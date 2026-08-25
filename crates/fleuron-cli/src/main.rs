@@ -25,8 +25,7 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
     // Pipeline entry: content tree in, paginated display list out.
-    // Exit 2 remains the contract while the PDF writer is pending
-    // (#16–#17).
+    // Exit 2 is the no-PDF-writer contract.
     let registry = match fleuron::fonts::bundled_registry() {
         Ok(registry) => registry,
         Err(e) => {
@@ -47,7 +46,7 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
                     warnings,
                     if warnings == 1 { "" } else { "s" },
                 );
-                let _ = output; // the PDF writer consumes this (#16)
+                let _ = output; // the PDF writer consumes this
                 ExitCode::from(2)
             }
             Err(e) => {

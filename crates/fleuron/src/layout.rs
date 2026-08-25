@@ -7,9 +7,7 @@
 //! v0.1 folds the middle of the pipeline into one pass: each section
 //! becomes its lines (headings with the chapter style, paragraphs with
 //! the body style, via `lines::LineLayout`), and the paginator flows
-//! those lines into page content boxes. The style compiler (#7) will
-//! interpose a real box tree between content and line layout; the
-//! flow below is the fragmentation contract it must satisfy.
+//! those lines into page content boxes.
 
 use crate::LayoutOutput;
 use crate::content::{Block, Book, Section};
@@ -17,9 +15,7 @@ use crate::fonts::FontRegistry;
 use crate::lines::{Line, LineBreakOptions, LineLayout, ParagraphStyle};
 use crate::pages::{DrawItem, Glyph, Page, Side};
 
-/// Page and content-box geometry, in points. v0.1: hardcoded 6×9in
-/// trade-book defaults; page masters (#15) and `@page` (#6) both
-/// generalize this.
+/// Page and content-box geometry, in points.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PageGeometry {
     /// Trimmed page width.
@@ -37,12 +33,12 @@ pub struct PageGeometry {
 }
 
 impl PageGeometry {
-    /// 6×9in with the margins of a trade paperback, mirrored across
-    /// the spread.
+    /// 6×9in (432×648pt) with the margins of a trade paperback,
+    /// mirrored across the spread.
     pub fn trade_paperback() -> PageGeometry {
         PageGeometry {
-            width: 432.0,  // 6in
-            height: 648.0, // 9in
+            width: 432.0,
+            height: 648.0,
             inner: 54.0,
             outer: 42.0,
             top: 54.0,
@@ -90,11 +86,10 @@ pub fn layout_book(book: &Book, registry: &FontRegistry) -> LayoutOutput {
 
 /// The pagination pass: laid-out lines in, `Page`s of `DrawItem`s out.
 ///
-/// Flow rules (v0.1): lines stack from the top of the content box; a
-/// line that does not fit starts the next page (a line taller than a
-/// whole page overflows rather than disappears); a chapter starts a
-/// fresh recto page, with a blank verso inserted when the flow sits
-/// on one.
+/// Lines stack from the top of the content box; a line that does not
+/// fit starts the next page, and a line taller than a whole page
+/// overflows it. Each section opens on a fresh recto page, with a
+/// blank verso inserted when the flow sits on one.
 pub struct Paginator<'a> {
     registry: &'a FontRegistry,
     geometry: PageGeometry,
@@ -126,12 +121,10 @@ impl<'a> Paginator<'a> {
     /// Lays a section out and flows it, opening on a fresh recto.
     fn flow_section(&self, section: &Section, pages: &mut Vec<Page>) {
         let mut flow: Vec<Line> = Vec::new();
-        self.append_blocks(&section.blocks, ParagraphStyle::BODY, &mut flow);
+        self.append_blocks(&section.blocks, &mut flow);
         if flow.is_empty() {
             return;
         }
-        // A chapter opens on a recto: when the next natural page is a
-        // verso, it ships blank.
         if pages.len() % 2 == 1 {
             pages.push(Page {
                 number: 0,
@@ -160,7 +153,7 @@ impl<'a> Paginator<'a> {
     }
 
     /// A section's blocks as laid-out lines, in document order.
-    fn append_blocks(&self, blocks: &[Block], _container: ParagraphStyle, flow: &mut Vec<Line>) {
+    fn append_blocks(&self, blocks: &[Block], flow: &mut Vec<Line>) {
         for block in blocks {
             match block {
                 Block::Heading { inlines, .. } => {
@@ -183,9 +176,6 @@ impl<'a> Paginator<'a> {
                         LineBreakOptions::default(),
                     ));
                 }
-                // v0.1 lays out prose; the block-remainder blocks
-                // arrive with the style compiler (#7) and image
-                // sizing (#5, v0.2).
                 Block::Blockquote { .. } | Block::ThematicBreak { .. } | Block::Image { .. } => {}
             }
         }
@@ -312,9 +302,6 @@ mod tests {
         assert_eq!(w, 336.0);
         assert_eq!(h, 540.0);
         assert_eq!(geometry.measure(), 336.0);
-        // Mirrored: the spine sits `inner` from whichever edge the
-        // page's side puts it on, and the content box is the same
-        // size on both sides.
         let (recto_x, top) = geometry.content_origin(Side::Recto);
         let (verso_x, verso_top) = geometry.content_origin(Side::Verso);
         assert_eq!(recto_x, 54.0);
@@ -367,7 +354,6 @@ mod tests {
         }
         let index = chapter_two.expect("a page opens with the chapter heading");
         assert_eq!(pages[index].number % 2, 1, "chapter opened on a verso");
-        // Fresh: the heading is the first thing painted on the page.
         assert!(
             matches!(pages[index].items.first(), Some(DrawItem::Text { size, .. }) if *size == ParagraphStyle::CHAPTER.size)
         );
