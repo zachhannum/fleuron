@@ -14,6 +14,17 @@ pub enum Side {
     Verso,
 }
 
+impl Side {
+    /// Books open on a right-hand page: odd numbers are recto.
+    pub fn of_number(number: u32) -> Side {
+        if number % 2 == 1 {
+            Side::Recto
+        } else {
+            Side::Verso
+        }
+    }
+}
+
 /// One typeset page: a number, a side, and what to paint on it.
 #[derive(Debug, Serialize)]
 pub struct Page {
