@@ -24,8 +24,7 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
-    // Pipeline entry: content tree in, paginated display list out.
-    // Exit 2 is the no-PDF-writer contract.
+    // Pipeline entry: content tree in, PDF out.
     let registry = match fleuron::fonts::bundled_registry() {
         Ok(registry) => registry,
         Err(e) => {
@@ -46,8 +45,23 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
                     warnings,
                     if warnings == 1 { "" } else { "s" },
                 );
-                let _ = output; // the PDF writer consumes this
-                ExitCode::from(2)
+                let Some(output) = output else {
+                    eprintln!("fleuron: no output path; pass -o <output.pdf>");
+                    return ExitCode::from(2);
+                };
+                match fleuron::pdf::write(&result, &registry, &book.metadata) {
+                    Ok(bytes) => match std::fs::write(&output, bytes) {
+                        Ok(()) => ExitCode::SUCCESS,
+                        Err(e) => {
+                            eprintln!("fleuron: {}: {e}", output.display());
+                            ExitCode::FAILURE
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("fleuron: {input}: {e}");
+                        ExitCode::FAILURE
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("fleuron: {input}: invalid content tree: {e}");

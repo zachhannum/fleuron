@@ -98,6 +98,8 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
     fleuron::lines::ShapedRun {
         font_id: 0,
         size,
+        text: String::new(),
+        text_start: 0,
         glyphs: Vec::new(),
         advance: 0,
     }

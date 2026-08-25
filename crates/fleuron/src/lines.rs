@@ -66,9 +66,43 @@ pub struct LineBreakOptions {
 pub struct ShapedRun {
     pub font_id: u16,
     pub size: f32,
+    /// The run's own text. Glyph ids alone do not spell anything:
+    /// text extraction and copy-paste need the characters back, and
+    /// only the shaper knows which glyph came from which of them.
+    pub text: String,
+    /// Byte offset of `text` in the paragraph the glyphs' clusters
+    /// index.
+    pub text_start: u32,
     pub glyphs: Vec<ShapedGlyph>,
     /// Total advance of the run's glyphs, in font units.
     pub advance: u32,
+}
+
+impl ShapedRun {
+    /// The byte range in `text` each glyph stands for, in glyph
+    /// order. A glyph covers its cluster up to the next cluster that
+    /// starts later — which is how a ligature comes to span the
+    /// characters it swallowed.
+    pub fn glyph_ranges(&self) -> Vec<Range<u32>> {
+        let end = self.text.len() as u32;
+        let starts: Vec<u32> = self
+            .glyphs
+            .iter()
+            .map(|g| g.cluster.saturating_sub(self.text_start).min(end))
+            .collect();
+        starts
+            .iter()
+            .enumerate()
+            .map(|(i, start)| {
+                let next = starts[i + 1..]
+                    .iter()
+                    .find(|later| *later > start)
+                    .copied()
+                    .unwrap_or(end);
+                *start..next.max(*start)
+            })
+            .collect()
+    }
 }
 
 /// One typeset line: shaped runs plus its width in font units.
@@ -430,9 +464,13 @@ fn cut_line(
             continue;
         }
         let advance = glyphs.iter().map(|g| g.x_advance).sum();
+        let text_start = span.range.start.max(start);
+        let text_end = span.range.end.min(content_end).max(text_start);
         runs.push(ShapedRun {
             font_id: *font_id,
             size: *size,
+            text: flat.text[text_start..text_end].to_string(),
+            text_start: text_start as u32,
             glyphs,
             advance,
         });
@@ -495,6 +533,37 @@ mod tests {
             end += 1;
         }
         &text[first..end]
+    }
+
+    /// A run's glyphs map back to the characters they were shaped
+    /// from: the ffi ligature is one glyph spanning three bytes, and
+    /// the ranges tile the run's text without gaps.
+    #[test]
+    fn glyph_ranges_cover_the_run_text() {
+        let lines = layout_body("difficult", 200.0);
+        let run = &lines[0].runs[0];
+        assert_eq!(run.text, "difficult");
+        let ranges = run.glyph_ranges();
+        assert_eq!(
+            ranges.first().cloned(),
+            Some(0..1),
+            "the first glyph stands for the first byte"
+        );
+        assert!(
+            ranges.iter().any(|r| r.end - r.start == 3),
+            "no glyph spans the three characters of the ffi ligature: {ranges:?}"
+        );
+        assert_eq!(
+            ranges.last().map(|r| r.end),
+            Some(run.text.len() as u32),
+            "the last glyph runs to the end of the run's text"
+        );
+        for pair in ranges.windows(2) {
+            assert!(
+                pair[1].start == pair[0].end || pair[1].start == pair[0].start,
+                "ranges neither tile nor share a cluster: {pair:?}"
+            );
+        }
     }
 
     /// Empty paragraph → no lines.

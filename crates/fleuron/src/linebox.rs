@@ -73,6 +73,8 @@ mod tests {
         ShapedRun {
             font_id: 0,
             size,
+            text: String::new(),
+            text_start: 0,
             glyphs: Vec::new(),
             advance: 0,
         }
