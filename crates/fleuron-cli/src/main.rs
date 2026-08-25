@@ -24,23 +24,27 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
-    // Placeholder pipeline entry: reads the fixture to prove the e2e
-    // path (input exists, is readable, parses as JSON) and reports the
-    // honest state — layout is unimplemented until the v0.1 stages land
-    // (#13). The e2e job's PDF assertions activate when #16/#17 land.
+    // Placeholder pipeline entry: reads the fixture and parses it
+    // against the real content schema (#1) to prove the e2e path
+    // (input exists, is readable, is a valid content tree), then
+    // reports the honest state — layout is unimplemented until the
+    // v0.1 stages land (#13). The e2e job's PDF assertions activate
+    // when #16/#17 land.
     match std::fs::read_to_string(input) {
-        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
-            Ok(_) => {
+        Ok(text) => match serde_json::from_str::<fleuron::content::Book>(&text) {
+            Ok(mut book) => {
+                book.assign_node_ids();
+                let sections = book.sections.len();
+                let blocks: usize = book.sections.iter().map(|s| s.blocks.len()).sum();
                 eprintln!(
-                    "fleuron: parsed {} ({} bytes); pipeline stages not yet implemented — see #13",
-                    input,
-                    text.len()
+                    "fleuron: parsed {} ({} sections, {} blocks); pipeline stages not yet implemented — see #13",
+                    input, sections, blocks
                 );
                 let _ = output; // used from #17 onward
                 ExitCode::from(2)
             }
             Err(e) => {
-                eprintln!("fleuron: {input}: invalid JSON: {e}");
+                eprintln!("fleuron: {input}: invalid content tree: {e}");
                 ExitCode::FAILURE
             }
         },

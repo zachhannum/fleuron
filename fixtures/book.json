@@ -1,29 +1,133 @@
 {
-  "title": "The Fixture Book",
+  "metadata": {
+    "title": "The Fixture Book",
+    "author": "A. Fixture",
+    "extra": {
+      "language": "en"
+    }
+  },
   "sections": [
     {
-      "title": "Chapter One",
+      "source": "chapter-01.md",
+      "title": "The Kind of Morning",
+      "position": { "line": 1, "column": 1 },
       "blocks": [
         {
-          "type": "paragraph",
-          "text": "It was the kind of morning that made you suspicious — too clean, too quiet, the light coming in sideways like an apology. Marlowe counted the knives in the drawer twice, said nothing to anyone, and left through the back door."
+          "type": "heading",
+          "level": 1,
+          "inlines": [
+            { "type": "text", "value": "The Kind of Morning", "position": { "line": 1, "column": 3 } }
+          ],
+          "position": { "line": 1, "column": 1 }
         },
         {
           "type": "paragraph",
-          "text": "\"You're early,\" said the woman behind the counter, not looking up. \"Nobody's early here. Not for years.\""
+          "inlines": [
+            { "type": "text", "value": "It was the kind of morning that made you suspicious — too clean, too quiet, the light coming in sideways like an apology. Marlowe counted the knives in the drawer twice, said nothing to anyone, and left through the back door.", "position": { "line": 3, "column": 1 } }
+          ],
+          "position": { "line": 3, "column": 1 }
         },
         {
           "type": "paragraph",
-          "text": "The rain had stopped somewhere upstream, unannounced, the way arrangements unravel when no one is watching them closely enough. He ordered coffee he didn't intend to drink and waited for whatever was coming next — the unfail-ing, un-hyphen-ated everything."
+          "inlines": [
+            { "type": "text", "value": "\"You're early,\" said the woman behind the counter, not looking up. \"Nobody's early here. Not for years.\"", "position": { "line": 5, "column": 1 } }
+          ],
+          "position": { "line": 5, "column": 1 }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            { "type": "text", "value": "The rain had stopped somewhere upstream, unannounced, the way arrangements unravel when nobody watches them closely enough. He ordered coffee he didn't intend to drink and considered the ", "position": { "line": 7, "column": 1 } },
+            { "type": "emphasis", "children": [{ "type": "text", "value": "unfailing" }], "position": { "line": 7, "column": 137 } },
+            { "type": "text", "value": " patience of counters, of waitresses, of cities that had decided everything about him except the parts that mattered.", "position": { "line": 7, "column": 148 } }
+          ],
+          "position": { "line": 7, "column": 1 }
+        },
+        {
+          "type": "blockquote",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "inlines": [
+                { "type": "text", "value": "Whoever controls the drawer controls the morning.", "position": { "line": 10, "column": 3 } }
+              ],
+              "position": { "line": 10, "column": 3 }
+            },
+            {
+              "type": "paragraph",
+              "inlines": [
+                { "type": "text", "value": "— from the diner's rulebook, unnumbered", "position": { "line": 12, "column": 3 } }
+              ],
+              "position": { "line": 12, "column": 3 }
+            }
+          ],
+          "position": { "line": 9, "column": 1 }
+        },
+        {
+          "type": "thematic_break",
+          "position": { "line": 14, "column": 1 }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            { "type": "text", "value": "Outside, the street performed its customary emptiness. A single police-precinct automobile performed the curb; the hydrant performed its obligation to every story like this one. Somewhere a phonograph committed ", "position": { "line": 16, "column": 1 } },
+            { "type": "strong", "children": [{ "type": "text", "value": "\"Unforgettable\"" }], "position": { "line": 16, "column": 172 } },
+            { "type": "text", "value": " to the afternoon, and the afternoon accepted.", "position": { "line": 16, "column": 188 } }
+          ],
+          "position": { "line": 16, "column": 1 }
+        },
+        {
+          "type": "image",
+          "url": "images/drawer.png",
+          "alt": "A wooden drawer, half open, filled with knives wrapped in cloth",
+          "position": { "line": 18, "column": 1 }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            { "type": "text", "value": "He walked to the offices of ", "position": { "line": 20, "column": 1 } },
+            { "type": "link", "url": "https://example.com/argon-bulletin", "children": [{ "type": "text", "value": "the Argon Bulletin" }], "position": { "line": 20, "column": 26 } },
+            { "type": "text", "value": " and asked for the morgue. The clerk asked him for a password; he gave her ", "position": { "line": 20, "column": 65 } },
+            { "type": "code", "value": "marlowe/1935", "position": { "line": 20, "column": 134 } },
+            { "type": "text", "value": " and she waved him through as though passwords were a formality the building had outgrown.", "position": { "line": 20, "column": 150 } }
+          ],
+          "position": { "line": 20, "column": 1 }
         }
       ]
     },
     {
-      "title": "Chapter Two",
+      "source": "chapter-02.md",
+      "title": "Where the Furniture Gets Arranged",
+      "position": { "line": 1, "column": 1 },
       "blocks": [
         {
+          "type": "heading",
+          "level": 1,
+          "inlines": [
+            { "type": "text", "value": "Where the Furniture Gets Arranged", "position": { "line": 1, "column": 3 } }
+          ],
+          "position": { "line": 1, "column": 1 }
+        },
+        {
           "type": "paragraph",
-          "text": "Second chapters are where the furniture gets arranged: dialogue, dashes — em and otherwise — and enough punctuation variety to exercise a line breaker's manners. \"Quote, attribution,\" she said. \"Reply,\" he didn't."
+          "inlines": [
+            { "type": "text", "value": "Second chapters are where the furniture gets arranged: dialogue, dashes — em and otherwise — and enough punctuation variety to exercise a line breaker's manners. \"Quote, attribution,\" she said. \"Reply,\" he didn't.", "position": { "line": 3, "column": 1 } }
+          ],
+          "position": { "line": 3, "column": 1 }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            { "type": "text", "value": "Consider the difference between a woman who is merely tireless and one who is systematically unstoppable — the first works through the night, the second has already rearranged the calendar. Miss Quartermaine belonged to the second category, and she had file folders to prove it: cross-references, tabulations, a hand-drawn map of everyone's movements since the equinox. \"You're wondering about the map,\" she said, correctly.", "position": { "line": 5, "column": 1 } }
+          ],
+          "position": { "line": 5, "column": 1 }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            { "type": "text", "value": "He was. \"It's thorough,\" he admitted, which was like calling the ocean damp. She smiled the smile of a person who has been called thorough before and considers it a beginning.", "position": { "line": 7, "column": 1 } }
+          ],
+          "position": { "line": 7, "column": 1 }
         }
       ]
     }
