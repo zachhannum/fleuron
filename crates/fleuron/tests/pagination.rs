@@ -4,6 +4,7 @@
 use fleuron::content::{Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::{PageGeometry, Paginator};
+use fleuron::lines::ParagraphStyle;
 use fleuron::pages::{DrawItem, Page, Side};
 use proptest::prelude::*;
 
@@ -61,13 +62,46 @@ fn paginate(book: &Book) -> Vec<Page> {
     Paginator::new(registry(), PageGeometry::trade_paperback()).paginate(book)
 }
 
-/// Every paint op of every page lies inside that page's content box.
+/// Width of a folio run in points, from the registry's advances.
+fn folio_width_pt(glyphs: &[fleuron::pages::Glyph], size: f32) -> f32 {
+    let font = ParagraphStyle::FOLIO.font_id;
+    let upem = registry().metrics(font).unwrap().units_per_em as f32;
+    glyphs
+        .iter()
+        .map(|g| registry().advance_width(font, g.id).unwrap_or(0) as f32)
+        .sum::<f32>()
+        / upem
+        * size
+}
+
+/// A folio run read back as digits, inverting the cmap over 0-9.
+fn folio_digits(glyphs: &[fleuron::pages::Glyph]) -> String {
+    let font = ParagraphStyle::FOLIO.font_id;
+    glyphs
+        .iter()
+        .filter_map(|g| ('0'..='9').find(|c| registry().char_glyph(font, *c) == Some(g.id)))
+        .collect()
+}
+
+/// True when a paint op is page furniture rather than content: in
+/// v0.1 the folio is the only furniture that paints, and its size
+/// identifies it.
+fn is_folio(item: &DrawItem) -> bool {
+    matches!(item, DrawItem::Text { size, .. } if *size == ParagraphStyle::FOLIO.size)
+}
+
+/// Every content paint op of every page lies inside that page's
+/// content box. The folio is furniture and lives in the margin box —
+/// `folios_sit_in_the_margin_box` covers where.
 fn assert_pages_fit(pages: &[Page]) -> Result<(), TestCaseError> {
     let geometry = PageGeometry::trade_paperback();
     for page in pages {
         let (x, y) = geometry.content_origin(page.side);
         let (w, h) = geometry.content_size();
         for item in &page.items {
+            if is_folio(item) {
+                continue;
+            }
             let DrawItem::Text {
                 x: tx,
                 y: ty,
@@ -161,6 +195,7 @@ proptest! {
             let baselines: Vec<f32> = page
                 .items
                 .iter()
+                .filter(|i| !is_folio(i))
                 .filter_map(|i| match i {
                     DrawItem::Text { y, .. } => Some(*y),
                     _ => None,
@@ -175,11 +210,59 @@ proptest! {
             }
         }
     }
+
+    /// Every folio, on any book, sits in the bottom margin box: below
+    /// the content area, inside the folio band, centered on the trim —
+    /// and reads as its own page number.
+    #[test]
+    fn folios_sit_in_the_margin_box(book in book_strategy()) {
+        let pages = paginate(&book);
+        let geometry = PageGeometry::trade_paperback();
+        let (band_top, band_height) = geometry.folio_line_box();
+        let (_, content_top) = geometry.content_origin(Side::Recto);
+        let content_bottom = content_top + geometry.content_size().1;
+        for page in &pages {
+            let folios: Vec<&DrawItem> = page.items.iter().filter(|i| is_folio(i)).collect();
+            prop_assert!(folios.len() <= 1, "page {} has {} folios", page.number, folios.len());
+            for item in folios {
+                let DrawItem::Text { x, y, glyphs, size, .. } = item else { continue };
+                prop_assert!(
+                    *y > content_bottom,
+                    "page {}: folio baseline {y} inside the content area",
+                    page.number
+                );
+                prop_assert!(
+                    *y >= band_top && *y <= band_top + band_height,
+                    "page {}: folio baseline {y} outside the margin box",
+                    page.number
+                );
+                prop_assert!(
+                    *y < geometry.height,
+                    "page {}: folio baseline {y} off the trim",
+                    page.number
+                );
+                let width = folio_width_pt(glyphs, *size);
+                prop_assert!(
+                    (x + width / 2.0 - geometry.width / 2.0).abs() < 1e-3,
+                    "page {}: folio off-center at {}",
+                    page.number,
+                    x + width / 2.0
+                );
+                prop_assert_eq!(
+                    folio_digits(glyphs),
+                    page.number.to_string(),
+                    "page {} shows the wrong folio",
+                    page.number
+                );
+            }
+        }
+    }
 }
 
 /// Snapshot of the assembled display list for a two-chapter book:
-/// the wire-format shape of page assembly — sides, numbering, the
-/// first text baselines of the opening pages.
+/// the wire-format shape of page assembly and page furniture — sides,
+/// numbering, the first text baselines, and the folio each page does
+/// or does not carry.
 #[test]
 fn page_assembly_snapshot() {
     let prose = "My father had a small estate in Nottinghamshire; I was bred a surgeon. ";
@@ -187,7 +270,7 @@ fn page_assembly_snapshot() {
         id: NodeId::UNASSIGNED,
         inlines: vec![Inline::Text {
             id: NodeId::UNASSIGNED,
-            value: prose.repeat(6),
+            value: prose.repeat(60),
             position: None,
         }],
         position: None,
@@ -231,11 +314,21 @@ fn page_assembly_snapshot() {
                     })
                     .take(3)
                     .collect();
+                let folio = page.items.iter().find(|i| is_folio(i)).map(|item| {
+                    let DrawItem::Text {
+                        x, y, size, glyphs, ..
+                    } = item
+                    else {
+                        unreachable!()
+                    };
+                    (*x, *y, *size, folio_digits(glyphs))
+                });
                 serde_json::json!({
                     "number": page.number,
                     "side": page.side,
                     "items": page.items.len(),
                     "first_baselines": firsts,
+                    "folio": folio,
                 })
             })
             .collect::<Vec<_>>()

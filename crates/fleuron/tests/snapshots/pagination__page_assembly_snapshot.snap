@@ -1,7 +1,7 @@
 ---
 source: crates/fleuron/tests/pagination.rs
-assertion_line: 213
-expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usize)> =\n    page.items.iter().filter_map(|item| match item\n    {\n        DrawItem::Text { x, y, size, glyphs, .. } =>\n        { Some((*x, *y, *size, glyphs.len())) } _ => None,\n    }).take(3).collect();\n    serde_json::json!({\n        \"number\": page.number, \"side\": page.side, \"items\": page.items.len(),\n        \"first_baselines\": firsts,\n    })\n}).collect::<Vec<_>>()"
+assertion_line: 302
+expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usize)> =\n    page.items.iter().filter_map(|item| match item\n    {\n        DrawItem::Text { x, y, size, glyphs, .. } =>\n        Some((*x, *y, *size, glyphs.len())), _ => None,\n    }).take(3).collect(); let folio =\n    page.items.iter().find(|i|\n    is_folio(i)).map(|item|\n    {\n        let DrawItem::Text { x, y, size, glyphs, .. } = item else\n        { unreachable!() }; (*x, *y, *size, folio_digits(glyphs))\n    });\n    serde_json::json!({\n        \"number\": page.number, \"side\": page.side, \"items\": page.items.len(),\n        \"first_baselines\": firsts, \"folio\": folio,\n    })\n}).collect::<Vec<_>>()"
 ---
 [
   {
@@ -25,13 +25,39 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
         77
       ]
     ],
-    "items": 7,
+    "folio": null,
+    "items": 34,
     "number": 1,
     "side": "recto"
   },
   {
-    "first_baselines": [],
-    "items": 0,
+    "first_baselines": [
+      [
+        42.0,
+        65.59950256347656,
+        11.0,
+        70
+      ],
+      [
+        42.0,
+        80.99950408935547,
+        11.0,
+        70
+      ],
+      [
+        42.0,
+        96.39950561523438,
+        11.0,
+        70
+      ]
+    ],
+    "folio": [
+      213.83999633789063,
+      624.1904907226563,
+      9.0,
+      "2"
+    ],
+    "items": 28,
     "number": 2,
     "side": "verso"
   },
@@ -56,8 +82,40 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
         77
       ]
     ],
-    "items": 7,
+    "folio": null,
+    "items": 34,
     "number": 3,
     "side": "recto"
+  },
+  {
+    "first_baselines": [
+      [
+        42.0,
+        65.59950256347656,
+        11.0,
+        70
+      ],
+      [
+        42.0,
+        80.99950408935547,
+        11.0,
+        70
+      ],
+      [
+        42.0,
+        96.39950561523438,
+        11.0,
+        70
+      ]
+    ],
+    "folio": [
+      213.83999633789063,
+      624.1904907226563,
+      9.0,
+      "4"
+    ],
+    "items": 28,
+    "number": 4,
+    "side": "verso"
   }
 ]

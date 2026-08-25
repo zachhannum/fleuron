@@ -44,6 +44,13 @@ impl ParagraphStyle {
         size: 18.0,
         line_height: 1.4,
     };
+
+    /// v0.1 page furniture: the bundled serif at folio scale.
+    pub const FOLIO: ParagraphStyle = ParagraphStyle {
+        font_id: 0,
+        size: 9.0,
+        line_height: 1.4,
+    };
 }
 
 /// Hyphenation is off unless asked for; when on, lines may end
