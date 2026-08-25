@@ -1,0 +1,31 @@
+{
+  "title": "The Fixture Book",
+  "sections": [
+    {
+      "title": "Chapter One",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "It was the kind of morning that made you suspicious — too clean, too quiet, the light coming in sideways like an apology. Marlowe counted the knives in the drawer twice, said nothing to anyone, and left through the back door."
+        },
+        {
+          "type": "paragraph",
+          "text": "\"You're early,\" said the woman behind the counter, not looking up. \"Nobody's early here. Not for years.\""
+        },
+        {
+          "type": "paragraph",
+          "text": "The rain had stopped somewhere upstream, unannounced, the way arrangements unravel when no one is watching them closely enough. He ordered coffee he didn't intend to drink and waited for whatever was coming next — the unfail-ing, un-hyphen-ated everything."
+        }
+      ]
+    },
+    {
+      "title": "Chapter Two",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Second chapters are where the furniture gets arranged: dialogue, dashes — em and otherwise — and enough punctuation variety to exercise a line breaker's manners. \"Quote, attribution,\" she said. \"Reply,\" he didn't."
+        }
+      ]
+    }
+  ]
+}
