@@ -41,15 +41,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "fleuron-cli"
-version = "0.0.1"
-dependencies = [
- "fleuron-core",
-]
-
-[[package]]
-name = "fleuron-core"
-version = "0.0.1"
+name = "fleuron"
+version = "0.0.0"
 dependencies = [
  "harfrust",
  "hypher",
@@ -60,10 +53,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleuron-cli"
+version = "0.0.1"
+dependencies = [
+ "fleuron",
+]
+
+[[package]]
 name = "fleuron-wasm"
 version = "0.0.1"
 dependencies = [
- "fleuron-core",
+ "fleuron",
  "wasm-bindgen",
 ]
 

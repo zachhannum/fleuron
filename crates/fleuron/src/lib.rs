@@ -1,4 +1,4 @@
-//! fleuron-core: paged-media layout for book-shaped documents.
+//! fleuron: paged-media layout for book-shaped documents.
 //!
 //! The pipeline is one-way:
 //!

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/fleuron-core", "crates/fleuron-cli", "crates/fleuron-wasm"]
+members = ["crates/fleuron", "crates/fleuron-cli", "crates/fleuron-wasm"]
 
 [workspace.package]
 version = "0.0.1"
