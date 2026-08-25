@@ -27,6 +27,9 @@ krilla = "0.5"
 # diagnostics & errors
 thiserror = "2"
 
+# testing
+proptest = "1"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

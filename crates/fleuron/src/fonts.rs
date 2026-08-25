@@ -7,7 +7,9 @@
 
 use std::collections::HashMap;
 
-use harfrust::{FontRef as HarfFontRef, Language, ShaperData, UnicodeBuffer, script};
+use harfrust::{
+    BufferClusterLevel, FontRef as HarfFontRef, Language, ShaperData, UnicodeBuffer, script,
+};
 use serde::Serialize;
 use skrifa::MetadataProvider;
 use skrifa::instance::{LocationRef, Size};
@@ -82,6 +84,19 @@ impl GenericFamily {
             _ => None,
         }
     }
+}
+
+/// One shaped glyph: its id, its advance, and the byte offset of its
+/// cluster in the shaped string — the bridge between shaping output
+/// and text-anchored break opportunities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShapedGlyph {
+    pub id: u32,
+    /// Horizontal advance in font units.
+    pub x_advance: u32,
+    /// Byte index into the shaped string where this glyph's cluster
+    /// begins.
+    pub cluster: u32,
 }
 
 /// A font's identity, as carried in the engine's output.
@@ -253,15 +268,17 @@ impl FontRegistry {
 
     /// Shapes a string with a registered face, in font units.
     ///
-    /// Returns per-glyph `(glyph_id, x_advance)` — the raw material of
-    /// line layout. Cluster/offset data stays in the shaper's buffer;
-    /// this is the narrow waist between shaping and layout.
-    pub fn shape(&self, id: u16, text: &str) -> Option<Vec<(u32, u32)>> {
+    /// Returns per-glyph `ShapedGlyph` — the raw material of line
+    /// layout. Clusters index the shaped string, so callers can map
+    /// text offsets (break opportunities) back to glyphs; offsets data
+    /// stays in the shaper's buffer.
+    pub fn shape(&self, id: u16, text: &str) -> Option<Vec<ShapedGlyph>> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
         let shaper = face.shaper_data.shaper(&font).build();
         let mut buffer = UnicodeBuffer::new();
         buffer.push_str(text);
+        buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
         buffer.set_script(script::LATIN);
         buffer.set_direction(harfrust::Direction::LeftToRight);
         buffer.set_language(Language::new("en").unwrap());
@@ -275,7 +292,11 @@ impl FontRegistry {
                 .glyph_infos()
                 .iter()
                 .zip(positions)
-                .map(|(info, pos)| (info.glyph_id, pos.x_advance as u32))
+                .map(|(info, pos)| ShapedGlyph {
+                    id: info.glyph_id,
+                    x_advance: pos.x_advance as u32,
+                    cluster: info.cluster,
+                })
                 .collect(),
         )
     }
@@ -453,9 +474,28 @@ mod tests {
             (509, 323),
         ];
         assert_eq!(
-            shaped.as_slice(),
+            shaped
+                .iter()
+                .map(|g| (g.id, g.x_advance))
+                .collect::<Vec<_>>(),
             expected,
             "harfrust disagrees with hb-shape on the reference string"
+        );
+    }
+
+    /// Clusters index the shaped string: ligatures carry their first
+    /// cluster, and clusters are monotone even where glyphs merge.
+    #[test]
+    fn clusters_index_the_input_text() {
+        let registry = registry();
+        let shaped = registry.shape(0, "AVAToffice quantities").unwrap();
+        let clusters: Vec<u32> = shaped.iter().map(|g| g.cluster).collect();
+        assert_eq!(
+            clusters,
+            vec![
+                0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+            ],
+            "f_f_i (cluster 5) absorbs 'f','f','i' (6, 7) into one glyph"
         );
     }
 }
