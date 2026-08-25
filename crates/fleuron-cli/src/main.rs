@@ -24,9 +24,8 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
-    // Pipeline entry: content tree in, line layout run over every
-    // paragraph. Exit 2 remains the contract while downstream stages
-    // (pages, PDF) are pending (#14–#17).
+    // Pipeline entry: content tree in, paginated display list out.
+    // Exit 2 is the no-PDF-writer contract.
     let registry = match fleuron::fonts::bundled_registry() {
         Ok(registry) => registry,
         Err(e) => {
@@ -38,22 +37,16 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
         Ok(text) => match serde_json::from_str::<fleuron::content::Book>(&text) {
             Ok(mut book) => {
                 book.assign_node_ids();
-                let layout = fleuron::lines::LineLayout::new(&registry);
-                let style = fleuron::lines::ParagraphStyle {
-                    font_id: registry
-                        .generic(fleuron::fonts::GenericFamily::Serif)
-                        .expect("bundled registry maps serif"),
-                    size: 11.0,
-                    line_height: 1.4,
-                };
-                let measure = 260.0; // 6×9 book text block, until #6
-                let (paragraphs, lines) =
-                    count_paragraphs_and_lines(&book, &layout, style, measure);
+                let result = fleuron::layout::layout_book(&book, &registry);
+                let warnings = result.warnings.len();
                 eprintln!(
-                    "fleuron: {} — {} paragraphs laid out to {} lines at {measure}pt measure",
-                    input, paragraphs, lines
+                    "fleuron: {} — {} pages, {} warning{}",
+                    input,
+                    result.pages.len(),
+                    warnings,
+                    if warnings == 1 { "" } else { "s" },
                 );
-                let _ = output; // the PDF writer consumes this (#16)
+                let _ = output; // the PDF writer consumes this
                 ExitCode::from(2)
             }
             Err(e) => {
@@ -66,33 +59,4 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-/// Runs line layout over every paragraph in the book — the e2e proof
-/// that the stage handles the whole fixture, not samples.
-fn count_paragraphs_and_lines(
-    book: &fleuron::content::Book,
-    layout: &fleuron::lines::LineLayout,
-    style: fleuron::lines::ParagraphStyle,
-    measure: f32,
-) -> (usize, usize) {
-    use fleuron::content::Block;
-    use fleuron::lines::LineBreakOptions;
-
-    let mut paragraphs = 0usize;
-    let mut lines = 0usize;
-    let walk = |blocks: &[Block], paragraphs: &mut usize, lines: &mut usize| {
-        for block in blocks {
-            if let Block::Paragraph { inlines, .. } = block {
-                *paragraphs += 1;
-                *lines += layout
-                    .layout(inlines, style, measure, LineBreakOptions::default())
-                    .len();
-            }
-        }
-    };
-    for section in &book.sections {
-        walk(&section.blocks, &mut paragraphs, &mut lines);
-    }
-    (paragraphs, lines)
 }

@@ -37,6 +37,13 @@ impl ParagraphStyle {
         size: 11.0,
         line_height: 1.4,
     };
+
+    /// v0.1 chapter openings: the bundled serif at display size.
+    pub const CHAPTER: ParagraphStyle = ParagraphStyle {
+        font_id: 0,
+        size: 18.0,
+        line_height: 1.4,
+    };
 }
 
 /// Hyphenation is off unless asked for; when on, lines may end

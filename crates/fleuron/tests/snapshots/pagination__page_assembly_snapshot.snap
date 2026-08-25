@@ -1,0 +1,63 @@
+---
+source: crates/fleuron/tests/pagination.rs
+assertion_line: 213
+expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usize)> =\n    page.items.iter().filter_map(|item| match item\n    {\n        DrawItem::Text { x, y, size, glyphs, .. } =>\n        { Some((*x, *y, *size, glyphs.len())) } _ => None,\n    }).take(3).collect();\n    serde_json::json!({\n        \"number\": page.number, \"side\": page.side, \"items\": page.items.len(),\n        \"first_baselines\": firsts,\n    })\n}).collect::<Vec<_>>()"
+---
+[
+  {
+    "first_baselines": [
+      [
+        54.0,
+        72.98100280761719,
+        18.0,
+        11
+      ],
+      [
+        54.0,
+        90.79949951171875,
+        11.0,
+        73
+      ],
+      [
+        54.0,
+        106.19950103759766,
+        11.0,
+        77
+      ]
+    ],
+    "items": 7,
+    "number": 1,
+    "side": "recto"
+  },
+  {
+    "first_baselines": [],
+    "items": 0,
+    "number": 2,
+    "side": "verso"
+  },
+  {
+    "first_baselines": [
+      [
+        54.0,
+        72.98100280761719,
+        18.0,
+        11
+      ],
+      [
+        54.0,
+        90.79949951171875,
+        11.0,
+        73
+      ],
+      [
+        54.0,
+        106.19950103759766,
+        11.0,
+        77
+      ]
+    ],
+    "items": 7,
+    "number": 3,
+    "side": "recto"
+  }
+]
