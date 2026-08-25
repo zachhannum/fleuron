@@ -9,6 +9,7 @@
 pub mod content;
 pub mod fonts;
 pub mod layout;
+pub mod linebox;
 pub mod lines;
 pub mod pages;
 pub mod style;
