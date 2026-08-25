@@ -85,6 +85,25 @@ in → valid PDF out**, invoked through the CLI, living in
    --target wasm32-unknown-unknown` — the bindings must never silently
    rot while only native gets exercised
 
+## Documentation rules
+
+Applies to code comments and all documentation — internal (CLAUDE.md,
+docs/) and external (README).
+
+**DO**
+
+- Keep them short.
+- Only write documentation when the WHY is non-obvious.
+- Write docs as statements of how things are.
+
+**DO NOT**
+
+- Document what the code or doc already says.
+- Document deletions.
+- Document changes over time — history lives in git.
+- Include links (code references, PRs, issues, error URLs).
+- Explain why a rejected or unchosen alternative wasn't taken.
+
 ## Conventions
 
 - Errors: `thiserror` in library crates, `anyhow` in the CLI.
