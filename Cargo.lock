@@ -47,6 +47,7 @@ dependencies = [
  "harfrust",
  "hypher",
  "serde",
+ "serde_json",
  "thiserror",
  "unicode-bidi",
  "unicode-linebreak",
