@@ -1,0 +1,15 @@
+[package]
+name = "fleuron-cli"
+description = "fleuron command line: content in, PDF out"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fleuron"
+path = "src/main.rs"
+
+[dependencies]
+fleuron-core = { path = "../fleuron-core" }

@@ -1,0 +1,16 @@
+[package]
+name = "fleuron-core"
+description = "Paged-media layout engine for book-shaped documents: style compilation, inline layout, fragmentation, page assembly"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+harfrust.workspace = true
+unicode-linebreak.workspace = true
+unicode-bidi.workspace = true
+hypher.workspace = true
+thiserror.workspace = true
+serde.workspace = true

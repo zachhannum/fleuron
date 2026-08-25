@@ -1,0 +1,84 @@
+# fleuron ❦
+
+*A paged-media layout engine for book-shaped documents, in Rust.*
+
+**fleuron** takes structured content plus typed settings or CSS, performs
+inline layout (shaping, line breaking, hyphenation), fragments it into pages,
+and emits a display list for preview and a PDF for export. It compiles to
+native and WebAssembly from the same core.
+
+> A *fleuron* is the printer's flower ❦ — the ornament set into a page to
+> mark a pause. This is one, in Rust.
+
+## Why
+
+Browser-based pagination (Paged.js and friends) asks the layout engine
+"did it overflow?" thousands of times per book and pays for a full layout
+each answer. fleuron owns the whole pipeline instead: harfrust shaping,
+Unicode line breaking and segmentation, Knuth-Plass-quality
+justification, and CSS Fragmentation semantics applied to a box tree it
+builds itself. Break decisions fall out of the layout pass instead of
+being guessed at through the DOM.
+
+Shaping is [harfrust], the pure-Rust HarfBuzz port from the Google Fonts
+team (successor to the archived rustybuzz).
+
+The result is book-scale pagination in hundreds of milliseconds rather
+than minutes, a preview that is *exactly* the export (both are painted
+from the same display list), and a library that runs anywhere Rust does.
+
+## Scope
+
+fleuron is scoped to **book-shaped documents**: flowing prose with
+headings, block quotes, scene breaks, drop caps, images, running heads,
+footnotes, and page machinery (recto/verso, page counters, named pages).
+
+It is not a browser engine. There is no float layout, no tables, no grid
+or flexbox, no transforms. CSS that falls outside the supported subset is
+reported through the diagnostics channel rather than silently ignored.
+
+## Architecture
+
+The pipeline is one-way. Content enters as a semantic tree (markdown
+frontends like [Orca] produce this from remark/rehype), styling enters
+through the style compiler, and everything downstream consumes a single
+resolved representation:
+
+```
+content tree ──┐
+               ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
+settings ──────┤                                                        │
+user CSS ──────┘                                                        ├─► display list (preview)
+                                                                       └─► PDF (export)
+```
+
+- **`fleuron-core`** — style compilation, box construction, inline layout,
+  fragmentation, page assembly. Pure library, no I/O.
+- **`fleuron-cli`** — `fleuron` binary: content in, PDF out. Batch-friendly.
+- **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
+  PDF bytes out, zero DOM access.
+
+### Invariants
+
+1. **Layout never reads settings.** It consumes the style tree. Settings
+   and user CSS are just two producers of the same representation.
+2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
+   and PDF are interchangeable painters over the display list.
+3. **Layout never decodes images.** Header probes yield intrinsic size,
+   orientation, and DPI; painters decode pixels on their own side of the
+   wall.
+
+## Status
+
+Pre-alpha. Development happens in service of [Orca], the Obsidian
+novel-writing suite — fleuron is its pagination backend, extracted. The
+build order lives in the issue tracker; the first milestone that matters
+is *fixture book in, valid PDF out*.
+
+## License
+
+Dual-licensed under either of [Apache-2.0](LICENSE-APACHE) or
+[MIT](LICENSE-MIT) at your option.
+
+[Orca]: https://github.com/zachhannum/obsidian-orca
+[harfrust]: https://github.com/harfbuzz/harfrust
