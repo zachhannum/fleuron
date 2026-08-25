@@ -13,9 +13,11 @@ skrifa.workspace = true
 unicode-linebreak.workspace = true
 unicode-bidi.workspace = true
 hypher.workspace = true
+icu_segmenter.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
 serde_json = "1"
 insta = { version = "1", features = ["json"] }
+proptest.workspace = true
