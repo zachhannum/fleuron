@@ -1,0 +1,31 @@
+# cargo-deny configuration
+# Policy: no merged dependency may carry an open RUSTSEC advisory.
+# The rustybuzz deprecation (RUSTSEC-2026-0206) is why this job exists.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Workspace is MIT OR Apache-2.0; accept the common compatible set.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Zlib",
+  "CC0-1.0",
+]
+
+[bans]
+# Duplicates are noisy, not fatal — rust provides them freely.
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

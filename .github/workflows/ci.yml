@@ -17,3 +17,48 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install PDF validation tools
+        run: sudo apt-get update && sudo apt-get install -y qpdf poppler-utils
+      - name: Build CLI
+        run: cargo build -p fleuron-cli --release
+      - name: Run fixture book through the pipeline
+        # Exit 2 = stages-not-implemented (expected until #16/#17 land);
+        # everything else — missing file, bad JSON, panic — fails the job.
+        run: |
+          set +e
+          target/release/fleuron fixtures/book.json -o out.pdf
+          code=$?
+          if [ "$code" -ne 2 ]; then
+            echo "unexpected exit code $code"; exit 1
+          fi
+      - name: Structural check
+        if: false # activated with #16: qpdf --check out.pdf
+        run: qpdf --check out.pdf
+      - name: Text round-trip check
+        if: false # activated with #17: pdftotext + word-count assertions
+        run: |
+          pdftotext out.pdf out.txt
+          test "$(wc -w < out.txt)" -gt 0
+
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p fleuron-wasm --target wasm32-unknown-unknown
