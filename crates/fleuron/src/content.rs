@@ -3,69 +3,52 @@
 //! Markdown frontends (Orca's remark/rehype pipeline) produce this; the
 //! element vocabulary is bounded by what those frontends emit —
 //! book/section, heading, paragraph, blockquote, thematic break,
-//! emphasis/strong/code, image, link. Schema and fixtures: see the
-//! Foundations milestone on the issue tracker.
+//! emphasis/strong/code, image, link.
 //!
 //! This module is the **input contract**: everything downstream (style,
-//! box construction, layout) consumes these types, and nothing
-//! downstream may widen them without a fixture and a test.
+//! box construction, layout) consumes these types, and nothing widens
+//! the vocabulary without a fixture and a test.
 //!
-//! # Wire format (decision)
+//! # Wire format
 //!
-//! The content tree speaks JSON, only JSON. Enums are internally
-//! tagged (`{"type": "paragraph", ...}`) so the shape maps one-to-one
-//! onto mdast — Orca serializes its remark tree with a field rename,
-//! not a conversion pass — and that single representation is the
-//! contract at every edge (CLI file input, WASM host message).
+//! The content tree crosses every boundary as JSON, internally tagged
+//! (`{"type": "paragraph", ...}`) so the shape maps one-to-one onto
+//! mdast; a frontend serializes its tree with a field rename, not a
+//! conversion pass. Postcard is the output wire (display list to the
+//! WASM host), not this one.
 //!
-//! It deliberately does not cross as postcard: serde's internal
-//! tagging buffers through `deserialize_any`, which non-self-describing
-//! formats don't implement. Postcard is the *output* wire (display
-//! list to the WASM host, where compactness pays per keystroke); the
-//! content tree crosses a boundary once per book, where mdast
-//! compatibility is worth more than a compact encoding. If a binary
-//! input wire is ever wanted, that requires custom `Deserialize`
-//! impls — a breaking change to revisit, not a default to bake in.
+//! # Node identity
 //!
-//! # Node identity (decision)
+//! `NodeId` is engine-assigned, never frontend-supplied: input can't
+//! collide ids or forge diagnostic origins. Every node's `id` field is
+//! `#[serde(skip)]` — ids never travel on the wire; the tree is
+//! authoritative. Fresh off the wire every id is `NodeId::UNASSIGNED`;
+//! `Book::assign_node_ids` assigns dense ids from 1 in document order
+//! (pre-order: a node before its children, sections in reading order).
 //!
-//! [`NodeId`] is engine-assigned, not frontend-supplied: untrusted
-//! input can't collide ids or forge diagnostic origins. Every node
-//! carries an `id` field that is `#[serde(skip)]` — ids never travel
-//! on the wire; the tree is authoritative. Fresh off the wire every
-//! id is [`NodeId::UNASSIGNED`], and the engine calls
-//! [`Book::assign_node_ids`] exactly once before any downstream pass.
-//! Ids are dense from 1 in document order (pre-order: a node before
-//! its children, sections in reading order), so diagnostics can order
-//! by id and incremental relayout can diff by it.
+//! # Source positions
 //!
-//! # Source positions (decision)
-//!
-//! Every node carries an optional 1-based line/column pointing at the
-//! markdown source the frontend read it from; the section's `source`
-//! names the file. [`origin`] formats the pair the way
-//! `Warning::origin` prints it (`chapter-01.md:12:3`). Frontends that
-//! don't track positions (hand-built content, tests) omit them; a
-//! missing position never fails a run.
+//! Every node carries an optional 1-based line/column into the markdown
+//! source the frontend read it from; the section's `source` names the
+//! file. `origin` formats the pair for diagnostics
+//! (`chapter-01.md:12:3`). A missing position never fails a run.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 /// Identity of one node in the content tree, for diagnostics and
-/// (later) incremental relayout.
+/// incremental relayout.
 ///
-/// Assigned by [`Book::assign_node_ids`] in document order, starting
-/// at 1. Zero never appears in an assigned tree.
+/// Assigned in document order, starting at 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct NodeId(u32);
 
 impl NodeId {
-    /// The pre-assignment value: what every node holds fresh off the
-    /// wire, before [`Book::assign_node_ids`] runs.
+    /// What every node holds fresh off the wire, before assignment.
     pub const UNASSIGNED: NodeId = NodeId(0);
 
-    /// The raw id. Monotonic in document order within one [`Book`].
+    /// The raw id. Monotonic in document order within one book.
     pub fn get(self) -> u32 {
         self.0
     }
@@ -73,9 +56,8 @@ impl NodeId {
 
 /// A 1-based position in the frontend's source document.
 ///
-/// Line and column are as the markdown parser reported them (an mdast
-/// `position.start` copies straight over). This is diagnostic data,
-/// never layout input.
+/// Line and column are as the markdown parser reported them. This is
+/// diagnostic data, never layout input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourcePos {
     /// 1-based line in the source markdown.
@@ -84,10 +66,9 @@ pub struct SourcePos {
     pub column: u32,
 }
 
-/// Formats a section's file name plus a node position the way
-/// diagnostics print it: `chapter-01.md:12:3`. Degrades to the bare
-/// file name, bare position, or empty string — a missing position
-/// never fails a run.
+/// Formats a file name plus a position for diagnostics:
+/// `chapter-01.md:12:3`. Missing parts degrade: bare file name, bare
+/// position, empty string.
 pub fn origin(source: Option<&str>, position: Option<SourcePos>) -> String {
     match (source, position) {
         (Some(file), Some(pos)) => format!("{file}:{}:{}", pos.line, pos.column),
@@ -107,8 +88,8 @@ pub struct Metadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     /// Frontend-defined extensions (language, ISBN, subtitle…) keyed
-    /// by name. The engine treats these as opaque; style can read
-    /// them, layout never does.
+    /// by name. Opaque to the engine; style reads them, layout
+    /// doesn't.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, String>,
 }
@@ -117,9 +98,7 @@ pub struct Metadata {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Book {
     pub metadata: Metadata,
-    /// The chapters/files, in reading order. Empty is legal (a blank
-    /// book still produces front matter) but never produced by a real
-    /// frontend.
+    /// The chapters/files, in reading order.
     #[serde(default)]
     pub sections: Vec<Section>,
 }
@@ -130,13 +109,11 @@ pub struct Book {
 pub struct Section {
     #[serde(skip)]
     pub id: NodeId,
-    /// File the frontend read (e.g. `chapter-01.md`); pairs with node
-    /// positions to form `Warning::origin`.
+    /// File the frontend read (e.g. `chapter-01.md`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// Section title when the frontend supplies one outside the body
-    /// (frontmatter `title:`). Where set, heading level 1 is implied;
-    /// a heading in the body is the frontend's problem.
+    /// Section title supplied outside the body (frontmatter
+    /// `title:`); implies heading level 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default)]
@@ -184,14 +161,13 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
-    /// Block-level image for now; inline images wait for a real book
-    /// that needs them.
+    /// A block-level image.
     Image {
         #[serde(skip)]
         id: NodeId,
         url: String,
         /// Alt text: not laid out, but part of the accessibility
-        /// contract and the PDF's structure tree later.
+        /// contract.
         #[serde(default)]
         alt: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -294,14 +270,9 @@ pub enum Inline {
 }
 
 impl Book {
-    /// Assign fresh [`NodeId`]s to every node, in document order
-    /// (pre-order: a node before its children, sections in reading
-    /// order), starting at 1.
-    ///
-    /// The engine calls this exactly once, after deserialization and
-    /// before any downstream pass. Calling it again is legal but
-    /// renumbers — downstream state keyed by id (warnings, relayout
-    /// caches) belongs to one assignment.
+    /// Assign ids to every node, in document order (pre-order: a node
+    /// before its children, sections in reading order), starting at 1.
+    /// Runs once, after deserialization; running it again renumbers.
     pub fn assign_node_ids(&mut self) {
         let mut next = 1u32;
         for section in &mut self.sections {
@@ -430,8 +401,7 @@ mod tests {
         }
     }
 
-    /// Every id in the tree, in walk order — the same order
-    /// `assign_node_ids` assigns in.
+    /// Every id in the tree, in walk order — the order assignment uses.
     fn collect_ids(book: &Book) -> Vec<NodeId> {
         fn walk_block(ids: &mut Vec<NodeId>, block: &Block) {
             match block {
@@ -472,8 +442,7 @@ mod tests {
         ids
     }
 
-    /// Acceptance: types round-trip through JSON — the one wire format
-    /// the content tree has (see the module docs for why not postcard).
+    /// The tree survives a JSON round-trip unchanged.
     #[test]
     fn json_round_trip() {
         let book = sample_book();
@@ -482,8 +451,8 @@ mod tests {
         assert_eq!(book, back);
     }
 
-    /// Ids are `#[serde(skip)]`: the wire never carries them, and a
-    /// deserialized tree comes back unassigned.
+    /// A serialized tree carries no ids; a deserialized one comes back
+    /// unassigned.
     #[test]
     fn ids_never_travel_on_the_wire() {
         let mut book = sample_book();
@@ -505,8 +474,6 @@ mod tests {
         let book: Book = serde_json::from_str(text).expect("fixture book.json parses");
         assert_eq!(book.metadata.title.as_deref(), Some("The Fixture Book"));
         assert_eq!(book.sections.len(), 2);
-        // The fixture exercises more than paragraphs: at least one
-        // heading, blockquote, and thematic break across the book.
         let blocks: Vec<&Block> = book.sections.iter().flat_map(|s| s.blocks.iter()).collect();
         assert!(blocks.iter().any(|b| matches!(b, Block::Heading { .. })));
         assert!(blocks.iter().any(|b| matches!(b, Block::Blockquote { .. })));
@@ -517,9 +484,8 @@ mod tests {
         );
     }
 
-    /// Node ids are dense (exactly `1..=n`), assigned pre-order, and
-    /// deterministic across assignments — the scheme diagnostics and
-    /// relayout rely on.
+    /// Ids are dense (exactly `1..=n`), assigned pre-order, and the
+    /// same on every assignment.
     #[test]
     fn node_ids_are_dense_pre_order_and_deterministic() {
         let mut book = sample_book();
@@ -571,7 +537,7 @@ mod tests {
         assert_eq!(first, collect_ids(&book));
     }
 
-    /// mdast-shaped input parses: tag is `type`, text runs are plain.
+    /// Tags are `type`, text runs are plain strings.
     #[test]
     fn internally_tagged_json_parses() {
         let json = r#"{
@@ -594,8 +560,7 @@ mod tests {
         assert_eq!(*position, Some(SourcePos { line: 4, column: 1 }));
     }
 
-    /// Heading levels outside 1–6 are a parse error, not a silent
-    /// clamp — the bounded vocabulary is enforced at the boundary.
+    /// Levels outside 1–6 fail at parse rather than clamping.
     #[test]
     fn heading_level_out_of_range_fails() {
         let json = r#"{"type": "heading", "level": 7, "inlines": []}"#;
@@ -603,8 +568,7 @@ mod tests {
         assert!(err.to_string().contains("1-6"), "got: {err}");
     }
 
-    /// Frontends that don't track positions omit them; nothing that
-    /// builds a tree by hand should have to write `null`s.
+    /// Every optional field can be omitted.
     #[test]
     fn missing_fields_default() {
         let json = r#"{"type": "paragraph"}"#;
@@ -619,8 +583,7 @@ mod tests {
         assert!(position.is_none());
     }
 
-    /// `Warning::origin` formatting: file + position, and the
-    /// degrade-to-file / degrade-to-nothing cases.
+    /// File + position in all four presence combinations.
     #[test]
     fn origin_formats_file_line_column() {
         let pos = SourcePos {

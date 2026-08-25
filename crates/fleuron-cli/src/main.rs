@@ -24,12 +24,10 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
-    // Placeholder pipeline entry: reads the fixture and parses it
-    // against the real content schema (#1) to prove the e2e path
-    // (input exists, is readable, is a valid content tree), then
-    // reports the honest state — layout is unimplemented until the
-    // v0.1 stages land (#13). The e2e job's PDF assertions activate
-    // when #16/#17 land.
+    // Placeholder pipeline entry: proves the e2e path (input exists,
+    // is readable, is a valid content tree) and reports the honest
+    // state — layout is unimplemented. Exit 2 is the contract for
+    // "parsed, stages pending".
     match std::fs::read_to_string(input) {
         Ok(text) => match serde_json::from_str::<fleuron::content::Book>(&text) {
             Ok(mut book) => {
@@ -37,10 +35,10 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
                 let sections = book.sections.len();
                 let blocks: usize = book.sections.iter().map(|s| s.blocks.len()).sum();
                 eprintln!(
-                    "fleuron: parsed {} ({} sections, {} blocks); pipeline stages not yet implemented — see #13",
+                    "fleuron: parsed {} ({} sections, {} blocks); pipeline stages not yet implemented",
                     input, sections, blocks
                 );
-                let _ = output; // used from #17 onward
+                let _ = output; // the PDF writer consumes this
                 ExitCode::from(2)
             }
             Err(e) => {
