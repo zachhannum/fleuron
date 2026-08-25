@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 
 # layout
 harfrust = "0.13"
+skrifa = "0.46"
 unicode-linebreak = "0.1"
 unicode-bidi = "0.3"
 hypher = "0.1"
