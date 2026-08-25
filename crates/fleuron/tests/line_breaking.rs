@@ -80,10 +80,14 @@ proptest! {
         prop_assert_eq!(first, second);
     }
 
-    /// Every letter survives layout, in order: breaking never drops
-    /// or reorders content.
+    /// Every glyph survives layout, in order: breaking never drops or
+    /// reorders content. Stated over the shaper's output rather than
+    /// the source letters, because ligatures merge letters into one
+    /// glyph — `ff` is a single glyph carrying the cluster of the
+    /// first `f`, so a letter count is not a glyph count. Layout is
+    /// allowed to drop spaces at line edges and nothing else.
     #[test]
-    fn every_letter_survives_in_order(text in text_strategy(), measure in 30.0f32..300.0) {
+    fn every_glyph_survives_in_order(text in text_strategy(), measure in 30.0f32..300.0) {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
@@ -91,21 +95,25 @@ proptest! {
             measure,
             LineBreakOptions::default(),
         );
-        // Spaces may be consumed at line edges; letters may not be.
-        let letters: usize = text.chars().filter(|c| c.is_ascii_alphabetic()).count();
-        let total_glyphs: usize = lines
+        let space = registry().char_glyph(0, ' ').unwrap();
+        let shaped: Vec<u32> = registry()
+            .shape(0, &text)
+            .unwrap()
             .iter()
-            .map(|l| l.runs.iter().map(|r| r.glyphs.len()).sum::<usize>())
-            .sum();
-        prop_assert!(total_glyphs >= letters, "dropped letters");
-        // Clusters strictly increase down the paragraph.
-        let clusters: Vec<u32> = lines
-            .iter()
-            .flat_map(|l| l.runs.iter().flat_map(|r| r.glyphs.iter().map(|g| g.cluster)))
+            .filter(|g| g.id != space)
+            .map(|g| g.cluster)
             .collect();
-        let mut sorted = clusters.clone();
-        sorted.sort_unstable();
-        prop_assert_eq!(clusters, sorted, "glyph order violated document order");
+        let laid_out: Vec<u32> = lines
+            .iter()
+            .flat_map(|l| l.runs.iter().flat_map(|r| r.glyphs.iter()))
+            .filter(|g| g.id != space)
+            .map(|g| g.cluster)
+            .collect();
+        prop_assert_eq!(
+            laid_out,
+            shaped,
+            "layout dropped or reordered the shaper's glyphs"
+        );
     }
 
     /// Hyphenated layout fits the measure wherever a hyphenation
