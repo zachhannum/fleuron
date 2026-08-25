@@ -1,0 +1,32 @@
+---
+source: crates/fleuron/tests/font_table.rs
+assertion_line: 26
+expression: "(output, generics)"
+---
+[
+  {
+    "pages": [],
+    "fonts": [
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Regular",
+        "style": "Regular"
+      }
+    ],
+    "warnings": []
+  },
+  [
+    [
+      "serif",
+      0
+    ],
+    [
+      "sans-serif",
+      0
+    ],
+    [
+      "monospace",
+      0
+    ]
+  ]
+]

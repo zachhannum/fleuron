@@ -7,6 +7,7 @@
 //! ```
 
 pub mod content;
+pub mod fonts;
 pub mod layout;
 pub mod pages;
 pub mod style;
@@ -24,5 +25,8 @@ pub struct Warning {
 #[derive(Debug, serde::Serialize)]
 pub struct LayoutOutput {
     pub pages: Vec<pages::Page>,
+    /// The fonts this run used, indexed by `font_id`: both painters
+    /// and the PDF writer resolve ids through this table.
+    pub fonts: Vec<fonts::FontRefEntry>,
     pub warnings: Vec<Warning>,
 }

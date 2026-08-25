@@ -9,6 +9,7 @@ authors.workspace = true
 
 [dependencies]
 harfrust.workspace = true
+skrifa.workspace = true
 unicode-linebreak.workspace = true
 unicode-bidi.workspace = true
 hypher.workspace = true
@@ -17,3 +18,4 @@ serde.workspace = true
 
 [dev-dependencies]
 serde_json = "1"
+insta = { version = "1", features = ["json"] }
