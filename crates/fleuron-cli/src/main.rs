@@ -44,6 +44,7 @@ fn run(input: &str, output: Option<PathBuf>) -> ExitCode {
                         .generic(fleuron::fonts::GenericFamily::Serif)
                         .expect("bundled registry maps serif"),
                     size: 11.0,
+                    line_height: 1.4,
                 };
                 let measure = 260.0; // 6×9 book text block, until #6
                 let (paragraphs, lines) =

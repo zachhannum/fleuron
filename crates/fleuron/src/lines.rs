@@ -13,6 +13,7 @@ use std::ops::Range;
 
 use crate::content::Inline;
 use crate::fonts::{FontRegistry, ShapedGlyph};
+use crate::linebox::{LineBox, Strut};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 
@@ -24,6 +25,9 @@ pub struct ParagraphStyle {
     pub font_id: u16,
     /// Font size in points.
     pub size: f32,
+    /// Line height as a unitless multiple of `size`, as in CSS
+    /// `line-height: <number>`.
+    pub line_height: f32,
 }
 
 /// v0.1 body text: the bundled serif at book scale.
@@ -31,6 +35,7 @@ impl ParagraphStyle {
     pub const BODY: ParagraphStyle = ParagraphStyle {
         font_id: 0,
         size: 11.0,
+        line_height: 1.4,
     };
 }
 
@@ -60,6 +65,9 @@ pub struct Line {
     /// hyphenated line's hyphen is charged here even though the glyph
     /// joins the runs when the display list paints it.
     pub width: u32,
+    /// The line's vertical geometry — computed here, in points;
+    /// downstream stages position against it, never re-measure.
+    pub box_: LineBox,
 }
 
 /// Flattened paragraph content: plain text plus, per style span, the
@@ -129,6 +137,35 @@ impl<'a> LineLayout<'a> {
         }
     }
 
+    /// The paragraph's strut: the minimum box every one of its lines
+    /// occupies, whatever the runs on it.
+    pub fn strut(&self, style: ParagraphStyle) -> Strut {
+        self.registry
+            .metrics(style.font_id)
+            .map(|m| Strut::from_metrics(m, style.size, style.line_height))
+            .unwrap_or_default()
+    }
+
+    /// The box one line occupies: the strut, grown by any run taller
+    /// than it around the shared baseline.
+    pub fn line_box(&self, runs: &[ShapedRun], style: ParagraphStyle) -> LineBox {
+        let strut = self.strut(style);
+        let mut above = strut.above;
+        let mut below = strut.below;
+        for run in runs {
+            let Some(metrics) = self.registry.metrics(run.font_id) else {
+                continue;
+            };
+            let run_strut = Strut::from_metrics(metrics, run.size, style.line_height);
+            above = above.max(run_strut.above);
+            below = below.max(run_strut.below);
+        }
+        LineBox {
+            baseline: above,
+            height: above + below,
+        }
+    }
+
     /// Breaks one paragraph into lines of at most `measure_pt` points.
     pub fn layout(
         &self,
@@ -169,6 +206,12 @@ impl<'a> LineLayout<'a> {
             .and_then(|g| self.registry.advance_width(style.font_id, g))
             .unwrap_or(0) as u32;
 
+        // Every line of this paragraph carries the same box unless a
+        // run on it is taller than the strut (v0.1: none — spans share
+        // the paragraph style; mixed sizes arrive with the style
+        // compiler).
+        let line_box = self.line_box(&[], style);
+
         let opportunities = self.opportunities(&flat.text, options);
         let hyphen_advance = self.hyphen_advance(style);
 
@@ -206,7 +249,7 @@ impl<'a> LineLayout<'a> {
                     if content_end <= line_start {
                         break; // nothing paintable left (trailing spaces)
                     }
-                    lines.push(cut_line(&flat, &shaped, line_start, end));
+                    lines.push(cut_line(&flat, &shaped, line_start, end, line_box));
                     line_start = skip_spaces(&flat.text, end);
                 }
                 None => {
@@ -218,7 +261,7 @@ impl<'a> LineLayout<'a> {
                         .map(|o| o.end)
                         .min()
                         .unwrap_or(flat.text.len());
-                    lines.push(cut_line(&flat, &shaped, line_start, end));
+                    lines.push(cut_line(&flat, &shaped, line_start, end, line_box));
                     line_start = skip_spaces(&flat.text, end);
                 }
             }
@@ -347,7 +390,13 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
 
 /// Slices shaped spans into the runs of one line. Trailing spaces are
 /// dropped from the runs — ragged right never paints them.
-fn cut_line(flat: &FlatParagraph, shaped: &[ShapedSpan], start: usize, end: usize) -> Line {
+fn cut_line(
+    flat: &FlatParagraph,
+    shaped: &[ShapedSpan],
+    start: usize,
+    end: usize,
+    line_box: LineBox,
+) -> Line {
     let mut runs = Vec::new();
     for (span, (font_id, size, _)) in shaped.iter().zip(flat.spans.iter()) {
         if span.range.start >= end || span.range.end <= start {
@@ -377,6 +426,7 @@ fn cut_line(flat: &FlatParagraph, shaped: &[ShapedSpan], start: usize, end: usiz
     Line {
         width: runs.iter().map(|r| r.advance).sum(),
         runs,
+        box_: line_box,
     }
 }
 
