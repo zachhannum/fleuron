@@ -472,16 +472,21 @@ mod tests {
     fn fixture_deserializes() {
         let text = include_str!("../../../fixtures/book.json");
         let book: Book = serde_json::from_str(text).expect("fixture book.json parses");
-        assert_eq!(book.metadata.title.as_deref(), Some("The Fixture Book"));
-        assert_eq!(book.sections.len(), 2);
+        assert_eq!(book.metadata.title.as_deref(), Some("Gulliver's Travels"));
+        assert_eq!(book.sections.len(), 1);
         let blocks: Vec<&Block> = book.sections.iter().flat_map(|s| s.blocks.iter()).collect();
         assert!(blocks.iter().any(|b| matches!(b, Block::Heading { .. })));
-        assert!(blocks.iter().any(|b| matches!(b, Block::Blockquote { .. })));
-        assert!(
-            blocks
-                .iter()
-                .any(|b| matches!(b, Block::ThematicBreak { .. }))
-        );
+        let quote = blocks
+            .iter()
+            .find_map(|b| match b {
+                Block::Blockquote { blocks, .. } => Some(blocks.len()),
+                _ => None,
+            })
+            .expect("fixture has a blockquote");
+        assert!(quote >= 2, "fixture blockquote has multiple paragraphs");
+        // Chapter argument paragraphs open with an emphasis run.
+        let italic_lead = blocks.iter().any(|b| matches!(b, Block::Paragraph { inlines, .. } if matches!(inlines.first(), Some(Inline::Emphasis { .. }))));
+        assert!(italic_lead);
     }
 
     /// Ids are dense (exactly `1..=n`), assigned pre-order, and the
