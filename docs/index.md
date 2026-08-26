@@ -20,7 +20,7 @@ CSS ───────────┘                                        
                                                                                └─► PDF (export)
 ```
 
-Break decisions fall out of the layout pass rather than being guessed at through a DOM, which is the whole reason a book paginates in hundreds of milliseconds here and in minutes elsewhere.
+Break decisions fall out of the layout pass itself, which is most of why a 333-page book reaches PDF bytes in 283 ms.
 
 ## Three invariants
 
@@ -30,15 +30,13 @@ Break decisions fall out of the layout pass rather than being guessed at through
 
 **Layout never decodes images.** Header probes yield intrinsic size, orientation and DPI; painters decode pixels on their own side of the wall.
 
-## Pick your consumer
+## Three ways in
 
-There are three ways into fleuron, and they want different pages.
-
-**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O — you hand it bytes and it hands you pages. Start at the [library quickstart](library/quickstart.md).
+**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. Start at the [library quickstart](library/quickstart.md).
 
 **A command-line binary.** `fleuron` reads a content tree and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
 
-**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access. The [wasm section](wasm/quickstart.md) states the contract; the bindings have not landed yet, and it says so.
+**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access. The [wasm section](wasm/quickstart.md) states the contract; the bindings have not landed.
 
 ## Scope
 
@@ -50,4 +48,4 @@ It is not a browser engine. There is no float layout, no tables, no grid or flex
 
 Pre-alpha. Development happens in service of [Orca](https://github.com/zachhannum/obsidian-orca), the Obsidian novel-writing suite — fleuron is its pagination backend, extracted.
 
-Pages in this documentation describe what has landed. Where a contract is written down ahead of its implementation, the page says so at the top rather than reading as though it were shipped.
+Pages here describe what has landed. A page that writes down a contract ahead of its implementation says so at the top.

@@ -18,7 +18,7 @@ serde_json = "1"
 
 `serde_json` is not fleuron's dependency; it is how you get a content tree off disk. The engine itself takes the deserialized `Book`.
 
-Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O of its own, and pulls in no platform libraries — it builds for `wasm32-unknown-unknown` unchanged.
+Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O of its own, and pulls in no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
 
 Go on to the [library quickstart](library/quickstart.md).
 
@@ -39,9 +39,9 @@ Go on to the [CLI quickstart](cli/quickstart.md).
 ## As a WebAssembly module
 
 :::caution[Not shipped yet]
-`fleuron-wasm` has no exports today. The crate builds for `wasm32-unknown-unknown` in CI, and the engine itself is already known to run under WebAssembly — the perf gate holds both corpus novels against their budgets under wasmtime — but the door out of it has not been built.
+`fleuron-wasm` has no exports today. The crate builds for `wasm32-unknown-unknown` in CI, and the engine already runs under WebAssembly — the perf gate holds both corpus novels against their budgets under wasmtime — but the bindings that would expose it do not exist.
 
-What the [wasm section](wasm/quickstart.md) describes is the contract the bindings are being written against, not a thing you can install today.
+The [wasm section](wasm/quickstart.md) describes the contract those bindings are being written against. Nothing in it is installable today.
 :::
 
 ## Working on fleuron itself
@@ -52,9 +52,9 @@ cd fleuron
 cargo test --workspace
 ```
 
-The end-to-end test is fixture book in, valid PDF out, through the CLI. It wants `qpdf` and `pdftotext` (from poppler) on the path to validate the result; without them it skips the validation rather than failing.
+The end-to-end test is fixture book in, valid PDF out, through the CLI. It wants `qpdf` and `pdftotext` (from poppler) on the path to validate the result; without them it skips the validation instead of failing.
 
-The perf harness is a separate binary and reports against absolute ceilings rather than a stored baseline:
+The perf harness is a separate binary, and it reports against absolute ceilings rather than a stored baseline:
 
 ```sh
 cargo run --release -p fleuron-fixtures --bin perf-gate

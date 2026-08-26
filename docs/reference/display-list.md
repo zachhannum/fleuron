@@ -37,7 +37,7 @@ pub struct Page {
 
 ## `DrawItem`
 
-Deliberately tiny. Three variants, and a painter that implements them has implemented the engine.
+Deliberately tiny: three variants, and a painter that handles all three can paint any page the engine produces.
 
 ### `Text`
 
@@ -66,9 +66,9 @@ pub struct Glyph {
 }
 ```
 
-`id` is a glyph id in the run's font — not a character. `x` is absolute, per glyph: kerning and justification mean no two glyphs are uniformly spaced, so there is no advance to accumulate and nothing for a painter to get wrong.
+`id` is a glyph id in the run's font — not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
 
-`range` is the byte range in the run's `text` that this glyph stands for. A ligature spans several characters; a decomposed cluster puts several glyphs on one range. Neither is a special case for a painter that treats the range as a mapping rather than a bijection.
+`range` is the byte range in the run's `text` that this glyph stands for. A ligature spans several characters; a decomposed cluster puts several glyphs on one range. A painter that treats the range as a mapping rather than a bijection handles both.
 
 ### `Rect`
 
@@ -90,4 +90,4 @@ A placed image. `asset` indexes the asset table; the pixels are the host's. Layo
 
 The whole job is: for each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
 
-For text, resolve `font_id` through `LayoutOutput::fonts`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape. Do not kern. The engine has done both, and a painter that re-shapes is a painter that disagrees with the export.
+For text, resolve `font_id` through `LayoutOutput::fonts`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.

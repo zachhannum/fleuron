@@ -13,7 +13,7 @@ cargo run --release -p fleuron-cli -- fixtures/book.json -o book.pdf -c fixtures
 fleuron: fixtures/book.json → book.pdf: 31 pages
 ```
 
-That is an excerpt of *Gulliver's Travels* — real prose, with dialogue, em-dashes and words a hyphenator has opinions about — laid out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is 47 lines, and it is `fixtures/styled.css`.
+That is an excerpt of *Gulliver's Travels* — dialogue, em-dashes, hyphenation-prone words — laid out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
 
 ## Without the clone
 
@@ -22,7 +22,7 @@ cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
 fleuron book.json -o book.pdf
 ```
 
-With no `-c`, the built-in stylesheet is the whole of the styling: a trade paperback, justified, chapters opening recto. It is a real design rather than a placeholder, and a book that never overrides it is still a book.
+With no `-c`, the built-in stylesheet is the whole of the styling: a trade paperback, justified, chapters opening recto. It is a finished design, and a book that never overrides it still comes out looking like a book.
 
 ## Adding your own styling
 
@@ -45,7 +45,7 @@ book { font-size: 12pt; line-height: 1.5; }
 h1, h2, h3 { font-size: 20pt; }
 ```
 
-Everything the engine understands is in [the CSS subset](../css-subset.md). Everything it does not is a warning on stderr naming the line and column, and the PDF is written regardless.
+[The CSS subset](../css-subset.md) is everything the engine understands. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
 
 ## Fonts
 
@@ -62,7 +62,7 @@ A face that resolves nowhere warns and the text falls back. See [fonts](../libra
 
 ## Where the input comes from
 
-`book.json` is a content tree: a semantic document, not markup. [The content tree reference](../reference/content-tree.md) is the schema. Markdown frontends produce it from remark or rehype with a field rename rather than a conversion pass — the shape maps one-to-one onto mdast.
+`book.json` is a content tree: a semantic document, not markup. [The content tree reference](../reference/content-tree.md) is the schema. Markdown frontends produce it from remark or rehype with a field rename rather than a conversion pass, because the shape maps one-to-one onto mdast.
 
 ## What it tells you
 

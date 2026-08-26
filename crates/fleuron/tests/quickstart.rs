@@ -1,6 +1,5 @@
 //! The library quickstart page and the example it quotes are one
-//! program. A page that has drifted from the code is worse than no
-//! page, so the drift is a test failure rather than a reader's problem.
+//! program, and drift between them is a test failure.
 
 use std::path::Path;
 
@@ -15,8 +14,8 @@ fn the_quickstart_page_quotes_the_example_it_runs() {
     let page =
         std::fs::read_to_string(root.join("docs/library/quickstart.md")).expect("the doc page");
 
-    // The example's own `//!` header explains the pairing and has no
-    // business in the page; everything after it is the program.
+    // The example's own `//!` header explains the pairing and stays out
+    // of the page; everything after it is the program.
     let code: String = example
         .lines()
         .skip_while(|line| line.starts_with("//!") || line.is_empty())

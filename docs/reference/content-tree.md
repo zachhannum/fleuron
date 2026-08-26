@@ -72,7 +72,7 @@ Sections are in reading order, and a section starts a new page.
 
 **`thematic_break`** — `---`. A scene break, set as space or an ornament depending on the stylesheet.
 
-**`image`** — `url` and `alt`. The url means whatever the host says it means; the engine resolves nothing and decodes nothing. `alt` is not laid out, and is part of the accessibility contract rather than optional.
+**`image`** — `url` and `alt`. The url means whatever the host says it means; the engine resolves nothing and decodes nothing. `alt` is not laid out; it is carried through for painters and for accessibility, and is not optional.
 
 ## Inlines
 
@@ -90,7 +90,7 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 ## Node identity
 
-Every node has an id, and it is engine-assigned rather than frontend-supplied: input cannot collide ids or forge a diagnostic origin. Ids never travel on the wire — the tree is authoritative — so fresh off the wire every node is unassigned, and `Book::assign_node_ids` numbers them from 1 in document order. Pre-order: a node before its children, sections in reading order.
+Every node has an id, and the engine assigns it: input cannot collide ids or forge a diagnostic origin. Ids never travel on the wire — the tree is authoritative — so fresh off the wire every node is unassigned, and `Book::assign_node_ids` numbers them from 1 in document order. Pre-order: a node before its children, sections in reading order.
 
 Call it once, after deserializing. Calling it again renumbers.
 
@@ -98,4 +98,4 @@ Call it once, after deserializing. Calling it again renumbers.
 
 `position` is a 1-based line and column into the markdown the frontend read the node out of, exactly as its parser reported them. Paired with the section's `source`, it is what a diagnostic points at: `chapter-01.md:12:3`.
 
-It is diagnostic data and never layout input. A missing position never fails a run — it degrades to the bare file name, and a node with neither still warns, just less usefully.
+It is diagnostic data and never layout input. A missing position never fails a run: it degrades to the bare file name, and a node with neither still warns, without a location.

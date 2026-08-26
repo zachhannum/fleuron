@@ -3,7 +3,7 @@ title: Library quickstart
 description: Book plus stylesheets plus fonts, to a LayoutOutput, to PDF bytes.
 ---
 
-Four steps, in one direction: read a content tree, compile styling against it, lay it out, write the PDF. The whole of it is below, and it is a file in the repository — `crates/fleuron/examples/quickstart.rs` — so it compiles and runs rather than approximating something that would.
+Four steps, in one direction: read a content tree, compile styling against it, lay it out, write the PDF. The whole of it is below, and it is also `crates/fleuron/examples/quickstart.rs` in the repository, so it compiles and runs.
 
 ```sh
 cargo run --example quickstart -p fleuron
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Run against the fixture book that ships with the repository, that prints `31 pages` and leaves a `book.pdf` beside you.
+Against the fixture book that ships with the repository, that prints `31 pages` and writes `book.pdf` into the working directory.
 
 ## What each step is for
 
@@ -70,9 +70,9 @@ Run against the fixture book that ships with the repository, that prints `31 pag
 
 **`Stylesheets`.** Parsing, font loading and compiling are three calls rather than one because they have different lifetimes: sheets parse once and style many books, and font loading is the single step that reaches outside the engine. `Stylesheets::parse` always puts the built-in user-agent sheet first, so author CSS is a cascade over defaults rather than a replacement for them.
 
-**`layout_book`.** Style tree in, `LayoutOutput` out: pages of draw items, the font table those items index, and every warning the run collected. This is the one call that does the work.
+**`layout_book`.** Style tree in, `LayoutOutput` out: pages of draw items, the font table those items index, and every warning the run collected.
 
-**`pdf::write`.** A painter over the display list. It re-derives no layout — it resolves font ids through the same registry that shaped the runs, so the embedded subset holds the outlines the shaper actually used.
+**`pdf::write`.** A painter over the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs, so the embedded subset holds the outlines the shaper actually used.
 
 ## Styling without an author sheet
 
@@ -82,4 +82,4 @@ Everything the built-in sheet can be overridden with is in [the CSS subset](../c
 
 ## Where things go wrong
 
-Nothing above panics on bad input; unsupported CSS, an unresolvable font, and a stack that matches nothing are all warnings, and the run finishes. [Diagnostics](diagnostics.md) covers what warns and what fails.
+Nothing above panics on bad input. Unsupported CSS, an unresolvable font, and a stack that matches nothing are all warnings, and the run finishes. [Diagnostics](diagnostics.md) covers what warns and what fails.
