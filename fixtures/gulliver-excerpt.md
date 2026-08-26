@@ -1,3 +1,11 @@
+---
+title: Gulliver's Travels
+author: Jonathan Swift
+language: en
+year: 1726
+source: Project Gutenberg via classic-books-markdown
+---
+
 ## PART I.  A VOYAGE TO LILLIPUT.
 
 ### CHAPTER I.

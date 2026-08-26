@@ -2,6 +2,10 @@
 //! that comes back validated three ways — structure, text round-trip,
 //! page count.
 //!
+//! The manuscript takes the path a reader takes, markdown in and no
+//! JSON step, and the content tree takes the same path one stage
+//! later. Both are checked in, and both are the same excerpt.
+//!
 //! Author CSS travels the same path, and is validated the same three
 //! ways: `fixtures/styled.css` restyles the same book — a different
 //! trim, mirrored margins, a head and a folio on the opening page —
@@ -20,6 +24,11 @@ use fleuron::content::{Block, Book, Inline};
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
 const EXPECTED_PAGES: usize = 23;
+
+/// Pages the markdown excerpt sets under the built-in sheet alone.
+/// It is the same prose as the content tree, read through the
+/// frontend rather than adapted by hand, so it sets its own count.
+const MANUSCRIPT_PAGES: usize = 22;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
@@ -393,13 +402,112 @@ fn the_page_count_is_what_the_layout_says() {
     assert_eq!(counted, EXPECTED_PAGES);
 }
 
+/// A manuscript renders with no JSON step: markdown in, an author
+/// sheet over the defaults, a PDF out.
+#[test]
+fn a_markdown_manuscript_renders_without_a_json_step() {
+    let (pdf, stderr) = run("manuscript", &[&manuscript_path()], &[&styled_sheet()]);
+    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+    assert!(bytes.starts_with(b"%PDF-"), "no PDF header");
+    assert!(
+        !stderr.contains("warning"),
+        "the excerpt is clean: {stderr}"
+    );
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}",
+            String::from_utf8_lossy(&check.stdout),
+        );
+    }
+
+    let (pdf, stderr) = run("manuscript-plain", &[&manuscript_path()], &[]);
+    assert!(
+        stderr.contains(&format!("{MANUSCRIPT_PAGES} pages")),
+        "the run did not report its page count: {stderr}",
+    );
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    assert_eq!(pages_of(&text).len(), MANUSCRIPT_PAGES);
+    assert!(
+        text.contains("Lilliput"),
+        "the manuscript's prose is not in the PDF",
+    );
+    assert!(
+        !text.contains("title: Gulliver"),
+        "the frontmatter was set as prose",
+    );
+}
+
+/// Several files compose in the order the command line gives them,
+/// and a diagnostic names the file it came from, not the first one and
+/// not the run.
+#[test]
+fn several_markdown_files_compose_in_argument_order() {
+    let first = write_source(
+        "compose-one",
+        "---\ntitle: A Composed Book\n---\n\n# Chapter One\n\nThe first chapter.\n",
+    );
+    let second = write_source(
+        "compose-two",
+        "# Chapter Two\n\nThe second chapter.\n\n- a list item\n",
+    );
+    let (pdf, stderr) = run("composed", &[&first, &second], &[]);
+
+    let warnings: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.contains("warning:"))
+        .collect();
+    assert_eq!(warnings.len(), 1, "{stderr}");
+    assert!(
+        warnings[0].contains("compose-two.md:5:1") && warnings[0].contains("a list"),
+        "the diagnostic names the wrong source: {}",
+        warnings[0],
+    );
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    let first_at = text.find("The first chapter").expect("chapter one is set");
+    let second_at = text.find("The second chapter").expect("chapter two is set");
+    assert!(first_at < second_at, "the files composed out of order");
+    assert!(text.contains("a list item"), "the list lost its prose");
+
+    // Reversed on the command line, reversed on the page.
+    let (pdf, _) = run("composed-reversed", &[&second, &first], &[]);
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    assert!(
+        text.find("The second chapter") < text.find("The first chapter"),
+        "argument order did not decide reading order",
+    );
+}
+
+/// A source for the CLI to read, beside the PDFs.
+fn write_source(name: &str, markdown: &str) -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.md"));
+    std::fs::write(&path, markdown).expect("the source is writable");
+    path
+}
+
+fn manuscript_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/gulliver-excerpt.md")
+}
+
 /// Runs the fixture book through the CLI exactly as the epic's
 /// definition of done words it, and returns the PDF and what the run
 /// had to say.
 fn render(name: &str, css: &[&Path]) -> (PathBuf, String) {
+    run(name, &[&fixture_path()], css)
+}
+
+/// The CLI, on whatever inputs and sheets the caller names.
+fn run(name: &str, inputs: &[&Path], css: &[&Path]) -> (PathBuf, String) {
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.pdf"));
     let mut command = Command::new(env!("CARGO_BIN_EXE_fleuron"));
-    command.arg(fixture_path()).arg("-o").arg(&output);
+    command.args(inputs).arg("-o").arg(&output);
     for sheet in css {
         command.arg("-c").arg(sheet);
     }
