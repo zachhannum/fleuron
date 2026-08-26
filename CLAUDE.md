@@ -56,6 +56,10 @@ in → valid PDF out**, invoked through the CLI, living in
   `fix/<issue>-slug`.
 - PR description references the issue with `Closes #N`. The issue's
   acceptance checkboxes must all be checked before review is requested.
+- PR and issue bodies are unwrapped: one line per paragraph and per
+  list item, blank lines between them. GitHub renders a single newline
+  as a line break, so prose wrapped to the width used for code comes
+  out as a ragged column.
 - Before pushing, run the CI mirror locally and make it green:
   `cargo fmt --all --check && cargo clippy --workspace --all-targets
   -- -D warnings && cargo test --workspace`. Pushing red and letting CI
@@ -67,8 +71,8 @@ in → valid PDF out**, invoked through the CLI, living in
 - Never force-push `main`. History rewrites on feature branches are fine
   while the PR is open.
 - No Co-Authored-By trailers on commits.
-- Keep PRs scoped to their issue. Drive-by fixes get their own issue and
-  their own branch.
+- Keep PRs scoped to their issue, but a small fix noticed on the way
+  may ride along rather than wait for a branch of its own.
 
 ## CI scaffolding
 
