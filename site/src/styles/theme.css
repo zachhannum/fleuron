@@ -52,9 +52,17 @@
   --f-paper-edge: rgb(0 0 0 / 0.5);
 
   --f-dot: rgb(255 255 255 / 0.09);
-  --f-grain: 0.055;
+  --f-grain: 0.38;
   --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 42%, transparent);
   --f-bleed-b: color-mix(in oklab, var(--f-ember) 26%, transparent);
+  --f-bleeds:
+    radial-gradient(60rem 40rem at 12% -8%, var(--f-bleed-a), transparent 70%),
+    radial-gradient(48rem 34rem at 92% 4%, var(--f-bleed-b), transparent 68%),
+    radial-gradient(70rem 44rem at 50% 108%, var(--f-bleed-a), transparent 72%);
+  --f-bleed-mask:
+    radial-gradient(60rem 40rem at 12% -8%, #000, transparent 70%),
+    radial-gradient(48rem 34rem at 92% 4%, #000, transparent 68%),
+    radial-gradient(70rem 44rem at 50% 108%, #000, transparent 72%);
 
   --f-radius: 18px;
   --f-radius-sm: 10px;
@@ -90,7 +98,7 @@
   --f-paper-edge: rgb(20 21 26 / 0.14);
 
   --f-dot: rgb(20 21 26 / 0.1);
-  --f-grain: 0.03;
+  --f-grain: 0.2;
   --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
   --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
 }
@@ -117,7 +125,7 @@
     --f-paper-ink: #14151a;
     --f-paper-edge: rgb(20 21 26 / 0.14);
     --f-dot: rgb(20 21 26 / 0.1);
-    --f-grain: 0.03;
+    --f-grain: 0.2;
     --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
     --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
   }
@@ -206,17 +214,20 @@ body::after {
 }
 
 body::before {
-  background:
-    radial-gradient(60rem 40rem at 12% -8%, var(--f-bleed-a), transparent 70%),
-    radial-gradient(48rem 34rem at 92% 4%, var(--f-bleed-b), transparent 68%),
-    radial-gradient(70rem 44rem at 50% 108%, var(--f-bleed-a), transparent 72%);
+  background: var(--f-bleeds);
   animation: f-drift 44s ease-in-out infinite alternate;
 }
 
+/* The grain is masked to the bleed shapes, so it is texture belonging to
+   the colour rather than a film lying over the whole viewport. Both
+   layers carry the same drift so the grain stays inside its colour. */
 body::after {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 140px 140px;
   opacity: var(--f-grain);
+  -webkit-mask-image: var(--f-bleed-mask);
+  mask-image: var(--f-bleed-mask);
+  animation: f-drift 44s ease-in-out infinite alternate;
 }
 
 @keyframes f-drift {
@@ -229,7 +240,8 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before {
+  body::before,
+  body::after {
     animation: none;
   }
 }
