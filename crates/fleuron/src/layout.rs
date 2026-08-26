@@ -197,6 +197,8 @@ impl<'a> Paginator<'a> {
         let run = ShapedRun {
             font_id: style.font_id,
             size: style.size,
+            text: page.number.to_string(),
+            text_start: 0,
             advance: shaped.iter().map(|g| g.x_advance).sum(),
             glyphs: shaped,
         };
@@ -226,11 +228,7 @@ impl<'a> Paginator<'a> {
             return None;
         }
         if pages.len() % 2 == 1 {
-            pages.push(Page {
-                number: 0,
-                side: Side::Verso,
-                items: Vec::new(),
-            });
+            pages.push(self.blank_page());
         }
         let open = pages.len();
 
@@ -284,11 +282,24 @@ impl<'a> Paginator<'a> {
     }
 
     fn push_page(&self, pages: &mut Vec<Page>, items: Vec<DrawItem>) {
+        let side = self.current_side(pages);
         pages.push(Page {
-            number: 0,
-            side: self.current_side(pages),
-            items,
+            side,
+            ..self.blank_page()
         });
+        pages.last_mut().expect("just pushed").items = items;
+    }
+
+    /// A page of the run's trim size with nothing on it. Numbering
+    /// and side are settled once the whole flow is assembled.
+    fn blank_page(&self) -> Page {
+        Page {
+            number: 0,
+            side: Side::Verso,
+            width: self.geometry.width,
+            height: self.geometry.height,
+            items: Vec::new(),
+        }
     }
 
     /// The side of the page under construction: it will sit at index
@@ -310,10 +321,11 @@ impl<'a> Paginator<'a> {
                 .unwrap_or(1000.0);
             let mut glyphs = Vec::with_capacity(run.glyphs.len());
             let mut glyph_x = x_cursor;
-            for shaped in &run.glyphs {
+            for (shaped, range) in run.glyphs.iter().zip(run.glyph_ranges()) {
                 glyphs.push(Glyph {
                     id: shaped.id,
                     x: glyph_x,
+                    range,
                 });
                 glyph_x += shaped.x_advance as f32 / upem * run.size;
             }
@@ -322,6 +334,7 @@ impl<'a> Paginator<'a> {
                 y: baseline,
                 font_id: run.font_id,
                 size: run.size,
+                text: run.text.clone(),
                 glyphs,
             });
             x_cursor = glyph_x;
