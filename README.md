@@ -62,7 +62,9 @@ CSS ───────────┘                                        
 
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
    the defaults; author CSS cascades over it. Everything downstream
-   consumes the resolved style tree.
+   consumes the resolved style tree. The supported subset is written
+   down in `docs/css-subset.md`; anything outside it is reported with
+   the line and column it was written at.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
    and PDF are interchangeable painters over the display list.
 3. **Layout never decodes images.** Header probes yield intrinsic size,
@@ -76,10 +78,10 @@ two complete public-domain novels — *Pride and Prejudice* at book scale
 and *The Count of Monte Cristo* at four times it — and holds the result
 against fixed budgets:
 
-| | pages | line layout | fragment | PDF | end to end | layout peak |
-|---|---|---|---|---|---|---|
-| *Pride and Prejudice* | 333 | 130 ms | 4 ms | 153 ms | 288 ms | 12 MiB |
-| *The Count of Monte Cristo* | 1240 | 510 ms | 18 ms | 572 ms | 1.10 s | 46 MiB |
+| | pages | style | line layout | fragment | PDF | end to end | layout peak |
+|---|---|---|---|---|---|---|---|
+| *Pride and Prejudice* | 333 | 1 ms | 128 ms | 5 ms | 150 ms | 283 ms | 12 MiB |
+| *The Count of Monte Cristo* | 1240 | 5 ms | 502 ms | 19 ms | 561 ms | 1.08 s | 46 MiB |
 
 Four times the book, four times the cost, in time and in memory both.
 

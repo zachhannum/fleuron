@@ -16,7 +16,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use fleuron::fonts::FontRegistry;
-use fleuron::layout::{PageGeometry, Paginator};
+use fleuron::layout::Paginator;
 use fleuron::lines::Line;
 use fleuron::pdf;
 
@@ -89,6 +89,8 @@ pub struct Report {
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
     pub lines: usize,
+    /// Style compilation: parse, match, cascade.
+    pub style: Duration,
     /// Line layout: shaping, breaking, measuring.
     pub line_layout: Duration,
     /// Fragmentation and page assembly, over already-laid-out lines.
@@ -106,7 +108,7 @@ pub struct Report {
 impl Report {
     /// Content tree to PDF bytes: what a build step waits on.
     pub fn end_to_end(&self) -> Duration {
-        self.layout + self.pdf
+        self.style + self.layout + self.pdf
     }
 
     /// The budgets this report is held to on `target`.
@@ -183,8 +185,10 @@ impl fmt::Display for Check {
 /// met every time.
 pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
     let book = corpus.book();
-    let paginator = Paginator::new(registry, PageGeometry::trade_paperback());
+    let styles = crate::styles(&book);
+    let paginator = Paginator::new(registry, &styles);
 
+    let mut style = Duration::MAX;
     let mut line_layout = Duration::MAX;
     let mut fragment = Duration::MAX;
     let mut layout = Duration::MAX;
@@ -196,6 +200,10 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
 
     for _ in 0..runs.max(1) {
         let start = Instant::now();
+        black_box(crate::styles(&book));
+        style = style.min(start.elapsed());
+
+        let start = Instant::now();
         let flows: Vec<Vec<Line>> = black_box(
             book.sections
                 .iter()
@@ -206,12 +214,12 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         lines = flows.iter().map(Vec::len).sum();
 
         let start = Instant::now();
-        black_box(paginator.flow(&flows));
+        black_box(paginator.flow(&book, &flows));
         fragment = fragment.min(start.elapsed());
 
         let (output, peak) = crate::alloc::measure(|| {
             let start = Instant::now();
-            let output = fleuron::layout::layout_book(&book, registry);
+            let output = fleuron::layout::layout_book(&book, &styles, registry);
             layout = layout.min(start.elapsed());
             output
         });
@@ -230,6 +238,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         corpus,
         pages,
         lines,
+        style,
         line_layout,
         fragment,
         layout,
@@ -250,6 +259,7 @@ impl fmt::Display for Report {
             self.pdf_bytes / 1024,
         )?;
         for (stage, duration) in [
+            ("style", self.style),
             ("line layout", self.line_layout),
             ("fragment", self.fragment),
             ("layout", self.layout),
@@ -314,6 +324,7 @@ mod tests {
             corpus: Corpus::GATE,
             pages: 300,
             lines: 10_000,
+            style: Duration::from_millis(10),
             line_layout: Duration::from_millis(600),
             fragment: Duration::from_millis(20),
             layout: Duration::from_millis(700),
@@ -321,11 +332,11 @@ mod tests {
             pdf_bytes: 0,
             layout_peak: 1024 * 1024,
         };
-        assert_eq!(report.end_to_end(), Duration::from_millis(800));
+        assert_eq!(report.end_to_end(), Duration::from_millis(810));
 
         let native = report.checks(Target::Native);
         assert_eq!(native[0].label, "end to end");
-        assert_eq!(native[0].measured, 800.0);
+        assert_eq!(native[0].measured, 810.0);
         assert!(native[0].passed());
 
         let wasm = report.checks(Target::Wasm);

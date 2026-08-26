@@ -1,4 +1,1080 @@
 //! The style tree: resolved styling.
 //!
-//! Styling enters as CSS. A built-in user-agent stylesheet supplies the
-//! defaults; author CSS cascades over it.
+//! Styling enters as CSS. A built-in user-agent stylesheet supplies
+//! the defaults; author CSS cascades over it. What comes out is one
+//! computed style per content node and one page master per situation
+//! a page can be in, and that is the whole of what layout is told.
+//!
+//! ```text
+//! content tree + CSS ─► style tree ─► box tree ─► …
+//! ```
+//!
+//! Font faces reach the registry here too: `@font-face` names a
+//! source, the host loader hands back bytes, and every node's face is
+//! an id by the time layout sees it.
+
+mod element;
+mod properties;
+mod sheet;
+
+use std::collections::BTreeMap;
+
+use selectors::context::{
+    MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode, SelectorCaches,
+};
+use selectors::matching::{MatchingContext, matches_selector};
+use serde::Serialize;
+
+use crate::Warning;
+use crate::content::{Book, NodeId};
+use crate::fonts::{FontRegistry, FontSource};
+use crate::lines::{InlineStyles, ParagraphStyle};
+use crate::pages::Side;
+
+pub use properties::{
+    Align, Band, Break, ComputedStyle, Content, Edge, Edges, Family, FontStyle, Hyphens, Length,
+    LineHeight, MarginBox, PageGeometry, TextAlign,
+};
+pub use sheet::{Origin, Source};
+
+use element::ElementTree;
+use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
+
+/// The defaults, as a stylesheet. Nothing in the engine carries a
+/// style constant; this file is where the trade paperback lives.
+pub const USER_AGENT_CSS: &str = include_str!("style/ua.css");
+
+/// Resolves `@font-face` sources to font bytes.
+///
+/// The engine reads no paths of its own: a url means whatever the
+/// host says it means, and a host that resolves nothing is a host
+/// with no author fonts.
+pub trait FontLoader {
+    /// The bytes behind one `src` url, or `None` when the host cannot
+    /// resolve it.
+    fn load(&self, url: &str) -> Option<Vec<u8>>;
+}
+
+/// A loader that resolves nothing.
+pub struct NoFonts;
+
+impl FontLoader for NoFonts {
+    fn load(&self, _url: &str) -> Option<Vec<u8>> {
+        None
+    }
+}
+
+/// One node's place in the tree: what it is, and which style it got.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NodeStyle {
+    /// The content node this style belongs to.
+    pub id: u32,
+    /// The element name selectors matched against.
+    pub element: &'static str,
+    /// Index into the tree's distinct styles.
+    pub style: u32,
+}
+
+/// The situation a page finds itself in, which is what `@page`
+/// selects on beyond the page's name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Situation {
+    /// The page a page group opens on: `@page :first`.
+    First(Side),
+    /// Any later page of the group.
+    Body(Side),
+    /// A page inserted to square the sheet: `@page :blank`.
+    Blank,
+}
+
+impl Situation {
+    /// The side of the spread this situation falls on. Blanks are
+    /// versos: a book never opens a leaf to a blank right-hand page.
+    pub fn side(self) -> Side {
+        match self {
+            Situation::First(side) | Situation::Body(side) => side,
+            Situation::Blank => Side::Verso,
+        }
+    }
+}
+
+/// Which page a `@page` lookup is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageQuery<'a> {
+    /// The named page in force, from the `page` property.
+    pub name: Option<&'a str>,
+    pub situation: Situation,
+}
+
+/// One resolved page master: the page box, and what its margin boxes
+/// paint.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PageStyle {
+    pub geometry: PageGeometry,
+    /// The margin boxes the page's rules mentioned, in CSS order.
+    pub boxes: Vec<MarginBoxStyle>,
+}
+
+impl PageStyle {
+    /// The margin box `which`, when it paints anything.
+    pub fn margin_box(&self, which: MarginBox) -> Option<&MarginBoxStyle> {
+        self.boxes
+            .iter()
+            .find(|box_| box_.which == which && box_.content != Content::None)
+    }
+}
+
+/// One page margin box: what it paints and the style it paints with.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MarginBoxStyle {
+    pub which: MarginBox,
+    pub content: Content,
+    /// The box's own text style, inherited from the book's root the
+    /// way a block's would be.
+    pub style: ComputedStyle,
+}
+
+/// One page master, named and situated.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PageMaster {
+    /// The named page, or `None` for the unnamed default.
+    pub page: Option<String>,
+    pub situation: Situation,
+    pub style: PageStyle,
+}
+
+/// The compiled styling of one book.
+#[derive(Debug, Serialize)]
+pub struct StyleTree {
+    /// The distinct computed styles this book uses. Nodes index into
+    /// it: a book has thousands of nodes and a handful of styles.
+    styles: Vec<ComputedStyle>,
+    /// Every element, in document order.
+    nodes: Vec<NodeStyle>,
+    /// Every master a page of this book can take.
+    masters: Vec<PageMaster>,
+    /// Style index by raw node id. Index 0 is the root, which is also
+    /// what an unassigned node resolves to.
+    #[serde(skip)]
+    by_node: Vec<u32>,
+    warnings: Vec<Warning>,
+}
+
+impl StyleTree {
+    /// The computed style of one content node. An id the tree does
+    /// not know — an unassigned one, or a node from another book —
+    /// gets the root style, which is the book's own defaults.
+    pub fn style(&self, id: NodeId) -> &ComputedStyle {
+        let index = self
+            .by_node
+            .get(id.get() as usize)
+            .copied()
+            .unwrap_or_default();
+        &self.styles[index as usize]
+    }
+
+    /// Everything line layout needs about one node.
+    pub fn paragraph(&self, id: NodeId) -> ParagraphStyle {
+        self.style(id).paragraph()
+    }
+
+    /// The style of the book itself: the root of inheritance.
+    pub fn root(&self) -> &ComputedStyle {
+        &self.styles[0]
+    }
+
+    /// The distinct computed styles, in the order nodes index them.
+    pub fn styles(&self) -> &[ComputedStyle] {
+        &self.styles
+    }
+
+    /// Every element, in document order.
+    pub fn nodes(&self) -> &[NodeStyle] {
+        &self.nodes
+    }
+
+    /// What compilation had to complain about.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    /// The page master one page resolves to. A named page with no
+    /// master of its own falls back to the unnamed one.
+    pub fn page(&self, query: PageQuery<'_>) -> &PageStyle {
+        self.master(query.name, query.situation)
+            .or_else(|| self.master(None, query.situation))
+            .expect("every situation has an unnamed master")
+    }
+
+    /// The default page: an unnamed body recto. The measure every
+    /// paragraph breaks to comes from here.
+    pub fn default_page(&self) -> &PageStyle {
+        self.page(PageQuery {
+            name: None,
+            situation: Situation::Body(Side::Recto),
+        })
+    }
+
+    /// Every master this book can put on a page: one per named page
+    /// and situation, in a stable order.
+    pub fn masters(&self) -> &[PageMaster] {
+        &self.masters
+    }
+
+    fn master(&self, name: Option<&str>, situation: Situation) -> Option<&PageStyle> {
+        self.masters
+            .iter()
+            .find(|master| master.page.as_deref() == name && master.situation == situation)
+            .map(|master| &master.style)
+    }
+}
+
+/// Resolves every master the book can use: the unnamed default, plus
+/// each named page, in each situation a page can be in.
+fn resolve_masters(
+    pages: &[(u8, PageRule)],
+    styles: &[ComputedStyle],
+    root: &ComputedStyle,
+    registry: &FontRegistry,
+) -> Vec<PageMaster> {
+    let mut names: Vec<Option<String>> = vec![None];
+    for style in styles {
+        if let Some(name) = &style.page
+            && !names.iter().any(|known| known.as_deref() == Some(name))
+        {
+            names.push(Some(name.clone()));
+        }
+    }
+    let situations = [
+        Situation::First(Side::Recto),
+        Situation::First(Side::Verso),
+        Situation::Body(Side::Recto),
+        Situation::Body(Side::Verso),
+        Situation::Blank,
+    ];
+    names
+        .into_iter()
+        .flat_map(|name| {
+            situations.map(|situation| PageMaster {
+                page: name.clone(),
+                situation,
+                style: resolve_page(
+                    pages,
+                    PageQuery {
+                        name: name.as_deref(),
+                        situation,
+                    },
+                    root,
+                    registry,
+                ),
+            })
+        })
+        .collect()
+}
+
+/// One page master: every `@page` rule that selects it, applied in
+/// specificity then source order.
+fn resolve_page(
+    pages: &[(u8, PageRule)],
+    query: PageQuery<'_>,
+    root: &ComputedStyle,
+    registry: &FontRegistry,
+) -> PageStyle {
+    let mut matching: Vec<&(u8, PageRule)> = pages
+        .iter()
+        .filter(|(_, rule)| selects(rule, query))
+        .collect();
+    // `@page` cascades like any other rule: origin first, then
+    // specificity. Source order already holds, and a stable sort
+    // leaves the later of two equal rules on top.
+    matching.sort_by_key(|(level, rule)| (*level, rule.specificity()));
+
+    let root_size = root.font_size;
+    let mut geometry = PageGeometry {
+        width: 612.0,
+        height: 792.0,
+        margin: Edges::all(0.0),
+    };
+    let mut boxes: BTreeMap<MarginBox, MarginBoxStyle> = BTreeMap::new();
+    for (_, rule) in matching {
+        for declaration in &rule.declarations {
+            match declaration {
+                PageDeclaration::Size(width, height) => {
+                    geometry.width = *width;
+                    geometry.height = *height;
+                }
+                PageDeclaration::Margin(edge, length) => {
+                    let points = length.to_points(root_size, root_size);
+                    match edge {
+                        Edge::Top => geometry.margin.top = points,
+                        Edge::Right => geometry.margin.right = points,
+                        Edge::Bottom => geometry.margin.bottom = points,
+                        Edge::Left => geometry.margin.left = points,
+                    }
+                }
+            }
+        }
+        for (which, declarations) in &rule.boxes {
+            let entry = boxes.entry(*which).or_insert_with(|| MarginBoxStyle {
+                which: *which,
+                content: Content::None,
+                style: root.inherit(),
+            });
+            for declaration in declarations {
+                match declaration {
+                    MarginDeclaration::Content(content) => entry.content = content.clone(),
+                    MarginDeclaration::Style(style) => {
+                        entry.style.apply(style, root_size, root_size)
+                    }
+                }
+            }
+            entry.style.font_id = resolve_face(&entry.style, registry);
+        }
+    }
+    PageStyle {
+        geometry,
+        boxes: boxes.into_values().collect(),
+    }
+}
+
+impl InlineStyles for StyleTree {
+    fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
+        match self.by_node.get(id.get() as usize) {
+            Some(index) => self.styles[*index as usize].paragraph(),
+            None => block,
+        }
+    }
+}
+
+/// Whether one `@page` rule selects the page a query describes.
+fn selects(rule: &PageRule, query: PageQuery<'_>) -> bool {
+    if rule.name.is_some() && rule.name.as_deref() != query.name {
+        return false;
+    }
+    if rule.first && !matches!(query.situation, Situation::First(_)) {
+        return false;
+    }
+    if rule.blank && query.situation != Situation::Blank {
+        return false;
+    }
+    match rule.side {
+        Some(side) => side == query.situation.side(),
+        None => true,
+    }
+}
+
+/// Parsed stylesheets: the built-in sheet, then whatever the host
+/// added, ready to compile against a book.
+///
+/// Parsing is separate from compiling because a run styles several
+/// books from one set of sheets, and separate from font loading
+/// because loading is the one step that reaches outside the engine.
+#[derive(Debug)]
+pub struct Stylesheets {
+    sheets: Vec<Sheet>,
+    warnings: Vec<Warning>,
+}
+
+impl Stylesheets {
+    /// Parses the built-in sheet, then `sources` in the order given.
+    pub fn parse(sources: &[Source<'_>]) -> Stylesheets {
+        let built_in = Source::user_agent("user-agent.css", USER_AGENT_CSS);
+        let mut sheets = Vec::new();
+        let mut warnings = Vec::new();
+        for source in std::iter::once(&built_in).chain(sources) {
+            let (sheet, mut sheet_warnings) = sheet::parse(source);
+            warnings.append(&mut sheet_warnings);
+            sheets.push(sheet);
+        }
+        Stylesheets { sheets, warnings }
+    }
+
+    /// Registers every `@font-face` the loader resolves, under the
+    /// family the sheet gave it rather than the one inside the file:
+    /// a stylesheet's name for a face is the one its selectors use.
+    ///
+    /// Run this before compiling — a face the registry does not hold
+    /// is a face no computed style can resolve to.
+    pub fn load_fonts(&mut self, registry: &mut FontRegistry, loader: &dyn FontLoader) {
+        for sheet in &self.sheets {
+            for face in &sheet.faces {
+                self.warnings.extend(register_face(face, registry, loader));
+            }
+        }
+    }
+
+    /// What parsing and font loading had to complain about.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    /// Compiles one book's styling against the faces the registry
+    /// holds.
+    pub fn compile(&self, book: &Book, registry: &FontRegistry) -> StyleTree {
+        cascade(book, &self.sheets, registry, self.warnings.clone())
+    }
+}
+
+/// One book's styling under the built-in sheet alone.
+pub fn defaults(book: &Book, registry: &FontRegistry) -> StyleTree {
+    Stylesheets::parse(&[]).compile(book, registry)
+}
+
+/// Registers one `@font-face`, or says why it could not be.
+fn register_face(
+    face: &FontFace,
+    registry: &mut FontRegistry,
+    loader: &dyn FontLoader,
+) -> Vec<Warning> {
+    let mut warnings = Vec::new();
+    for src in &face.src {
+        let Src::Url(url) = src else {
+            continue;
+        };
+        let Some(bytes) = loader.load(url) else {
+            continue;
+        };
+        match FontSource::from_bytes(bytes) {
+            Ok(mut source) => {
+                source.family = face.family.to_lowercase();
+                return match registry.add(source) {
+                    Ok(_) => warnings,
+                    Err(error) => {
+                        warnings.push(Warning {
+                            message: format!("@font-face {}: {error}", face.family),
+                            origin: Some(url.clone()),
+                        });
+                        warnings
+                    }
+                };
+            }
+            Err(error) => warnings.push(Warning {
+                message: format!("@font-face {}: {error}", face.family),
+                origin: Some(url.clone()),
+            }),
+        }
+    }
+    warnings.push(Warning {
+        message: format!(
+            "@font-face {}: no source resolved; text falls back to a registered face",
+            face.family
+        ),
+        origin: None,
+    });
+    warnings
+}
+
+/// Matching and the cascade: every element gets the declarations that
+/// match it, in cascade order, applied over what it inherited.
+fn cascade(
+    book: &Book,
+    sheets: &[Sheet],
+    registry: &FontRegistry,
+    warnings: Vec<Warning>,
+) -> StyleTree {
+    let elements = ElementTree::build(book);
+    let mut caches = SelectorCaches::default();
+
+    let mut styles: Vec<ComputedStyle> = Vec::new();
+    let mut nodes = Vec::new();
+    let mut computed: Vec<u32> = Vec::with_capacity(elements.nodes().len());
+    let mut max_id = 0u32;
+
+    for (index, node) in elements.nodes().iter().enumerate() {
+        let parent = node
+            .parent
+            .map(|parent| styles[computed[parent] as usize].clone())
+            .unwrap_or_else(ComputedStyle::initial);
+        let mut style = parent.inherit();
+
+        let mut applicable: Vec<(u8, u32, usize, usize, usize)> = Vec::new();
+        for (sheet_index, sheet) in sheets.iter().enumerate() {
+            for (rule_index, rule) in sheet.rules.iter().enumerate() {
+                let specificity = rule
+                    .selectors
+                    .slice()
+                    .iter()
+                    .filter(|selector| {
+                        let mut context = MatchingContext::new(
+                            MatchingMode::Normal,
+                            None,
+                            &mut caches,
+                            QuirksMode::NoQuirks,
+                            NeedsSelectorFlags::No,
+                            MatchingForInvalidation::No,
+                        );
+                        matches_selector(selector, 0, None, &elements.at(index), &mut context)
+                    })
+                    .map(|selector| selector.specificity())
+                    .max();
+                let Some(specificity) = specificity else {
+                    continue;
+                };
+                for (order, (_, importance)) in rule.declarations.iter().enumerate() {
+                    applicable.push((
+                        level(sheet.origin, *importance),
+                        specificity,
+                        sheet_index,
+                        rule_index,
+                        order,
+                    ));
+                }
+            }
+        }
+        applicable.sort_unstable();
+        let root_size = styles.first().map(|style| style.font_size);
+        for (_, _, sheet_index, rule_index, order) in &applicable {
+            let (declaration, _) = &sheets[*sheet_index].rules[*rule_index].declarations[*order];
+            let parent_size = parent.font_size;
+            style.apply(declaration, parent_size, root_size.unwrap_or(parent_size));
+        }
+        style.font_id = resolve_face(&style, registry);
+
+        let index_of_style = intern(&mut styles, style);
+        computed.push(index_of_style);
+        nodes.push(NodeStyle {
+            id: node.id.get(),
+            element: node.name,
+            style: index_of_style,
+        });
+        max_id = max_id.max(node.id.get());
+    }
+
+    let root = computed.first().copied().unwrap_or(0);
+    let mut by_node = vec![root; max_id as usize + 1];
+    for (node, style) in elements.nodes().iter().zip(&computed) {
+        by_node[node.id.get() as usize] = *style;
+    }
+    by_node[0] = root;
+
+    if styles.is_empty() {
+        styles.push(ComputedStyle::initial());
+    }
+    let pages: Vec<(u8, PageRule)> = sheets
+        .iter()
+        .flat_map(|sheet| {
+            let level = level(sheet.origin, Importance::Normal);
+            sheet.pages.iter().cloned().map(move |rule| (level, rule))
+        })
+        .collect();
+    let masters = resolve_masters(&pages, &styles, &styles[root as usize].clone(), registry);
+
+    StyleTree {
+        styles,
+        nodes,
+        masters,
+        by_node,
+        warnings,
+    }
+}
+
+/// Where one declaration sits in the cascade, before specificity is
+/// consulted: author CSS beats the built-in sheet, and `!important`
+/// turns that round for the origin that used it.
+fn level(origin: Origin, importance: Importance) -> u8 {
+    match (origin, importance) {
+        (Origin::UserAgent, Importance::Normal) => 0,
+        (Origin::Author, Importance::Normal) => 1,
+        (Origin::Author, Importance::Important) => 2,
+        (Origin::UserAgent, Importance::Important) => 3,
+    }
+}
+
+/// The index of a style in the table, adding it if it is new. Books
+/// have thousands of nodes and a handful of styles.
+fn intern(styles: &mut Vec<ComputedStyle>, style: ComputedStyle) -> u32 {
+    match styles.iter().position(|known| *known == style) {
+        Some(index) => index as u32,
+        None => {
+            styles.push(style);
+            (styles.len() - 1) as u32
+        }
+    }
+}
+
+/// The face a computed style shapes with: the first family the
+/// registry holds, at the nearest slope and weight it has.
+fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> u16 {
+    let italic = style.font_style == FontStyle::Italic;
+    let bold = style.font_weight >= 600;
+    for family in &style.font_family {
+        let found = match family {
+            Family::Named(name) => registry.best_match(name, italic, bold),
+            Family::Generic(generic) => registry
+                .generic(*generic)
+                .and_then(|id| registry.font_ref(id).map(|entry| entry.family.clone()))
+                .and_then(|family| registry.best_match(&family, italic, bold)),
+        };
+        if let Some(id) = found {
+            return id;
+        }
+    }
+    0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::content::{Block, HeadingLevel, Inline, Metadata, Section};
+    use crate::fonts::{BUNDLED_FONT, GenericFamily, bundled_registry};
+
+    fn registry() -> &'static FontRegistry {
+        static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
+        REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
+    }
+
+    fn text(value: &str) -> Inline {
+        Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: value.into(),
+            position: None,
+        }
+    }
+
+    /// A chapter: a heading, a paragraph opening with emphasis, a
+    /// paragraph of plain prose, and a blockquote.
+    fn sample() -> Book {
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                id: NodeId::UNASSIGNED,
+                source: Some("chapter-01.md".into()),
+                title: None,
+                blocks: vec![
+                    Block::Heading {
+                        id: NodeId::UNASSIGNED,
+                        level: HeadingLevel::H1,
+                        inlines: vec![text("Chapter One")],
+                        position: None,
+                    },
+                    Block::Paragraph {
+                        id: NodeId::UNASSIGNED,
+                        inlines: vec![
+                            Inline::Emphasis {
+                                id: NodeId::UNASSIGNED,
+                                children: vec![text("In which")],
+                                position: None,
+                            },
+                            text(" a drawer is opened."),
+                        ],
+                        position: None,
+                    },
+                    Block::Paragraph {
+                        id: NodeId::UNASSIGNED,
+                        inlines: vec![text("It was the kind of morning.")],
+                        position: None,
+                    },
+                    Block::Blockquote {
+                        id: NodeId::UNASSIGNED,
+                        blocks: vec![Block::Paragraph {
+                            id: NodeId::UNASSIGNED,
+                            inlines: vec![text("\"Nobody's early here.\"")],
+                            position: None,
+                        }],
+                        position: None,
+                    },
+                ],
+                position: None,
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// The tree, with `css` cascading over the built-in sheet.
+    fn compile(book: &Book, css: &str) -> StyleTree {
+        Stylesheets::parse(&[Source::author("author.css", css)]).compile(book, registry())
+    }
+
+    /// The computed style of the nth element with a given name.
+    fn nth(tree: &StyleTree, element: &str, index: usize) -> ComputedStyle {
+        let node = tree
+            .nodes()
+            .iter()
+            .filter(|node| node.element == element)
+            .nth(index)
+            .unwrap_or_else(|| panic!("no {element} #{index}"));
+        tree.styles()[node.style as usize].clone()
+    }
+
+    fn first(tree: &StyleTree, element: &str) -> ComputedStyle {
+        nth(tree, element, 0)
+    }
+
+    /// The built-in sheet carries what the constants used to: body,
+    /// chapter and folio styles, and the trade-paperback page.
+    #[test]
+    fn the_built_in_sheet_carries_the_defaults() {
+        let book = sample();
+        let tree = defaults(&book, registry());
+
+        let body = first(&tree, "p");
+        assert_eq!(body.font_size, 11.0);
+        assert_eq!(body.line_height, 1.4);
+        assert_eq!(body.font_id, 0);
+        assert_eq!(body.hyphens, Hyphens::None);
+        assert_eq!(first(&tree, "h1").font_size, 18.0);
+
+        let recto = tree.page(PageQuery {
+            name: Some("chapter"),
+            situation: Situation::Body(Side::Recto),
+        });
+        assert_eq!(recto.geometry.width, 432.0);
+        assert_eq!(recto.geometry.height, 648.0);
+        assert_eq!(recto.geometry.content_size(), (336.0, 540.0));
+        let folio = recto
+            .margin_box(MarginBox::BottomCenter)
+            .expect("the folio is a margin box");
+        assert_eq!(folio.content, Content::PageNumber);
+        assert_eq!(folio.style.font_size, 9.0);
+        assert_eq!(folio.style.line_height, 1.4);
+    }
+
+    /// Selectors run against the content tree: type, descendant,
+    /// child, `:first-child` and `:is()` all pick out the elements a
+    /// reader of the markdown would expect.
+    #[test]
+    fn selectors_match_the_content_tree() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "section > p { text-indent: 12pt }
+             blockquote p { text-indent: 3pt }
+             :is(h1, h2):first-child { text-indent: 6pt }
+             :is(em, strong) { font-weight: 700 }",
+        );
+        // The section's own paragraphs are indented; the one inside
+        // the blockquote is not a child of the section, so only the
+        // descendant rule reaches it.
+        assert_eq!(nth(&tree, "p", 0).text_indent, 12.0);
+        assert_eq!(nth(&tree, "p", 1).text_indent, 12.0);
+        assert_eq!(nth(&tree, "p", 2).text_indent, 3.0);
+        // The heading opens the section, so it is a first child.
+        assert_eq!(first(&tree, "h1").text_indent, 6.0);
+        assert_eq!(first(&tree, "em").font_weight, 700);
+
+        // Siblings, negation, counting and `:has()` all reach the
+        // same tree.
+        let tree = compile(
+            &book,
+            "h1 + p { text-indent: 1pt }
+             h1 ~ p { widows: 3 }
+             p:not(:first-child) { orphans: 4 }
+             section:has(blockquote) > p:nth-child(3) { text-indent: 2pt }",
+        );
+        assert_eq!(nth(&tree, "p", 0).text_indent, 1.0);
+        assert_eq!(nth(&tree, "p", 1).text_indent, 2.0);
+        assert_eq!(nth(&tree, "p", 0).widows, 3);
+        assert_eq!(nth(&tree, "p", 0).orphans, 4);
+        assert_eq!(first(&tree, "h1").orphans, 2);
+    }
+
+    /// Author CSS overrides the built-in sheet, and specificity and
+    /// source order decide between author rules.
+    #[test]
+    fn author_css_overrides_the_built_in_sheet() {
+        let book = sample();
+        // The built-in sheet's `book { font-size: 11pt }` is more
+        // specific than nothing, and still loses to the author.
+        let tree = compile(&book, "* { font-size: 13pt } p { font-size: 12pt }");
+        assert_eq!(first(&tree, "p").font_size, 12.0);
+        // Equal specificity: the later rule wins.
+        let tree = compile(&book, "p { font-size: 12pt } p { font-size: 14pt }");
+        assert_eq!(first(&tree, "p").font_size, 14.0);
+        // `!important` in the built-in sheet would outrank the
+        // author, and nothing in it uses one.
+        let tree = compile(
+            &book,
+            "p { font-size: 12pt !important } p { font-size: 14pt }",
+        );
+        assert_eq!(first(&tree, "p").font_size, 12.0);
+    }
+
+    /// An unsupported property is a diagnostic naming its source
+    /// position, and the rest of the rule still applies.
+    #[test]
+    fn unsupported_properties_warn_and_the_run_continues() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p {\n  text-shadow: 0 0 2px black;\n  font-size: 13pt;\n}\n",
+        );
+        let warning = tree
+            .warnings()
+            .iter()
+            .find(|warning| warning.message.contains("text-shadow"))
+            .expect("text-shadow is outside the subset");
+        assert_eq!(warning.message, "unsupported property `text-shadow`");
+        assert_eq!(warning.origin.as_deref(), Some("author.css:2:3"));
+        assert_eq!(
+            first(&tree, "p").font_size,
+            13.0,
+            "the declaration after the bad one was dropped"
+        );
+    }
+
+    /// The rest of the subset's edges: an at-rule, a selector and a
+    /// value the engine does not know each warn where they were
+    /// written, and the sheet keeps parsing.
+    #[test]
+    fn unsupported_at_rules_selectors_and_values_warn() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "@media print { p { font-size: 30pt } }\n\
+             p:hover { font-size: 40pt }\n\
+             p { text-align: sideways }\n\
+             p { font-size: 15pt }\n",
+        );
+        let messages: Vec<&str> = tree
+            .warnings()
+            .iter()
+            .map(|warning| warning.message.as_str())
+            .collect();
+        assert!(
+            messages.contains(&"unsupported at-rule `@media`"),
+            "{messages:?}"
+        );
+        assert!(
+            messages.contains(&"unsupported selector `:hover`"),
+            "{messages:?}"
+        );
+        assert!(
+            messages.contains(&"unsupported value for `text-align`"),
+            "{messages:?}"
+        );
+        assert!(
+            tree.warnings()
+                .iter()
+                .all(|warning| warning.origin.is_some()),
+            "a diagnostic with no position: {:?}",
+            tree.warnings()
+        );
+        assert_eq!(first(&tree, "p").font_size, 15.0);
+    }
+
+    /// `@page :first` and `:left`/`:right` select different masters
+    /// for the same book: a chapter opening runs a blind folio, and
+    /// the spread's margins mirror.
+    #[test]
+    fn page_pseudo_classes_select_different_masters() {
+        let book = sample();
+        let tree = defaults(&book, registry());
+        let chapter = |situation| {
+            tree.page(PageQuery {
+                name: Some("chapter"),
+                situation,
+            })
+        };
+        let opening = chapter(Situation::First(Side::Recto));
+        let body = chapter(Situation::Body(Side::Recto));
+        let verso = chapter(Situation::Body(Side::Verso));
+        let blank = chapter(Situation::Blank);
+
+        assert!(opening.margin_box(MarginBox::BottomCenter).is_none());
+        assert!(blank.margin_box(MarginBox::BottomCenter).is_none());
+        assert_eq!(
+            body.margin_box(MarginBox::BottomCenter)
+                .map(|box_| &box_.content),
+            Some(&Content::PageNumber)
+        );
+        assert_eq!(body.geometry.margin.left, 54.0);
+        assert_eq!(body.geometry.margin.right, 42.0);
+        assert_eq!(verso.geometry.margin.left, 42.0);
+        assert_eq!(verso.geometry.margin.right, 54.0);
+        // Every situation of every named page has a master.
+        assert_eq!(tree.masters().len(), 10);
+    }
+
+    /// The `@page` grammar: named pages, sheet sizes, margins, and a
+    /// margin box carrying a literal.
+    #[test]
+    fn page_grammar_sets_size_margins_and_margin_boxes() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "section { page: chapter }
+             @page { size: a5; margin: 2cm }
+             @page chapter { margin-left: 3cm }
+             @page chapter:first { @top-center { content: \"❦\"; font-size: 14pt } }",
+        );
+        let a5 = (148.0 * 72.0 / 25.4, 210.0 * 72.0 / 25.4);
+        let body = tree.page(PageQuery {
+            name: Some("chapter"),
+            situation: Situation::Body(Side::Recto),
+        });
+        assert!((body.geometry.width - a5.0).abs() < 1e-3);
+        assert!((body.geometry.height - a5.1).abs() < 1e-3);
+        assert!((body.geometry.margin.top - 2.0 * 72.0 / 2.54).abs() < 1e-3);
+        assert!((body.geometry.margin.left - 3.0 * 72.0 / 2.54).abs() < 1e-3);
+
+        let opening = tree.page(PageQuery {
+            name: Some("chapter"),
+            situation: Situation::First(Side::Recto),
+        });
+        let ornament = opening
+            .margin_box(MarginBox::TopCenter)
+            .expect("the opening page carries an ornament");
+        assert_eq!(ornament.content, Content::Text("❦".into()));
+        assert_eq!(ornament.style.font_size, 14.0);
+        // An unnamed page never picked up the named rule's margin.
+        let unnamed = tree.page(PageQuery {
+            name: None,
+            situation: Situation::Body(Side::Recto),
+        });
+        assert!((unnamed.geometry.margin.left - 2.0 * 72.0 / 2.54).abs() < 1e-3);
+    }
+
+    /// `@font-face` resolves its `src` through the host loader, and
+    /// the family the sheet declared is the one selectors use.
+    #[test]
+    fn font_face_src_resolves_through_the_host_loader() {
+        struct OneFace;
+        impl FontLoader for OneFace {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "faces/garamond.ttf").then(|| BUNDLED_FONT.to_vec())
+            }
+        }
+
+        let book = sample();
+        let mut registry = bundled_registry().expect("bundled font parses");
+        let css = "@font-face {
+                     font-family: \"Author Serif\";
+                     src: url(\"faces/garamond.ttf\") format(\"truetype\");
+                   }
+                   @font-face {
+                     font-family: \"Missing\";
+                     src: url(\"faces/nowhere.ttf\");
+                   }
+                   p { font-family: \"Author Serif\", serif }
+                   h1 { font-family: \"Missing\", serif }";
+        let mut sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
+        sheets.load_fonts(&mut registry, &OneFace);
+        let tree = sheets.compile(&book, &registry);
+
+        assert_eq!(registry.len(), 2, "the loaded face joined the registry");
+        assert_eq!(registry.by_family("author serif"), Some(1));
+        assert_eq!(first(&tree, "p").font_id, 1);
+        // A face nothing resolved falls back to the next family.
+        assert_eq!(first(&tree, "h1").font_id, 0);
+        assert!(
+            tree.warnings()
+                .iter()
+                .any(|warning| warning.message.contains("Missing")),
+            "an unresolved face should say so: {:?}",
+            tree.warnings()
+        );
+    }
+
+    /// The engine opens nothing itself: with a loader that resolves
+    /// nothing, `@font-face` adds no face and says why.
+    #[test]
+    fn without_a_loader_no_font_face_resolves() {
+        let book = sample();
+        let mut registry = bundled_registry().expect("bundled font parses");
+        let css = "@font-face { font-family: \"Author Serif\"; src: url(\"anywhere.ttf\") }";
+        let mut sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
+        sheets.load_fonts(&mut registry, &NoFonts);
+        let tree = sheets.compile(&book, &registry);
+        assert_eq!(registry.len(), 1);
+        assert!(
+            tree.warnings()
+                .iter()
+                .any(|w| w.message.contains("no source resolved"))
+        );
+    }
+
+    /// Relative lengths compute against what CSS says they do:
+    /// `em` in `font-size` against the parent, `rem` against the
+    /// root, `em` elsewhere against the element's own size.
+    #[test]
+    fn relative_lengths_resolve_against_their_reference() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "book { font-size: 10pt }
+             p { font-size: 1.2em; text-indent: 2em; margin-left: 1rem }
+             em { font-size: 50% }",
+        );
+        let paragraph = first(&tree, "p");
+        assert!((paragraph.font_size - 12.0).abs() < 1e-4);
+        assert!((paragraph.text_indent - 24.0).abs() < 1e-4);
+        assert!((paragraph.margin.left - 10.0).abs() < 1e-4);
+        assert!((first(&tree, "em").font_size - 6.0).abs() < 1e-4);
+    }
+
+    /// Line height computes to a multiple whatever it was written as.
+    #[test]
+    fn line_height_computes_to_a_multiple() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { font-size: 10pt; line-height: 15pt }
+             h1 { line-height: 150% }
+             em { line-height: normal }",
+        );
+        assert!((first(&tree, "p").line_height - 1.5).abs() < 1e-4);
+        assert!((first(&tree, "h1").line_height - 1.5).abs() < 1e-4);
+        assert!((first(&tree, "em").line_height - 1.2).abs() < 1e-4);
+    }
+
+    /// Inheritance: text properties reach descendants, box properties
+    /// do not.
+    #[test]
+    fn text_properties_inherit_and_box_properties_do_not() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "section { text-align: justify; margin-left: 20pt; hyphens: auto }",
+        );
+        let paragraph = first(&tree, "p");
+        assert_eq!(paragraph.text_align, TextAlign::Justify);
+        assert_eq!(paragraph.hyphens, Hyphens::Auto);
+        assert_eq!(paragraph.margin.left, 0.0);
+        assert_eq!(first(&tree, "section").margin.left, 20.0);
+    }
+
+    /// Generic families resolve through the registry's bindings, and
+    /// slope and weight pick the nearest face a family holds.
+    #[test]
+    fn families_resolve_through_the_registry() {
+        let book = sample();
+        let tree = compile(&book, "p { font-family: \"Nowhere\", monospace }");
+        let paragraph = first(&tree, "p");
+        assert_eq!(
+            paragraph.font_family,
+            vec![
+                Family::Named("Nowhere".into()),
+                Family::Generic(GenericFamily::Monospace),
+            ]
+        );
+        assert_eq!(
+            paragraph.font_id,
+            registry().generic(GenericFamily::Monospace).unwrap()
+        );
+    }
+
+    /// Styles are interned: a book of thousands of nodes computes a
+    /// handful of distinct styles, and every node points at one.
+    #[test]
+    fn styles_are_shared_between_nodes() {
+        let book = sample();
+        let tree = defaults(&book, registry());
+        assert!(
+            tree.styles().len() < tree.nodes().len(),
+            "{} styles for {} nodes",
+            tree.styles().len(),
+            tree.nodes().len()
+        );
+        for node in tree.nodes() {
+            assert!((node.style as usize) < tree.styles().len());
+        }
+        // A real node id resolves to the style its element got: the
+        // section is the second element, after the book itself.
+        assert_eq!(
+            tree.style(book.sections[0].id),
+            &tree.styles()[tree.nodes()[1].style as usize]
+        );
+    }
+}

@@ -2,6 +2,10 @@
 //! that comes back validated three ways — structure, text round-trip,
 //! page count.
 //!
+//! Author CSS travels the same path: a stylesheet on the command line
+//! reaches layout, and one that asks for something outside the subset
+//! is reported without stopping the run.
+//!
 //! Structure and text need `qpdf` and `pdftotext`. Where a tool is
 //! missing its check is skipped; setting `FLEURON_E2E_REQUIRE_TOOLS`
 //! makes the absence a failure, which is how CI keeps the checks from
@@ -16,9 +20,14 @@ use fleuron::content::{Block, Book, Inline};
 /// count is a fact about the pipeline, not a range.
 const EXPECTED_PAGES: usize = 20;
 
+/// SHA-256 of the fixture book's PDF as v0.1 wrote it, before styling
+/// became a compiled stylesheet. The built-in sheet says what the
+/// constants said, so the bytes have not moved.
+const V0_1_PDF: &str = "03a92971e3a5924e1fd4fd6d5bf85c9efb10b6353a58078c3cb2ca06233bb927";
+
 #[test]
 fn the_fixture_book_renders_a_pdf() {
-    let (pdf, stderr) = render("renders");
+    let (pdf, stderr) = render("renders", &[]);
     let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
     assert!(bytes.starts_with(b"%PDF-"), "no PDF header");
     assert!(
@@ -31,9 +40,63 @@ fn the_fixture_book_renders_a_pdf() {
     );
 }
 
+/// The built-in sheet alone reproduces v0.1 byte for byte: the
+/// defaults moved into CSS without moving a glyph.
+#[test]
+fn the_default_sheet_writes_the_pdf_v0_1_wrote() {
+    let (pdf, _) = render("identical", &[]);
+    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+    assert_eq!(
+        sha256(&bytes),
+        V0_1_PDF,
+        "the fixture book's PDF is no longer v0.1's",
+    );
+}
+
+/// Author CSS reaches layout through the command line, and changes
+/// what comes out.
+#[test]
+fn author_css_reaches_the_pdf() {
+    let sheet = write_sheet("author", "book { font-size: 14pt }\n");
+    let (pdf, stderr) = render("styled", &[sheet.as_path()]);
+    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+    assert_ne!(
+        sha256(&bytes),
+        V0_1_PDF,
+        "a larger body size changed nothing",
+    );
+    let pages: usize = stderr
+        .split_whitespace()
+        .zip(stderr.split_whitespace().skip(1))
+        .find_map(|(count, unit)| (unit == "pages").then(|| count.parse().ok())?)
+        .expect("the run reports its page count");
+    assert!(
+        pages > EXPECTED_PAGES,
+        "{pages} pages at 14pt, {EXPECTED_PAGES} at 11pt",
+    );
+}
+
+/// CSS outside the subset is a diagnostic naming where it was
+/// written, and the PDF is written anyway.
+#[test]
+fn unsupported_css_is_reported_and_the_run_continues() {
+    let sheet = write_sheet("unsupported", "p {\n  text-shadow: 0 0 2px black;\n}\n");
+    let (pdf, stderr) = render("warned", &[sheet.as_path()]);
+    assert!(
+        stderr.contains("unsupported property `text-shadow`"),
+        "no diagnostic for text-shadow: {stderr}",
+    );
+    assert!(stderr.contains(":2:3"), "no source position: {stderr}");
+    assert_eq!(
+        sha256(&std::fs::read(&pdf).expect("the CLI wrote its output")),
+        V0_1_PDF,
+        "a sheet the engine ignored changed the output",
+    );
+}
+
 #[test]
 fn the_pdf_is_structurally_sound() {
-    let (pdf, _) = render("structure");
+    let (pdf, _) = render("structure", &[]);
     let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
         return;
     };
@@ -47,7 +110,7 @@ fn the_pdf_is_structurally_sound() {
 
 #[test]
 fn the_pdf_holds_every_word_of_the_book() {
-    let (pdf, _) = render("text");
+    let (pdf, _) = render("text", &[]);
     let Some(text) = extract_text(&pdf) else {
         return;
     };
@@ -64,7 +127,7 @@ fn the_pdf_holds_every_word_of_the_book() {
 
 #[test]
 fn the_page_count_is_what_the_layout_says() {
-    let (pdf, _) = render("pages");
+    let (pdf, _) = render("pages", &[]);
     if let Some(text) = extract_text(&pdf) {
         assert_eq!(
             text.matches('\u{c}').count(),
@@ -86,17 +149,33 @@ fn the_page_count_is_what_the_layout_says() {
 /// Runs the fixture book through the CLI exactly as the epic's
 /// definition of done words it, and returns the PDF and what the run
 /// had to say.
-fn render(name: &str) -> (PathBuf, String) {
+fn render(name: &str, css: &[&Path]) -> (PathBuf, String) {
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.pdf"));
-    let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
-        .arg(fixture_path())
-        .arg("-o")
-        .arg(&output)
-        .output()
-        .expect("the CLI runs");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_fleuron"));
+    command.arg(fixture_path()).arg("-o").arg(&output);
+    for sheet in css {
+        command.arg("-c").arg(sheet);
+    }
+    let run = command.output().expect("the CLI runs");
     let stderr = String::from_utf8_lossy(&run.stderr).into_owned();
     assert!(run.status.success(), "the CLI failed: {stderr}");
     (output, stderr)
+}
+
+/// A stylesheet on disk for the CLI to read, beside the PDFs.
+fn write_sheet(name: &str, css: &str) -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.css"));
+    std::fs::write(&path, css).expect("the sheet is writable");
+    path
+}
+
+/// The digest the fixture PDF is held to, lowercase hex.
+fn sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn fixture_path() -> PathBuf {

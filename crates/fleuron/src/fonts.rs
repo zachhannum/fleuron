@@ -210,6 +210,26 @@ impl FontRegistry {
             .and_then(|ids| ids.first().copied())
     }
 
+    /// The face of `family` that best fits a slope and weight.
+    ///
+    /// Style matching is by the face's own style name, which is what
+    /// a font file calls itself: an author asking for italic gets the
+    /// italic cut when the family has one and the upright otherwise.
+    pub fn best_match(&self, family: &str, italic: bool, bold: bool) -> Option<u16> {
+        let ids = self.by_family.get(&family.to_lowercase())?;
+        ids.iter()
+            .max_by_key(|id| {
+                let style = self
+                    .font_ref(**id)
+                    .map(|entry| entry.style.to_lowercase())
+                    .unwrap_or_default();
+                let is_italic = style.contains("italic") || style.contains("oblique");
+                let is_bold = style.contains("bold");
+                (is_italic == italic) as u8 + (is_bold == bold) as u8
+            })
+            .copied()
+    }
+
     /// Identity of a face, for the output font table.
     pub fn font_ref(&self, id: u16) -> Option<&FontRefEntry> {
         self.faces.get(id as usize).map(|face| &face.identity)

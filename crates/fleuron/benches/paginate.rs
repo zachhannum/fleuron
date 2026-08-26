@@ -7,14 +7,15 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fleuron::layout::{PageGeometry, Paginator};
-use fleuron_fixtures::{Corpus, registry};
+use fleuron::layout::Paginator;
+use fleuron_fixtures::{Corpus, registry, styles};
 
 fn paginate(c: &mut Criterion) {
-    let paginator = Paginator::new(registry(), PageGeometry::trade_paperback());
     let mut group = c.benchmark_group("paginate");
     for corpus in Corpus::ALL {
         let book = corpus.book();
+        let styles = styles(&book);
+        let paginator = Paginator::new(registry(), &styles);
         group.throughput(Throughput::Elements(paginator.paginate(&book).len() as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(corpus.slug()),

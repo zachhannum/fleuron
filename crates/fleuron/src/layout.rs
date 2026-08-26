@@ -4,124 +4,56 @@
 //! content + style ─► box tree ─► line layout ─► fragmentation ─► pages
 //! ```
 //!
-//! v0.1 folds the middle of the pipeline into one pass: each section
-//! becomes its lines (headings with the chapter style, paragraphs with
-//! the body style, via `lines::LineLayout`), and the paginator flows
-//! those lines into page content boxes.
+//! v0.2 folds the middle of the pipeline into one pass: each section
+//! becomes its lines (each block with the style the tree computed for
+//! it, via `lines::LineLayout`), and the paginator flows those lines
+//! into page content boxes. Nothing here decides what anything looks
+//! like — the style tree was told, and this asks it.
 
 use crate::LayoutOutput;
 use crate::content::{Block, Book, Section};
 use crate::fonts::FontRegistry;
 use crate::lines::{Line, LineBreakOptions, LineLayout, ParagraphStyle, ShapedRun};
 use crate::pages::{DrawItem, Glyph, Page, Side};
-
-/// Page and content-box geometry, in points.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PageGeometry {
-    /// Trimmed page width.
-    pub width: f32,
-    /// Trimmed page height.
-    pub height: f32,
-    /// Margin on the spine side: left on recto, right on verso.
-    pub inner: f32,
-    /// Margin on the outer edge.
-    pub outer: f32,
-    /// Margin at the top of the page.
-    pub top: f32,
-    /// Margin at the bottom of the page.
-    pub bottom: f32,
-}
-
-impl PageGeometry {
-    /// 6×9in (432×648pt) with the margins of a trade paperback,
-    /// mirrored across the spread.
-    pub fn trade_paperback() -> PageGeometry {
-        PageGeometry {
-            width: 432.0,
-            height: 648.0,
-            inner: 54.0,
-            outer: 42.0,
-            top: 54.0,
-            bottom: 54.0,
-        }
-    }
-
-    /// Origin (top-left) of the content box on one side, in page
-    /// coordinates.
-    pub fn content_origin(self, side: Side) -> (f32, f32) {
-        let x = match side {
-            Side::Recto => self.inner,
-            Side::Verso => self.outer,
-        };
-        (x, self.top)
-    }
-
-    /// Size of the content box; identical on both sides, since the
-    /// margins mirror.
-    pub fn content_size(self) -> (f32, f32) {
-        (
-            self.width - self.inner - self.outer,
-            self.height - self.top - self.bottom,
-        )
-    }
-
-    /// The measure line layout breaks to: the content box width.
-    pub fn measure(self) -> f32 {
-        self.content_size().0
-    }
-
-    /// The folio line's box: `(top, height)` in page coordinates. One
-    /// folio line tall, centered in the bottom margin — the
-    /// bottom-center margin box, clear of the content area.
-    pub fn folio_line_box(self) -> (f32, f32) {
-        margin_band(self.height - self.bottom, self.bottom)
-    }
-
-    /// The running-head line's box: `(top, height)`, one line tall,
-    /// centered in the top margin. Geometry reserved for v0.2's
-    /// string-set heads; nothing paints here yet.
-    pub fn running_head_line_box(self) -> (f32, f32) {
-        margin_band(0.0, self.top)
-    }
-}
-
-/// The band of one furniture line, centered in a margin that runs
-/// from `start` for `margin` points.
-fn margin_band(start: f32, margin: f32) -> (f32, f32) {
-    let height = ParagraphStyle::FOLIO.size * ParagraphStyle::FOLIO.line_height;
-    (start + margin / 2.0 - height / 2.0, height)
-}
-
-/// The furniture one page role paints. v0.1 has one default master
-/// per role; `@page` selectors arrive with the style compiler (#7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PageMaster {
-    /// Continuation pages: folio painted, running-head slot reserved.
-    Body,
-    /// A chapter's opening page: no folio — blind, but counted.
-    ChapterOpen,
-    /// A blank verso inserted to square the sheet: no furniture.
-    Blank,
-}
-
-impl PageMaster {
-    /// False when the page counts without showing: chapter opens and
-    /// inserted blanks run blind folios.
-    fn shows_folio(self) -> bool {
-        matches!(self, PageMaster::Body)
-    }
-}
+use crate::style::{
+    Align, Band, Break, Content, Hyphens, MarginBox, MarginBoxStyle, PageQuery, PageStyle,
+    Situation, StyleTree,
+};
 
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.
-pub fn layout_book(book: &Book, registry: &FontRegistry) -> LayoutOutput {
-    let paginator = Paginator::new(registry, PageGeometry::trade_paperback());
+pub fn layout_book(book: &Book, styles: &StyleTree, registry: &FontRegistry) -> LayoutOutput {
+    let paginator = Paginator::new(registry, styles);
     LayoutOutput {
         pages: paginator.paginate(book),
         fonts: (0..registry.len() as u16)
             .filter_map(|id| registry.font_ref(id).cloned())
             .collect(),
-        warnings: Vec::new(),
+        warnings: styles.warnings().to_vec(),
+    }
+}
+
+/// What one page needs to know to ask the style tree for its master:
+/// the named page in force, and the situation the page is in.
+#[derive(Debug, Clone)]
+struct PageSlot {
+    name: Option<String>,
+    /// The page a section opens on: `@page :first`.
+    first: bool,
+    /// Inserted to square the sheet: `@page :blank`.
+    blank: bool,
+}
+
+impl PageSlot {
+    fn query(&self, side: Side) -> PageQuery<'_> {
+        PageQuery {
+            name: self.name.as_deref(),
+            situation: match (self.blank, self.first) {
+                (true, _) => Situation::Blank,
+                (false, true) => Situation::First(side),
+                (false, false) => Situation::Body(side),
+            },
+        }
     }
 }
 
@@ -129,19 +61,19 @@ pub fn layout_book(book: &Book, registry: &FontRegistry) -> LayoutOutput {
 ///
 /// Lines stack from the top of the content box; a line that does not
 /// fit starts the next page, and a line taller than a whole page
-/// overflows it. Each section opens on a fresh recto page, with a
-/// blank verso inserted when the flow sits on one.
+/// overflows it. A section starts a new page, and `break-before`
+/// decides which side of the spread that page falls on.
 pub struct Paginator<'a> {
     registry: &'a FontRegistry,
-    geometry: PageGeometry,
+    styles: &'a StyleTree,
     lines: LineLayout<'a>,
 }
 
 impl<'a> Paginator<'a> {
-    pub fn new(registry: &'a FontRegistry, geometry: PageGeometry) -> Self {
+    pub fn new(registry: &'a FontRegistry, styles: &'a StyleTree) -> Self {
         Paginator {
             registry,
-            geometry,
+            styles,
             lines: LineLayout::new(registry),
         }
     }
@@ -153,14 +85,12 @@ impl<'a> Paginator<'a> {
     /// not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         let mut pages = Vec::new();
-        let mut chapter_opens: Vec<usize> = Vec::new();
+        let mut slots = Vec::new();
         for section in &book.sections {
             let lines = self.section_lines(section);
-            if let Some(open) = self.flow_section(&lines, &mut pages) {
-                chapter_opens.push(open);
-            }
+            self.flow_section(section, &lines, &mut pages, &mut slots);
         }
-        self.number_and_paint(&mut pages, &chapter_opens);
+        self.number_and_paint(&mut pages, &slots);
         pages
     }
 
@@ -168,81 +98,78 @@ impl<'a> Paginator<'a> {
     /// everything measurement decides, and nothing pagination does.
     pub fn section_lines(&self, section: &Section) -> Vec<Line> {
         let mut lines = Vec::new();
-        self.append_blocks(&section.blocks, &mut lines);
+        let measure = self.styles.default_page().geometry.measure();
+        self.append_blocks(&section.blocks, measure, &mut lines);
         lines
     }
 
     /// Laid-out lines in, numbered pages out: fragmentation and page
-    /// assembly, one `Vec<Line>` per section. Nothing here measures —
-    /// every line arrives with its box already decided.
-    pub fn flow(&self, sections: &[Vec<Line>]) -> Vec<Page> {
+    /// assembly, one `Vec<Line>` per section of `book`. Nothing here
+    /// measures — every line arrives with its box already decided.
+    pub fn flow(&self, book: &Book, sections: &[Vec<Line>]) -> Vec<Page> {
         let mut pages = Vec::new();
-        let mut chapter_opens: Vec<usize> = Vec::new();
-        for lines in sections {
-            if let Some(open) = self.flow_section(lines, &mut pages) {
-                chapter_opens.push(open);
-            }
+        let mut slots = Vec::new();
+        for (section, lines) in book.sections.iter().zip(sections) {
+            self.flow_section(section, lines, &mut pages, &mut slots);
         }
-        self.number_and_paint(&mut pages, &chapter_opens);
+        self.number_and_paint(&mut pages, &slots);
         pages
     }
 
     /// Settles numbering and side once the whole flow is assembled,
-    /// then paints each page's furniture: a folio's digits are not
+    /// then paints each page's margin boxes: a folio's digits are not
     /// known until the pages before it are.
-    fn number_and_paint(&self, pages: &mut [Page], chapter_opens: &[usize]) {
-        let masters = self.assign_masters(pages, chapter_opens);
-        for ((index, page), master) in pages.iter_mut().enumerate().zip(masters) {
+    fn number_and_paint(&self, pages: &mut [Page], slots: &[PageSlot]) {
+        for ((index, page), slot) in pages.iter_mut().enumerate().zip(slots) {
             page.number = index as u32 + 1;
             page.side = Side::of_number(page.number);
-            self.paint_furniture(page, master);
-        }
-    }
-
-    /// One master per page: a page carries body furniture unless it
-    /// opens a chapter or is an inserted blank (recognized by carrying
-    /// no content — only inserted pages are ever empty, since a
-    /// section with nothing to paint produces no pages).
-    fn assign_masters(&self, pages: &[Page], chapter_opens: &[usize]) -> Vec<PageMaster> {
-        let mut masters = vec![PageMaster::Body; pages.len()];
-        for (page, master) in pages.iter().zip(&mut masters) {
-            if page.items.is_empty() {
-                *master = PageMaster::Blank;
+            let master = self.styles.page(slot.query(page.side));
+            for which in MarginBox::ALL {
+                let Some(box_style) = master.margin_box(which) else {
+                    continue;
+                };
+                let Some((band, align)) = which.band() else {
+                    continue;
+                };
+                self.paint_margin_box(page, master, box_style, band, align);
             }
         }
-        for open in chapter_opens {
-            masters[*open] = PageMaster::ChapterOpen;
-        }
-        masters
     }
 
-    /// Paints the furniture of one assembled page. The folio is a
-    /// line like any other — shaped, measured, placed on the margin
-    /// box's baseline — so furniture and content paint through the
-    /// same path. The running head's slot has geometry but no content
-    /// until v0.2's string-set.
-    fn paint_furniture(&self, page: &mut Page, master: PageMaster) {
-        if !master.shows_folio() {
-            return;
-        }
-        let style = ParagraphStyle::FOLIO;
-        let Some(shaped) = self.registry.shape(style.font_id, &page.number.to_string()) else {
+    /// Paints one page margin box. Its content is a line like any
+    /// other — shaped, measured, placed on the band's baseline — so
+    /// furniture and prose paint through the same path.
+    fn paint_margin_box(
+        &self,
+        page: &mut Page,
+        master: &PageStyle,
+        box_style: &MarginBoxStyle,
+        band: Band,
+        align: Align,
+    ) {
+        let text = match &box_style.content {
+            Content::None => return,
+            Content::PageNumber => page.number.to_string(),
+            Content::Text(text) => text.clone(),
+        };
+        let style = box_style.style.paragraph();
+        let Some(shaped) = self.registry.shape(style.font_id, &text) else {
             return;
         };
         let run = ShapedRun {
             font_id: style.font_id,
             size: style.size,
-            text: page.number.to_string(),
+            text,
             text_start: 0,
             advance: shaped.iter().map(|g| g.x_advance).sum(),
             glyphs: shaped,
         };
         let line = Line {
             width: run.advance,
+            box_: self.lines.line_box(std::slice::from_ref(&run), style),
             runs: vec![run],
-            box_: self.lines.line_box(&[], style),
         };
-        let (band_top, _) = self.geometry.folio_line_box();
+        let (band_top, _) = margin_band(master, band, style);
         let baseline = band_top + line.box_.baseline;
         let upem = self
             .registry
@@ -250,64 +177,94 @@ impl<'a> Paginator<'a> {
             .map(|m| m.units_per_em as f32)
             .unwrap_or(1000.0);
         let text_width = line.width as f32 / upem * style.size;
-        let x = (self.geometry.width - text_width) / 2.0;
+        let x = match align {
+            // Centred on the trim, not on the content box: a folio
+            // belongs on the page's axis, and mirrored margins put
+            // the content box off it.
+            Align::Center => (master.geometry.width - text_width) / 2.0,
+            Align::Start => master.geometry.margin.left,
+            Align::End => master.geometry.width - master.geometry.margin.right - text_width,
+        };
         page.items.append(&mut self.text_items(&line, x, baseline));
     }
 
-    /// Flows one section's lines, opening on a fresh recto. Returns
-    /// the index of the page the section opens on.
-    fn flow_section(&self, flow: &[Line], pages: &mut Vec<Page>) -> Option<usize> {
+    /// Flows one section's lines, opening a page of its own.
+    fn flow_section(
+        &self,
+        section: &Section,
+        flow: &[Line],
+        pages: &mut Vec<Page>,
+        slots: &mut Vec<PageSlot>,
+    ) {
         if flow.is_empty() {
-            return None;
+            return;
         }
-        if pages.len() % 2 == 1 {
-            pages.push(self.blank_page());
+        let style = self.styles.style(section.id);
+        let name = style.page.clone();
+        // `break-before: recto` on a section that would open on a
+        // verso: the leaf it skips ships blank, and counts.
+        if let Break::Side(wanted) = style.break_before
+            && Side::of_number(pages.len() as u32 + 1) != wanted
+        {
+            let blank = PageSlot {
+                name: None,
+                first: false,
+                blank: true,
+            };
+            pages.push(self.blank_page(&blank));
+            slots.push(blank);
         }
-        let open = pages.len();
 
-        let (_, content_h) = self.geometry.content_size();
+        let mut slot = PageSlot {
+            name,
+            first: true,
+            blank: false,
+        };
+        let mut master = self.master(pages.len(), &slot);
+        let mut content_height = master.geometry.content_size().1;
         let mut cursor = 0f32;
         let mut items = Vec::new();
 
         for line in flow {
-            if !items.is_empty() && cursor + line.box_.height > content_h {
-                self.push_page(pages, std::mem::take(&mut items));
+            if !items.is_empty() && cursor + line.box_.height > content_height {
+                self.push_page(pages, slots, std::mem::take(&mut items), &slot);
+                slot.first = false;
+                master = self.master(pages.len(), &slot);
+                content_height = master.geometry.content_size().1;
                 cursor = 0.0;
             }
-            let (x, y) = self.geometry.content_origin(self.current_side(pages));
+            let (x, y) = master.geometry.content_origin();
             let baseline = y + cursor + line.box_.baseline;
             items.append(&mut self.text_items(line, x, baseline));
             cursor += line.box_.height;
         }
         if !items.is_empty() {
-            self.push_page(pages, items);
+            self.push_page(pages, slots, items, &slot);
         }
-        Some(open)
     }
 
-    /// Appends the blocks' lines, descending into nothing v0.1 does
-    /// not yet lay out.
-    fn append_blocks(&self, blocks: &[Block], flow: &mut Vec<Line>) {
+    /// The master of the page that will sit at `index`.
+    fn master(&self, index: usize, slot: &PageSlot) -> &PageStyle {
+        self.styles
+            .page(slot.query(Side::of_number(index as u32 + 1)))
+    }
+
+    /// Appends the blocks' lines, each block styled as the tree says
+    /// and descending into nothing v0.2 does not yet lay out.
+    fn append_blocks(&self, blocks: &[Block], measure: f32, flow: &mut Vec<Line>) {
         for block in blocks {
             match block {
-                Block::Heading { inlines, .. } => {
-                    let style = ParagraphStyle::CHAPTER;
-                    let measure = self.geometry.measure();
-                    flow.extend(self.lines.layout(
+                Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
+                    let computed = self.styles.style(*id);
+                    let options = LineBreakOptions {
+                        hyphenate: computed.hyphens == Hyphens::Auto,
+                    };
+                    flow.extend(self.lines.layout_styled(
                         inlines,
-                        style,
+                        computed.paragraph(),
+                        self.styles,
                         measure,
-                        LineBreakOptions::default(),
-                    ));
-                }
-                Block::Paragraph { inlines, .. } => {
-                    let style = ParagraphStyle::BODY;
-                    let measure = self.geometry.measure();
-                    flow.extend(self.lines.layout(
-                        inlines,
-                        style,
-                        measure,
-                        LineBreakOptions::default(),
+                        options,
                     ));
                 }
                 Block::Blockquote { .. } | Block::ThematicBreak { .. } | Block::Image { .. } => {}
@@ -315,31 +272,31 @@ impl<'a> Paginator<'a> {
         }
     }
 
-    fn push_page(&self, pages: &mut Vec<Page>, items: Vec<DrawItem>) {
-        let side = self.current_side(pages);
-        pages.push(Page {
-            side,
-            ..self.blank_page()
-        });
-        pages.last_mut().expect("just pushed").items = items;
+    fn push_page(
+        &self,
+        pages: &mut Vec<Page>,
+        slots: &mut Vec<PageSlot>,
+        items: Vec<DrawItem>,
+        slot: &PageSlot,
+    ) {
+        let mut page = self.blank_page(slot);
+        page.side = Side::of_number(pages.len() as u32 + 1);
+        page.items = items;
+        pages.push(page);
+        slots.push(slot.clone());
     }
 
-    /// A page of the run's trim size with nothing on it. Numbering
+    /// A page of the master's trim size with nothing on it. Numbering
     /// and side are settled once the whole flow is assembled.
-    fn blank_page(&self) -> Page {
+    fn blank_page(&self, slot: &PageSlot) -> Page {
+        let geometry = self.styles.page(slot.query(Side::Verso)).geometry;
         Page {
             number: 0,
             side: Side::Verso,
-            width: self.geometry.width,
-            height: self.geometry.height,
+            width: geometry.width,
+            height: geometry.height,
             items: Vec::new(),
         }
-    }
-
-    /// The side of the page under construction: it will sit at index
-    /// `pages.len()`, so its number is `pages.len() + 1`.
-    fn current_side(&self, pages: &[Page]) -> Side {
-        Side::of_number(pages.len() as u32 + 1)
     }
 
     /// One line as paint ops: every run a `DrawItem::Text` at the
@@ -377,10 +334,25 @@ impl<'a> Paginator<'a> {
     }
 }
 
+/// The band one margin box's line sits in: `(top, height)` in page
+/// coordinates, one line tall, centred in the margin it lives in.
+pub fn margin_band(master: &PageStyle, band: Band, style: ParagraphStyle) -> (f32, f32) {
+    let (start, margin) = match band {
+        Band::Top => (0.0, master.geometry.margin.top),
+        Band::Bottom => (
+            master.geometry.height - master.geometry.margin.bottom,
+            master.geometry.margin.bottom,
+        ),
+    };
+    let height = style.size * style.line_height;
+    (start + margin / 2.0 - height / 2.0, height)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::content::{HeadingLevel, Inline, NodeId, SourcePos};
+    use crate::style::StyleTree;
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -422,12 +394,67 @@ mod tests {
         }
     }
 
-    fn paginate(sections: Vec<Section>) -> Vec<Page> {
-        let book = Book {
+    /// A book with its ids assigned: styling is keyed by node id, so
+    /// a tree that never had ids has no styles to look up.
+    fn book_of(sections: Vec<Section>) -> Book {
+        let mut book = Book {
             metadata: Default::default(),
             sections,
         };
-        Paginator::new(registry(), PageGeometry::trade_paperback()).paginate(&book)
+        book.assign_node_ids();
+        book
+    }
+
+    fn paginate(sections: Vec<Section>) -> Vec<Page> {
+        let book = book_of(sections);
+        let styles = crate::style::defaults(&book, registry());
+        Paginator::new(registry(), &styles).paginate(&book)
+    }
+
+    /// The built-in sheet's own answers, read back the way these
+    /// tests identify what they are looking at. Nothing here is a
+    /// constant: the sheet is asked.
+    fn ua() -> &'static StyleTree {
+        static STYLES: std::sync::OnceLock<StyleTree> = std::sync::OnceLock::new();
+        STYLES.get_or_init(|| {
+            let book = book_of(vec![section(vec![heading("H"), paragraph("prose")])]);
+            crate::style::defaults(&book, registry())
+        })
+    }
+
+    /// The font size the built-in sheet computes for one element.
+    fn size_of(element: &str) -> f32 {
+        let styles = ua();
+        let node = styles
+            .nodes()
+            .iter()
+            .find(|node| node.element == element)
+            .unwrap_or_else(|| panic!("no {element} in the sample book"));
+        styles.styles()[node.style as usize].font_size
+    }
+
+    fn body_size() -> f32 {
+        size_of("p")
+    }
+
+    fn chapter_size() -> f32 {
+        size_of("h1")
+    }
+
+    fn folio_size() -> f32 {
+        ua().default_page()
+            .margin_box(MarginBox::BottomCenter)
+            .expect("the default page carries a folio")
+            .style
+            .font_size
+    }
+
+    /// The master a page of the fixture books resolves to.
+    fn master(situation: Situation) -> &'static PageStyle {
+        ua().page(PageQuery {
+            name: Some("chapter"),
+            situation,
+        })
     }
 
     /// Prose long enough to span several pages at the trade-paperback
@@ -440,23 +467,25 @@ mod tests {
             .collect()
     }
 
-    /// 6×9in trim with mirrored margins; the content box is what
-    /// remains.
+    /// The built-in sheet computes a 6×9in trim with mirrored
+    /// margins; the content box is what remains, and it is the same
+    /// width on both sides of the spread.
     #[test]
-    fn trade_paperback_geometry() {
-        let geometry = PageGeometry::trade_paperback();
-        assert_eq!(geometry.width, 432.0);
-        assert_eq!(geometry.height, 648.0);
-        let (w, h) = geometry.content_size();
-        assert_eq!(w, 336.0);
-        assert_eq!(h, 540.0);
-        assert_eq!(geometry.measure(), 336.0);
-        let (recto_x, top) = geometry.content_origin(Side::Recto);
-        let (verso_x, verso_top) = geometry.content_origin(Side::Verso);
-        assert_eq!(recto_x, 54.0);
-        assert_eq!(verso_x, 42.0);
-        assert_eq!(verso_x + w, geometry.width - geometry.inner);
-        assert_eq!(top, verso_top);
+    fn the_built_in_sheet_computes_a_trade_paperback() {
+        let recto = master(Situation::Body(Side::Recto)).geometry;
+        let verso = master(Situation::Body(Side::Verso)).geometry;
+        assert_eq!(recto.width, 432.0);
+        assert_eq!(recto.height, 648.0);
+        assert_eq!(recto.content_size(), (336.0, 540.0));
+        assert_eq!(verso.content_size(), recto.content_size());
+        assert_eq!(recto.measure(), 336.0);
+        assert_eq!(recto.content_origin(), (54.0, 54.0));
+        assert_eq!(verso.content_origin(), (42.0, 54.0));
+        // The spine margin is the wider one on both sides.
+        assert_eq!(recto.margin.left, verso.margin.right);
+        assert_eq!(body_size(), 11.0);
+        assert_eq!(chapter_size(), 18.0);
+        assert_eq!(folio_size(), 9.0);
     }
 
     /// Odd pages are recto, even pages verso — books open on a
@@ -496,16 +525,13 @@ mod tests {
             }
             if chapter_two.is_none()
                 && let Some(DrawItem::Text { size, .. }) = page.items.first()
-                && *size == ParagraphStyle::CHAPTER.size
+                && *size == chapter_size()
             {
                 chapter_two = Some(i);
             }
         }
         let index = chapter_two.expect("a page opens with the chapter heading");
         assert_eq!(pages[index].number % 2, 1, "chapter opened on a verso");
-        assert!(
-            matches!(pages[index].items.first(), Some(DrawItem::Text { size, .. }) if *size == ParagraphStyle::CHAPTER.size)
-        );
     }
 
     /// No line crosses a page boundary: every content baseline sits
@@ -517,9 +543,9 @@ mod tests {
     fn no_line_crosses_a_page_boundary() {
         let pages = paginate(vec![section(long_prose(30))]);
         assert!(pages.len() >= 3);
-        let geometry = PageGeometry::trade_paperback();
         for page in &pages {
-            let (x, y) = geometry.content_origin(page.side);
+            let geometry = master(Situation::Body(page.side)).geometry;
+            let (x, y) = geometry.content_origin();
             let (w, h) = geometry.content_size();
             for item in &page.items {
                 let DrawItem::Text {
@@ -532,7 +558,7 @@ mod tests {
                 else {
                     continue;
                 };
-                if *size == ParagraphStyle::FOLIO.size {
+                if *size == folio_size() {
                     continue;
                 }
                 assert!(
@@ -564,28 +590,20 @@ mod tests {
     fn overflow_starts_a_new_page_at_the_top() {
         let pages = paginate(vec![section(long_prose(20))]);
         assert!(pages.len() >= 2);
-        let geometry = PageGeometry::trade_paperback();
+        let body = ua().root().paragraph();
         for page in pages.iter().skip(1) {
-            let (_, top) = geometry.content_origin(page.side);
+            let (_, top) = master(Situation::Body(page.side)).geometry.content_origin();
             let first = page
                 .items
                 .iter()
                 .find_map(|i| match i {
-                    DrawItem::Text { y, size, .. } if *size != ParagraphStyle::FOLIO.size => {
-                        Some(*y)
-                    }
+                    DrawItem::Text { y, size, .. } if *size != folio_size() => Some(*y),
                     _ => None,
                 })
                 .expect("page has text");
             let strut = registry()
-                .metrics(0)
-                .map(|m| {
-                    crate::linebox::Strut::from_metrics(
-                        m,
-                        ParagraphStyle::BODY.size,
-                        ParagraphStyle::BODY.line_height,
-                    )
-                })
+                .metrics(body.font_id)
+                .map(|m| crate::linebox::Strut::from_metrics(m, body.size, body.line_height))
                 .unwrap();
             assert!(
                 (first - (top + strut.above)).abs() < 1e-3,
@@ -605,7 +623,7 @@ mod tests {
             .items
             .iter()
             .filter_map(|i| match i {
-                DrawItem::Text { y, size, .. } if *size != ParagraphStyle::FOLIO.size => Some(*y),
+                DrawItem::Text { y, size, .. } if *size != folio_size() => Some(*y),
                 _ => None,
             })
             .collect();
@@ -643,7 +661,7 @@ mod tests {
     /// Total advance of a folio run, in points — for checking where
     /// the centered run sits on the trim.
     fn run_width_pt(glyphs: &[Glyph], size: f32) -> f32 {
-        let font = ParagraphStyle::FOLIO.font_id;
+        let font = ua().root().font_id;
         let upem = registry().metrics(font).unwrap().units_per_em as f32;
         glyphs
             .iter()
@@ -662,7 +680,7 @@ mod tests {
                 font_id,
                 glyphs,
                 ..
-            } if *size == ParagraphStyle::FOLIO.size => {
+            } if *size == folio_size() => {
                 let digits = glyphs
                     .iter()
                     .filter_map(|g| {
@@ -677,7 +695,7 @@ mod tests {
 
     /// True when the page's first paint op is a chapter heading.
     fn opens_a_chapter(page: &Page) -> bool {
-        matches!(page.items.first(), Some(DrawItem::Text { size, .. }) if *size == ParagraphStyle::CHAPTER.size)
+        matches!(page.items.first(), Some(DrawItem::Text { size, .. }) if *size == chapter_size())
     }
 
     /// A chapter: a heading followed by enough prose to run over.
@@ -687,9 +705,9 @@ mod tests {
         section(blocks)
     }
 
-    /// Acceptance: folios are correct and sequential — every page
-    /// that carries one carries its own number, and the folios read
-    /// in page order with no repeats or gaps among body pages.
+    /// Folios are correct and sequential — every page that carries
+    /// one carries its own number, and the folios read in page order
+    /// with no repeats or gaps among body pages.
     #[test]
     fn folios_are_correct_and_sequential() {
         let pages = paginate(vec![chapter("Chapter One", 24), chapter("Chapter Two", 24)]);
@@ -717,9 +735,10 @@ mod tests {
         );
     }
 
-    /// Acceptance: the folio is suppressed on chapter opens. A
-    /// chapter's first page counts — the next folio is one past it —
-    /// but shows nothing; inserted blank versos are equally blind.
+    /// The folio is suppressed on chapter opens, because
+    /// `@page chapter:first` says so. A chapter's first page counts —
+    /// the next folio is one past it — but shows nothing; inserted
+    /// blank versos are equally blind, by `@page :blank`.
     #[test]
     fn folios_are_suppressed_on_chapter_opens() {
         let pages = paginate(vec![chapter("Chapter One", 14), chapter("Chapter Two", 14)]);
@@ -749,19 +768,25 @@ mod tests {
         }
     }
 
-    /// Acceptance: the folio baseline sits in the bottom margin box —
-    /// strictly below the content area, inside the margin band — and
-    /// the folio is centered on the trim, not on the content box
-    /// (whose mirrored margins are off-center).
+    /// The folio baseline sits in the bottom margin box — strictly
+    /// below the content area, inside the margin band — and is
+    /// centred on the trim, not on the content box (whose mirrored
+    /// margins are off-centre).
     #[test]
     fn folio_baseline_sits_in_the_margin_box() {
         let pages = paginate(vec![chapter("Chapter One", 20)]);
-        let geometry = PageGeometry::trade_paperback();
-        let (band_top, band_height) = geometry.folio_line_box();
-        let (_, content_top) = geometry.content_origin(Side::Recto);
-        let content_bottom = content_top + geometry.content_size().1;
         let mut checked = 0;
         for page in &pages {
+            let master = master(Situation::Body(page.side));
+            let geometry = master.geometry;
+            let folio_style = master
+                .margin_box(MarginBox::BottomCenter)
+                .expect("body pages carry a folio")
+                .style
+                .paragraph();
+            let (band_top, band_height) = margin_band(master, Band::Bottom, folio_style);
+            let (_, content_top) = geometry.content_origin();
+            let content_bottom = content_top + geometry.content_size().1;
             let Some((
                 DrawItem::Text {
                     x, y, glyphs, size, ..
@@ -783,7 +808,7 @@ mod tests {
                 band_top + band_height
             );
             assert!(
-                *y + geometry.bottom / 4.0 < geometry.height,
+                *y + geometry.margin.bottom / 4.0 < geometry.height,
                 "page {}: folio baseline {y} runs off the trim",
                 page.number
             );
@@ -801,17 +826,19 @@ mod tests {
     }
 
     /// The running-head slot is reserved geometry in the top margin
-    /// and stays empty: nothing paints above the content box.
+    /// and stays empty: the built-in sheet generates no top margin
+    /// box, so nothing paints above the content box.
     #[test]
     fn running_head_slot_is_reserved_and_empty() {
-        let geometry = PageGeometry::trade_paperback();
-        let (head_top, head_height) = geometry.running_head_line_box();
-        let (_, content_top) = geometry.content_origin(Side::Recto);
-        assert!(head_top > 0.0);
+        let master = master(Situation::Body(Side::Recto));
+        let head = margin_band(master, Band::Top, ua().root().paragraph());
+        let (_, content_top) = master.geometry.content_origin();
+        assert!(head.0 > 0.0);
         assert!(
-            head_top + head_height <= content_top,
+            head.0 + head.1 <= content_top,
             "running head overlaps the content box"
         );
+        assert!(master.margin_box(MarginBox::TopCenter).is_none());
         for page in paginate(vec![chapter("Chapter One", 14)]) {
             for item in &page.items {
                 if let DrawItem::Text { y, .. } = item {
@@ -836,8 +863,7 @@ mod tests {
     /// furniture, not just content flow.
     #[test]
     fn fixture_book_carries_folios() {
-        let book: Book = serde_json::from_str(include_str!("../../../fixtures/book.json")).unwrap();
-        let output = layout_book(&book, registry());
+        let output = layout_fixture();
         let with_folios = output.pages.iter().filter(|p| folio(p).is_some()).count();
         assert!(
             with_folios >= output.pages.len() - 2,
@@ -851,26 +877,33 @@ mod tests {
         }
     }
 
+    /// The fixture book, laid out under the built-in sheet.
+    fn layout_fixture() -> LayoutOutput {
+        let mut book: Book =
+            serde_json::from_str(include_str!("../../../fixtures/book.json")).unwrap();
+        book.assign_node_ids();
+        let styles = crate::style::defaults(&book, registry());
+        layout_book(&book, &styles, registry())
+    }
+
     /// Pagination is line layout then flow, and splitting it that way
     /// changes nothing: the harness times the two halves separately,
     /// which is only worth doing while their composition is the whole.
     #[test]
     fn the_stages_compose_into_what_paginate_does() {
-        let book = Book {
-            metadata: Default::default(),
-            sections: vec![
-                section(long_prose(30)),
-                section([vec![heading("Two")], long_prose(24)].concat()),
-            ],
-        };
-        let paginator = Paginator::new(registry(), PageGeometry::trade_paperback());
+        let book = book_of(vec![
+            section(long_prose(30)),
+            section([vec![heading("Two")], long_prose(24)].concat()),
+        ]);
+        let styles = crate::style::defaults(&book, registry());
+        let paginator = Paginator::new(registry(), &styles);
 
         let staged: Vec<Vec<Line>> = book
             .sections
             .iter()
             .map(|section| paginator.section_lines(section))
             .collect();
-        let by_stage = paginator.flow(&staged);
+        let by_stage = paginator.flow(&book, &staged);
         let in_one = paginator.paginate(&book);
 
         assert!(in_one.len() > 2, "a book worth splitting");
@@ -885,8 +918,7 @@ mod tests {
     /// The fixture book paginates.
     #[test]
     fn fixture_book_paginates() {
-        let book: Book = serde_json::from_str(include_str!("../../../fixtures/book.json")).unwrap();
-        let output = layout_book(&book, registry());
+        let output = layout_fixture();
         assert!(!output.pages.is_empty());
         assert_eq!(output.fonts.len(), 1);
     }

@@ -7,25 +7,28 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fleuron::layout::{PageGeometry, Paginator};
+use fleuron::layout::Paginator;
 use fleuron::lines::Line;
-use fleuron_fixtures::{Corpus, registry};
+use fleuron_fixtures::{Corpus, registry, styles};
 
 fn fragment(c: &mut Criterion) {
-    let paginator = Paginator::new(registry(), PageGeometry::trade_paperback());
     let mut group = c.benchmark_group("fragment");
     for corpus in Corpus::ALL {
         let book = corpus.book();
+        let styles = styles(&book);
+        let paginator = Paginator::new(registry(), &styles);
         let sections: Vec<Vec<Line>> = book
             .sections
             .iter()
             .map(|section| paginator.section_lines(section))
             .collect();
-        group.throughput(Throughput::Elements(paginator.flow(&sections).len() as u64));
+        group.throughput(Throughput::Elements(
+            paginator.flow(&book, &sections).len() as u64
+        ));
         group.bench_with_input(
             BenchmarkId::from_parameter(corpus.slug()),
             &sections,
-            |b, sections| b.iter(|| black_box(paginator.flow(sections))),
+            |b, sections| b.iter(|| black_box(paginator.flow(&book, sections))),
         );
     }
     group.finish();

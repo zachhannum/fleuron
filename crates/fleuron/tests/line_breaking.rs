@@ -11,6 +11,14 @@ fn registry() -> &'static FontRegistry {
     REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
 }
 
+/// The body style the built-in sheet computes: what these properties
+/// hold for the styling a book gets by default.
+fn body() -> ParagraphStyle {
+    fleuron::style::defaults(&fleuron::content::Book::default(), registry())
+        .root()
+        .paragraph()
+}
+
 fn word_strategy() -> impl Strategy<Value = String> {
     "[a-zA-Z]{1,12}"
 }
@@ -29,7 +37,7 @@ fn inlines_of(text: &str) -> Vec<Inline> {
 
 fn width_pt(line: &Line) -> f32 {
     let upem = registry().metrics(0).unwrap().units_per_em;
-    line.width as f32 / upem as f32 * ParagraphStyle::BODY.size
+    line.width as f32 / upem as f32 * body().size
 }
 
 proptest! {
@@ -44,7 +52,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            ParagraphStyle::BODY,
+            body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -67,13 +75,13 @@ proptest! {
         let layout = LineLayout::new(registry());
         let first = layout.layout(
             &inlines_of(&text),
-            ParagraphStyle::BODY,
+            body(),
             measure,
             LineBreakOptions::default(),
         );
         let second = layout.layout(
             &inlines_of(&text),
-            ParagraphStyle::BODY,
+            body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -91,7 +99,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            ParagraphStyle::BODY,
+            body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -126,7 +134,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            ParagraphStyle::BODY,
+            body(),
             measure,
             LineBreakOptions { hyphenate: true },
         );

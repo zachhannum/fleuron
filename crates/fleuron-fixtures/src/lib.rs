@@ -22,6 +22,13 @@ pub fn registry() -> &'static fleuron::fonts::FontRegistry {
     REGISTRY.get_or_init(|| fleuron::fonts::bundled_registry().expect("bundled font parses"))
 }
 
+/// One book's styling under the built-in sheet alone, compiled
+/// against the shared registry. The default sheet loads no author
+/// fonts, so nothing is added to it.
+pub fn styles(book: &fleuron::content::Book) -> fleuron::style::StyleTree {
+    fleuron::style::defaults(book, registry())
+}
+
 /// Every block of a book as the flat text one shaping call is handed,
 /// in document order. v0.1 puts one face on everything, so a block is
 /// a run and a run is a shaping call.

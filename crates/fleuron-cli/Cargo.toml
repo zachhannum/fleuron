@@ -15,3 +15,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 serde_json = "1"
 fleuron = { path = "../fleuron" }
+
+[dev-dependencies]
+# The e2e holds the fixture PDF to a digest; nothing ships with it.
+sha2 = "0.10"

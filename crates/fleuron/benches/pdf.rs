@@ -7,14 +7,14 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fleuron::pdf;
-use fleuron_fixtures::{Corpus, registry};
+use fleuron_fixtures::{Corpus, registry, styles};
 
 fn write(c: &mut Criterion) {
     let registry = registry();
     let mut group = c.benchmark_group("pdf");
     for corpus in Corpus::ALL {
         let book = corpus.book();
-        let output = fleuron::layout::layout_book(&book, registry);
+        let output = fleuron::layout::layout_book(&book, &styles(&book), registry);
         group.throughput(Throughput::Elements(output.pages.len() as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(corpus.slug()),
