@@ -147,21 +147,56 @@ impl<'a> Paginator<'a> {
     }
 
     /// Flows one book into numbered, side-tagged pages.
+    ///
+    /// A section's lines are laid out, flowed, and released before the
+    /// next one is measured: what a book holds at once is its pages,
+    /// not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         let mut pages = Vec::new();
         let mut chapter_opens: Vec<usize> = Vec::new();
         for section in &book.sections {
-            if let Some(open) = self.flow_section(section, &mut pages) {
+            let lines = self.section_lines(section);
+            if let Some(open) = self.flow_section(&lines, &mut pages) {
                 chapter_opens.push(open);
             }
         }
-        let masters = self.assign_masters(&pages, &chapter_opens);
+        self.number_and_paint(&mut pages, &chapter_opens);
+        pages
+    }
+
+    /// One section's blocks as laid-out lines, in document order:
+    /// everything measurement decides, and nothing pagination does.
+    pub fn section_lines(&self, section: &Section) -> Vec<Line> {
+        let mut lines = Vec::new();
+        self.append_blocks(&section.blocks, &mut lines);
+        lines
+    }
+
+    /// Laid-out lines in, numbered pages out: fragmentation and page
+    /// assembly, one `Vec<Line>` per section. Nothing here measures —
+    /// every line arrives with its box already decided.
+    pub fn flow(&self, sections: &[Vec<Line>]) -> Vec<Page> {
+        let mut pages = Vec::new();
+        let mut chapter_opens: Vec<usize> = Vec::new();
+        for lines in sections {
+            if let Some(open) = self.flow_section(lines, &mut pages) {
+                chapter_opens.push(open);
+            }
+        }
+        self.number_and_paint(&mut pages, &chapter_opens);
+        pages
+    }
+
+    /// Settles numbering and side once the whole flow is assembled,
+    /// then paints each page's furniture: a folio's digits are not
+    /// known until the pages before it are.
+    fn number_and_paint(&self, pages: &mut [Page], chapter_opens: &[usize]) {
+        let masters = self.assign_masters(pages, chapter_opens);
         for ((index, page), master) in pages.iter_mut().enumerate().zip(masters) {
             page.number = index as u32 + 1;
             page.side = Side::of_number(page.number);
             self.paint_furniture(page, master);
         }
-        pages
     }
 
     /// One master per page: a page carries body furniture unless it
@@ -219,11 +254,9 @@ impl<'a> Paginator<'a> {
         page.items.append(&mut self.text_items(&line, x, baseline));
     }
 
-    /// Lays a section out and flows it, opening on a fresh recto.
-    /// Returns the index of the page the section opens on.
-    fn flow_section(&self, section: &Section, pages: &mut Vec<Page>) -> Option<usize> {
-        let mut flow: Vec<Line> = Vec::new();
-        self.append_blocks(&section.blocks, &mut flow);
+    /// Flows one section's lines, opening on a fresh recto. Returns
+    /// the index of the page the section opens on.
+    fn flow_section(&self, flow: &[Line], pages: &mut Vec<Page>) -> Option<usize> {
         if flow.is_empty() {
             return None;
         }
@@ -243,7 +276,7 @@ impl<'a> Paginator<'a> {
             }
             let (x, y) = self.geometry.content_origin(self.current_side(pages));
             let baseline = y + cursor + line.box_.baseline;
-            items.append(&mut self.text_items(&line, x, baseline));
+            items.append(&mut self.text_items(line, x, baseline));
             cursor += line.box_.height;
         }
         if !items.is_empty() {
@@ -252,7 +285,8 @@ impl<'a> Paginator<'a> {
         Some(open)
     }
 
-    /// A section's blocks as laid-out lines, in document order.
+    /// Appends the blocks' lines, descending into nothing v0.1 does
+    /// not yet lay out.
     fn append_blocks(&self, blocks: &[Block], flow: &mut Vec<Line>) {
         for block in blocks {
             match block {
@@ -814,6 +848,37 @@ mod tests {
             if let Some((_, digits)) = folio(page) {
                 assert_eq!(digits, page.number.to_string());
             }
+        }
+    }
+
+    /// Pagination is line layout then flow, and splitting it that way
+    /// changes nothing: the harness times the two halves separately,
+    /// which is only worth doing while their composition is the whole.
+    #[test]
+    fn the_stages_compose_into_what_paginate_does() {
+        let book = Book {
+            metadata: Default::default(),
+            sections: vec![
+                section(long_prose(30)),
+                section([vec![heading("Two")], long_prose(24)].concat()),
+            ],
+        };
+        let paginator = Paginator::new(registry(), PageGeometry::trade_paperback());
+
+        let staged: Vec<Vec<Line>> = book
+            .sections
+            .iter()
+            .map(|section| paginator.section_lines(section))
+            .collect();
+        let by_stage = paginator.flow(&staged);
+        let in_one = paginator.paginate(&book);
+
+        assert!(in_one.len() > 2, "a book worth splitting");
+        assert_eq!(by_stage.len(), in_one.len());
+        for (staged, whole) in by_stage.iter().zip(&in_one) {
+            assert_eq!(staged.number, whole.number);
+            assert_eq!(staged.side, whole.side);
+            assert_eq!(format!("{:?}", staged.items), format!("{:?}", whole.items));
         }
     }
 

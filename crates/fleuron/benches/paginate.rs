@@ -1,0 +1,33 @@
+//! Pagination: a content tree in, a numbered display list out.
+//!
+//! The composed stage — line layout and fragmentation together, as a
+//! caller pays for them. Its own number matters less than the gap
+//! between it and the sum of the two stages beneath it.
+
+use std::hint::black_box;
+
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use fleuron::layout::{PageGeometry, Paginator};
+use fleuron_fixtures::{Corpus, registry};
+
+fn paginate(c: &mut Criterion) {
+    let paginator = Paginator::new(registry(), PageGeometry::trade_paperback());
+    let mut group = c.benchmark_group("paginate");
+    for corpus in Corpus::ALL {
+        let book = corpus.book();
+        group.throughput(Throughput::Elements(paginator.paginate(&book).len() as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(corpus.slug()),
+            &book,
+            |b, book| b.iter(|| black_box(paginator.paginate(book))),
+        );
+    }
+    group.finish();
+}
+
+criterion_group! {
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = paginate
+}
+criterion_main!(benches);

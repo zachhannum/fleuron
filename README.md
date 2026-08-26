@@ -68,6 +68,32 @@ user CSS ──────┘                                                  
    orientation, and DPI; painters decode pixels on their own side of the
    wall.
 
+## Performance
+
+The claim above is a measurement, not an adjective. The harness lays out
+two complete public-domain novels — *Pride and Prejudice* at book scale
+and *The Count of Monte Cristo* at four times it — and holds the result
+against fixed budgets:
+
+| | pages | line layout | fragment | PDF | end to end | layout peak |
+|---|---|---|---|---|---|---|
+| *Pride and Prejudice* | 333 | 130 ms | 4 ms | 153 ms | 288 ms | 12 MiB |
+| *The Count of Monte Cristo* | 1240 | 510 ms | 18 ms | 572 ms | 1.10 s | 46 MiB |
+
+Four times the book, four times the cost, in time and in memory both.
+
+Apple M-series, release build, best of three. Budgets: a book-scale
+manuscript reaches PDF bytes in under a second natively, lays out in
+under half a second in a WebAssembly worker, and holds under 32 MiB
+while doing it. Criterion benches time each stage on its own; a gate
+binary runs the same budgets natively and under wasm, and CI reports
+both on every pull request.
+
+```
+cargo run --release -p fleuron-fixtures --bin perf-gate
+cargo bench -p fleuron
+```
+
 ## Status
 
 Pre-alpha. Development happens in service of [Orca], the Obsidian

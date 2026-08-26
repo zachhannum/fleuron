@@ -37,6 +37,44 @@ jobs:
           pdftotext out.pdf out.txt
           test "$(wc -w < out.txt)" -gt 0
 
+  # Warns, does not fail: a shared runner's clock is evidence of a trend,
+  # not of a regression. `--strict` is the switch to throw once the
+  # numbers have held still. The memory ceiling is a hard failure — the
+  # allocator counts the same bytes on every machine.
+  perf:
+    runs-on: ubuntu-latest
+    env:
+      WASMTIME_VERSION: v29.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Book-scale invariants
+        run: cargo test --release -p fleuron-fixtures
+      - name: Native budgets
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cargo run --release -p fleuron-fixtures --bin perf-gate -- --runs 3 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install wasmtime
+        run: |
+          curl -sSfL -o wasmtime.tar.xz \
+            "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz"
+          tar xf wasmtime.tar.xz
+          echo "$PWD/wasmtime-${WASMTIME_VERSION}-x86_64-linux" >> "$GITHUB_PATH"
+      # A standalone runtime, not a browser: the worker's real engine is
+      # someone else's, and this is the closest reproducible proxy.
+      - name: Worker budgets
+        run: |
+          cargo build --release -p fleuron-fixtures --bin perf-gate --target wasm32-wasip1
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          wasmtime run target/wasm32-wasip1/release/perf-gate.wasm -- --gate-only --runs 3 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
   advisories:
     runs-on: ubuntu-latest
     steps:
