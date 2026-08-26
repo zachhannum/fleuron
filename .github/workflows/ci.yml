@@ -66,12 +66,14 @@ jobs:
           tar xf wasmtime.tar.xz
           echo "$PWD/wasmtime-${WASMTIME_VERSION}-x86_64-linux" >> "$GITHUB_PATH"
       # A standalone runtime, not a browser: the worker's real engine is
-      # someone else's, and this is the closest reproducible proxy.
+      # someone else's, and this is the closest reproducible proxy. Both
+      # books, as natively — the constrained target is where a curve
+      # that has stopped being linear shows up first.
       - name: Worker budgets
         run: |
           cargo build --release -p fleuron-fixtures --bin perf-gate --target wasm32-wasip1
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          wasmtime run target/wasm32-wasip1/release/perf-gate.wasm -- --gate-only --runs 3 \
+          wasmtime run target/wasm32-wasip1/release/perf-gate.wasm -- --runs 3 \
             | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
