@@ -7,6 +7,7 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use fleuron::Warning;
 use fleuron::content::Book;
+use fleuron::images::{Assets, ImageLoader};
 use fleuron::style::{FontLoader, Source, Stylesheets};
 
 const USAGE: &str = "usage: fleuron <input.json> -o <output.pdf> [-c <style.css>]
@@ -152,12 +153,15 @@ fn render(input: &Path, output: &Path, css: &[PathBuf]) -> Result<Summary> {
         .map(|(name, text)| Source::author(name, text))
         .collect();
     let mut stylesheets = Stylesheets::parse(&sources);
-    // The engine opens nothing: `@font-face` urls are resolved here,
-    // against the directory of the sheet that asked for them.
-    stylesheets.load_fonts(&mut registry, &Files::rooted(css));
+    // The engine opens nothing: `@font-face` and image urls are
+    // resolved here, against the book's directory and the directory
+    // of the sheet that asked for them.
+    let files = Files::rooted(input, css);
+    stylesheets.load_fonts(&mut registry, &files);
     let styles = stylesheets.compile(&book, &registry);
 
-    let laid_out = fleuron::layout::layout_book(&book, &styles, &registry);
+    let assets = Assets::probe(&book, &files);
+    let laid_out = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
     let bytes = fleuron::pdf::write(&laid_out, &registry, &book.metadata)
         .with_context(|| format!("{}", input.display()))?;
     std::fs::write(output, bytes).with_context(|| format!("{}", output.display()))?;
@@ -179,28 +183,42 @@ fn read_sheets(paths: &[PathBuf]) -> Result<Vec<(String, String)>> {
         .collect()
 }
 
-/// The host side of `@font-face`: urls are paths, resolved against
-/// the directories the stylesheets came from.
+/// The host side of every url the engine does not open itself —
+/// `@font-face` sources and images. Urls are paths, resolved against
+/// the book's own directory and the directories the stylesheets came
+/// from.
 struct Files {
     roots: Vec<PathBuf>,
 }
 
 impl Files {
-    fn rooted(sheets: &[PathBuf]) -> Files {
-        let mut roots: Vec<PathBuf> = sheets
-            .iter()
-            .filter_map(|sheet| sheet.parent().map(Path::to_path_buf))
-            .collect();
+    fn rooted(book: &Path, sheets: &[PathBuf]) -> Files {
+        let mut roots: Vec<PathBuf> = book.parent().map(Path::to_path_buf).into_iter().collect();
+        roots.extend(
+            sheets
+                .iter()
+                .filter_map(|sheet| sheet.parent().map(Path::to_path_buf)),
+        );
         roots.push(PathBuf::from("."));
         Files { roots }
+    }
+
+    fn read(&self, url: &str) -> Option<Vec<u8>> {
+        self.roots
+            .iter()
+            .find_map(|root| std::fs::read(root.join(url)).ok())
     }
 }
 
 impl FontLoader for Files {
     fn load(&self, url: &str) -> Option<Vec<u8>> {
-        self.roots
-            .iter()
-            .find_map(|root| std::fs::read(root.join(url)).ok())
+        self.read(url)
+    }
+}
+
+impl ImageLoader for Files {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        self.read(url)
     }
 }
 

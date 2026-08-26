@@ -25,6 +25,24 @@ h1, h2, h3, h4, h5, h6 {
   break-after: avoid;
 }
 
+/* A quotation is set narrower than the measure and off from the
+   prose around it, and holds together across a page turn as far as
+   its own orphans and widows allow. */
+blockquote {
+  margin: 1em 2em;
+}
+
+/* A scene break is an ornament centred in the measure. It belongs
+   between paragraphs, so it never opens or closes a page: what would
+   read as a stray mark at a page turn moves with the prose. */
+hr {
+  content: "\2766";
+  text-align: center;
+  margin: 1em 0;
+  break-before: avoid;
+  break-after: avoid;
+}
+
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }

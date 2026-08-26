@@ -19,6 +19,10 @@ Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`,
 classes, ids, attributes or namespaces — the content tree carries none —
 and no pseudo-classes that describe a document being interacted with.
 
+One pseudo-element: `::first-letter`, which is where a drop cap comes
+from. It cascades over the style of the element it belongs to, so a rule
+that names it starts from that element's own font and size.
+
 Text runs are not elements: they take the style of the inline or block
 around them, and never count towards `:first-child`.
 
@@ -43,11 +47,24 @@ Block box, not inherited:
 
 | property | values |
 |---|---|
+| `content` | `none` or a `<string>` — the ornament a thematic break is set in |
+| `initial-letter` | `<integer>` lines to sink an initial letter over, on `::first-letter` |
 | `margin` | one to four `<length>`s |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length>` |
 | `break-before`, `break-after`, `break-inside` | `auto`, `avoid`, `page`, `left`, `right`, `recto`, `verso` |
 
 `recto` and `verso` are the book's names for `right` and `left`.
+
+`break-inside: avoid` moves a block whole rather than split it, and
+`orphans` and `widows` bound where a paragraph may be cut: fewer than
+`orphans + widows` lines and it moves whole too. Where no allowed break
+remains, the page ends anyway — a book that cannot be broken is still a
+book that has to be paginated.
+
+An initial letter is sized from the sink rather than from `font-size`:
+its cap height spans `initial-letter` lines, so its baseline lands on
+the last of them and its top on the first line's cap height. The lines
+beside it break to the measure it leaves.
 
 Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`.
 Everything computes to points. `em` in `font-size` is a multiple of the
@@ -117,5 +134,6 @@ registered face and says that.
 
 Colour, backgrounds, borders, padding, floats, tables, grid, flexbox,
 transforms, media queries, custom properties, counters other than
-`page`, and generated content beyond page margin boxes. The engine says
-so, per declaration, where it was written.
+`page`, and generated content beyond page margin boxes and `content` on
+an empty element. The engine says so, per declaration, where it was
+written.

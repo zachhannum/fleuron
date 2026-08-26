@@ -187,6 +187,9 @@ pub struct FontMetricsTable {
     pub descender: i16,
     /// Leading the face asks for between lines.
     pub line_gap: i16,
+    /// Height of a capital above the baseline. Zero when the face
+    /// declares none, which is what a drop cap has to fall back from.
+    pub cap_height: i16,
 }
 
 /// One registered face: bytes plus everything decoded from them.
@@ -569,6 +572,7 @@ fn read_metrics(font: &skrifa::FontRef, location: &Location) -> FontMetricsTable
         ascender: metrics.ascent as i16,
         descender: metrics.descent as i16,
         line_gap: metrics.leading as i16,
+        cap_height: metrics.cap_height.unwrap_or_default() as i16,
     }
 }
 

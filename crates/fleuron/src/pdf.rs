@@ -166,7 +166,8 @@ fn paint(
             })?;
             surface.draw_path(&path);
         }
-        // Images arrive with the image pipeline; layout emits none.
+        // Layout places images; the writer embeds them through an
+        // image pipeline it does not have yet.
         DrawItem::Image { .. } => {}
     }
     Ok(())

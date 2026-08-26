@@ -92,13 +92,19 @@ impl NonTSPseudoClass for PseudoClass {
     }
 }
 
-/// No pseudo-elements yet: `::first-letter` arrives with drop caps.
+/// The pseudo-elements the engine styles: the initial letter a drop
+/// cap is set from, and nothing else.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PseudoElement {}
+pub enum PseudoElement {
+    /// `::first-letter`
+    FirstLetter,
+}
 
 impl ToCss for PseudoElement {
-    fn to_css<W: fmt::Write>(&self, _dest: &mut W) -> fmt::Result {
-        match *self {}
+    fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+        match self {
+            PseudoElement::FirstLetter => dest.write_str("::first-letter"),
+        }
     }
 }
 
@@ -372,12 +378,15 @@ impl Element for ElementRef<'_> {
         match *pc {}
     }
 
+    /// Nothing in the content tree *is* a pseudo-element: a rule that
+    /// names one is matched against its originating element instead,
+    /// in `MatchingMode::ForStatelessPseudoElement`.
     fn match_pseudo_element(
         &self,
-        pe: &PseudoElement,
+        _pe: &PseudoElement,
         _context: &mut MatchingContext<Fleuron>,
     ) -> bool {
-        match *pe {}
+        false
     }
 
     fn apply_selector_flags(&self, _flags: ElementSelectorFlags) {}

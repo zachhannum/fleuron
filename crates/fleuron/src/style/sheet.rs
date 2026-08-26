@@ -16,7 +16,7 @@ use selectors::parser::{ParseRelative, SelectorParseErrorKind};
 use crate::Warning;
 use crate::fonts::GenericFamily;
 use crate::pages::Side;
-use crate::style::element::Fleuron;
+use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     Break, Content, Declaration, Edge, Family, FontStyle, Hyphens, Length, LineHeight, MarginBox,
     TextAlign,
@@ -398,6 +398,19 @@ impl<'i> selectors::Parser<'i> for Selectors {
     fn parse_has(&self) -> bool {
         true
     }
+
+    fn parse_pseudo_element(
+        &self,
+        location: SourceLocation,
+        name: CowRcStr<'i>,
+    ) -> Result<PseudoElement, ParseError<'i, StyleError<'i>>> {
+        match_ignore_ascii_case! { &name,
+            "first-letter" => Ok(PseudoElement::FirstLetter),
+            _ => Err(location.new_custom_error(
+                SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.clone()),
+            )),
+        }
+    }
 }
 
 /// Every declaration in one style-rule body, plus a warning for each
@@ -506,6 +519,8 @@ fn property<'i>(
         "orphans" => one(Declaration::Orphans(keyword_or(input, count, bad)?)),
         "widows" => one(Declaration::Widows(keyword_or(input, count, bad)?)),
         "page" => one(Declaration::Page(keyword_or(input, page_name, bad)?)),
+        "content" => one(Declaration::Content(keyword_or(input, ornament, bad)?)),
+        "initial-letter" => one(Declaration::InitialLetter(keyword_or(input, count, bad)?)),
         "margin" => Ok(edges(input)
             .ok_or_else(|| input.new_custom_error(bad()))?
             .into_iter()
@@ -571,6 +586,19 @@ fn page_name(input: &mut Parser<'_, '_>) -> Option<Option<String>> {
     } else {
         Some(Some(keyword.as_ref().to_string()))
     }
+}
+
+/// What an element paints in place of children: a literal, or
+/// nothing. The page counter belongs to margin boxes, not to prose.
+fn ornament(input: &mut Parser<'_, '_>) -> Option<Content> {
+    if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
+        return Some(Content::Text(text.as_ref().to_string()));
+    }
+    input
+        .expect_ident()
+        .ok()?
+        .eq_ignore_ascii_case("none")
+        .then_some(Content::None)
 }
 
 fn count(input: &mut Parser<'_, '_>) -> Option<u16> {

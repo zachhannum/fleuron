@@ -16,8 +16,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use fleuron::fonts::FontRegistry;
-use fleuron::layout::Paginator;
-use fleuron::lines::Line;
+use fleuron::layout::{Fragment, Paginator, Piece};
 use fleuron::pdf;
 
 use crate::corpus::Corpus;
@@ -214,14 +213,18 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         style = style.min(start.elapsed());
 
         let start = Instant::now();
-        let flows: Vec<Vec<Line>> = black_box(
+        let flows: Vec<Vec<Fragment>> = black_box(
             book.sections
                 .iter()
-                .map(|section| paginator.section_lines(section))
+                .map(|section| paginator.section_fragments(section))
                 .collect(),
         );
         line_layout = line_layout.min(start.elapsed());
-        lines = flows.iter().map(Vec::len).sum();
+        lines = flows
+            .iter()
+            .flatten()
+            .filter(|fragment| matches!(fragment.piece, Piece::Line { .. }))
+            .count();
 
         let start = Instant::now();
         black_box(paginator.flow(&book, &flows));

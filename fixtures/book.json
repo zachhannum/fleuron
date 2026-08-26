@@ -372,6 +372,13 @@
           }
         },
         {
+          "type": "thematic_break",
+          "position": {
+            "line": 17,
+            "column": 1
+          }
+        },
+        {
           "type": "paragraph",
           "inlines": [
             {

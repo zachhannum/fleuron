@@ -45,3 +45,10 @@ h1, h2, h3 {
 blockquote p {
   font-size: 10pt;
 }
+
+/* A chapter opens with a three-line drop cap: the initial letter of
+   the paragraph after the chapter heading is sunk into the lines
+   beside it. */
+h2 + p::first-letter {
+  initial-letter: 3;
+}
