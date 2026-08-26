@@ -80,6 +80,10 @@ Against the fixture book that ships with the repository, that prints `31 pages` 
 
 Everything the built-in sheet can be overridden with is in [the CSS subset](../css-subset.md).
 
+## Laying out again
+
+`layout_book` rebuilds every stage on every call, which is what a program that renders one book and exits wants. A program that lays the same book out over and over — a preview beside an editor — wants a [session](sessions.md): it holds each stage's output and re-runs only the ones an edit invalidates, so a change to page margins costs fragmentation rather than another pass over every line.
+
 ## Where things go wrong
 
 Nothing above panics on bad input. Unsupported CSS, an unresolvable font, and a stack that matches nothing are all warnings, and the run finishes. [Diagnostics](diagnostics.md) covers what warns and what fails.

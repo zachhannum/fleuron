@@ -37,6 +37,8 @@ The host raises the generation whenever the input becomes stale, at a keystroke 
 
 This is cheaper than cancellation: a layout already in flight finishes, its result is discarded, and the module is never left half-done.
 
+A request is an edit, not a book. The engine holds each stage between calls and re-runs only the ones an edit invalidates — a stylesheet that moves the page box costs fragmentation, a colour costs nothing — so what a re-layout has to carry is the part that changed: one source replaced, or a sheet set. What the module holds between requests is a [session](../library/sessions.md), and encoding an edit rather than a book is part of what the bindings still have to settle.
+
 ## Host duties
 
 **Own the fonts.** Fetch them, cache them, decide when a face has changed. The engine registers what it is handed and warns about what it is not.

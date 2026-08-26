@@ -87,12 +87,19 @@ it — and holds the result against fixed budgets:
 Four times the book costs about four times the time and four times the
 memory.
 
+A [session](docs/library/sessions.md) is the same pipeline held open:
+it keeps each stage's output and re-runs only the stages an edit
+invalidates. Restyling *Pride and Prejudice* with a sheet that moves
+the page box costs 6 ms, against the 128 ms of line breaking it does
+not do again.
+
 Apple M-series, release build, best of three. Budgets: a book-scale
 manuscript reaches PDF bytes in under a second natively, lays out in
-under half a second in a WebAssembly worker, and holds under 32 MiB
-while doing it. Criterion benches time each stage on its own; a gate
-binary runs the same budgets natively and under wasm, and CI reports
-both on every pull request.
+under half a second in a WebAssembly worker, holds under 32 MiB while
+doing it, and re-renders a style change in under 20 ms from a session
+holding under 64 MiB. Criterion benches time each stage on its own; a
+gate binary runs the same budgets natively and under wasm, and CI
+reports both on every pull request.
 
 ```
 cargo run --release -p fleuron-fixtures --bin perf-gate

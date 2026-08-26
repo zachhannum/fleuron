@@ -38,7 +38,7 @@ impl FontLoader for Files {
 sheets.load_fonts(&mut registry, &Files(PathBuf::from("assets")));
 ```
 
-A host that resolves nothing has no author fonts. `NoFonts` is that loader, and is the one to use in a sandbox. Load fonts before compiling: a face the registry does not hold is a face no computed style can resolve to.
+A host that resolves nothing has no author fonts. `NoFonts` is that loader, and is the one to use in a sandbox. Load fonts before compiling: a face the registry does not hold is a face no computed style can resolve to. A [session](sessions.md) borrows the registry for its whole life, so under one the loading happens before the session is made.
 
 A face is registered under the family the *sheet* declared, not the name inside the file, so a sheet's selectors always match the name the sheet wrote.
 

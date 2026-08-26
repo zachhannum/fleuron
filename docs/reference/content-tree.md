@@ -92,7 +92,7 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 Every node has an id, and the engine assigns it: input cannot collide ids or forge a diagnostic origin. Ids never travel on the wire — the tree is authoritative — so fresh off the wire every node is unassigned, and `Book::assign_node_ids` numbers them from 1 in document order. Pre-order: a node before its children, sections in reading order.
 
-Call it once, after deserializing. Calling it again renumbers.
+Call it once, after deserializing. Calling it again renumbers. A [session](../library/sessions.md) numbers what it is handed, so content set through one arrives numbered whatever the host did.
 
 ## Source positions
 
