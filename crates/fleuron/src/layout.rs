@@ -20,7 +20,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, Inline, NodeId, Section, origin};
+use crate::content::{Block, Book, Inline, NodeId, Section, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, ShapedRun};
@@ -541,14 +541,14 @@ impl Builder<'_, '_> {
         if style.string_set.is_empty() && style.counter_reset.is_none() {
             return;
         }
-        let mut text = None;
+        let mut cached = None;
         let marks = self.pending_marks.get_or_insert_with(Box::default);
         for set in &style.string_set {
             let mut value = String::new();
             for piece in &set.value {
                 match piece {
                     StringPiece::Content => {
-                        value.push_str(text.get_or_insert_with(|| flatten(inlines)))
+                        value.push_str(cached.get_or_insert_with(|| text(inlines)))
                     }
                     StringPiece::Text(literal) => value.push_str(literal),
                 }
@@ -871,24 +871,6 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
         TextAlign::Right => (available - width).max(0.0),
         TextAlign::Center => ((available - width) / 2.0).max(0.0),
     }
-}
-
-/// One element's text, as `content()` reads it: every inline it
-/// holds, run together.
-fn flatten(inlines: &[Inline]) -> String {
-    let mut text = String::new();
-    fn walk(inlines: &[Inline], text: &mut String) {
-        for inline in inlines {
-            match inline {
-                Inline::Text { value, .. } | Inline::Code { value, .. } => text.push_str(value),
-                Inline::Emphasis { children, .. }
-                | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => walk(children, text),
-            }
-        }
-    }
-    walk(inlines, &mut text);
-    text
 }
 
 /// Splits the first character off a run of inlines, wherever the

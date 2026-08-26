@@ -314,6 +314,26 @@ pub enum Inline {
     },
 }
 
+/// The text of an inline tree, markup discarded: every inline run
+/// together, as `content()` reads an element and as a frontend reads
+/// alt text.
+pub fn text(inlines: &[Inline]) -> String {
+    let mut out = String::new();
+    push_text(inlines, &mut out);
+    out
+}
+
+fn push_text(inlines: &[Inline], out: &mut String) {
+    for inline in inlines {
+        match inline {
+            Inline::Text { value, .. } | Inline::Code { value, .. } => out.push_str(value),
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. } => push_text(children, out),
+        }
+    }
+}
+
 impl Book {
     /// Assign ids to every node, in document order (pre-order: a node
     /// before its children, sections in reading order), starting at 1.
