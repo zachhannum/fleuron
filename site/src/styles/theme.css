@@ -183,8 +183,11 @@ html {
   }
 }
 
+/* The ground is painted by `html` and nowhere else. A background on
+   `body` would sit above body's own negative-z children in the root
+   stacking context, and the bleeds and grain below are exactly that. */
 body {
-  background: var(--f-ground);
+  background: transparent;
   color: var(--f-text);
   font-family: var(--f-sans);
 }
