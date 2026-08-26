@@ -1,4 +1,7 @@
-# The novel subset
+---
+title: The novel subset
+description: Every property, at-rule and selector the engine honours, and what it does with the rest.
+---
 
 fleuron understands the CSS a book needs and reports the rest. Every
 property, at-rule and selector below is honoured by the pipeline;

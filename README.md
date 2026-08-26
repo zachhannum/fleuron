@@ -2,6 +2,8 @@
 
 *A paged-media layout engine for book-shaped documents, in Rust.*
 
+[**Documentation**](https://zachhannum.github.io/fleuron/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
+
 **fleuron** takes structured content plus CSS, performs
 inline layout (shaping, line breaking, hyphenation), fragments it into pages,
 and emits a display list for preview and a PDF for export. It compiles to
@@ -63,8 +65,8 @@ CSS ───────────┘                                        
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
    the defaults; author CSS cascades over it. Everything downstream
    consumes the resolved style tree. The supported subset is written
-   down in `docs/css-subset.md`; anything outside it is reported with
-   the line and column it was written at.
+   down in [`docs/css-subset.md`](docs/css-subset.md); anything outside
+   it is reported with the line and column it was written at.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
    and PDF are interchangeable painters over the display list.
 3. **Layout never decodes images.** Header probes yield intrinsic size,

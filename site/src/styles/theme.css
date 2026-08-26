@@ -1,0 +1,323 @@
+@layer base, starlight, theme, components, utilities;
+
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* The face the engine ships, subset from the same bytes in
+   crates/fleuron/fonts/. Display type only: chrome is a system
+   grotesque, which costs nothing to load. */
+@font-face {
+  font-family: 'EB Garamond Subset';
+  src: url('../assets/fonts/ebgaramond-subset.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'EB Garamond Subset';
+  src: url('../assets/fonts/ebgaramond-italic-subset.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ── The token layer ──────────────────────────────────────────────
+   One definition of the palette. Both themes are written out; the
+   light one is designed rather than inverted, because inverted glass
+   looks like a mistake. Everything else in the site, Starlight
+   included, is expressed in terms of these. */
+
+:root {
+  --f-ground: #07080b;
+  --f-ground-2: #0c0e13;
+  --f-raise: #141821;
+  --f-glass: rgb(255 255 255 / 0.045);
+  --f-glass-solid: #12151c;
+  --f-hairline: rgb(255 255 255 / 0.1);
+  --f-hairline-strong: rgb(255 255 255 / 0.18);
+
+  --f-text: #eef0f6;
+  --f-text-muted: #a7aebd;
+  --f-text-faint: #767d8d;
+
+  --f-accent: #9b9cfb;
+  --f-accent-deep: #5750e0;
+  --f-accent-low: #1a1b3a;
+  --f-ember: #e8b06a;
+
+  --f-paper: #fffefb;
+  --f-paper-ink: #14151a;
+  --f-paper-edge: rgb(0 0 0 / 0.5);
+
+  --f-dot: rgb(255 255 255 / 0.09);
+  --f-grain: 0.055;
+  --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 42%, transparent);
+  --f-bleed-b: color-mix(in oklab, var(--f-ember) 26%, transparent);
+
+  --f-radius: 18px;
+  --f-radius-sm: 10px;
+  --f-measure: 68ch;
+
+  --f-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --f-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+  --f-display: 'EB Garamond Subset', Garamond, 'Times New Roman', serif;
+}
+
+:root[data-theme='light'] {
+  --f-ground: #f5f3ef;
+  --f-ground-2: #faf9f6;
+  --f-raise: #ffffff;
+  --f-glass: rgb(255 255 255 / 0.72);
+  --f-glass-solid: #ffffff;
+  --f-hairline: rgb(20 21 26 / 0.12);
+  --f-hairline-strong: rgb(20 21 26 / 0.22);
+
+  --f-text: #16181d;
+  --f-text-muted: #4d5361;
+  --f-text-faint: #626976;
+
+  --f-accent: #4740c4;
+  --f-accent-deep: #4740c4;
+  --f-accent-low: #e8e7fb;
+  --f-ember: #8a5a12;
+
+  --f-paper: #ffffff;
+  --f-paper-ink: #14151a;
+  --f-paper-edge: rgb(20 21 26 / 0.14);
+
+  --f-dot: rgb(20 21 26 / 0.1);
+  --f-grain: 0.03;
+  --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
+  --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
+}
+
+/* The landing page ships no JavaScript, so it cannot read the theme a
+   visitor chose in the docs. It follows the system instead. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --f-ground: #f5f3ef;
+    --f-ground-2: #faf9f6;
+    --f-raise: #ffffff;
+    --f-glass: rgb(255 255 255 / 0.72);
+    --f-glass-solid: #ffffff;
+    --f-hairline: rgb(20 21 26 / 0.12);
+    --f-hairline-strong: rgb(20 21 26 / 0.22);
+    --f-text: #16181d;
+    --f-text-muted: #4d5361;
+    --f-text-faint: #626976;
+    --f-accent: #4740c4;
+    --f-accent-deep: #4740c4;
+    --f-accent-low: #e8e7fb;
+    --f-ember: #8a5a12;
+    --f-paper: #ffffff;
+    --f-paper-ink: #14151a;
+    --f-paper-edge: rgb(20 21 26 / 0.14);
+    --f-dot: rgb(20 21 26 / 0.1);
+    --f-grain: 0.03;
+    --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
+    --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
+  }
+}
+
+/* ── Starlight, expressed in the token layer ─────────────────────── */
+
+:root,
+:root[data-theme='dark'],
+:root[data-theme='light'] {
+  --sl-font: var(--f-sans);
+  --sl-font-mono: var(--f-mono);
+
+  --sl-color-white: var(--f-text);
+  --sl-color-gray-1: var(--f-text);
+  --sl-color-gray-2: var(--f-text-muted);
+  --sl-color-gray-3: var(--f-text-faint);
+  --sl-color-gray-4: var(--f-hairline-strong);
+  --sl-color-gray-5: var(--f-raise);
+  --sl-color-gray-6: var(--f-ground-2);
+  --sl-color-gray-7: var(--f-glass-solid);
+  --sl-color-black: var(--f-ground);
+
+  --sl-color-accent-low: var(--f-accent-low);
+  --sl-color-accent: var(--f-accent-deep);
+  --sl-color-accent-high: var(--f-accent);
+
+  --sl-color-text: var(--f-text-muted);
+  --sl-color-text-accent: var(--f-accent);
+  --sl-color-text-invert: var(--f-ground);
+  --sl-color-bg: var(--f-ground);
+  --sl-color-bg-nav: transparent;
+  --sl-color-bg-sidebar: transparent;
+  --sl-color-bg-inline-code: var(--f-glass);
+  --sl-color-bg-accent: var(--f-accent-deep);
+  --sl-color-hairline: var(--f-hairline);
+  --sl-color-hairline-light: var(--f-hairline);
+  --sl-color-hairline-shade: var(--f-hairline);
+  --sl-color-backdrop-overlay: color-mix(in oklab, var(--f-ground) 88%, transparent);
+
+  --sl-nav-height: 4rem;
+  --sl-content-width: 48rem;
+}
+
+:root[data-theme='light'] {
+  --sl-color-text: #3b4150;
+}
+
+/* ── Ground, bleeds, grain ───────────────────────────────────────── */
+
+html {
+  background: var(--f-ground);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+  }
+}
+
+body {
+  background: var(--f-ground);
+  color: var(--f-text);
+  font-family: var(--f-sans);
+}
+
+/* Two fixed pseudo-elements do every atmospheric effect on the site.
+   The bleeds are gradients; the grain is one tiled turbulence tile,
+   painted once and never repainted on scroll. The grain is not
+   decoration — it is what stops a large dark gradient banding. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background:
+    radial-gradient(60rem 40rem at 12% -8%, var(--f-bleed-a), transparent 70%),
+    radial-gradient(48rem 34rem at 92% 4%, var(--f-bleed-b), transparent 68%),
+    radial-gradient(70rem 44rem at 50% 108%, var(--f-bleed-a), transparent 72%);
+  animation: f-drift 44s ease-in-out infinite alternate;
+}
+
+body::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+  opacity: var(--f-grain);
+}
+
+@keyframes f-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(0, -2.5%, 0) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+}
+
+/* ── Glass ───────────────────────────────────────────────────────
+   backdrop-filter lives on fixed chrome and nowhere else: it
+   composites every frame, and a scrolling surface cannot afford it.
+   Panels are opaque enough that text on them passes AA without the
+   blur, which is also what makes the reduced-transparency fallback a
+   one-line change. */
+
+.f-glass {
+  background: var(--f-glass-solid);
+  border: 1px solid var(--f-hairline);
+  border-radius: var(--f-radius);
+}
+
+.f-chrome {
+  background: color-mix(in oklab, var(--f-ground) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--f-hairline);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .f-chrome {
+    background: var(--f-ground);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  body::before {
+    opacity: 0.4;
+  }
+}
+
+/* A dot field: a background-image, not an asset. */
+.f-dots {
+  background-image: radial-gradient(var(--f-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ── Starlight chrome, dressed ───────────────────────────────────── */
+
+.f-mark {
+  font-family: var(--f-display);
+  color: var(--f-ember);
+  line-height: 1;
+}
+
+.site-title,
+.sl-markdown-content h1,
+.sl-markdown-content h2 {
+  font-family: var(--f-display);
+  letter-spacing: 0.01em;
+}
+
+.sl-markdown-content h1 {
+  font-weight: 500;
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  color: var(--f-text);
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--f-accent);
+  text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content :is(pre, .expressive-code) {
+  border-radius: var(--f-radius-sm);
+}
+
+/* Starlight's nav is fixed, which is the only place backdrop-filter is
+   affordable. The sidebar is not: it scrolls. */
+.page > header.header {
+  background: color-mix(in oklab, var(--f-ground) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--f-hairline);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .page > header.header {
+    background: var(--f-ground);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.sidebar-pane {
+  border-inline-end: 1px solid var(--f-hairline);
+}

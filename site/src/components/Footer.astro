@@ -1,0 +1,59 @@
+---
+import EditLink from 'virtual:starlight/components/EditLink';
+import LastUpdated from 'virtual:starlight/components/LastUpdated';
+
+const year = new Date().getUTCFullYear();
+---
+
+<footer class="sl-flex">
+  <div class="meta sl-flex">
+    <EditLink />
+    <LastUpdated />
+  </div>
+  <div class="colophon">
+    <span class="f-mark" aria-hidden="true">&#10086;</span>
+    <p>
+      fleuron is dual-licensed under Apache-2.0 or MIT. Set in EB Garamond,
+      the face the engine ships. &copy; {year} Zach Hannum.
+    </p>
+  </div>
+</footer>
+
+<style>
+  footer {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .meta {
+    gap: 0.75rem 3rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 3rem;
+    font-size: var(--sl-text-sm);
+    color: var(--f-text-muted);
+  }
+
+  .meta > :global(p:only-child) {
+    margin-inline-start: auto;
+  }
+
+  .colophon {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin: 1.5rem 0 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--f-hairline);
+    font-size: var(--sl-text-xs);
+    color: var(--f-text-muted);
+  }
+
+  .colophon .f-mark {
+    font-size: 1.4rem;
+  }
+
+  .colophon p {
+    margin: 0;
+  }
+</style>

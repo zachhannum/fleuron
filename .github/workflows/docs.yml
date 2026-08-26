@@ -1,0 +1,101 @@
+name: docs
+
+# ci.yml is about the engine being correct. A docs build failing should
+# read as a docs build failing, not as the engine going red.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'site/**'
+      - 'crates/**'
+      - 'fixtures/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'site/**'
+      - 'crates/**'
+      - 'fixtures/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+env:
+  # The CLAUDE.md rule about `///` on every public item, enforced. The
+  # lib crates deny missing docs; this catches everything else rustdoc
+  # has to say.
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install the site
+        working-directory: site
+        run: npm ci
+
+      # Prose promises these run. They run.
+      - name: The library quickstart
+        run: cargo run --release --example quickstart -p fleuron
+
+      - name: The CLI quickstart
+        run: |
+          cargo run --release -p fleuron-cli -- \
+            fixtures/book.json -o cli.pdf -c fixtures/styled.css
+          test -s cli.pdf
+
+      # `--lib` and not the whole workspace: the CLI's bin target is
+      # also called `fleuron` and would overwrite the library's docs at
+      # the path the site serves them from.
+      - name: Rustdoc
+        run: cargo doc --workspace --no-deps --lib
+
+      - name: Build the site
+        working-directory: site
+        run: npm run build
+
+      - name: Fold the rustdoc in
+        run: |
+          cp -r target/doc site/dist/api
+          cat > site/dist/api/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>fleuron API</title>
+          <meta http-equiv="refresh" content="0; url=fleuron/">
+          <a href="fleuron/">fleuron API documentation</a>
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: site/dist
+
+  # Settings → Pages → Source must be "GitHub Actions" before the first
+  # deploy succeeds; there is no way to set that from a workflow.
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
