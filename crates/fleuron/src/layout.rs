@@ -35,7 +35,7 @@ use crate::{LayoutOutput, Warning};
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.
 ///
-/// A one-shot run over a session that retains nothing: it holds one
+/// A single run over a session that retains nothing. It holds one
 /// section's lines at a time, which is what a process that renders a
 /// book once and exits wants. A live preview wants `Session`.
 pub fn layout_book(book: &Book, styles: &StyleTree, registry: &FontRegistry) -> LayoutOutput {
@@ -283,7 +283,7 @@ impl<'a> Paginator<'a> {
     }
 
     /// The same, stopping short of the furniture: pages as the flow
-    /// settled them, and what each of them needs to paint its own.
+    /// settled them, and what each one needs to paint its own.
     pub(crate) fn fragment<'f>(
         &self,
         book: &Book,
@@ -300,7 +300,7 @@ impl<'a> Paginator<'a> {
     /// then paints each page's margin boxes: a folio's digits are not
     /// known until the pages before it are.
     ///
-    /// Idempotent: what an earlier paint left is discarded first, so
+    /// Idempotent. What an earlier paint left is discarded first, so
     /// a session that only changed its furniture repaints in place.
     ///
     /// The folio counts pages, and `counter-reset: page` restarts it
@@ -947,9 +947,9 @@ pub(crate) struct PageInfo {
     content_items: usize,
 }
 
-/// Pages as fragmentation settled them, and what each needs to paint
-/// its furniture. The two travel together: a folio is a fact about
-/// where a page landed, not about what is on it.
+/// Pages as fragmentation settled them, and what each one needs to
+/// paint its furniture. The two travel together, because a folio is a
+/// fact about where a page landed rather than about what is on it.
 pub(crate) struct Paged {
     pub(crate) pages: Vec<Page>,
     pub(crate) infos: Vec<PageInfo>,

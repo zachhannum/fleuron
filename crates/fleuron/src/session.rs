@@ -1,33 +1,34 @@
-//! The retained session: every stage kept, only what changed re-run.
+//! A retained pipeline: every stage kept, and only what an edit
+//! changed run again.
 //!
-//! `layout_book` is a pure function of its inputs — every call
-//! rebuilds every stage. That is what a process rendering one book
-//! and exiting wants, and the wrong shape for a live preview, where
-//! the common event is a small change to one input with the others
-//! standing. A session holds each stage's output and classifies an
-//! edit into the deepest stage it actually reaches: a colour serves
-//! the display list back, page furniture repaints, `@page` geometry
-//! re-fragments over cached lines, and only a change to the measure
-//! or to the text itself breaks lines again.
+//! `layout_book` is a pure function of its inputs, so every call
+//! rebuilds every stage. A process that renders one book and exits
+//! wants that. A live preview does not, because the common event
+//! there is a small change to one input while the others stand. A
+//! session holds each stage's output and works out the deepest stage
+//! an edit reaches: a colour serves the display list back, page
+//! furniture repaints, `@page` geometry re-fragments over cached
+//! lines, and only the measure or the text itself breaks lines
+//! again.
 //!
 //! # Section-local lines
 //!
 //! Line *breaking* is section-local: where the breaks fall depends on
 //! the measure, the face and the text, not on where the section
-//! starts vertically. Line *placement* is position-dependent and
+//! starts vertically. Line *placement* depends on position and
 //! belongs to fragmentation. So the cache holds breaks, shaped runs
-//! and advances, and holds no page coordinates; an edit to one
+//! and advances, and holds no page coordinates. An edit to one
 //! chapter re-breaks that chapter and re-fragments the book, which
-//! for a whole novel costs about as much as tracking which pages
-//! moved would.
+//! for a whole novel costs about what tracking the pages that moved
+//! would.
 //!
 //! Two preconditions make that sound, and both are checked rather
-//! than remembered. **Uniform measure**: masters that resolve
-//! different content widths make breaking depend on which page a line
-//! lands on. **No pagination-dependent inline text**: `counter(page)`
-//! is legal only inside a margin box, so nothing in the prose can
-//! depend on where the prose fell. When either fails the session
-//! re-breaks everything rather than serve stale lines.
+//! than remembered. The first is a uniform measure: masters that
+//! resolve different content widths make breaking depend on which
+//! page a line lands on. The second is that no inline text depends
+//! on pagination, which holds because `counter(page)` is legal only
+//! inside a margin box. When either one fails, the session re-breaks
+//! everything instead of serving stale lines.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -43,9 +44,8 @@ use crate::{LayoutOutput, Warning};
 
 /// How many times each stage has run since the session was made.
 ///
-/// A host reads these to see what an edit cost; the tests read them
-/// to prove what an edit did *not* cost, which is the whole point of
-/// a session and is not a thing a clock can prove.
+/// A host reads these to see what an edit cost. The tests read them
+/// to prove what an edit did *not* cost, which a clock cannot show.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Stages {
     /// Style compilations: parse, match, cascade.
@@ -94,10 +94,10 @@ struct Cached {
 /// let pages = &session.preview().pages;
 /// ```
 ///
-/// The registry is fixed for the session's life: a sheet that brings
-/// its own `@font-face` needs the host to register the face before
-/// the sheet is set, since a face the registry does not hold is a
-/// face no computed style can resolve to.
+/// The registry is fixed for the session's life. A computed style
+/// can only resolve to a face the registry already holds, so a sheet
+/// that brings its own `@font-face` needs the host to register that
+/// face before the sheet is set.
 pub struct Session<'a> {
     registry: &'a FontRegistry,
     assets: &'a Assets,
@@ -113,9 +113,9 @@ pub struct Session<'a> {
     /// Whether the book places an image, which is what makes the
     /// page's height an input to breaking.
     images: bool,
-    /// Whether the stages are kept between calls. A one-shot run
-    /// holds one section's lines at a time and drops them as they are
-    /// flowed; that, and nothing else, is what it does differently.
+    /// Whether the stages are kept between calls. This is the only
+    /// difference on the one-shot path, which holds one section's
+    /// lines at a time and drops them as they are flowed.
     retain: bool,
     lines: Vec<Cached>,
     infos: Vec<PageInfo>,
@@ -161,9 +161,9 @@ impl<'a> Session<'a> {
         }
     }
 
-    /// One run over inputs the caller owns and will not edit: what
-    /// `layout_book` is. Nothing is fingerprinted, because nothing
-    /// will be compared against it.
+    /// The single run `layout_book` makes, over inputs the caller
+    /// owns and will not edit. Nothing is fingerprinted, because
+    /// nothing will be compared against it.
     pub(crate) fn once(
         book: &'a Book,
         styles: &'a StyleTree,
@@ -234,8 +234,7 @@ impl<'a> Session<'a> {
     }
 
     /// Sets the styling, and with it whichever stage the change
-    /// reaches — which is the point of the session and is usually far
-    /// short of everything.
+    /// reaches, which is usually far short of everything.
     pub fn set_style(&mut self, sheets: Stylesheets) {
         self.sheets = Some(sheets);
         self.recompile();
@@ -248,7 +247,7 @@ impl<'a> Session<'a> {
     }
 
     /// The same, as PDF bytes. The stages above the painter are the
-    /// ones the preview used: an export can never contradict it.
+    /// ones the preview used, so an export cannot contradict it.
     pub fn export(&mut self) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
@@ -277,9 +276,9 @@ impl<'a> Session<'a> {
     }
 
     /// Whether a section's lines survive an edit elsewhere in the
-    /// book. False when the styling breaks a precondition — masters
-    /// of different measures, or inline content that depends on
-    /// pagination — and everything is re-broken instead.
+    /// book. This goes false when the styling breaks a precondition,
+    /// either masters of different measures or inline content that
+    /// depends on pagination, and everything is re-broken instead.
     pub fn reuses_sections(&self) -> bool {
         self.section_local
     }
@@ -430,13 +429,12 @@ fn blank_output(registry: &FontRegistry) -> LayoutOutput {
     }
 }
 
-/// The page a section's lines were broken against.
-///
-/// The measure always. The content height only for a book with an
-/// image in it: an image is the one thing fragment building sizes
-/// against the page's own height, so a book without one does not
-/// read it, and a page that grows taller does not re-break its
-/// prose.
+/// The page a section's lines were broken against: the measure
+/// always, and the content height only for a book with an image in
+/// it. An image is the one thing fragment building sizes against the
+/// page's own height, so a book without one never reads that height,
+/// and a page that grows taller leaves its prose broken where it
+/// was.
 #[derive(Debug, Clone, Copy)]
 struct Against {
     measure: f32,
@@ -550,8 +548,8 @@ fn uniform_measure(styles: &StyleTree) -> bool {
 
 /// Whether any element generates text that only pagination knows.
 /// `counter(page)` and `string()` in prose would make inline text
-/// depend on where the prose fell — a fixpoint, not a cache
-/// invalidation.
+/// depend on where the prose fell, which is a fixpoint rather than a
+/// cache invalidation.
 fn paginated_prose(styles: &[ComputedStyle]) -> bool {
     styles
         .iter()
@@ -560,8 +558,9 @@ fn paginated_prose(styles: &[ComputedStyle]) -> bool {
 
 /// What one section's lines were built from: the file it came from,
 /// its content, and the style every node in it resolved to. Node ids
-/// are deliberately absent — they renumber globally on every edit,
-/// and a chapter nothing touched would miss its own cache.
+/// are deliberately absent, because they renumber globally on every
+/// edit and a chapter nothing touched would then miss its own
+/// cache.
 fn section_key(section: &Section, styles: &StyleTree, against: Against) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
@@ -898,7 +897,7 @@ mod tests {
         assert_eq!(once, twice, "the second folio was painted over the first");
     }
 
-    /// A change the engine models nothing of costs nothing: the
+    /// A change the engine models nothing of costs nothing. The
     /// display list is served back as it stands, and only the
     /// diagnostics move.
     #[test]
@@ -1041,9 +1040,9 @@ mod tests {
 
     /// Inline text that depended on pagination would make breaking
     /// depend on where the breaks fell. The parser keeps the page
-    /// counter out of element rules, so prose cannot ask for it —
-    /// and the precondition is what says so out loud rather than
-    /// leaving it to somebody's memory.
+    /// counter out of element rules, so prose cannot ask for it, and
+    /// the precondition says so out loud rather than leaving it to
+    /// somebody's memory.
     #[test]
     fn generated_content_that_depends_on_pagination_closes_the_cache() {
         let plain = ComputedStyle::initial();
@@ -1066,8 +1065,8 @@ mod tests {
         assert!(paginated_prose(&[running]));
     }
 
-    /// And a sheet that asks for it anyway is a diagnostic, not a
-    /// stale cache: the ornament keeps whatever it had.
+    /// A sheet that asks for it anyway gets a diagnostic rather than
+    /// a stale cache, and the ornament keeps whatever it had.
     #[test]
     fn the_page_counter_never_reaches_prose() {
         let mut session = three_chapters();

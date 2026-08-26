@@ -2,11 +2,12 @@
 //!
 //! The tracker counts bytes through the global allocator, so a
 //! reading is only about the work it wraps while nothing else in the
-//! process is allocating — and a test harness runs its tests on
-//! threads that allocate, a hundred bytes of which is enough to take
-//! a reading below the work it was supposed to measure. This target
-//! carries no harness: one thread, one thing at a time, which is what
-//! it takes for the numbers to mean what they say.
+//! process is allocating. A test harness runs its tests on threads
+//! that allocate, and a hundred bytes freed by one of them is enough
+//! to take a reading below the work it was supposed to measure. This
+//! target carries no harness, so it runs on one thread and does one
+//! thing at a time, which is what the numbers need to mean what they
+//! say.
 
 use fleuron_fixtures::gate::{self, Target};
 use fleuron_fixtures::{Corpus, alloc, registry};
@@ -29,8 +30,8 @@ fn main() {
 }
 
 /// The high-water mark follows a live allocation up and survives its
-/// release: what the ceiling asks is how much was held at once, not
-/// how much is held now.
+/// release. The ceiling asks how much was held at once, not how much
+/// is held now.
 fn a_peak_outlives_the_allocation_that_made_it() {
     let (live_at_peak, peak) = alloc::measure(|| {
         let block: Vec<u8> = vec![7; 4 * 1024 * 1024];
@@ -50,12 +51,12 @@ fn a_peak_outlives_the_allocation_that_made_it() {
 }
 
 /// A book-scale run is bounded: the gate book sets the ~300 pages the
-/// budgets are written against, and lays them out inside the memory
-/// ceilings — the throwaway pass inside its own, and a session
-/// holding every stage at once inside the one written for that.
+/// budgets are written against, and lays them out inside both memory
+/// ceilings, the throwaway pass inside its own and a session holding
+/// every stage at once inside the one written for that.
 ///
 /// Timing verdicts stay with the gate binary, which warns rather than
-/// fails: a shared runner's clock is not evidence, but its allocator
+/// fails. A shared runner's clock is not evidence, but its allocator
 /// is.
 fn a_book_scale_run_stays_inside_the_memory_ceilings() {
     let report = gate::measure(Corpus::GATE, registry(), 1);

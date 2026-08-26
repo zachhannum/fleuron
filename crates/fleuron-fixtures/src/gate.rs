@@ -47,14 +47,13 @@ pub mod budget {
     pub const LAYOUT_PEAK: u64 = 32 * 1024 * 1024;
 
     /// The same for a retained session, which is a different
-    /// question: a throwaway pass holds one section's lines at a
-    /// time, and a session holds every one of them next to the
-    /// display list, because holding them is what saves measuring
-    /// them again.
+    /// question. A throwaway pass holds one section's lines at a
+    /// time. A session holds all of them next to the display list,
+    /// and holding them is what saves measuring them again.
     pub const SESSION_PEAK: u64 = 64 * 1024 * 1024;
 
     /// What a style-only re-render costs a session on a book-scale
-    /// manuscript: a sheet that moves the page box re-fragments over
+    /// manuscript. A sheet that moves the page box re-fragments over
     /// the lines it already has, and a reader dragging a margin
     /// should see the page turn over rather than wait on it.
     pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
@@ -123,8 +122,8 @@ pub struct Report {
     /// Bytes held at the peak of the layout call, over the content
     /// tree it was given.
     pub layout_peak: u64,
-    /// A style-only re-render over a retained session: a sheet that
-    /// moves the page box, and the pages that come back.
+    /// A style-only re-render over a retained session, measured with
+    /// a sheet that moves the page box.
     pub style_rerender: Duration,
     /// Bytes a session holds at its peak, over the content tree it
     /// was handed.
@@ -284,7 +283,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
 
     for index in 0..runs.max(1) {
         // A session is handed a content tree it then owns, and the
-        // ceiling is about what it builds over one — so the tree is
+        // ceiling is about what it builds over one, so the tree is
         // cloned before the measurement opens and moved in.
         let held = book.clone();
         let (mut session, peak) = crate::alloc::measure(|| {
@@ -295,8 +294,8 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         });
         session_peak = session_peak.max(peak as u64);
 
-        // A sheet that moves the page box and nothing else: the
-        // middle tier, which re-fragments over cached lines. The
+        // A sheet that moves the page box and nothing else, which
+        // is the middle tier: it re-fragments over cached lines. The
         // margin lands somewhere the built-in sheet did not, and
         // somewhere no other run put it, so every run measures a real
         // re-render rather than a cache that was already warm.

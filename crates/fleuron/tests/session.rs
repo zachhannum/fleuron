@@ -1,4 +1,4 @@
-//! Property tests for the retained session: whatever sequence of
+//! Property tests for the retained session. Whatever sequence of
 //! edits got it there, a session's output is the output a one-shot
 //! run over the same inputs would have produced.
 
@@ -72,8 +72,8 @@ fn book(shape: &[(&str, &str, usize)]) -> Book {
 }
 
 /// A page small enough that a handful of paragraphs spans several of
-/// them: what the tiers do to page geometry is only visible on a book
-/// whose pages actually break.
+/// them. What the tiers do to page geometry is only visible on a book
+/// whose pages break.
 const PAGE: &str = "@page { size: 300pt 300pt }";
 
 /// The sheets a source compiles to, over the small page.
@@ -95,9 +95,9 @@ fn one_shot(book: &Book, css: &str) -> Vec<u8> {
     serde_json::to_vec(&output).expect("the output serializes")
 }
 
-/// What a host does between previews. Each carries everything the
-/// session needs to apply it, so the test can replay the same edits
-/// against a book of its own.
+/// What a host does between previews. Each edit carries everything
+/// the session needs to apply it, so the test can replay the same
+/// edits against a book of its own.
 #[derive(Debug, Clone)]
 enum Edit {
     /// A whole book, as a shape.
@@ -106,8 +106,8 @@ enum Edit {
     Source(usize),
     /// A stylesheet, by index into `SHEETS`.
     Style(usize),
-    /// A preview taken mid-sequence, which is what gives the caches
-    /// something to be stale about.
+    /// A preview taken mid-sequence, which is what leaves the caches
+    /// something to go stale.
     Preview,
 }
 
@@ -134,7 +134,7 @@ const SOURCES: [(&str, &str, usize); 4] = [
 
 /// Sheets spanning every tier the classifier has: one the engine
 /// models nothing of, one that only moves furniture, one that moves
-/// the page box, ones that move the measure and the face, and one
+/// the page box, two that move the measure and the face, and one
 /// that puts two measures on the book at once.
 const SHEETS: [&str; 6] = [
     "p { color: rebeccapurple }",
@@ -191,11 +191,11 @@ fn replay(edits: &[Edit]) -> (Book, &'static str) {
     (book, css)
 }
 
-/// Every sheet, previewed, then every sheet again: whichever tier
+/// Every sheet, previewed, then every sheet again. Whichever tier
 /// the classifier picked for that step, the bytes are the ones a
 /// one-shot run over the second sheet would have produced.
 ///
-/// The property test wanders; this covers the matrix.
+/// The property test wanders, and this covers the matrix.
 #[test]
 fn every_style_step_lands_where_a_one_shot_run_would() {
     let shape = BOOKS[1];
@@ -210,15 +210,15 @@ fn every_style_step_lands_where_a_one_shot_run_would() {
             assert_eq!(
                 retained,
                 one_shot(&book(shape), next),
-                "{first} — then — {next}"
+                "{first} then {next}"
             );
         }
     }
 }
 
-/// And every sheet followed by a file replaced: the sections that
-/// kept their lines have to be the sections a fresh run would have
-/// broken the same way.
+/// Every sheet followed by a file replaced. The sections that kept
+/// their lines have to be the sections a fresh run would have broken
+/// the same way.
 #[test]
 fn every_source_edit_lands_where_a_one_shot_run_would() {
     let shape = BOOKS[1];
@@ -240,7 +240,7 @@ fn every_source_edit_lands_where_a_one_shot_run_would() {
                         .expect("the replacement is one of the four"),
                 ),
             ]);
-            assert_eq!(retained, one_shot(&expected, css), "{css} — then — {name}");
+            assert_eq!(retained, one_shot(&expected, css), "{css} then {name}");
         }
     }
 }
@@ -248,10 +248,10 @@ fn every_source_edit_lands_where_a_one_shot_run_would() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
-    /// However it got there — content set and reset, one file
-    /// replaced, sheets swapped, previews taken along the way — a
-    /// session's output is byte-identical to a one-shot run over the
-    /// inputs it ended up with.
+    /// A session's output is byte-identical to a one-shot run over
+    /// the inputs it ended up with, however it got there: content set
+    /// and reset, one file replaced, sheets swapped, previews taken
+    /// along the way.
     #[test]
     fn a_session_ends_where_a_one_shot_run_would_have(
         edits in proptest::collection::vec(edit_strategy(), 1..8),

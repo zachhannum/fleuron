@@ -122,6 +122,8 @@ docs/) and external (README).
 - Keep them short.
 - Only write documentation when the WHY is non-obvious.
 - Write docs as statements of how things are.
+- Run the `humanizer` skill over prose before it lands: comments,
+  doc comments, docs/, README, PR and issue bodies.
 
 **DO NOT**
 
@@ -130,6 +132,10 @@ docs/) and external (README).
 - Document changes over time — history lives in git.
 - Include links (code references, PRs, issues, error URLs).
 - Explain why a rejected or unchosen alternative wasn't taken.
+
+Run it against its own rules. Nothing in this repo is a writing
+sample to match, so nothing overrides them, the em dash rule
+included.
 
 ## Conventions
 

@@ -91,7 +91,7 @@ A [session](docs/library/sessions.md) is the same pipeline held open:
 it keeps each stage's output and re-runs only the stages an edit
 invalidates. Restyling *Pride and Prejudice* with a sheet that moves
 the page box costs 6 ms, against the 128 ms of line breaking it does
-not do again.
+not repeat.
 
 Apple M-series, release build, best of three. Budgets: a book-scale
 manuscript reaches PDF bytes in under a second natively, lays out in
