@@ -115,8 +115,11 @@ pub struct FaceMatch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GenericFamily {
+    /// `serif`
     Serif,
+    /// `sans-serif`
     SansSerif,
+    /// `monospace`
     Monospace,
 }
 
@@ -147,6 +150,7 @@ impl GenericFamily {
 /// and text-anchored break opportunities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShapedGlyph {
+    /// Glyph id in the face that shaped it.
     pub id: u32,
     /// Horizontal advance in font units.
     pub x_advance: u32,
@@ -175,9 +179,13 @@ pub struct FontRefEntry {
 /// tables.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct FontMetricsTable {
+    /// Font design units per em; everything else here is in them.
     pub units_per_em: u16,
+    /// Height above the baseline.
     pub ascender: i16,
+    /// Depth below the baseline, negative.
     pub descender: i16,
+    /// Leading the face asks for between lines.
     pub line_gap: i16,
 }
 
@@ -567,8 +575,10 @@ fn read_metrics(font: &skrifa::FontRef, location: &Location) -> FontMetricsTable
 /// What can go wrong loading a font.
 #[derive(Debug, thiserror::Error)]
 pub enum FontError {
+    /// The bytes are not a font this build can read.
     #[error("font data could not be parsed")]
     Parse,
+    /// A font with no family name has nothing to register under.
     #[error("font has no family name")]
     MissingName,
 }

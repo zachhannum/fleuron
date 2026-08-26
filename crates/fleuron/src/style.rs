@@ -104,6 +104,7 @@ impl Situation {
 pub struct PageQuery<'a> {
     /// The named page in force, from the `page` property.
     pub name: Option<&'a str>,
+    /// Which page of the group, and which side.
     pub situation: Situation,
 }
 
@@ -111,6 +112,7 @@ pub struct PageQuery<'a> {
 /// paint.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PageStyle {
+    /// Trim size and margins.
     pub geometry: PageGeometry,
     /// The margin boxes the page's rules mentioned, in CSS order.
     pub boxes: Vec<MarginBoxStyle>,
@@ -128,7 +130,9 @@ impl PageStyle {
 /// One page margin box: what it paints and the style it paints with.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MarginBoxStyle {
+    /// Which of the sixteen boxes.
     pub which: MarginBox,
+    /// What it paints.
     pub content: Content,
     /// The box's own text style, inherited from the book's root the
     /// way a block's would be.
@@ -140,7 +144,9 @@ pub struct MarginBoxStyle {
 pub struct PageMaster {
     /// The named page, or `None` for the unnamed default.
     pub page: Option<String>,
+    /// The situation this master answers.
     pub situation: Situation,
+    /// The page box and its margin boxes.
     pub style: PageStyle,
 }
 

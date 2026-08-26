@@ -70,6 +70,7 @@ pub struct Paginator<'a> {
 }
 
 impl<'a> Paginator<'a> {
+    /// A paginator over one book's styling and the faces it shapes with.
     pub fn new(registry: &'a FontRegistry, styles: &'a StyleTree) -> Self {
         Paginator {
             registry,

@@ -8,6 +8,8 @@
 //! Nothing here ships. The crate exists so that a perf claim about
 //! fleuron is a number somebody can reproduce.
 
+#![deny(missing_docs)]
+
 pub mod alloc;
 pub mod corpus;
 pub mod gate;

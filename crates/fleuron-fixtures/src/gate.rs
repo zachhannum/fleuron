@@ -50,7 +50,9 @@ pub mod budget {
 /// do not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
+    /// The machine the gate is run on.
     Native,
+    /// A WebAssembly runtime standing in for the worker.
     Wasm,
 }
 
@@ -74,6 +76,7 @@ impl Target {
         }
     }
 
+    /// What reports call this target.
     pub fn name(self) -> &'static str {
         match self {
             Target::Native => "native",
@@ -85,7 +88,9 @@ impl Target {
 /// One book measured: the stages, end to end, plus what the run held.
 #[derive(Debug, Clone)]
 pub struct Report {
+    /// The book measured.
     pub corpus: Corpus,
+    /// Pages the book fragmented into.
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
     pub lines: usize,
@@ -99,6 +104,7 @@ pub struct Report {
     pub layout: Duration,
     /// Display list to PDF bytes.
     pub pdf: Duration,
+    /// Size of the PDF the run wrote.
     pub pdf_bytes: usize,
     /// Bytes held at the peak of the layout call, over the content
     /// tree it was given.
@@ -138,9 +144,13 @@ impl Report {
 /// One measured quantity against its ceiling.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Check {
+    /// What the quantity is called in the report.
     pub label: &'static str,
+    /// What this run measured.
     pub measured: f64,
+    /// The budget it is held to.
     pub ceiling: f64,
+    /// The unit both are in.
     pub unit: &'static str,
 }
 

@@ -51,7 +51,9 @@ pub enum Family {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FontStyle {
+    /// `normal`
     Normal,
+    /// `italic`, and `oblique` with it.
     Italic,
 }
 
@@ -59,9 +61,13 @@ pub enum FontStyle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextAlign {
+    /// `left`
     Left,
+    /// `right`
     Right,
+    /// `center`
     Center,
+    /// `justify`
     Justify,
 }
 
@@ -69,7 +75,9 @@ pub enum TextAlign {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Hyphens {
+    /// `none`, and `manual` with it: only explicit soft hyphens break.
     None,
+    /// `auto`
     Auto,
 }
 
@@ -79,8 +87,11 @@ pub enum Hyphens {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Break {
+    /// `auto`
     Auto,
+    /// `avoid`
     Avoid,
+    /// `page`
     Page,
     /// Break to the next page that falls on the given side, leaving a
     /// blank behind if the flow sits on the wrong one.
@@ -90,9 +101,13 @@ pub enum Break {
 /// Box edges in points, resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Edges {
+    /// Top edge in points.
     pub top: f32,
+    /// Right edge in points.
     pub right: f32,
+    /// Bottom edge in points.
     pub bottom: f32,
+    /// Left edge in points.
     pub left: f32,
 }
 
@@ -111,9 +126,13 @@ impl Edges {
 /// Which edge a one-sided box property sets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
+    /// `-top`
     Top,
+    /// `-right`
     Right,
+    /// `-bottom`
     Bottom,
+    /// `-left`
     Left,
 }
 
@@ -154,21 +173,37 @@ impl PageGeometry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MarginBox {
+    /// `@top-left-corner`
     TopLeftCorner,
+    /// `@top-left`
     TopLeft,
+    /// `@top-center`
     TopCenter,
+    /// `@top-right`
     TopRight,
+    /// `@top-right-corner`
     TopRightCorner,
+    /// `@left-top`
     LeftTop,
+    /// `@left-middle`
     LeftMiddle,
+    /// `@left-bottom`
     LeftBottom,
+    /// `@right-top`
     RightTop,
+    /// `@right-middle`
     RightMiddle,
+    /// `@right-bottom`
     RightBottom,
+    /// `@bottom-left-corner`
     BottomLeftCorner,
+    /// `@bottom-left`
     BottomLeft,
+    /// `@bottom-center`
     BottomCenter,
+    /// `@bottom-right`
     BottomRight,
+    /// `@bottom-right-corner`
     BottomRightCorner,
 }
 
@@ -240,7 +275,9 @@ impl MarginBox {
 /// Which margin a painted margin box lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Band {
+    /// The top margin: running heads.
     Top,
+    /// The bottom margin: folios and running feet.
     Bottom,
 }
 
@@ -249,8 +286,11 @@ pub enum Band {
 /// page's axis, and mirrored margins put the content box off it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Align {
+    /// The content box's leading edge.
     Start,
+    /// The trim's axis.
     Center,
+    /// The content box's trailing edge.
     End,
 }
 
@@ -332,14 +372,17 @@ pub struct ComputedStyle {
     pub font_family: Vec<Family>,
     /// Font size in points.
     pub font_size: f32,
+    /// Upright or italic.
     pub font_style: FontStyle,
     /// Weight on the CSS 1–1000 scale.
     pub font_weight: u16,
     /// Line height as a unitless multiple of the font size.
     pub line_height: f32,
+    /// How lines fill the measure.
     pub text_align: TextAlign,
     /// First-line indent in points.
     pub text_indent: f32,
+    /// Whether words may break at syllable boundaries.
     pub hyphens: Hyphens,
     /// Lines that must be left at the bottom of a fragment.
     pub orphans: u16,
@@ -349,8 +392,11 @@ pub struct ComputedStyle {
     pub page: Option<String>,
     /// Margins in points.
     pub margin: Edges,
+    /// Where a page break falls before this element.
     pub break_before: Break,
+    /// Where one falls after it.
     pub break_after: Break,
+    /// Whether this element may be split across pages.
     pub break_inside: Break,
 }
 

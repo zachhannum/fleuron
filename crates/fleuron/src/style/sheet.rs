@@ -27,7 +27,9 @@ use crate::style::properties::{
 /// however specific the built-in rule was.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Origin {
+    /// The built-in sheet.
     UserAgent,
+    /// A sheet the host handed in.
     #[default]
     Author,
 }
@@ -38,7 +40,9 @@ pub enum Origin {
 pub struct Source<'a> {
     /// What diagnostics call this sheet.
     pub name: &'a str,
+    /// The sheet's text.
     pub css: &'a str,
+    /// Which origin it cascades at.
     pub origin: Origin,
 }
 
