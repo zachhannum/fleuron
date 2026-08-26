@@ -43,6 +43,12 @@ import page from '../assets/hero-page.svg?raw';
     height: auto;
   }
 
+  /* Each run carries one x position per character, so a collapsed run
+     of spaces would shift the rest of the line onto the wrong ones. */
+  .sheet :global(text) {
+    white-space: pre;
+  }
+
   figcaption {
     max-width: 26rem;
     font-size: 0.8125rem;
