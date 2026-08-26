@@ -12,8 +12,8 @@ wins and the quick fix waits for its own PR.
 - Pipeline is one-way: content tree + style tree → box tree → line
   layout → fragmentation → pages → display list / PDF. Downstream never
   reaches back upstream.
-- The three invariants (see README): layout never reads settings; the
-  engine never touches the DOM; layout never decodes images.
+- The three invariants (see README): styling enters as CSS; the engine
+  never touches the DOM; layout never decodes images.
 - Work is tracked in GitHub issues, grouped by the v0.1 epic (#13). An
   issue's acceptance checkboxes are its definition of done.
 
