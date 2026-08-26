@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * The island seam, proven empty.
+ * The island seam, with nothing mounted on it.
  *
  * Nothing here talks to the engine yet. It exists so that the React
  * runtime, the client directive and the hydration boundary are known

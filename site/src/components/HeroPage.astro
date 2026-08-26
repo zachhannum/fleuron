@@ -10,8 +10,8 @@ import page from '../assets/hero-page.svg?raw';
   <div class="sheet" set:html={page} />
   <figcaption>
     <span class="f-mark" aria-hidden="true">&#10086;</span>
-    Page 1 of the fixture book, laid out by fleuron and painted from the
-    display list the PDF is written from.
+    Page 1 of the sample book, typeset by fleuron. The preview and the PDF
+    are painted from the same layout.
   </figcaption>
 </figure>
 
@@ -24,9 +24,8 @@ import page from '../assets/hero-page.svg?raw';
     align-items: center;
   }
 
-  /* The one bright, sharp, square-cornered object on the page. Every
-     other surface here is dark glass with a generous radius; the page
-     is paper, and paper has corners. */
+  /* The one bright, square-cornered object on the page. Every other
+     surface here is dark glass with a generous radius. */
   .sheet {
     width: min(100%, 25rem);
     background: var(--f-paper);

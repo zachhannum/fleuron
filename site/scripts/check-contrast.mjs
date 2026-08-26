@@ -1,10 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-// Glass is where contrast goes to die: text sits on a translucent panel
-// over a gradient over the ground, and eyeballing the result is how a
-// site ends up at 92. Every pair below is composited through the layers
-// actually beneath it and measured.
+// Text sits on a translucent panel, over a gradient, over the ground, so
+// no single token pair gives the contrast a reader actually sees. Every
+// pair below is composited through the layers beneath it and measured.
 
 const AA = 4.5;
 const AA_LARGE = 3;

@@ -7,22 +7,21 @@ import EngineProbe from '../components/EngineProbe';
   frontmatter={{
     title: 'Live demos',
     description:
-      'Where the engine runs in your browser — and the island seam that is waiting for it.',
+      'Where the engine will run in your browser, and the island seam waiting for it.',
     tableOfContents: false,
   }}
 >
   <p>
     fleuron's two claims — that a book paginates in hundreds of milliseconds,
-    and that the preview is exactly the export — are checkable on your own
-    machine, in this page. They are not checkable yet: the WebAssembly bindings
-    and the SVG painter have not landed, and until they do there is nothing here
-    to run.
+    and that the preview is exactly the export — are ones you should be able to
+    check here, on your own machine. Not yet: the WebAssembly bindings and the
+    SVG painter have not landed, so there is nothing on this page to run.
   </p>
 
   <p>
-    What is here is the seam they mount into. The panel below is a React island
-    hydrated with <code>client:visible</code>, which is to say it ships no
-    JavaScript until it scrolls into view and none at all to any other page.
+    The panel below is the seam they will mount into: a React island hydrated
+    with <code>client:visible</code>, so it ships no JavaScript until it scrolls
+    into view, and none at all to any other page.
   </p>
 
   <div class="not-content probe-frame">
@@ -30,9 +29,9 @@ import EngineProbe from '../components/EngineProbe';
   </div>
 
   <p>
-    Prose pages ship no JavaScript. That is the whole reason the site is built
-    this way: a demo that carries a WebAssembly engine can afford to be
-    expensive, as long as it is the only thing that is.
+    Prose pages ship no JavaScript, which is why the site is built this way. A
+    demo carrying a WebAssembly engine can afford to be expensive as long as
+    nothing else on the site is.
   </p>
 </StarlightPage>
 
