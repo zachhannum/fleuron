@@ -93,9 +93,11 @@ mod tests {
 
     /// A book-scale run is bounded: the gate book sets the ~300 pages
     /// the budgets are written against, and lays them out inside the
-    /// memory ceiling. Timing verdicts stay with the gate binary,
-    /// which warns rather than fails — a shared runner's clock is not
-    /// evidence, but its allocator is.
+    /// memory ceilings — the throwaway pass inside its own, and a
+    /// session holding every stage at once inside the one written for
+    /// that. Timing verdicts stay with the gate binary, which warns
+    /// rather than fails — a shared runner's clock is not evidence,
+    /// but its allocator is.
     #[test]
     #[cfg_attr(
         debug_assertions,
@@ -110,11 +112,14 @@ mod tests {
         );
         assert!(report.pdf_bytes > 0, "the run painted nothing");
 
-        let peak = report
+        let held: Vec<gate::Check> = report
             .checks(gate::Target::current())
             .into_iter()
-            .find(|check| check.label == "layout peak")
-            .expect("every target carries the memory ceiling");
-        assert!(peak.passed(), "{peak}");
+            .filter(|check| check.unit == "MiB")
+            .collect();
+        assert_eq!(held.len(), 2, "a memory ceiling went unchecked");
+        for peak in held {
+            assert!(peak.passed(), "{peak}");
+        }
     }
 }

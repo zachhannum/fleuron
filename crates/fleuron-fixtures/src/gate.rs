@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 use fleuron::fonts::FontRegistry;
 use fleuron::layout::{Fragment, Paginator, Piece};
 use fleuron::pdf;
+use fleuron::session::Session;
+use fleuron::style::{Source, Stylesheets};
 
 use crate::corpus::Corpus;
 
@@ -43,6 +45,19 @@ pub mod budget {
     /// twice the floor. Allocation counts are identical on every
     /// machine, which is why this one is a hard failure.
     pub const LAYOUT_PEAK: u64 = 32 * 1024 * 1024;
+
+    /// The same for a retained session, which is a different
+    /// question: a throwaway pass holds one section's lines at a
+    /// time, and a session holds every one of them next to the
+    /// display list, because holding them is what saves measuring
+    /// them again.
+    pub const SESSION_PEAK: u64 = 64 * 1024 * 1024;
+
+    /// What a style-only re-render costs a session on a book-scale
+    /// manuscript: a sheet that moves the page box re-fragments over
+    /// the lines it already has, and a reader dragging a margin
+    /// should see the page turn over rather than wait on it.
+    pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
 }
 
 /// Where the harness is running. The budgets differ; the measurements
@@ -108,6 +123,12 @@ pub struct Report {
     /// Bytes held at the peak of the layout call, over the content
     /// tree it was given.
     pub layout_peak: u64,
+    /// A style-only re-render over a retained session: a sheet that
+    /// moves the page box, and the pages that come back.
+    pub style_rerender: Duration,
+    /// Bytes a session holds at its peak, over the content tree it
+    /// was handed.
+    pub session_peak: u64,
 }
 
 impl Report {
@@ -134,6 +155,18 @@ impl Report {
                 label: "layout peak",
                 measured: self.layout_peak as f64 / (1024.0 * 1024.0),
                 ceiling: budget::LAYOUT_PEAK as f64 / (1024.0 * 1024.0),
+                unit: "MiB",
+            },
+            Check {
+                label: "re-render",
+                measured: self.style_rerender.as_secs_f64() * 1000.0,
+                ceiling: budget::STYLE_RERENDER.as_secs_f64() * 1000.0,
+                unit: "ms",
+            },
+            Check {
+                label: "session peak",
+                measured: self.session_peak as f64 / (1024.0 * 1024.0),
+                ceiling: budget::SESSION_PEAK as f64 / (1024.0 * 1024.0),
                 unit: "MiB",
             },
         ]
@@ -206,6 +239,8 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
     let mut pages = 0;
     let mut pdf_bytes = 0;
     let mut layout_peak = 0u64;
+    let mut style_rerender = Duration::MAX;
+    let mut session_peak = 0u64;
 
     for _ in 0..runs.max(1) {
         let start = Instant::now();
@@ -247,6 +282,32 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         pdf_bytes = bytes.len();
     }
 
+    for index in 0..runs.max(1) {
+        // A session is handed a content tree it then owns, and the
+        // ceiling is about what it builds over one — so the tree is
+        // cloned before the measurement opens and moved in.
+        let held = book.clone();
+        let (mut session, peak) = crate::alloc::measure(|| {
+            let mut session = Session::new(registry);
+            session.set_content(held);
+            session.preview();
+            session
+        });
+        session_peak = session_peak.max(peak as u64);
+
+        // A sheet that moves the page box and nothing else: the
+        // middle tier, which re-fragments over cached lines. The
+        // margin lands somewhere the built-in sheet did not, and
+        // somewhere no other run put it, so every run measures a real
+        // re-render rather than a cache that was already warm.
+        let css = format!("@page {{ margin-bottom: {}pt }}", 60 + index);
+        let sheets = Stylesheets::parse(&[Source::author("gate.css", &css)]);
+        let start = Instant::now();
+        session.set_style(sheets);
+        black_box(session.preview());
+        style_rerender = style_rerender.min(start.elapsed());
+    }
+
     Report {
         corpus,
         pages,
@@ -258,6 +319,8 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         pdf: pdf_time,
         pdf_bytes,
         layout_peak,
+        style_rerender,
+        session_peak,
     }
 }
 
@@ -278,6 +341,7 @@ impl fmt::Display for Report {
             ("layout", self.layout),
             ("pdf", self.pdf),
             ("end to end", self.end_to_end()),
+            ("re-render", self.style_rerender),
         ] {
             writeln!(
                 f,
@@ -286,12 +350,15 @@ impl fmt::Display for Report {
                 duration.as_secs_f64() * 1000.0
             )?;
         }
-        write!(
-            f,
-            "  {:<14} {:>9.1} MiB peak",
-            "layout",
-            self.layout_peak as f64 / (1024.0 * 1024.0)
-        )
+        for (held, bytes) in [("layout", self.layout_peak), ("session", self.session_peak)] {
+            writeln!(
+                f,
+                "  {:<14} {:>9.1} MiB peak",
+                held,
+                bytes as f64 / (1024.0 * 1024.0)
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -344,6 +411,8 @@ mod tests {
             pdf: Duration::from_millis(100),
             pdf_bytes: 0,
             layout_peak: 1024 * 1024,
+            style_rerender: Duration::from_millis(6),
+            session_peak: 2 * 1024 * 1024,
         };
         assert_eq!(report.end_to_end(), Duration::from_millis(810));
 

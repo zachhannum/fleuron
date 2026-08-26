@@ -58,7 +58,7 @@ impl NodeId {
 ///
 /// Line and column are as the markdown parser reported them. This is
 /// diagnostic data, never layout input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SourcePos {
     /// 1-based line in the source markdown.
     pub line: u32,
@@ -196,7 +196,7 @@ pub enum Block {
 }
 
 /// A heading level, 1–6, as markdown defines them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(into = "u8", try_from = "u8")]
 pub enum HeadingLevel {
     /// `#`

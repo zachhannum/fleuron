@@ -9,7 +9,7 @@ use std::ops::Range;
 use serde::Serialize;
 
 /// Which side of the spread a page falls on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     /// A right-hand page.

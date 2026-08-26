@@ -16,6 +16,7 @@ pub mod linebox;
 pub mod lines;
 pub mod pages;
 pub mod pdf;
+pub mod session;
 pub mod style;
 
 /// Non-fatal problems surfaced during style compilation, layout, or
