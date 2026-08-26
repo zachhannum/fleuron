@@ -13,10 +13,10 @@ Rust 1.85 or newer — the workspace is on the 2024 edition.
 # Cargo.toml
 [dependencies]
 fleuron = { git = "https://github.com/zachhannum/fleuron" }
-serde_json = "1"
+fleuron-markdown = { git = "https://github.com/zachhannum/fleuron" }
 ```
 
-`serde_json` is not fleuron's dependency; it is how you get a content tree off disk. The engine itself takes the deserialized `Book`.
+`fleuron-markdown` is the frontend: markdown in, sections out. Leave it out if your source is already structured and you build a `Book` yourself, and add `serde_json` instead if you are reading a content tree off disk.
 
 Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O of its own, and pulls in no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
 
@@ -28,10 +28,10 @@ Go on to the [library quickstart](library/quickstart.md).
 cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
 ```
 
-That puts a `fleuron` binary on your path. It reads a content tree as JSON and writes a PDF; author stylesheets are supplied with repeatable `-c` flags.
+That puts a `fleuron` binary on your path. It reads markdown and writes a PDF; author stylesheets are supplied with repeatable `-c` flags.
 
 ```sh
-fleuron book.json -o book.pdf -c book.css
+fleuron manuscript.md -o book.pdf -c book.css
 ```
 
 Go on to the [CLI quickstart](cli/quickstart.md).

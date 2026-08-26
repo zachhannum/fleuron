@@ -4,7 +4,7 @@
 
 [**Documentation**](https://zachhannum.github.io/fleuron/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
 
-**fleuron** takes structured content plus CSS, performs
+**fleuron** takes markdown plus CSS, performs
 inline layout (shaping, line breaking, hyphenation), fragments it into pages,
 and emits a display list for preview and a PDF for export. It compiles to
 native and WebAssembly from the same core.
@@ -21,7 +21,7 @@ Both come from owning the pipeline end to end: harfrust shaping, Unicode
 line breaking and segmentation, Knuth-Plass-quality justification, and
 CSS Fragmentation semantics applied to a box tree it builds itself.
 Break decisions fall out of the layout pass, so a 333-page novel reaches
-PDF bytes in 283 ms. The preview is *exactly* the export, because both
+PDF bytes in 287 ms. The preview is *exactly* the export, because both
 are painted from the same display list. And because the engine does no
 I/O and depends on no platform library, all of it runs anywhere Rust
 does, WebAssembly included.
@@ -41,24 +41,31 @@ reported through the diagnostics channel rather than silently ignored.
 
 ## Architecture
 
-The pipeline is one-way. Content enters as a semantic tree (markdown
-frontends like [Orca] produce this from remark/rehype), styling enters
-through the style compiler, and everything downstream consumes a single
-resolved representation:
+The pipeline is one-way. Content enters as markdown and becomes a
+semantic tree, styling enters through the style compiler, and everything
+downstream consumes a single resolved representation:
 
 ```
-content tree ──┐
-               ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
-CSS ───────────┘                                                               │
-                                                                               ├─► display list (preview)
-                                                                               └─► PDF (export)
+markdown ─► content tree ──┐
+                           ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
+CSS ───────────────────────┘                                                               │
+                                                                                           ├─► display list (preview)
+                                                                                           └─► PDF (export)
 ```
 
 - **`fleuron`** — style compilation, box construction, inline layout,
   fragmentation, page assembly. Pure library, no I/O.
-- **`fleuron-cli`** — `fleuron` binary: content in, PDF out. Batch-friendly.
+- **`fleuron-markdown`** — the frontend: source text in, sections out,
+  with the constructs the vocabulary cannot hold reported rather than
+  dropped. The mapping is written down in
+  [`docs/reference/markdown.md`](docs/reference/markdown.md).
+- **`fleuron-cli`** — `fleuron` binary: markdown in, PDF out.
+  Batch-friendly.
 - **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
   PDF bytes out, zero DOM access.
+
+The content tree stays public for a host with a structured source of
+its own, such as a CMS or a docx converter, but markdown is the way in.
 
 ### Invariants
 
@@ -79,10 +86,10 @@ The harness lays out two complete public-domain novels — *Pride and
 Prejudice* at book scale and *The Count of Monte Cristo* at four times
 it — and holds the result against fixed budgets:
 
-| | pages | style | line layout | fragment | PDF | end to end | layout peak |
-|---|---|---|---|---|---|---|---|
-| *Pride and Prejudice* | 333 | 1 ms | 128 ms | 5 ms | 150 ms | 283 ms | 12 MiB |
-| *The Count of Monte Cristo* | 1240 | 5 ms | 502 ms | 19 ms | 561 ms | 1.08 s | 46 MiB |
+| | pages | parse | style | line layout | fragment | PDF | end to end | layout peak |
+|---|---|---|---|---|---|---|---|---|
+| *Pride and Prejudice* | 333 | 1 ms | 1 ms | 128 ms | 5 ms | 150 ms | 287 ms | 12 MiB |
+| *The Count of Monte Cristo* | 1254 | 5 ms | 6 ms | 505 ms | 20 ms | 563 ms | 1.10 s | 47 MiB |
 
 Four times the book costs about four times the time and four times the
 memory.

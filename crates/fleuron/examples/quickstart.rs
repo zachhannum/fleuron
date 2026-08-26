@@ -1,13 +1,13 @@
-//! The library quickstart, as a program: fixture book in, PDF out.
+//! The library quickstart, as a program: manuscript in, PDF out.
 //!
 //! `docs/library/quickstart.md` quotes this file, and a test holds the
 //! two together.
 
 use std::path::{Path, PathBuf};
 
-use fleuron::content::Book;
 use fleuron::fonts::bundled_registry;
 use fleuron::style::{FontLoader, Source, Stylesheets};
+use fleuron_markdown::Options;
 
 /// Resolves `@font-face` urls against one directory. The engine reads
 /// no paths of its own; this is the host half of that contract.
@@ -20,11 +20,14 @@ impl FontLoader for Files {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Content enters as a tree. `assign_node_ids` numbers it in
-    // document order, which is what diagnostics point at.
-    let json = std::fs::read_to_string("fixtures/book.json")?;
-    let mut book: Book = serde_json::from_str(&json)?;
-    book.assign_node_ids();
+    // Content enters as markdown. The frontend reads one source into
+    // sections; assembly composes the sources into a book and numbers
+    // it in document order, which is what diagnostics point at.
+    let source = "gulliver-excerpt.md";
+    let markdown = std::fs::read_to_string(Path::new("fixtures").join(source))?;
+    let (sections, complaints) =
+        fleuron_markdown::to_sections(&markdown, source, &Options::default());
+    let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections);
 
     // Styling enters as CSS. The built-in sheet is always first;
     // author sheets cascade over it in the order given.
@@ -36,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // One call from styled tree to pages of draw items.
     let output = fleuron::layout::layout_book(&book, &styles, &registry);
-    for warning in &output.warnings {
+    for warning in complaints.iter().chain(&output.warnings) {
         match &warning.origin {
             Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
             None => eprintln!("warning: {}", warning.message),

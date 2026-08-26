@@ -4,18 +4,26 @@ description: Flags, repeatable -c, exit codes, and what lands on stderr.
 ---
 
 ```text
-usage: fleuron <input.json> -o <output.pdf> [-c <style.css>]
+usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
   -o, --output <path>  where to write the PDF
   -c, --css <path>     author stylesheet, cascading over the defaults;
                        repeatable, applied in the order given
+  -s, --split <n|none> where a markdown file's sections begin: at a
+                       heading of level n or shallower, or nowhere at
+                       all, one section per file (default 1)
+  -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 ```
 
 ## Arguments
 
-**`<input.json>`** — a content tree, as JSON. Exactly one, in any position. Two positional arguments is a usage error.
+**`<input.md…>`** — one or more markdown files, composed in the order given, each carrying its own name into the tree. A single `.json` argument is read as a [content tree](../reference/content-tree.md) instead; two of those, or a tree beside markdown, is a usage error. An extension that is neither is an error naming the file.
+
+**`-s`, `--split`** — where a markdown file's sections begin. A level 1 to 6 opens a section at every heading of that level or shallower; `none` opens none, so the file is one section. Default 1.
+
+**`-d`, `--dialect`** — which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.md).
 
 **`-o`, `--output`** — where the PDF goes. Required. The path is written whole; nothing is created alongside it.
 
@@ -25,7 +33,7 @@ usage: fleuron <input.json> -o <output.pdf> [-c <style.css>]
 
 **`-h`, `--help`** — prints the usage above and exits 0, whether or not a job was named.
 
-An unrecognised option beginning with `-` is a usage error. There is no `--` separator, because there is nothing after the input a stylesheet could be confused with.
+An unrecognised option beginning with `-` is a usage error. There is no `--` separator: every positional argument is an input, and every option takes its value next.
 
 ## Exit codes
 
@@ -42,7 +50,7 @@ An unrecognised option beginning with `-` is a usage error. There is no `--` sep
 Everything the run has to say goes to stderr; stdout carries only what `--version` and `--help` print. A summary comes first:
 
 ```text
-fleuron: book.json → book.pdf: 333 pages
+fleuron: manuscript.md → book.pdf: 333 pages
 ```
 
 Then each warning, prefixed with its origin when it has one:
@@ -53,7 +61,7 @@ fleuron: warning: chapter-03.md:88:1: family "House Sans" resolved nothing
 fleuron: 2 warnings; the PDF was written anyway
 ```
 
-The origin is a CSS sheet with a line and column, or the frontend's own source file and position for a content node. [Diagnostics](../library/diagnostics.md) covers what warns and why.
+The origin is a CSS sheet with a line and column, or a markdown file and the position in it the frontend read the node from. [Diagnostics](../library/diagnostics.md) covers what warns and why.
 
 ## Fonts on the command line
 

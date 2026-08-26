@@ -3,33 +3,38 @@
 // left. Text is <text>, not paths, so it stays selectable and scales
 // with the reader's font settings.
 const stages = [
-  { x: 232, label: 'style tree' },
-  { x: 352, label: 'box tree' },
-  { x: 472, label: 'line layout' },
-  { x: 604, label: 'fragmentation' },
-  { x: 744, label: 'pages' },
+  { x: 372, label: 'style tree' },
+  { x: 492, label: 'box tree' },
+  { x: 612, label: 'line layout' },
+  { x: 744, label: 'fragmentation' },
+  { x: 884, label: 'pages' },
 ];
 ---
 
 <div class="scroller">
-  <svg viewBox="0 0 980 200" role="img" aria-labelledby="pipeline-title">
+  <svg viewBox="0 0 1120 200" role="img" aria-labelledby="pipeline-title">
     <title id="pipeline-title">
-      Content tree and CSS enter; style tree, box tree, line layout,
-      fragmentation and pages follow in order; pages leave as a display
-      list for preview and a PDF for export.
+      Markdown becomes a content tree; that and CSS enter; style tree,
+      box tree, line layout, fragmentation and pages follow in order;
+      pages leave as a display list for preview and a PDF for export.
     </title>
 
     <g class="node">
-      <rect x="8" y="34" width="132" height="34" rx="8"></rect>
-      <text x="74" y="56">content tree</text>
+      <rect x="8" y="34" width="118" height="34" rx="8"></rect>
+      <text x="67" y="56">markdown</text>
+    </g>
+    <path class="wire" d="M126 51 H166"></path>
+    <g class="node">
+      <rect x="166" y="34" width="132" height="34" rx="8"></rect>
+      <text x="232" y="56">content tree</text>
     </g>
     <g class="node">
       <rect x="8" y="112" width="132" height="34" rx="8"></rect>
       <text x="74" y="134">CSS</text>
     </g>
 
-    <path class="wire" d="M140 51 H188 Q196 51 196 59 V82 Q196 90 204 90 H224"></path>
-    <path class="wire" d="M140 129 H188 Q196 129 196 121 V98 Q196 90 204 90 H224"></path>
+    <path class="wire" d="M298 51 H328 Q336 51 336 59 V82 Q336 90 344 90 H364"></path>
+    <path class="wire" d="M140 129 H328 Q336 129 336 121 V98 Q336 90 344 90 H364"></path>
 
     {
       stages.map((stage, i) => (
@@ -48,16 +53,16 @@ const stages = [
       ))
     }
 
-    <path class="wire" d="M828 90 H860 Q868 90 868 82 V48 Q868 40 876 40 H896"></path>
-    <path class="wire" d="M828 90 H860 Q868 90 868 98 V132 Q868 140 876 140 H896"></path>
+    <path class="wire" d="M968 90 H1000 Q1008 90 1008 82 V48 Q1008 40 1016 40 H1036"></path>
+    <path class="wire" d="M968 90 H1000 Q1008 90 1008 98 V132 Q1008 140 1016 140 H1036"></path>
 
     <g class="node out">
-      <rect x="836" y="23" width="136" height="34" rx="8"></rect>
-      <text x="904" y="45">display list</text>
+      <rect x="976" y="23" width="136" height="34" rx="8"></rect>
+      <text x="1044" y="45">display list</text>
     </g>
     <g class="node out">
-      <rect x="836" y="123" width="136" height="34" rx="8"></rect>
-      <text x="904" y="145">PDF</text>
+      <rect x="976" y="123" width="136" height="34" rx="8"></rect>
+      <text x="1044" y="145">PDF</text>
     </g>
   </svg>
 </div>
@@ -70,7 +75,7 @@ const stages = [
 
   svg {
     display: block;
-    min-width: 46rem;
+    min-width: 54rem;
     width: 100%;
     height: auto;
   }

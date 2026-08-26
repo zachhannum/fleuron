@@ -52,7 +52,7 @@ jobs:
       - name: The CLI quickstart
         run: |
           cargo run --release -p fleuron-cli -- \
-            fixtures/book.json -o cli.pdf -c fixtures/styled.css
+            fixtures/gulliver-excerpt.md -o cli.pdf -c fixtures/styled.css
           test -s cli.pdf
 
       # `--lib` and not the whole workspace: the CLI's bin target is

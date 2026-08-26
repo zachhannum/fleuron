@@ -1,9 +1,9 @@
 ---
 title: Library quickstart
-description: Book plus stylesheets plus fonts, to a LayoutOutput, to PDF bytes.
+description: Markdown plus stylesheets plus fonts, to a LayoutOutput, to PDF bytes.
 ---
 
-Four steps, in one direction: read a content tree, compile styling against it, lay it out, write the PDF. The whole of it is below, and it is also `crates/fleuron/examples/quickstart.rs` in the repository, so it compiles and runs.
+Four steps, in one direction: read a manuscript, compile styling against it, lay it out, write the PDF. The whole of it is below, and it is also `crates/fleuron/examples/quickstart.rs` in the repository, so it compiles and runs.
 
 ```sh
 cargo run --example quickstart -p fleuron
@@ -14,9 +14,9 @@ cargo run --example quickstart -p fleuron
 ```rust
 use std::path::{Path, PathBuf};
 
-use fleuron::content::Book;
 use fleuron::fonts::bundled_registry;
 use fleuron::style::{FontLoader, Source, Stylesheets};
+use fleuron_markdown::Options;
 
 /// Resolves `@font-face` urls against one directory. The engine reads
 /// no paths of its own; this is the host half of that contract.
@@ -29,11 +29,14 @@ impl FontLoader for Files {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Content enters as a tree. `assign_node_ids` numbers it in
-    // document order, which is what diagnostics point at.
-    let json = std::fs::read_to_string("fixtures/book.json")?;
-    let mut book: Book = serde_json::from_str(&json)?;
-    book.assign_node_ids();
+    // Content enters as markdown. The frontend reads one source into
+    // sections; assembly composes the sources into a book and numbers
+    // it in document order, which is what diagnostics point at.
+    let source = "gulliver-excerpt.md";
+    let markdown = std::fs::read_to_string(Path::new("fixtures").join(source))?;
+    let (sections, complaints) =
+        fleuron_markdown::to_sections(&markdown, source, &Options::default());
+    let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections);
 
     // Styling enters as CSS. The built-in sheet is always first;
     // author sheets cascade over it in the order given.
@@ -45,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // One call from styled tree to pages of draw items.
     let output = fleuron::layout::layout_book(&book, &styles, &registry);
-    for warning in &output.warnings {
+    for warning in complaints.iter().chain(&output.warnings) {
         match &warning.origin {
             Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
             None => eprintln!("warning: {}", warning.message),
@@ -60,11 +63,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Against the fixture book that ships with the repository, that prints `31 pages` and writes `book.pdf` into the working directory.
+Against the manuscript that ships with the repository, that prints `34 pages` and writes `book.pdf` into the working directory.
 
 ## What each step is for
 
-**`Book` and `assign_node_ids`.** The content tree is the input contract; see [the content tree reference](../reference/content-tree.md) for the JSON it deserializes from. Node ids are engine-assigned, never supplied by the frontend, so a document cannot collide ids or forge a diagnostic origin. Fresh off the wire every id is unassigned; one call numbers the tree in document order.
+**`to_sections` and `assemble`.** `fleuron-markdown` is the frontend: one source in, that source's sections and its diagnostics out. [The markdown mapping](../reference/markdown.md) is what it does with each construct, and `Options` is where the section policy and the dialect are named. Assembly is a step of its own because composing sources is the caller's decision, not the parser's: you order them and you decide the metadata. It also numbers the tree, in document order, which is what diagnostics point at.
+
+A host with a tree of its own, such as a CMS or a docx converter, can skip the frontend and hand the engine a `Book` directly; [the content tree reference](../reference/content-tree.md) is that schema.
 
 **`FontRegistry`.** `bundled_registry()` gives you EB Garamond, upright and italic, registered as the default serif. Everything else a stylesheet asks for arrives through `@font-face`. See [fonts](fonts.md).
 
