@@ -4,3 +4,5 @@
 //! Inputs cross as serialized bytes; outputs come back as one
 //! transferable ArrayBuffer — the postcard-encoded display list, or PDF
 //! bytes on the export path. See the Orca Integration milestone.
+
+#![deny(missing_docs)]

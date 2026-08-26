@@ -1,0 +1,593 @@
+---
+import '../styles/theme.css';
+import { Code } from 'astro:components';
+import Consumers from '../components/Consumers.astro';
+import HeroPage from '../components/HeroPage.astro';
+import garamond from '../assets/fonts/ebgaramond-subset.woff2';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const repo = 'https://github.com/zachhannum/fleuron';
+
+// A page design in the supported subset, shown as-is.
+const pageCss = `@page {
+  size: 5.5in 8.5in;
+  margin: 0.8in 0.7in;
+
+  @bottom-center {
+    content: counter(page);
+  }
+}
+
+@page :left {
+  @top-left {
+    content: "Pride and Prejudice";
+  }
+}
+
+section {
+  break-before: recto;
+}
+
+p {
+  orphans: 2;
+  widows: 2;
+}`;
+const description =
+  'A typesetting engine for novels, in Rust. It turns a manuscript ' +
+  'into a book: justified, hyphenated text, running heads, page ' +
+  'numbers, and a PDF. Built for markdown writing tools.';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fleuron: a typesetting engine for novels</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+    <link rel="canonical" href="https://zachhannum.github.io/fleuron/" />
+    <meta property="og:title" content="fleuron" />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <!-- The face the display type is set in. Nothing else on the
+         critical path waits on the network. -->
+    <link
+      rel="preload"
+      href={garamond}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav f-chrome">
+      <a class="brand" href={`${base}/`}>
+        <span class="f-mark" aria-hidden="true">&#10086;</span>
+        <span>fleuron</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href={`${base}/overview/`}>Docs</a>
+        <a href={`${base}/api/fleuron/`}>API</a>
+        <a href={repo}>GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">CSS paged media, in Rust</p>
+          <h1>A typesetting engine<br />for novels.</h1>
+          <p class="lede">
+            fleuron takes a manuscript and produces a typeset book for beautiful, print-ready PDFs. 
+            It is built for markdown writing tools. Configure styling with CSS.
+          </p>
+          <div class="cta">
+            <a class="button primary" href={`${base}/install/`}>Get started</a>
+            <a class="button" href={repo}>Read the source</a>
+          </div>
+          <p class="claim">
+            <em>Pride and Prejudice</em>, 333 pages, becomes a PDF in
+            283&nbsp;ms.
+          </p>
+        </div>
+        <div class="hero-page">
+          <HeroPage />
+        </div>
+      </section>
+
+      <section class="band f-dots">
+        <div class="wrap two-up">
+          <div>
+            <h2>Paged media</h2>
+            <p>
+              Styling is plain CSS. A built-in stylesheet sets the defaults,
+              and your stylesheet overrides whatever you want to change.
+              fleuron supports a <a
+                href={`${base}/css-subset/`}>subset of CSS</a>.
+            </p>
+          </div>
+          <div class="page-css">
+            <Code code={pageCss} lang="css" theme="github-dark-default" />
+          </div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="wrap">
+          <h2>Performance</h2>
+          <p class="section-lede">
+            Two complete novels, measured from document to PDF.
+          </p>
+          <div class="speed f-glass">
+            <table>
+              <caption class="sr-only">
+                Layout time and peak memory for two public-domain novels.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">book</th>
+                  <th scope="col">pages</th>
+                  <th scope="col">to PDF</th>
+                  <th scope="col">peak memory</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Pride and Prejudice</th>
+                  <td>333</td>
+                  <td>283&nbsp;ms</td>
+                  <td>12&nbsp;MiB</td>
+                </tr>
+                <tr>
+                  <th scope="row">The Count of Monte Cristo</th>
+                  <td>1240</td>
+                  <td>1.08&nbsp;s</td>
+                  <td>46&nbsp;MiB</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="speed-note">
+            Apple M-series
+          </p>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="wrap">
+          <h2>Using it</h2>
+          <!-- Inline tags stay mid-line: a newline touching one is dropped
+               rather than collapsed to a space, which runs the words together. -->
+          <p class="section-lede">
+            fleuron does not read markdown files directly. It takes the
+            document as JSON, in the same shape as mdast, the syntax tree
+            that markdown tools already produce. <code>fleuron</code> is the
+            core library, pure Rust with no I/O. <code>fleuron-cli</code> reads
+            a document and stylesheets and writes a PDF. <code>fleuron-wasm</code> will run
+            layout in the browser, but it has no exports yet and is not usable.
+          </p>
+          <Consumers />
+        </div>
+      </section>
+
+      <section class="band closing">
+        <div class="wrap">
+          <p class="f-mark closing-mark" aria-hidden="true">&#10086;</p>
+          <p class="section-lede center">
+            fleuron is pre-alpha. It is being built as the pagination backend
+            for <a href="https://github.com/zachhannum/obsidian-orca">Orca</a>,
+            an Obsidian plugin for writing novels.
+          </p>
+          <div class="cta center">
+            <a class="button primary" href={`${base}/install/`}>Install fleuron</a>
+            <a class="button" href={`${base}/overview/`}>Read the docs</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <p>
+          Dual-licensed under Apache-2.0 or MIT.
+        </p>
+        <p><a href={repo}>github.com/zachhannum/fleuron</a></p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+    padding: 0.75rem 1rem;
+    background: var(--f-raise);
+    color: var(--f-text);
+  }
+
+  .skip:focus {
+    left: 0;
+  }
+
+  .nav {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 4rem;
+    padding-inline: clamp(1rem, 4vw, 3rem);
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--f-text);
+    text-decoration: none;
+  }
+
+  .brand .f-mark {
+    font-size: 1.3rem;
+  }
+
+  .nav nav {
+    display: flex;
+    gap: clamp(1rem, 3vw, 2rem);
+  }
+
+  .nav nav a {
+    font-size: 0.875rem;
+    color: var(--f-text-muted);
+    text-decoration: none;
+  }
+
+  .nav nav a:hover {
+    color: var(--f-text);
+  }
+
+  main {
+    padding-top: 4rem;
+  }
+
+  .wrap {
+    width: min(72rem, 100% - clamp(2rem, 8vw, 6rem));
+    margin-inline: auto;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(3rem, 6vw, 5rem);
+    align-items: center;
+    width: min(72rem, 100% - clamp(2rem, 8vw, 6rem));
+    margin-inline: auto;
+    padding-block: clamp(4rem, 9vw, 7rem) clamp(3rem, 7vw, 6rem);
+  }
+
+  @media (min-width: 60rem) {
+    .hero {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+  }
+
+  .eyebrow {
+    margin: 0 0 1.25rem;
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--f-text-muted);
+  }
+
+  h1 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: clamp(2.6rem, 1.5rem + 3.8vw, 4.1rem);
+    font-weight: 500;
+    line-height: 1.02;
+    letter-spacing: -0.015em;
+    color: var(--f-text);
+  }
+
+  .lede {
+    max-width: 34rem;
+    margin: 1.5rem 0 0;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--f-text-muted);
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .cta.center {
+    justify-content: center;
+  }
+
+  .button {
+    display: inline-block;
+    padding: 0.7rem 1.4rem;
+    border: 1px solid var(--f-hairline-strong);
+    border-radius: 999px;
+    font-size: 0.9375rem;
+    color: var(--f-text);
+    text-decoration: none;
+    background: var(--f-glass-solid);
+  }
+
+  .button:hover {
+    border-color: var(--f-text-faint);
+  }
+
+  .button.primary {
+    background: var(--f-accent-deep);
+    border-color: var(--f-accent-deep);
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  .button.primary:hover {
+    filter: brightness(1.1);
+  }
+
+  .claim {
+    max-width: 34rem;
+    margin: 2rem 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--f-text-muted);
+  }
+
+  .band {
+    padding-block: clamp(3.5rem, 8vw, 6rem);
+    border-top: 1px solid var(--f-hairline);
+  }
+
+  .band h2 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: clamp(1.9rem, 1.3rem + 2vw, 2.75rem);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--f-text);
+  }
+
+  .section-lede {
+    max-width: 44rem;
+    margin: 1rem 0 2.5rem;
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--f-text-muted);
+  }
+
+  .section-lede.center {
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .section-lede code {
+    font-family: var(--f-mono);
+    font-size: 0.9em;
+    color: var(--f-text);
+  }
+
+  a:not(.button):not(.brand) {
+    color: var(--f-accent);
+    text-underline-offset: 0.2em;
+  }
+
+  .nav nav a,
+  .foot a {
+    color: var(--f-text-muted);
+  }
+
+  .nav nav a:hover {
+    color: var(--f-text);
+  }
+
+  .two-up {
+    display: grid;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: start;
+  }
+
+  @media (min-width: 60rem) {
+    .two-up {
+      grid-template-columns: 1.1fr 0.9fr;
+    }
+  }
+
+  .two-up p {
+    max-width: 38rem;
+    font-size: 1rem;
+    line-height: 1.75;
+    color: var(--f-text-muted);
+  }
+
+  .defaults {
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .defaults h3 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--f-text);
+  }
+
+  .defaults p {
+    margin: 0.5rem 0 1.25rem;
+    font-size: 0.9375rem;
+    color: var(--f-text-muted);
+  }
+
+  .defaults dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem 1.25rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .defaults dt {
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--f-text-muted);
+    padding-top: 0.15em;
+  }
+
+  .defaults dd {
+    margin: 0;
+    color: var(--f-text);
+  }
+
+  .two-up p code {
+    font-family: var(--f-mono);
+    font-size: 0.9em;
+    color: var(--f-text);
+  }
+
+  /* Code keeps one dark ground in both themes, matching the panels in
+     the consumer tabs. */
+  .page-css :global(pre) {
+    margin: 0;
+    padding: 1.1rem 1.25rem;
+    overflow-x: auto;
+    background: #0b0d12 !important;
+    border: 1px solid var(--f-hairline);
+    border-radius: var(--f-radius-sm);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+  }
+
+  .speed {
+    overflow-x: auto;
+  }
+
+  .speed table {
+    width: 100%;
+    min-width: 34rem;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .speed caption {
+    text-align: start;
+  }
+
+  .speed th,
+  .speed td {
+    padding: 0.7rem 1rem;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  .speed thead th {
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--f-text-muted);
+    border-bottom: 1px solid var(--f-hairline);
+  }
+
+  .speed thead th:first-child {
+    text-align: start;
+  }
+
+  .speed tbody th {
+    font-family: var(--f-display);
+    font-size: 1.05rem;
+    font-weight: 500;
+    font-style: italic;
+    text-align: start;
+    color: var(--f-text);
+  }
+
+  .speed tbody td {
+    font-family: var(--f-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--f-text);
+  }
+
+  .speed tbody tr + tr th,
+  .speed tbody tr + tr td {
+    border-top: 1px solid var(--f-hairline);
+  }
+
+  .speed-note {
+    margin: 0.9rem 0 0;
+    max-width: 44rem;
+    font-size: 0.8125rem;
+    color: var(--f-text-muted);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .closing {
+    text-align: center;
+  }
+
+  .closing-mark {
+    margin: 0 0 1.5rem;
+    font-size: 2.5rem;
+  }
+
+  .foot {
+    padding-block: 2.5rem 4rem;
+    border-top: 1px solid var(--f-hairline);
+    font-size: 0.8125rem;
+    color: var(--f-text-muted);
+  }
+
+  .foot .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    justify-content: space-between;
+  }
+
+  .foot p {
+    margin: 0;
+  }
+
+  em {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 1.08em;
+    color: var(--f-text);
+  }
+</style>

@@ -12,7 +12,9 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
+    /// A right-hand page.
     Recto,
+    /// A left-hand page.
     Verso,
 }
 
@@ -31,12 +33,15 @@ impl Side {
 /// paint on it.
 #[derive(Debug, Serialize)]
 pub struct Page {
+    /// Folio, counting from 1.
     pub number: u32,
+    /// Which side of the spread this page falls on.
     pub side: Side,
     /// Trimmed page width in points.
     pub width: f32,
     /// Trimmed page height in points.
     pub height: f32,
+    /// What to paint, in paint order.
     pub items: Vec<DrawItem>,
 }
 
@@ -45,25 +50,44 @@ pub struct Page {
 pub enum DrawItem {
     /// A run of shaped glyphs sharing a font, size, and baseline.
     Text {
+        /// Left edge of the run.
         x: f32,
+        /// The run's baseline.
         y: f32,
+        /// Index into `LayoutOutput::fonts`.
         font_id: u16,
+        /// Em size in points.
         size: f32,
         /// The text the glyphs were shaped from. Painters that map
         /// glyphs back to characters — PDF text extraction, copy and
         /// paste — read it through the glyphs' ranges; only the
         /// shaper knew the correspondence, so it travels with them.
         text: String,
+        /// The glyphs, in visual order.
         glyphs: Vec<Glyph>,
     },
     /// Filled rectangle: rules, borders, backgrounds.
-    Rect { x: f32, y: f32, w: f32, h: f32 },
+    Rect {
+        /// Left edge.
+        x: f32,
+        /// Top edge.
+        y: f32,
+        /// Width in points.
+        w: f32,
+        /// Height in points.
+        h: f32,
+    },
     /// Placed image; `asset` indexes the asset table.
     Image {
+        /// Left edge.
         x: f32,
+        /// Top edge.
         y: f32,
+        /// Width in points.
         w: f32,
+        /// Height in points.
         h: f32,
+        /// Index into the asset table.
         asset: u32,
     },
 }
@@ -73,7 +97,9 @@ pub enum DrawItem {
 /// the atom of layout, so positions are per-glyph.
 #[derive(Debug, Serialize)]
 pub struct Glyph {
+    /// Glyph id in the run's font.
     pub id: u32,
+    /// Absolute x of the glyph's origin.
     pub x: f32,
     /// Byte range in the run's `text` this glyph stands for. A
     /// ligature spans several characters, a decomposed cluster puts

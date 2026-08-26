@@ -1,0 +1,64 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import EngineProbe from '../components/EngineProbe';
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Live demos',
+    description:
+      'Where the engine will run in your browser, and the island seam waiting for it.',
+    tableOfContents: false,
+  }}
+>
+  <p>
+    fleuron's two claims — that a book paginates in hundreds of milliseconds,
+    and that the preview is exactly the export — are ones you should be able to
+    check here, on your own machine. Not yet: the WebAssembly bindings and the
+    SVG painter have not landed, so there is nothing on this page to run.
+  </p>
+
+  <p>
+    The panel below is the seam they will mount into: a React island hydrated
+    with <code>client:visible</code>, so it ships no JavaScript until it scrolls
+    into view, and none at all to any other page.
+  </p>
+
+  <div class="not-content probe-frame">
+    <EngineProbe client:visible />
+  </div>
+
+  <p>
+    Prose pages ship no JavaScript, which is why the site is built this way. A
+    demo carrying a WebAssembly engine can afford to be expensive as long as
+    nothing else on the site is.
+  </p>
+</StarlightPage>
+
+<style is:global>
+  .probe-frame {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: var(--f-glass-solid);
+    border: 1px solid var(--f-hairline);
+    border-radius: var(--f-radius);
+  }
+
+  .probe-state {
+    margin: 0 0 0.75rem;
+    font-family: var(--f-mono);
+    font-size: 0.875rem;
+    color: var(--f-text);
+  }
+
+  .probe-state span {
+    color: var(--f-ember);
+  }
+
+  .probe-note {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--f-text-muted);
+  }
+</style>

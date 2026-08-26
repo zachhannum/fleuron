@@ -25,10 +25,18 @@ use crate::pages::{DrawItem, Glyph, Page};
 /// What can go wrong turning a display list into a PDF.
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
+    /// The face named could not be embedded.
     #[error("font {0} could not be embedded")]
     Font(String),
+    /// A draw item falls outside what PDF can express.
     #[error("page {number} draws {kind} outside what PDF can express")]
-    Geometry { number: u32, kind: &'static str },
+    Geometry {
+        /// The folio the offending item is on.
+        number: u32,
+        /// What kind of item it was.
+        kind: &'static str,
+    },
+    /// The writer refused the document.
     #[error("PDF serialization failed: {0}")]
     Serialize(String),
 }

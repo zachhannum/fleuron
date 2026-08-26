@@ -2,6 +2,8 @@
 
 *A paged-media layout engine for book-shaped documents, in Rust.*
 
+[**Documentation**](https://zachhannum.github.io/fleuron/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
+
 **fleuron** takes structured content plus CSS, performs
 inline layout (shaping, line breaking, hyphenation), fragments it into pages,
 and emits a display list for preview and a PDF for export. It compiles to
@@ -12,20 +14,20 @@ native and WebAssembly from the same core.
 
 ## Why
 
-Browser-based pagination (Paged.js and friends) asks the layout engine
-"did it overflow?" thousands of times per book and pays for a full layout
-each answer. fleuron owns the whole pipeline instead: harfrust shaping,
-Unicode line breaking and segmentation, Knuth-Plass-quality
-justification, and CSS Fragmentation semantics applied to a box tree it
-builds itself. Break decisions fall out of the layout pass instead of
-being guessed at through the DOM.
+fleuron is built to repaginate a full-length manuscript while someone
+waits, and to give that person a preview the export cannot contradict.
+
+Both come from owning the pipeline end to end: harfrust shaping, Unicode
+line breaking and segmentation, Knuth-Plass-quality justification, and
+CSS Fragmentation semantics applied to a box tree it builds itself.
+Break decisions fall out of the layout pass, so a 333-page novel reaches
+PDF bytes in 283 ms. The preview is *exactly* the export, because both
+are painted from the same display list. And because the engine does no
+I/O and depends on no platform library, all of it runs anywhere Rust
+does, WebAssembly included.
 
 Shaping is [harfrust], the pure-Rust HarfBuzz port from the Google Fonts
 team (successor to the archived rustybuzz).
-
-The result is book-scale pagination in hundreds of milliseconds rather
-than minutes, a preview that is *exactly* the export (both are painted
-from the same display list), and a library that runs anywhere Rust does.
 
 ## Scope
 
@@ -52,7 +54,7 @@ CSS ───────────┘                                        
                                                                                └─► PDF (export)
 ```
 
-- **`fleuron-core`** — style compilation, box construction, inline layout,
+- **`fleuron`** — style compilation, box construction, inline layout,
   fragmentation, page assembly. Pure library, no I/O.
 - **`fleuron-cli`** — `fleuron` binary: content in, PDF out. Batch-friendly.
 - **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
@@ -63,8 +65,8 @@ CSS ───────────┘                                        
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
    the defaults; author CSS cascades over it. Everything downstream
    consumes the resolved style tree. The supported subset is written
-   down in `docs/css-subset.md`; anything outside it is reported with
-   the line and column it was written at.
+   down in [`docs/css-subset.md`](docs/css-subset.md); anything outside
+   it is reported with the line and column it was written at.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
    and PDF are interchangeable painters over the display list.
 3. **Layout never decodes images.** Header probes yield intrinsic size,
@@ -73,17 +75,17 @@ CSS ───────────┘                                        
 
 ## Performance
 
-The claim above is a measurement, not an adjective. The harness lays out
-two complete public-domain novels — *Pride and Prejudice* at book scale
-and *The Count of Monte Cristo* at four times it — and holds the result
-against fixed budgets:
+The harness lays out two complete public-domain novels — *Pride and
+Prejudice* at book scale and *The Count of Monte Cristo* at four times
+it — and holds the result against fixed budgets:
 
 | | pages | style | line layout | fragment | PDF | end to end | layout peak |
 |---|---|---|---|---|---|---|---|
 | *Pride and Prejudice* | 333 | 1 ms | 128 ms | 5 ms | 150 ms | 283 ms | 12 MiB |
 | *The Count of Monte Cristo* | 1240 | 5 ms | 502 ms | 19 ms | 561 ms | 1.08 s | 46 MiB |
 
-Four times the book, four times the cost, in time and in memory both.
+Four times the book costs about four times the time and four times the
+memory.
 
 Apple M-series, release build, best of three. Budgets: a book-scale
 manuscript reaches PDF bytes in under a second natively, lays out in

@@ -97,6 +97,7 @@ pub struct Metadata {
 /// The root of the content tree: one book.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Book {
+    /// The work's title, author and frontend extensions.
     pub metadata: Metadata,
     /// The chapters/files, in reading order.
     #[serde(default)]
@@ -107,6 +108,7 @@ pub struct Book {
 /// attribution for diagnostics.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Section {
+    /// Engine-assigned identity, for diagnostics; never on the wire.
     #[serde(skip)]
     pub id: NodeId,
     /// File the frontend read (e.g. `chapter-01.md`).
@@ -116,8 +118,10 @@ pub struct Section {
     /// `title:`); implies heading level 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The section's blocks, in reading order.
     #[serde(default)]
     pub blocks: Vec<Block>,
+    /// Where the frontend read this from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<SourcePos>,
 }
@@ -128,48 +132,64 @@ pub struct Section {
 pub enum Block {
     /// `#` through `######`; levels outside 1–6 are rejected at parse.
     Heading {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// `#` count, 1-6.
         level: HeadingLevel,
+        /// The heading's text, in reading order.
         #[serde(default)]
         inlines: Vec<Inline>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
+    /// A run of prose: the unit line layout breaks.
     Paragraph {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The paragraph's text, in reading order.
         #[serde(default)]
         inlines: Vec<Inline>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A quotation set off by `>`; contents are blocks, not inlines —
     /// blockquotes nest.
     Blockquote {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The quoted blocks, in reading order.
         #[serde(default)]
         blocks: Vec<Block>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// `---`: a scene break, rendered as space or an ornament (❦).
     ThematicBreak {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A block-level image.
     Image {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// Where the image lives; the host resolves it, not the engine.
         url: String,
         /// Alt text: not laid out, but part of the accessibility
         /// contract.
         #[serde(default)]
         alt: String,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
@@ -179,11 +199,17 @@ pub enum Block {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(into = "u8", try_from = "u8")]
 pub enum HeadingLevel {
+    /// `#`
     H1,
+    /// `##`
     H2,
+    /// `###`
     H3,
+    /// `####`
     H4,
+    /// `#####`
     H5,
+    /// `######`
     H6,
 }
 
@@ -228,42 +254,61 @@ pub enum Inline {
     /// A run of text. The frontend has already decoded entities; the
     /// engine sees plain Unicode.
     Text {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The characters themselves, entities already decoded.
         value: String,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
+    /// `*emphasis*`: italic, in the default sheet.
     Emphasis {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The emphasised inlines.
         #[serde(default)]
         children: Vec<Inline>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
+    /// `**strong**`: bold, in the default sheet.
     Strong {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The strengthened inlines.
         #[serde(default)]
         children: Vec<Inline>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
+    /// `` `code` ``: monospace, and never hyphenated.
     Code {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
         /// The literal code text; no markup inside.
         value: String,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
+    /// A hyperlink. The text lays out; the url is for painters that can carry one.
     Link {
+        /// Engine-assigned identity, for diagnostics; never on the wire.
         #[serde(skip)]
         id: NodeId,
+        /// The link target.
         url: String,
+        /// The linked inlines.
         #[serde(default)]
         children: Vec<Inline>,
+        /// Where the frontend read this from.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },

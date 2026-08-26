@@ -1,0 +1,38 @@
+---
+import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
+import SidebarPersister from '@astrojs/starlight/components/SidebarPersister.astro';
+import SidebarSublist from '@astrojs/starlight/components/SidebarSublist.astro';
+
+const { sidebar } = Astro.locals.starlightRoute;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<a class="back" href={`${base}/`}>
+  <span aria-hidden="true">&larr;</span> fleuron
+</a>
+
+<SidebarPersister>
+  <SidebarSublist sublist={sidebar} />
+</SidebarPersister>
+
+<div class="md:sl-hidden">
+  <MobileMenuFooter />
+</div>
+
+<style>
+  .back {
+    display: block;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--f-hairline);
+    font-size: var(--sl-text-sm);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--f-text-faint);
+    text-decoration: none;
+  }
+
+  .back:hover {
+    color: var(--f-text);
+  }
+</style>

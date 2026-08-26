@@ -1,0 +1,133 @@
+---
+import { Code } from 'astro:components';
+
+// Tabs without JavaScript: a radio group, and the panels are chosen by
+// :checked. Native radios carry the keyboard and screen-reader
+// behaviour a hand-rolled tablist would have to reimplement.
+const rust = `let json = std::fs::read_to_string("book.json")?;
+let mut book: Book = serde_json::from_str(&json)?;
+book.assign_node_ids();
+
+let css = std::fs::read_to_string("book.css")?;
+let mut registry = bundled_registry()?;
+let mut sheets = Stylesheets::parse(&[Source::author("book.css", &css)]);
+sheets.load_fonts(&mut registry, &Files(PathBuf::from(".")));
+let styles = sheets.compile(&book, &registry);
+
+let output = fleuron::layout::layout_book(&book, &styles, &registry);
+let bytes = fleuron::pdf::write(&output, &registry, &book.metadata)?;
+std::fs::write("book.pdf", bytes)?;`;
+
+const shell = `cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
+
+fleuron book.json -o book.pdf -c book.css
+# fleuron: book.json → book.pdf: 333 pages`;
+
+const ts = `// Not shipped yet: the bindings land with the WASM milestone.
+const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), {
+  type: 'module',
+});
+
+worker.postMessage({ book, css, fonts }, [book.buffer]);
+worker.onmessage = ({ data }) => {
+  // One transferable ArrayBuffer: the postcard display list.
+  paint(decodeDisplayList(data));
+};`;
+
+const codeTheme = 'github-dark-default';
+---
+
+<div class="consumers">
+  <div class="tabs" role="group" aria-label="Pick your consumer">
+    <input type="radio" name="consumer" id="c-lib" checked />
+    <label for="c-lib">Rust library</label>
+    <input type="radio" name="consumer" id="c-cli" />
+    <label for="c-cli">Command line</label>
+    <input type="radio" name="consumer" id="c-wasm" />
+    <label for="c-wasm">WebAssembly</label>
+
+    <div class="panel" data-for="c-lib">
+      <Code code={rust} lang="rust" theme={codeTheme} />
+    </div>
+    <div class="panel" data-for="c-cli">
+      <Code code={shell} lang="bash" theme={codeTheme} />
+    </div>
+    <div class="panel" data-for="c-wasm">
+      <Code code={ts} lang="ts" theme={codeTheme} />
+    </div>
+  </div>
+</div>
+
+<style>
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, auto) 1fr;
+    gap: 0.5rem 0.35rem;
+    align-items: center;
+  }
+
+  input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  label {
+    grid-row: 1;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    color: var(--f-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  label:hover {
+    color: var(--f-text);
+  }
+
+  .panel {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    display: none;
+    min-width: 0;
+  }
+
+  /* Code keeps one dark ground in both themes: it is ink on a terminal
+     wherever you read it, and one palette is one contrast check. */
+  .panel :global(pre) {
+    margin: 0;
+    padding: 1.1rem 1.25rem;
+    overflow-x: auto;
+    background: #0b0d12 !important;
+    border: 1px solid var(--f-hairline);
+    border-radius: var(--f-radius-sm);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+  }
+
+  #c-lib:checked ~ label[for='c-lib'],
+  #c-cli:checked ~ label[for='c-cli'],
+  #c-wasm:checked ~ label[for='c-wasm'] {
+    color: var(--f-text);
+    border-color: var(--f-hairline-strong);
+    background: var(--f-glass-solid);
+  }
+
+  #c-lib:focus-visible ~ label[for='c-lib'],
+  #c-cli:focus-visible ~ label[for='c-cli'],
+  #c-wasm:focus-visible ~ label[for='c-wasm'] {
+    outline: 2px solid var(--f-accent);
+    outline-offset: 2px;
+  }
+
+  #c-lib:checked ~ .panel[data-for='c-lib'],
+  #c-cli:checked ~ .panel[data-for='c-cli'],
+  #c-wasm:checked ~ .panel[data-for='c-wasm'] {
+    display: block;
+  }
+</style>

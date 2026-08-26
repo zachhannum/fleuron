@@ -54,13 +54,16 @@ impl InlineStyles for Inherited {
 /// line.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LineBreakOptions {
+    /// Whether `hyphens: auto` is in force.
     pub hyphenate: bool,
 }
 
 /// A run of glyphs sharing one font and size — the paintable unit.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShapedRun {
+    /// Index into the registry that shaped the run.
     pub font_id: u16,
+    /// Em size in points.
     pub size: f32,
     /// The run's own text. Glyph ids alone do not spell anything:
     /// text extraction and copy-paste need the characters back, and
@@ -69,6 +72,7 @@ pub struct ShapedRun {
     /// Byte offset of `text` in the paragraph the glyphs' clusters
     /// index.
     pub text_start: u32,
+    /// The glyphs, in visual order.
     pub glyphs: Vec<ShapedGlyph>,
     /// Total advance of the run's glyphs, in font units.
     pub advance: u32,
@@ -104,6 +108,7 @@ impl ShapedRun {
 /// One typeset line: shaped runs plus its width in font units.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
+    /// The line's runs, in visual order.
     pub runs: Vec<ShapedRun>,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
@@ -186,6 +191,7 @@ pub struct LineLayout<'a> {
 type WordSegmenterBorrowedStatic = icu_segmenter::WordSegmenterBorrowed<'static>;
 
 impl<'a> LineLayout<'a> {
+    /// A layout pass over the faces `registry` holds.
     pub fn new(registry: &'a FontRegistry) -> Self {
         LineLayout {
             registry,

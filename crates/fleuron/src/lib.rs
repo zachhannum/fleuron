@@ -6,6 +6,8 @@
 //! content tree + style tree ─► box tree ─► line layout ─► fragmentation ─► pages
 //! ```
 
+#![deny(missing_docs)]
+
 pub mod content;
 pub mod fonts;
 pub mod layout;
@@ -19,6 +21,7 @@ pub mod style;
 /// fragmentation: unsupported CSS, missing fonts, low effective DPI…
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Warning {
+    /// What went wrong, in one line.
     pub message: String,
     /// Source location when one exists (CSS line, content node id).
     pub origin: Option<String>,
@@ -27,9 +30,11 @@ pub struct Warning {
 /// Everything the engine produces for one run: pages plus diagnostics.
 #[derive(Debug, serde::Serialize)]
 pub struct LayoutOutput {
+    /// The typeset pages, in reading order.
     pub pages: Vec<pages::Page>,
     /// The fonts this run used, indexed by `font_id`: both painters
     /// and the PDF writer resolve ids through this table.
     pub fonts: Vec<fonts::FontRefEntry>,
+    /// Everything the run had to complain about.
     pub warnings: Vec<Warning>,
 }
