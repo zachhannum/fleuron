@@ -322,6 +322,8 @@ pub enum Declaration {
     Orphans(u16),
     Widows(u16),
     Page(Option<String>),
+    Content(Content),
+    InitialLetter(u16),
     Margin(Edge, Length),
     BreakBefore(Break),
     BreakAfter(Break),
@@ -390,6 +392,12 @@ pub struct ComputedStyle {
     pub widows: u16,
     /// The named page this element's pages take, from `page`.
     pub page: Option<String>,
+    /// What the element paints in place of children it has none of:
+    /// the ornament a thematic break is set with.
+    pub content: Content,
+    /// Lines an initial letter is sunk over, from `initial-letter`.
+    /// Fewer than two is no drop cap.
+    pub initial_letter: u16,
     /// Margins in points.
     pub margin: Edges,
     /// Where a page break falls before this element.
@@ -417,6 +425,8 @@ impl ComputedStyle {
             orphans: 2,
             widows: 2,
             page: None,
+            content: Content::None,
+            initial_letter: 0,
             margin: Edges::all(0.0),
             break_before: Break::Auto,
             break_after: Break::Auto,
@@ -429,6 +439,8 @@ impl ComputedStyle {
     pub fn inherit(&self) -> ComputedStyle {
         ComputedStyle {
             margin: Edges::all(0.0),
+            content: Content::None,
+            initial_letter: 0,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -458,6 +470,8 @@ impl ComputedStyle {
             Declaration::Orphans(lines) => self.orphans = *lines,
             Declaration::Widows(lines) => self.widows = *lines,
             Declaration::Page(name) => self.page = name.clone(),
+            Declaration::Content(content) => self.content = content.clone(),
+            Declaration::InitialLetter(lines) => self.initial_letter = *lines,
             Declaration::Margin(edge, length) => {
                 let points = length.to_points(self.font_size, root_size);
                 match edge {

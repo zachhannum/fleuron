@@ -49,6 +49,47 @@ impl InlineStyles for Inherited {
     }
 }
 
+/// The width lines break to.
+///
+/// Uniform for a paragraph on its own; a drop cap shortens the lines
+/// it sits beside and leaves the rest of the paragraph at the full
+/// measure.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Measure {
+    /// Points the lines past the shortened ones break to.
+    pub full: f32,
+    /// Points the first `shortened` lines break to.
+    pub narrow: f32,
+    /// How many lines break to `narrow`.
+    pub shortened: usize,
+}
+
+impl Measure {
+    /// One width for every line.
+    pub fn uniform(points: f32) -> Measure {
+        Measure {
+            full: points,
+            narrow: points,
+            shortened: 0,
+        }
+    }
+
+    /// The width line `index` breaks to.
+    pub fn at(self, index: usize) -> f32 {
+        if index < self.shortened {
+            self.narrow
+        } else {
+            self.full
+        }
+    }
+}
+
+impl From<f32> for Measure {
+    fn from(points: f32) -> Measure {
+        Measure::uniform(points)
+    }
+}
+
 /// Hyphenation is off unless asked for; when on, lines may end
 /// inside words, at syllable boundaries, with a hyphen charged to the
 /// line.
@@ -234,10 +275,10 @@ impl<'a> LineLayout<'a> {
         &self,
         inlines: &[Inline],
         style: ParagraphStyle,
-        measure_pt: f32,
+        measure: impl Into<Measure>,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        self.layout_styled(inlines, style, &Inherited, measure_pt, options)
+        self.layout_styled(inlines, style, &Inherited, measure, options)
     }
 
     /// The same, with the style tree answering for each inline.
@@ -246,9 +287,10 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        measure_pt: f32,
+        measure: impl Into<Measure>,
         options: LineBreakOptions,
     ) -> Vec<Line> {
+        let measure = measure.into();
         let flat = flatten(inlines, style, styles);
         if flat.text.is_empty() {
             return Vec::new();
@@ -256,9 +298,9 @@ impl<'a> LineLayout<'a> {
         let Some(metrics) = self.registry.metrics(style.font_id) else {
             return Vec::new();
         };
-        // Points → font units, once: measure_pt / size gives ems,
-        // ems * units_per_em gives font units.
-        let measure_units = measure_pt / style.size * metrics.units_per_em as f32;
+        // Points → font units: measure / size gives ems, ems *
+        // units_per_em gives font units.
+        let to_units = |points: f32| points / style.size * metrics.units_per_em as f32;
 
         // Shape each span; glyphs carry cluster offsets into the span,
         // which index the paragraph text once offset by span start.
@@ -287,6 +329,7 @@ impl<'a> LineLayout<'a> {
         let mut lines = Vec::new();
         let mut line_start = 0usize;
         while line_start < flat.text.len() {
+            let measure_units = to_units(measure.at(lines.len()));
             // Candidate ends for this line, in order: the first
             // opportunity whose width fits wins. Trailing spaces are
             // not charged; a hyphenated candidate is.
@@ -855,6 +898,52 @@ mod tests {
     #[test]
     fn spaces_only_paragraph_is_empty() {
         assert!(layout_body("   ", 200.0).is_empty());
+    }
+
+    /// A drop cap shortens the lines beside it: the first few break
+    /// to a narrower measure, and the rest go back to the full one.
+    #[test]
+    fn a_shortened_measure_only_holds_for_the_lines_it_names() {
+        let text = "one two three four five six seven eight nine ten eleven twelve";
+        let measure = Measure {
+            full: 120.0,
+            narrow: 40.0,
+            shortened: 2,
+        };
+        let layout = LineLayout::new(registry());
+        let inlines = vec![Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: text.to_string(),
+            position: None,
+        }];
+        let lines = layout.layout(&inlines, body(), measure, Default::default());
+        assert!(lines.len() > 3, "expected several lines: {lines:?}");
+        let width_pt = |line: &Line| line.width as f32 / units_per_em() as f32 * body().size;
+        for (index, line) in lines.iter().enumerate() {
+            let allowed = measure.at(index);
+            assert!(
+                width_pt(line) <= allowed,
+                "line {index} is {}pt against a measure of {allowed}pt",
+                width_pt(line),
+            );
+        }
+        // The lines that were not shortened use the width the
+        // shortened ones could not: nothing is lost, and the same
+        // text set at one measure breaks differently.
+        assert!(
+            width_pt(&lines[2]) > measure.narrow,
+            "the measure never widened"
+        );
+        let uniform = layout.layout(&inlines, body(), 120.0, Default::default());
+        assert!(uniform.len() < lines.len());
+        assert_eq!(
+            lines
+                .iter()
+                .map(|l| line_text(l, text))
+                .collect::<Vec<_>>()
+                .join(" "),
+            text,
+        );
     }
 
     /// Acceptance: fixture-paragraph breaks match a hand-computed

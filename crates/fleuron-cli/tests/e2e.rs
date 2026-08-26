@@ -19,15 +19,18 @@ use fleuron::content::{Block, Book, Inline};
 
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
-const EXPECTED_PAGES: usize = 20;
+const EXPECTED_PAGES: usize = 23;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 31;
+const STYLED_PAGES: usize = 34;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
 const STYLED_TRIM: &str = "396 x 612 pts";
+
+/// What the built-in sheet sets a thematic break in.
+const ORNAMENT: &str = "\u{2766}";
 
 /// The head that sheet paints in the opening page's top margin box.
 const STYLED_HEAD: &str = "STYLED BY FLEURON";
@@ -35,7 +38,7 @@ const STYLED_HEAD: &str = "STYLED BY FLEURON";
 /// SHA-256 of the fixture book's PDF under the built-in sheet alone.
 /// Layout is deterministic, so these bytes are a fact about the
 /// pipeline: a digest that moves is a change someone meant to make.
-const DEFAULT_PDF: &str = "c2345dfe50aedd4ffcebc4da16bea5ec5ce922fc0bd482134cbbcaa5a1d843fc";
+const DEFAULT_PDF: &str = "1ccd22621a3abc01ed0b69f9fc8140401a6c5bf66b962b1e1326bb37dc614720";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -457,9 +460,9 @@ fn strip_furniture(text: &str, head: Option<&str>) -> String {
     prose
 }
 
-/// Everything v0.1 lays out, in reading order: headings and
-/// paragraphs. Blockquotes, images and thematic breaks reach the box
-/// tree and stop there, so the PDF is not expected to carry them.
+/// Everything the engine lays out, in reading order: headings,
+/// paragraphs, the blocks a blockquote nests, and the ornament the
+/// built-in sheet sets a thematic break in. Images carry no text.
 fn laid_out_text(book: &Book) -> String {
     let mut text = String::new();
     for section in &book.sections {
@@ -474,7 +477,9 @@ fn append_blocks(blocks: &[Block], text: &mut String) {
             Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
                 append_inlines(inlines, text);
             }
-            Block::Blockquote { .. } | Block::ThematicBreak { .. } | Block::Image { .. } => {}
+            Block::Blockquote { blocks, .. } => append_blocks(blocks, text),
+            Block::ThematicBreak { .. } => text.push_str(ORNAMENT),
+            Block::Image { .. } => {}
         }
     }
 }

@@ -37,7 +37,7 @@ pub use properties::{
 };
 pub use sheet::{Origin, Source};
 
-use element::ElementTree;
+use element::{ElementTree, PseudoElement};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
 /// The defaults, as a stylesheet. Nothing in the engine carries a
@@ -73,6 +73,10 @@ pub struct NodeStyle {
     pub element: &'static str,
     /// Index into the tree's distinct styles.
     pub style: u32,
+    /// Index of the style `::first-letter` computed for this node,
+    /// when a rule named one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_letter: Option<u32>,
 }
 
 /// The situation a page finds itself in, which is what `@page`
@@ -164,6 +168,9 @@ pub struct StyleTree {
     /// what an unassigned node resolves to.
     #[serde(skip)]
     by_node: Vec<u32>,
+    /// `::first-letter` style index by raw node id, where there is one.
+    #[serde(skip)]
+    initial_by_node: Vec<Option<u32>>,
     warnings: Vec<Warning>,
 }
 
@@ -183,6 +190,13 @@ impl StyleTree {
     /// Everything line layout needs about one node.
     pub fn paragraph(&self, id: NodeId) -> ParagraphStyle {
         self.style(id).paragraph()
+    }
+
+    /// The style `::first-letter` computed for one node, when a rule
+    /// named one. This is where a drop cap's size and face come from.
+    pub fn first_letter(&self, id: NodeId) -> Option<&ComputedStyle> {
+        let index = (*self.initial_by_node.get(id.get() as usize)?)?;
+        Some(&self.styles[index as usize])
     }
 
     /// The style of the book itself: the root of inheritance.
@@ -503,6 +517,7 @@ fn cascade(
     let mut styles: Vec<ComputedStyle> = Vec::new();
     let mut nodes = Vec::new();
     let mut computed: Vec<u32> = Vec::with_capacity(elements.nodes().len());
+    let mut first_letters: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
     let mut max_id = 0u32;
 
     for (index, node) in elements.nodes().iter().enumerate() {
@@ -512,65 +527,51 @@ fn cascade(
             .unwrap_or_else(ComputedStyle::initial);
         let mut style = parent.inherit();
 
-        let mut applicable: Vec<(u8, u32, usize, usize, usize)> = Vec::new();
-        for (sheet_index, sheet) in sheets.iter().enumerate() {
-            for (rule_index, rule) in sheet.rules.iter().enumerate() {
-                let specificity = rule
-                    .selectors
-                    .slice()
-                    .iter()
-                    .filter(|selector| {
-                        let mut context = MatchingContext::new(
-                            MatchingMode::Normal,
-                            None,
-                            &mut caches,
-                            QuirksMode::NoQuirks,
-                            NeedsSelectorFlags::No,
-                            MatchingForInvalidation::No,
-                        );
-                        matches_selector(selector, 0, None, &elements.at(index), &mut context)
-                    })
-                    .map(|selector| selector.specificity())
-                    .max();
-                let Some(specificity) = specificity else {
-                    continue;
-                };
-                for (order, (_, importance)) in rule.declarations.iter().enumerate() {
-                    applicable.push((
-                        level(sheet.origin, *importance),
-                        specificity,
-                        sheet_index,
-                        rule_index,
-                        order,
-                    ));
-                }
-            }
-        }
-        applicable.sort_unstable();
+        let matched = applicable(sheets, &elements, index, &mut caches, None);
         let root_size = styles.first().map(|style| style.font_size);
-        for (_, _, sheet_index, rule_index, order) in &applicable {
-            let (declaration, _) = &sheets[*sheet_index].rules[*rule_index].declarations[*order];
-            let parent_size = parent.font_size;
-            style.apply(declaration, parent_size, root_size.unwrap_or(parent_size));
-        }
+        let parent_size = parent.font_size;
+        apply_all(&mut style, sheets, &matched, parent_size, root_size);
         let (font_id, warning) = resolve_face(&style, registry);
         style.font_id = font_id;
         report(&mut warnings, warning);
 
+        // `::first-letter` cascades over the element's own style, so
+        // it is a second matching pass rather than a second element.
+        let pseudo = applicable(
+            sheets,
+            &elements,
+            index,
+            &mut caches,
+            Some(&PseudoElement::FirstLetter),
+        );
+        let first_letter = (!pseudo.is_empty()).then(|| {
+            let mut initial = style.inherit();
+            apply_all(&mut initial, sheets, &pseudo, style.font_size, root_size);
+            let (font_id, warning) = resolve_face(&initial, registry);
+            initial.font_id = font_id;
+            report(&mut warnings, warning);
+            initial
+        });
+
         let index_of_style = intern(&mut styles, style);
+        let index_of_initial = first_letter.map(|initial| intern(&mut styles, initial));
         computed.push(index_of_style);
+        first_letters.push(index_of_initial);
         nodes.push(NodeStyle {
             id: node.id.get(),
             element: node.name,
             style: index_of_style,
+            first_letter: index_of_initial,
         });
         max_id = max_id.max(node.id.get());
     }
 
     let root = computed.first().copied().unwrap_or(0);
     let mut by_node = vec![root; max_id as usize + 1];
-    for (node, style) in elements.nodes().iter().zip(&computed) {
+    let mut initial_by_node = vec![None; max_id as usize + 1];
+    for ((node, style), initial) in elements.nodes().iter().zip(&computed).zip(&first_letters) {
         by_node[node.id.get() as usize] = *style;
+        initial_by_node[node.id.get() as usize] = *initial;
     }
     by_node[0] = root;
 
@@ -597,7 +598,79 @@ fn cascade(
         nodes,
         masters,
         by_node,
+        initial_by_node,
         warnings,
+    }
+}
+
+/// Where one applicable declaration lives, sorted into cascade order:
+/// origin and importance, then specificity, then source order.
+type Applicable = (u8, u32, usize, usize, usize);
+
+/// Every declaration that matches one element, in cascade order.
+/// `pseudo` selects the pass: `None` matches the element itself,
+/// `Some(_)` matches only rules ending in that pseudo-element.
+fn applicable(
+    sheets: &[Sheet],
+    elements: &ElementTree,
+    index: usize,
+    caches: &mut SelectorCaches,
+    pseudo: Option<&PseudoElement>,
+) -> Vec<Applicable> {
+    let mode = match pseudo {
+        Some(_) => MatchingMode::ForStatelessPseudoElement,
+        None => MatchingMode::Normal,
+    };
+    let mut applicable = Vec::new();
+    for (sheet_index, sheet) in sheets.iter().enumerate() {
+        for (rule_index, rule) in sheet.rules.iter().enumerate() {
+            let specificity = rule
+                .selectors
+                .slice()
+                .iter()
+                .filter(|selector| selector.pseudo_element() == pseudo)
+                .filter(|selector| {
+                    let mut context = MatchingContext::new(
+                        mode,
+                        None,
+                        caches,
+                        QuirksMode::NoQuirks,
+                        NeedsSelectorFlags::No,
+                        MatchingForInvalidation::No,
+                    );
+                    matches_selector(selector, 0, None, &elements.at(index), &mut context)
+                })
+                .map(|selector| selector.specificity())
+                .max();
+            let Some(specificity) = specificity else {
+                continue;
+            };
+            for (order, (_, importance)) in rule.declarations.iter().enumerate() {
+                applicable.push((
+                    level(sheet.origin, *importance),
+                    specificity,
+                    sheet_index,
+                    rule_index,
+                    order,
+                ));
+            }
+        }
+    }
+    applicable.sort_unstable();
+    applicable
+}
+
+/// Applies matched declarations in cascade order.
+fn apply_all(
+    style: &mut ComputedStyle,
+    sheets: &[Sheet],
+    applicable: &[Applicable],
+    parent_size: f32,
+    root_size: Option<f32>,
+) {
+    for (_, _, sheet_index, rule_index, order) in applicable {
+        let (declaration, _) = &sheets[*sheet_index].rules[*rule_index].declarations[*order];
+        style.apply(declaration, parent_size, root_size.unwrap_or(parent_size));
     }
 }
 
@@ -1141,6 +1214,144 @@ mod tests {
             paragraph.font_id,
             registry().generic(GenericFamily::Monospace).unwrap()
         );
+    }
+
+    /// A book of one paragraph, a scene break and a quotation: the
+    /// blocks whose defaults the built-in sheet has opinions about.
+    fn furnished() -> Book {
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                blocks: vec![
+                    Block::Paragraph {
+                        id: NodeId::UNASSIGNED,
+                        inlines: vec![text("Before the break.")],
+                        position: None,
+                    },
+                    Block::ThematicBreak {
+                        id: NodeId::UNASSIGNED,
+                        position: None,
+                    },
+                    Block::Blockquote {
+                        id: NodeId::UNASSIGNED,
+                        blocks: vec![Block::Paragraph {
+                            id: NodeId::UNASSIGNED,
+                            inlines: vec![text("Quoted.")],
+                            position: None,
+                        }],
+                        position: None,
+                    },
+                ],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// The built-in sheet sets a scene break in an ornament, centred,
+    /// and keeps it off both ends of a page. An author sets it in
+    /// something else, or in space.
+    #[test]
+    fn a_thematic_break_takes_its_ornament_from_the_cascade() {
+        let book = furnished();
+        let tree = defaults(&book, registry());
+        let rule = first(&tree, "hr");
+        assert_eq!(rule.content, Content::Text("\u{2766}".into()));
+        assert_eq!(rule.text_align, TextAlign::Center);
+        assert_eq!(rule.break_before, Break::Avoid);
+        assert_eq!(rule.break_after, Break::Avoid);
+        assert_eq!(rule.margin.top, 11.0);
+
+        assert_eq!(
+            first(&compile(&book, "hr { content: none }"), "hr").content,
+            Content::None,
+        );
+        assert_eq!(
+            first(&compile(&book, "hr { content: \"* * *\" }"), "hr").content,
+            Content::Text("* * *".into()),
+        );
+    }
+
+    /// A quotation is indented on both sides and set off above and
+    /// below, and the indent is a multiple of its own size.
+    #[test]
+    fn a_blockquote_is_indented_by_the_built_in_sheet() {
+        let book = furnished();
+        let tree = defaults(&book, registry());
+        let quote = first(&tree, "blockquote");
+        assert_eq!(quote.margin.left, 2.0 * quote.font_size);
+        assert_eq!(quote.margin.right, 2.0 * quote.font_size);
+        assert_eq!(quote.margin.top, quote.font_size);
+        // The paragraph inside carries no indent of its own: the
+        // quotation's box is what moves it.
+        assert_eq!(nth(&tree, "p", 1).margin.left, 0.0);
+    }
+
+    /// `::first-letter` is a second pass over the element it belongs
+    /// to: it starts from that element's own computed style, cascades
+    /// the rules that named it over the top, and resolves a face of
+    /// its own. Rules that name no pseudo-element never reach it, and
+    /// it never reaches the element.
+    #[test]
+    fn first_letter_cascades_over_the_element_it_belongs_to() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { font-size: 12pt; line-height: 1.8 }
+             p::first-letter { initial-letter: 3; font-family: monospace }",
+        );
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let initial = tree
+            .first_letter(*id)
+            .expect("a rule named the paragraph's first letter");
+        assert_eq!(initial.initial_letter, 3);
+        assert_eq!(initial.font_size, 12.0, "the element's size is inherited");
+        assert_eq!(initial.line_height, 1.8);
+        assert_eq!(
+            initial.font_id,
+            registry().generic(GenericFamily::Monospace).unwrap(),
+            "the pseudo-element resolves its own face",
+        );
+
+        // The element keeps its own style, and an element no rule
+        // named has no first-letter style at all.
+        assert_eq!(first(&tree, "p").initial_letter, 0);
+        let Block::Heading { id, .. } = &book.sections[0].blocks[0] else {
+            panic!("the first block is a heading");
+        };
+        assert!(tree.first_letter(*id).is_none());
+        assert!(defaults(&book, registry()).first_letter(*id).is_none());
+
+        // Selectors in front of the pseudo-element still have to
+        // match: only the paragraph after the heading is picked out.
+        let tree = compile(&book, "h1 + p::first-letter { initial-letter: 2 }");
+        assert!(tree.first_letter(*id).is_none());
+        let Block::Paragraph { id: second, .. } = &book.sections[0].blocks[2] else {
+            panic!("the third block is a paragraph");
+        };
+        assert!(tree.first_letter(*second).is_none());
+    }
+
+    /// A pseudo-element outside the subset is a diagnostic, and the
+    /// sheet keeps parsing.
+    #[test]
+    fn an_unsupported_pseudo_element_warns() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p::first-line { font-size: 30pt }\np { font-size: 15pt }\n",
+        );
+        assert!(
+            tree.warnings()
+                .iter()
+                .any(|warning| warning.message == "unsupported selector `:first-line`"),
+            "{:?}",
+            tree.warnings(),
+        );
+        assert_eq!(first(&tree, "p").font_size, 15.0);
     }
 
     /// A book whose one paragraph nests `strong` inside `em`.

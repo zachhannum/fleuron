@@ -7,8 +7,7 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fleuron::layout::Paginator;
-use fleuron::lines::Line;
+use fleuron::layout::{Fragment, Paginator};
 use fleuron_fixtures::{Corpus, registry, styles};
 
 fn fragment(c: &mut Criterion) {
@@ -17,10 +16,10 @@ fn fragment(c: &mut Criterion) {
         let book = corpus.book();
         let styles = styles(&book);
         let paginator = Paginator::new(registry(), &styles);
-        let sections: Vec<Vec<Line>> = book
+        let sections: Vec<Vec<Fragment>> = book
             .sections
             .iter()
-            .map(|section| paginator.section_lines(section))
+            .map(|section| paginator.section_fragments(section))
             .collect();
         group.throughput(Throughput::Elements(
             paginator.flow(&book, &sections).len() as u64
