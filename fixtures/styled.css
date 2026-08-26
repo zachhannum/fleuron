@@ -1,0 +1,47 @@
+/* Author styling for the fixture book: what the e2e drives the CLI
+   with to prove that CSS reaches the PDF. Every rule here shows up in
+   something qpdf, pdfinfo or pdftotext can see. */
+
+@page {
+  size: 5.5in 8.5in;
+  margin: 48pt 40pt 56pt 60pt;
+  @bottom-center {
+    content: counter(page);
+    font-size: 8pt;
+  }
+}
+
+/* Margins mirror: the wider one is the spine on both sides. */
+@page :left {
+  margin-left: 40pt;
+  margin-right: 60pt;
+}
+
+@page :right {
+  margin-left: 60pt;
+  margin-right: 40pt;
+}
+
+/* A chapter's opening page carries a head. Its folio comes back too:
+   the rule above outranks the built-in sheet's blinding of it,
+   because author CSS outranks the defaults whatever their
+   specificity. */
+@page chapter:first {
+  @top-center {
+    content: "STYLED BY FLEURON";
+    font-size: 8pt;
+  }
+}
+
+book {
+  font-size: 12pt;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  font-size: 20pt;
+}
+
+blockquote p {
+  font-size: 10pt;
+}
