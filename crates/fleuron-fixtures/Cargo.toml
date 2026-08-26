@@ -21,4 +21,4 @@ harness = false
 
 [dependencies]
 fleuron = { path = "../fleuron" }
-pulldown-cmark.workspace = true
+fleuron-markdown = { path = "../fleuron-markdown" }

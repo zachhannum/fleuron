@@ -31,6 +31,12 @@ criterion.workspace = true
 # Dev-only, and a cycle only in the dev graph: the fixtures crate reads
 # the corpus through this one.
 fleuron-fixtures = { path = "../fleuron-fixtures" }
+# The quickstart example reads a manuscript, as the docs lead with.
+fleuron-markdown = { path = "../fleuron-markdown" }
+
+[[bench]]
+name = "parse"
+harness = false
 
 [[bench]]
 name = "style"

@@ -28,10 +28,16 @@ use crate::corpus::Corpus;
 pub mod budget {
     use std::time::Duration;
 
-    /// A book-scale manuscript goes from content tree to PDF bytes
+    /// A book-scale manuscript goes from markdown to PDF bytes
     /// natively in under a second — the whole pipeline, since that is
     /// what a build step waits on.
     pub const NATIVE_END_TO_END: Duration = Duration::from_millis(1000);
+
+    /// What reading the gate book costs inside that. Parse has a
+    /// ceiling of its own because a host re-reads a chapter far more
+    /// often than it renders a book, and a frontend that slowed down
+    /// would otherwise hide inside a pipeline that had not.
+    pub const PARSE: Duration = Duration::from_millis(20);
 
     /// The same book laid out in the worker, where the budget is a
     /// span of a reader's patience rather than a build step, and
@@ -107,6 +113,8 @@ pub struct Report {
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
     pub lines: usize,
+    /// Markdown to content tree.
+    pub parse: Duration,
     /// Style compilation: parse, match, cascade.
     pub style: Duration,
     /// Line layout: shaping, breaking, measuring.
@@ -131,9 +139,9 @@ pub struct Report {
 }
 
 impl Report {
-    /// Content tree to PDF bytes: what a build step waits on.
+    /// Markdown to PDF bytes: what a build step waits on.
     pub fn end_to_end(&self) -> Duration {
-        self.style + self.layout + self.pdf
+        self.parse + self.style + self.layout + self.pdf
     }
 
     /// The budgets this report is held to on `target`.
@@ -144,6 +152,12 @@ impl Report {
             Target::Wasm => self.layout,
         };
         vec![
+            Check {
+                label: "parse",
+                measured: self.parse.as_secs_f64() * 1000.0,
+                ceiling: budget::PARSE.as_secs_f64() * 1000.0,
+                unit: "ms",
+            },
             Check {
                 label,
                 measured: measured.as_secs_f64() * 1000.0,
@@ -225,10 +239,12 @@ impl fmt::Display for Check {
 /// work. Memory goes the other way — a ceiling is only met if it is
 /// met every time.
 pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
+    let markdown = corpus.markdown();
     let book = corpus.book();
     let styles = crate::styles(&book);
     let paginator = Paginator::new(registry, &styles);
 
+    let mut parse = Duration::MAX;
     let mut style = Duration::MAX;
     let mut line_layout = Duration::MAX;
     let mut fragment = Duration::MAX;
@@ -242,6 +258,10 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
     let mut session_peak = 0u64;
 
     for _ in 0..runs.max(1) {
+        let start = Instant::now();
+        black_box(corpus.parse(markdown));
+        parse = parse.min(start.elapsed());
+
         let start = Instant::now();
         black_box(crate::styles(&book));
         style = style.min(start.elapsed());
@@ -311,6 +331,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         corpus,
         pages,
         lines,
+        parse,
         style,
         line_layout,
         fragment,
@@ -334,6 +355,7 @@ impl fmt::Display for Report {
             self.pdf_bytes / 1024,
         )?;
         for (stage, duration) in [
+            ("parse", self.parse),
             ("style", self.style),
             ("line layout", self.line_layout),
             ("fragment", self.fragment),
@@ -403,6 +425,7 @@ mod tests {
             corpus: Corpus::GATE,
             pages: 300,
             lines: 10_000,
+            parse: Duration::from_millis(30),
             style: Duration::from_millis(10),
             line_layout: Duration::from_millis(600),
             fragment: Duration::from_millis(20),
@@ -413,22 +436,23 @@ mod tests {
             style_rerender: Duration::from_millis(6),
             session_peak: 2 * 1024 * 1024,
         };
-        assert_eq!(report.end_to_end(), Duration::from_millis(810));
+        assert_eq!(report.end_to_end(), Duration::from_millis(840));
 
         let native = report.checks(Target::Native);
-        assert_eq!(native[0].label, "end to end");
-        assert_eq!(native[0].measured, 810.0);
-        assert!(native[0].passed());
+        assert_eq!(native[1].label, "end to end");
+        assert_eq!(native[1].measured, 840.0);
+        assert!(native[1].passed());
 
         let wasm = report.checks(Target::Wasm);
-        assert_eq!(wasm[0].label, "layout");
-        assert_eq!(wasm[0].measured, 700.0);
+        assert_eq!(wasm[1].label, "layout");
+        assert_eq!(wasm[1].measured, 700.0);
         assert!(
-            !wasm[0].passed(),
+            !wasm[1].passed(),
             "700 ms of layout blows the worker budget"
         );
 
-        // The memory ceiling does not move with the target.
-        assert_eq!(native[1], wasm[1]);
+        // Parse and the memory ceiling do not move with the target.
+        assert_eq!(native[0], wasm[0]);
+        assert_eq!(native[2], wasm[2]);
     }
 }
