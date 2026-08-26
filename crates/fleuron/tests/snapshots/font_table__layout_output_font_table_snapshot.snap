@@ -10,7 +10,92 @@ expression: "(output, generics)"
       {
         "family": "eb garamond",
         "name": "EB Garamond Regular",
-        "style": "Regular"
+        "style": "Regular",
+        "attributes": {
+          "italic": false,
+          "weight": 400
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Medium",
+        "style": "Medium",
+        "attributes": {
+          "italic": false,
+          "weight": 500
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond SemiBold",
+        "style": "SemiBold",
+        "attributes": {
+          "italic": false,
+          "weight": 600
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Bold",
+        "style": "Bold",
+        "attributes": {
+          "italic": false,
+          "weight": 700
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond ExtraBold",
+        "style": "ExtraBold",
+        "attributes": {
+          "italic": false,
+          "weight": 800
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Italic",
+        "style": "Italic",
+        "attributes": {
+          "italic": true,
+          "weight": 400
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Medium Italic",
+        "style": "Medium Italic",
+        "attributes": {
+          "italic": true,
+          "weight": 500
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond SemiBold Italic",
+        "style": "SemiBold Italic",
+        "attributes": {
+          "italic": true,
+          "weight": 600
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond Bold Italic",
+        "style": "Bold Italic",
+        "attributes": {
+          "italic": true,
+          "weight": 700
+        }
+      },
+      {
+        "family": "eb garamond",
+        "name": "EB Garamond ExtraBold Italic",
+        "style": "ExtraBold Italic",
+        "attributes": {
+          "italic": true,
+          "weight": 800
+        }
       }
     ],
     "warnings": []

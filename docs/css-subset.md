@@ -93,6 +93,23 @@ resolves is registered under the family the sheet declared, not the one
 inside the file. A face that resolves nowhere is a warning, and text
 falls back to the next family in the list.
 
+A variable file registers one face per named instance, so a family
+declared once holds every cut the file names. Declaring `font-style` or
+`font-weight` overrides that: the sheet has said what this source is,
+and it registers as that one cut.
+
+## Font matching
+
+`font-family` is tried in order and the first registered family answers.
+Within it, slope decides before weight: a family with an italic cut
+never answers an italic request with the upright one. Weight then
+follows CSS, which looks up before it looks down between 400 and 500 and
+away from that range elsewhere.
+
+Nothing is synthesised. A family with no italic cut lays out upright and
+says so, and a stack that resolves nothing falls back to the first
+registered face and says that.
+
 ## Not in the subset
 
 Colour, backgrounds, borders, padding, floats, tables, grid, flexbox,

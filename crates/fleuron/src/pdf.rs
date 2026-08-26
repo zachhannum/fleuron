@@ -14,7 +14,7 @@ use krilla::geom::{PathBuilder, Point, Rect};
 use krilla::metadata::Metadata as PdfMetadata;
 use krilla::page::PageSettings;
 use krilla::surface::Surface;
-use krilla::text::{Font, GlyphId, KrillaGlyph};
+use krilla::text::{Font, GlyphId, KrillaGlyph, Tag};
 use krilla::{Document, SerializeSettings};
 
 use crate::LayoutOutput;
@@ -73,6 +73,10 @@ fn write_with(
 /// Every registered face as a krilla font, indexed by `font_id`.
 /// krilla subsets on write, so a face nothing draws with costs
 /// nothing.
+///
+/// A face off its family's default location embeds as that instance:
+/// the outlines a reader gets are the ones the shaper measured, not
+/// the whole axis.
 fn embed_fonts(registry: &FontRegistry) -> Result<Vec<Font>, PdfError> {
     (0..registry.len() as u16)
         .map(|id| {
@@ -83,7 +87,13 @@ fn embed_fonts(registry: &FontRegistry) -> Result<Vec<Font>, PdfError> {
                     .unwrap_or_else(|| id.to_string())
             };
             let bytes = registry.bytes(id).ok_or_else(|| PdfError::Font(name()))?;
-            Font::new(bytes.to_vec().into(), 0).ok_or_else(|| PdfError::Font(name()))
+            let variations: Vec<(Tag, f32)> = registry
+                .variations(id)
+                .unwrap_or_default()
+                .iter()
+                .map(|axis| (Tag::new(&axis.tag), axis.value))
+                .collect();
+            Font::new_variable(bytes.into(), 0, &variations).ok_or_else(|| PdfError::Font(name()))
         })
         .collect()
 }

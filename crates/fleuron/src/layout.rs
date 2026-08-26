@@ -915,11 +915,12 @@ mod tests {
         }
     }
 
-    /// The fixture book paginates.
+    /// The fixture book paginates, and its font table is the
+    /// registry's — every cut, indexed by the id a run carries.
     #[test]
     fn fixture_book_paginates() {
         let output = layout_fixture();
         assert!(!output.pages.is_empty());
-        assert_eq!(output.fonts.len(), 1);
+        assert_eq!(output.fonts.len(), registry().len());
     }
 }

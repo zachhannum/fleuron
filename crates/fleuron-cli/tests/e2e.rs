@@ -32,10 +32,10 @@ const STYLED_TRIM: &str = "396 x 612 pts";
 /// The head that sheet paints in the opening page's top margin box.
 const STYLED_HEAD: &str = "STYLED BY FLEURON";
 
-/// SHA-256 of the fixture book's PDF as v0.1 wrote it, before styling
-/// became a compiled stylesheet. The built-in sheet says what the
-/// constants said, so the bytes have not moved.
-const V0_1_PDF: &str = "03a92971e3a5924e1fd4fd6d5bf85c9efb10b6353a58078c3cb2ca06233bb927";
+/// SHA-256 of the fixture book's PDF under the built-in sheet alone.
+/// Layout is deterministic, so these bytes are a fact about the
+/// pipeline: a digest that moves is a change someone meant to make.
+const DEFAULT_PDF: &str = "c2345dfe50aedd4ffcebc4da16bea5ec5ce922fc0bd482134cbbcaa5a1d843fc";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -52,16 +52,15 @@ fn the_fixture_book_renders_a_pdf() {
     );
 }
 
-/// The built-in sheet alone reproduces v0.1 byte for byte: the
-/// defaults moved into CSS without moving a glyph.
+/// The built-in sheet writes the bytes it is checked in as writing.
 #[test]
-fn the_default_sheet_writes_the_pdf_v0_1_wrote() {
+fn the_default_sheet_writes_the_checked_in_bytes() {
     let (pdf, _) = render("identical", &[]);
     let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
     assert_eq!(
         sha256(&bytes),
-        V0_1_PDF,
-        "the fixture book's PDF is no longer v0.1's",
+        DEFAULT_PDF,
+        "the fixture book's PDF is not the one checked in",
     );
 }
 
@@ -74,7 +73,7 @@ fn author_css_reaches_the_pdf() {
     let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
     assert_ne!(
         sha256(&bytes),
-        V0_1_PDF,
+        DEFAULT_PDF,
         "a larger body size changed nothing",
     );
     let pages: usize = stderr
@@ -101,7 +100,7 @@ fn unsupported_css_is_reported_and_the_run_continues() {
     assert!(stderr.contains(":2:3"), "no source position: {stderr}");
     assert_eq!(
         sha256(&std::fs::read(&pdf).expect("the CLI wrote its output")),
-        V0_1_PDF,
+        DEFAULT_PDF,
         "a sheet the engine ignored changed the output",
     );
 }
@@ -207,15 +206,23 @@ fn the_styled_page_count_is_what_the_layout_says() {
 /// warning over a PDF that was written anyway.
 #[test]
 fn font_faces_resolve_through_the_host_and_say_when_they_cannot() {
-    let face = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fleuron/fonts/EBGaramond-VF.ttf");
-    assert!(face.exists(), "the bundled face is checked in");
+    let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fleuron/fonts");
+    let roman = fonts.join("EBGaramond-VF.ttf");
+    let italic = fonts.join("EBGaramond-Italic-VF.ttf");
+    assert!(
+        roman.exists() && italic.exists(),
+        "the faces are checked in"
+    );
 
     let resolved = write_sheet(
         "face-found",
         &format!(
             "@font-face {{ font-family: \"Host Serif\"; src: url(\"{}\") }}\n\
+             @font-face {{ font-family: \"Host Serif\"; font-style: italic; \
+             src: url(\"{}\") }}\n\
              p {{ font-family: \"Host Serif\", serif }}\n",
-            face.display()
+            roman.display(),
+            italic.display(),
         ),
     );
     let (pdf, stderr) = render("face-found", &[resolved.as_path()]);
@@ -243,8 +250,30 @@ fn font_faces_resolve_through_the_host_and_say_when_they_cannot() {
     );
     assert_eq!(
         sha256(&std::fs::read(&pdf).expect("the CLI wrote its output")),
-        V0_1_PDF,
+        DEFAULT_PDF,
         "falling back to the bundled face should lay the book out unchanged",
+    );
+}
+
+/// Emphasis is a face, not a slant: the fixture book's italic
+/// passages embed the italic cut beside the roman, and the prose
+/// still comes back through `pdftotext` with both of them there.
+#[test]
+fn emphasis_embeds_a_second_face_and_keeps_every_word() {
+    let (pdf, _) = render("emphasis", &[]);
+    if let Some(fonts) = tool("pdffonts", &[pdf.as_os_str()]) {
+        let listed = String::from_utf8_lossy(&fonts.stdout);
+        for cut in ["EBGaramond-Regular", "EBGaramond-Italic"] {
+            assert!(listed.contains(cut), "no {cut} in:\n{listed}");
+        }
+    }
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    assert_eq!(
+        squeeze(&strip_furniture(&text, None)),
+        squeeze(&laid_out_text(&fixture_book())),
+        "the italic passages did not survive the round trip",
     );
 }
 
