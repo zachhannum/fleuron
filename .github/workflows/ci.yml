@@ -26,16 +26,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install PDF validation tools
         run: sudo apt-get update && sudo apt-get install -y qpdf poppler-utils
-      - name: Build CLI
-        run: cargo build -p fleuron-cli --release
-      - name: Run fixture book through the pipeline
-        run: target/release/fleuron fixtures/book.json -o out.pdf
-      - name: Structural check
-        run: qpdf --check out.pdf
-      - name: Text round-trip check
-        run: |
-          pdftotext out.pdf out.txt
-          test "$(wc -w < out.txt)" -gt 0
+      - name: Fixture book in, validated PDF out
+        env:
+          FLEURON_E2E_REQUIRE_TOOLS: "1"
+        run: cargo test -p fleuron-cli --release --test e2e
 
   # Warns, does not fail: a shared runner's clock is evidence of a trend,
   # not of a regression. `--strict` is the switch to throw once the
