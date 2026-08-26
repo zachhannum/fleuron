@@ -300,9 +300,139 @@ pub enum Align {
 pub enum Content {
     /// Nothing: the box is not generated.
     None,
-    /// The page's own number.
-    PageNumber,
+    /// The page's own folio, spelled as the style names.
+    Counter(CounterStyle),
+    /// A running string, as it stood at the page's start. A string
+    /// nothing has set yet paints nothing.
+    String(String),
     /// A literal string.
+    Text(String),
+}
+
+/// How a counter's value is spelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CounterStyle {
+    /// `1`, `2`, `3`
+    Decimal,
+    /// `i`, `ii`, `iii`
+    LowerRoman,
+    /// `I`, `II`, `III`
+    UpperRoman,
+    /// `a`, `b`, `c`
+    LowerAlpha,
+    /// `A`, `B`, `C`
+    UpperAlpha,
+}
+
+impl CounterStyle {
+    /// The CSS keyword.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            CounterStyle::Decimal => "decimal",
+            CounterStyle::LowerRoman => "lower-roman",
+            CounterStyle::UpperRoman => "upper-roman",
+            CounterStyle::LowerAlpha => "lower-alpha",
+            CounterStyle::UpperAlpha => "upper-alpha",
+        }
+    }
+
+    /// Parses one of the keywords, or `None` for a style outside the
+    /// subset.
+    pub fn parse(keyword: &str) -> Option<CounterStyle> {
+        [
+            CounterStyle::Decimal,
+            CounterStyle::LowerRoman,
+            CounterStyle::UpperRoman,
+            CounterStyle::LowerAlpha,
+            CounterStyle::UpperAlpha,
+        ]
+        .into_iter()
+        .find(|style| style.keyword().eq_ignore_ascii_case(keyword))
+    }
+
+    /// One value as this style spells it. A value the style has no
+    /// spelling for — nothing before `i`, nothing past `mmmcmxcix` —
+    /// falls back to decimal, as CSS asks.
+    pub fn format(self, value: u32) -> String {
+        match self {
+            CounterStyle::Decimal => value.to_string(),
+            CounterStyle::LowerRoman => roman(value).unwrap_or_else(|| value.to_string()),
+            CounterStyle::UpperRoman => roman(value)
+                .map(|numeral| numeral.to_uppercase())
+                .unwrap_or_else(|| value.to_string()),
+            CounterStyle::LowerAlpha => alpha(value).unwrap_or_else(|| value.to_string()),
+            CounterStyle::UpperAlpha => alpha(value)
+                .map(|letters| letters.to_uppercase())
+                .unwrap_or_else(|| value.to_string()),
+        }
+    }
+}
+
+/// Roman numerals, lowercase, over the range they have spellings for.
+fn roman(value: u32) -> Option<String> {
+    const NUMERALS: [(u32, &str); 13] = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+    if !(1..4000).contains(&value) {
+        return None;
+    }
+    let mut left = value;
+    let mut numeral = String::new();
+    for (amount, digits) in NUMERALS {
+        while left >= amount {
+            numeral.push_str(digits);
+            left -= amount;
+        }
+    }
+    Some(numeral)
+}
+
+/// Bijective base 26, lowercase: `a`…`z`, `aa`…
+fn alpha(value: u32) -> Option<String> {
+    if value == 0 {
+        return None;
+    }
+    let mut left = value;
+    let mut letters = Vec::new();
+    while left > 0 {
+        let digit = (left - 1) % 26;
+        letters.push(b'a' + digit as u8);
+        left = (left - 1) / 26;
+    }
+    letters.reverse();
+    Some(String::from_utf8(letters).expect("ascii letters"))
+}
+
+/// One `string-set` entry: a named string, and what the element sets
+/// it to when the flow reaches it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct StringSet {
+    /// The string's name, as `string()` asks for it.
+    pub name: String,
+    /// The pieces the value is built from, concatenated.
+    pub value: Vec<StringPiece>,
+}
+
+/// One piece of a `string-set` value.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StringPiece {
+    /// `content()`: the element's own text.
+    Content,
+    /// A literal.
     Text(String),
 }
 
@@ -323,6 +453,8 @@ pub enum Declaration {
     Widows(u16),
     Page(Option<String>),
     Content(Content),
+    StringSet(Vec<StringSet>),
+    CounterReset(Option<u32>),
     InitialLetter(u16),
     Margin(Edge, Length),
     BreakBefore(Break),
@@ -395,6 +527,15 @@ pub struct ComputedStyle {
     /// What the element paints in place of children it has none of:
     /// the ornament a thematic break is set with.
     pub content: Content,
+    /// The named strings this element sets when the flow reaches it,
+    /// from `string-set`. This is where a running head's text comes
+    /// from.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub string_set: Vec<StringSet>,
+    /// The folio the page this element opens takes, from
+    /// `counter-reset: page`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counter_reset: Option<u32>,
     /// Lines an initial letter is sunk over, from `initial-letter`.
     /// Fewer than two is no drop cap.
     pub initial_letter: u16,
@@ -426,6 +567,8 @@ impl ComputedStyle {
             widows: 2,
             page: None,
             content: Content::None,
+            string_set: Vec::new(),
+            counter_reset: None,
             initial_letter: 0,
             margin: Edges::all(0.0),
             break_before: Break::Auto,
@@ -440,6 +583,8 @@ impl ComputedStyle {
         ComputedStyle {
             margin: Edges::all(0.0),
             content: Content::None,
+            string_set: Vec::new(),
+            counter_reset: None,
             initial_letter: 0,
             break_before: Break::Auto,
             break_after: Break::Auto,
@@ -471,6 +616,8 @@ impl ComputedStyle {
             Declaration::Widows(lines) => self.widows = *lines,
             Declaration::Page(name) => self.page = name.clone(),
             Declaration::Content(content) => self.content = content.clone(),
+            Declaration::StringSet(sets) => self.string_set = sets.clone(),
+            Declaration::CounterReset(folio) => self.counter_reset = *folio,
             Declaration::InitialLetter(lines) => self.initial_letter = *lines,
             Declaration::Margin(edge, length) => {
                 let points = length.to_points(self.font_size, root_size);
@@ -494,5 +641,27 @@ impl ComputedStyle {
             size: self.font_size,
             line_height: self.line_height,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Folios spell out in every style the subset carries, and a
+    /// value a style has no spelling for falls back to decimal.
+    #[test]
+    fn counter_styles_spell_their_values() {
+        let spell = |style: CounterStyle, values: [u32; 4]| {
+            values.map(|value| style.format(value)).join(" ")
+        };
+        assert_eq!(spell(CounterStyle::Decimal, [1, 4, 9, 40]), "1 4 9 40");
+        assert_eq!(spell(CounterStyle::LowerRoman, [1, 4, 9, 40]), "i iv ix xl");
+        assert_eq!(spell(CounterStyle::UpperRoman, [1, 4, 9, 40]), "I IV IX XL");
+        assert_eq!(spell(CounterStyle::LowerAlpha, [1, 4, 26, 27]), "a d z aa");
+        assert_eq!(spell(CounterStyle::UpperAlpha, [1, 4, 26, 27]), "A D Z AA");
+        assert_eq!(CounterStyle::LowerRoman.format(0), "0");
+        assert_eq!(CounterStyle::LowerRoman.format(4000), "4000");
+        assert_eq!(CounterStyle::LowerAlpha.format(0), "0");
     }
 }

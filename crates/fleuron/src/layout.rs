@@ -18,6 +18,7 @@
 //! allowed.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use crate::content::{Block, Book, Inline, NodeId, Section, origin};
 use crate::fonts::FontRegistry;
@@ -26,7 +27,7 @@ use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, 
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::style::{
     Align, Band, Break, ComputedStyle, Content, Hyphens, MarginBox, MarginBoxStyle, PageQuery,
-    PageStyle, Situation, StyleTree, TextAlign,
+    PageStyle, Situation, StringPiece, StyleTree, TextAlign,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -132,6 +133,35 @@ pub struct Fragment {
     pub break_before: BreakPoint,
     /// What it paints.
     pub piece: Piece,
+    /// What it tells the page furniture when it lands. Boxed because
+    /// a book has thousands of fragments and a handful of chapter
+    /// headings.
+    pub marks: Option<Box<Marks>>,
+}
+
+/// What a fragment tells the page it lands on: the running strings
+/// its element set, and the folio its page restarts at.
+///
+/// Both are captured from the content flow, so both are answers only
+/// pagination has: which page a heading fell on is not known until it
+/// falls there.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Marks {
+    /// Named strings, resolved from the element's own text, in the
+    /// order the cascade gave them.
+    pub strings: Vec<(String, String)>,
+    /// The folio the page carrying this fragment takes.
+    pub page_number: Option<u32>,
+}
+
+/// The running strings in force, by name.
+type Strings = BTreeMap<String, String>;
+
+/// What one page's furniture resolves its content against: the folio
+/// the page counted to, and the running strings it opened with.
+struct Furniture<'a> {
+    folio: u32,
+    strings: &'a Strings,
 }
 
 /// What one page needs to know to ask the style tree for its master:
@@ -226,9 +256,11 @@ impl<'a> Paginator<'a> {
             fragments: Vec::new(),
             pending: BreakPoint::Allowed,
             lead: 0.0,
+            pending_marks: None,
         };
         let style = self.styles.style(section.id);
         builder.ask(style.break_before);
+        builder.mark(style, &[]);
         builder.lead = style.margin.top;
         builder.blocks(
             &section.blocks,
@@ -252,11 +284,25 @@ impl<'a> Paginator<'a> {
     /// Settles numbering and side once the whole flow is assembled,
     /// then paints each page's margin boxes: a folio's digits are not
     /// known until the pages before it are.
-    fn number_and_paint(&self, pages: &mut [Page], slots: &[PageSlot]) {
-        for ((index, page), slot) in pages.iter_mut().enumerate().zip(slots) {
-            page.number = index as u32 + 1;
-            page.side = Side::of_number(page.number);
-            let master = self.styles.page(slot.query(page.side));
+    ///
+    /// The folio counts pages, and `counter-reset: page` restarts it
+    /// where a section asked; the side counts leaves, and nothing
+    /// restarts that — recto and verso are where a page falls in the
+    /// sheet, not what is printed on it.
+    ///
+    /// A page inserted to square the sheet paints no furniture. A
+    /// blank leaf is blank: a page whose only content would be a
+    /// running head does not carry one.
+    fn number_and_paint(&self, pages: &mut [Page], infos: &[PageInfo]) {
+        let mut folio = 0;
+        for ((index, page), info) in pages.iter_mut().enumerate().zip(infos) {
+            folio = info.reset.unwrap_or(folio + 1);
+            page.number = folio;
+            page.side = Side::of_number(index as u32 + 1);
+            if info.slot.blank {
+                continue;
+            }
+            let master = self.styles.page(info.slot.query(page.side));
             for which in MarginBox::ALL {
                 let Some(box_style) = master.margin_box(which) else {
                     continue;
@@ -264,7 +310,11 @@ impl<'a> Paginator<'a> {
                 let Some((band, align)) = which.band() else {
                     continue;
                 };
-                self.paint_margin_box(page, master, box_style, band, align);
+                let furniture = Furniture {
+                    folio,
+                    strings: &info.strings,
+                };
+                self.paint_margin_box(page, master, box_style, band, align, furniture);
             }
         }
     }
@@ -279,12 +329,17 @@ impl<'a> Paginator<'a> {
         box_style: &MarginBoxStyle,
         band: Band,
         align: Align,
+        furniture: Furniture<'_>,
     ) {
         let text = match &box_style.content {
             Content::None => return,
-            Content::PageNumber => page.number.to_string(),
+            Content::Counter(counter) => counter.format(furniture.folio),
+            Content::String(name) => furniture.strings.get(name).cloned().unwrap_or_default(),
             Content::Text(text) => text.clone(),
         };
+        if text.is_empty() {
+            return;
+        }
         let style = box_style.style.paragraph();
         let Some(line) = self.line_of(&text, style) else {
             return;
@@ -421,6 +476,9 @@ struct Builder<'a, 'p> {
     pending: BreakPoint,
     /// Space carried down from the last block's bottom margin.
     lead: f32,
+    /// What the blocks opened so far have set, waiting for a fragment
+    /// to carry it onto a page.
+    pending_marks: Option<Box<Marks>>,
 }
 
 impl Builder<'_, '_> {
@@ -441,12 +499,44 @@ impl Builder<'_, '_> {
         };
     }
 
-    /// Opens a block: what it asks for above itself, and the space
-    /// its top margin leaves. Adjacent margins collapse to the larger.
-    fn open(&mut self, style: &ComputedStyle) -> usize {
+    /// Opens a block: what it asks for above itself, what it sets for
+    /// the page furniture, and the space its top margin leaves.
+    /// Adjacent margins collapse to the larger.
+    fn open(&mut self, style: &ComputedStyle, inlines: &[Inline]) -> usize {
         self.ask(style.break_before);
+        self.mark(style, inlines);
         self.lead = self.lead.max(style.margin.top);
         self.fragments.len()
+    }
+
+    /// Resolves what one element sets — its `string-set` values, the
+    /// folio its page takes — against its own text. It lands on the
+    /// first fragment the element emits, which is the fragment whose
+    /// page the element is on.
+    ///
+    /// An element that emits nothing hands what it set to whatever
+    /// comes next: a string set by an empty heading is still set.
+    fn mark(&mut self, style: &ComputedStyle, inlines: &[Inline]) {
+        if style.string_set.is_empty() && style.counter_reset.is_none() {
+            return;
+        }
+        let mut text = None;
+        let marks = self.pending_marks.get_or_insert_with(Box::default);
+        for set in &style.string_set {
+            let mut value = String::new();
+            for piece in &set.value {
+                match piece {
+                    StringPiece::Content => {
+                        value.push_str(text.get_or_insert_with(|| flatten(inlines)))
+                    }
+                    StringPiece::Text(literal) => value.push_str(literal),
+                }
+            }
+            marks.strings.push((set.name.clone(), value));
+        }
+        if let Some(folio) = style.counter_reset {
+            marks.page_number = Some(folio);
+        }
     }
 
     /// Closes a block: `break-inside: avoid` glues everything it
@@ -477,14 +567,15 @@ impl Builder<'_, '_> {
     /// cascade asked for above it and the space its margins left; the
     /// rest carry what the block says about splitting itself.
     fn emit(&mut self, first: &mut bool, inner: BreakPoint, x: f32, height: f32, piece: Piece) {
-        let (break_before, lead) = if *first {
+        let (break_before, lead, marks) = if *first {
             *first = false;
             (
                 std::mem::replace(&mut self.pending, BreakPoint::Allowed),
                 std::mem::take(&mut self.lead),
+                self.pending_marks.take(),
             )
         } else {
-            (inner, 0.0)
+            (inner, 0.0, None)
         };
         self.fragments.push(Fragment {
             x,
@@ -492,6 +583,7 @@ impl Builder<'_, '_> {
             height,
             break_before,
             piece,
+            marks,
         });
     }
 
@@ -505,7 +597,7 @@ impl Builder<'_, '_> {
                 }
                 Block::Blockquote { id, blocks, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style);
+                    let start = self.open(&style, &[]);
                     self.blocks(
                         blocks,
                         x + style.margin.left,
@@ -515,7 +607,7 @@ impl Builder<'_, '_> {
                 }
                 Block::ThematicBreak { id, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style);
+                    let start = self.open(&style, &[]);
                     self.ornament(&style, x, measure);
                     self.close(&style, start);
                 }
@@ -523,7 +615,7 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style);
+                    let start = self.open(&style, &[]);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
                 }
@@ -535,7 +627,7 @@ impl Builder<'_, '_> {
     /// first of them, and where a page may end between them.
     fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
         let computed = self.styles().style(id).clone();
-        let start = self.open(&computed);
+        let start = self.open(&computed, inlines);
         let x = x + computed.margin.left;
         let measure = measure - computed.margin.left - computed.margin.right;
 
@@ -760,6 +852,24 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
     }
 }
 
+/// One element's text, as `content()` reads it: every inline it
+/// holds, run together.
+fn flatten(inlines: &[Inline]) -> String {
+    let mut text = String::new();
+    fn walk(inlines: &[Inline], text: &mut String) {
+        for inline in inlines {
+            match inline {
+                Inline::Text { value, .. } | Inline::Code { value, .. } => text.push_str(value),
+                Inline::Emphasis { children, .. }
+                | Inline::Strong { children, .. }
+                | Inline::Link { children, .. } => walk(children, text),
+            }
+        }
+    }
+    walk(inlines, &mut text);
+    text
+}
+
 /// Splits the first character off a run of inlines, wherever the
 /// markup has put it: a paragraph opening in italic still opens with
 /// a letter.
@@ -801,6 +911,17 @@ struct Placed {
     break_before: BreakPoint,
     /// What it paints, already positioned on this page.
     items: Vec<DrawItem>,
+    /// What it sets for the furniture of whichever page it ends on.
+    marks: Option<Box<Marks>>,
+}
+
+/// What one finished page knows about itself: the master to ask for,
+/// the running strings as they stood when it opened, and the folio it
+/// restarts at.
+struct PageInfo {
+    slot: PageSlot,
+    strings: Strings,
+    reset: Option<u32>,
 }
 
 /// The flow: fragments in, pages out.
@@ -812,9 +933,13 @@ struct Placed {
 struct Flow<'a, 'p> {
     paginator: &'p Paginator<'a>,
     pages: Vec<Page>,
-    slots: Vec<PageSlot>,
+    infos: Vec<PageInfo>,
     placed: Vec<Placed>,
     slot: PageSlot,
+    /// The running strings as the page being built opened. The flow
+    /// only advances them when a page closes, so this is what
+    /// `string()` reads.
+    strings: Strings,
     /// The slot the next page opens with: a section waiting for a
     /// page of its own.
     pending_slot: Option<PageSlot>,
@@ -835,9 +960,10 @@ impl<'a, 'p> Flow<'a, 'p> {
         Flow {
             paginator,
             pages: Vec::new(),
-            slots: Vec::new(),
+            infos: Vec::new(),
             placed: Vec::new(),
             slot,
+            strings: Strings::new(),
             pending_slot: None,
             cursor: 0.0,
             height,
@@ -970,24 +1096,41 @@ impl<'a, 'p> Flow<'a, 'p> {
             height: fragment.height,
             break_before: fragment.break_before,
             items,
+            marks: fragment.marks.clone(),
         });
     }
 
     /// Ends the page being built, if anything is on it.
+    ///
+    /// What the page's fragments set takes effect here, not where
+    /// they were placed: a fragment carried onto the next page sets
+    /// its strings there instead, so a page's furniture only ever
+    /// reads what stood on it.
     fn close(&mut self) {
         if self.placed.is_empty() {
             return;
         }
-        let items = self
-            .placed
-            .drain(..)
-            .flat_map(|placed| placed.items)
-            .collect();
+        let opened = self.strings.clone();
+        let mut reset = None;
+        let mut items = Vec::new();
+        for placed in self.placed.drain(..) {
+            if let Some(marks) = placed.marks {
+                for (name, value) in marks.strings {
+                    self.strings.insert(name, value);
+                }
+                reset = reset.or(marks.page_number);
+            }
+            items.extend(placed.items);
+        }
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);
         page.items = items;
         self.pages.push(page);
-        self.slots.push(self.slot.clone());
+        self.infos.push(PageInfo {
+            slot: self.slot.clone(),
+            strings: opened,
+            reset,
+        });
         self.slot = self.pending_slot.take().unwrap_or(PageSlot {
             first: false,
             ..self.slot.clone()
@@ -1005,7 +1148,11 @@ impl<'a, 'p> Flow<'a, 'p> {
                 blank: true,
             };
             self.pages.push(self.paginator.blank_page(&blank));
-            self.slots.push(blank);
+            self.infos.push(PageInfo {
+                slot: blank,
+                strings: self.strings.clone(),
+                reset: None,
+            });
         }
         self.remaster();
     }
@@ -1030,7 +1177,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn finish(mut self) -> Vec<Page> {
         self.close();
         self.paginator
-            .number_and_paint(&mut self.pages, &self.slots);
+            .number_and_paint(&mut self.pages, &self.infos);
         self.pages
     }
 }

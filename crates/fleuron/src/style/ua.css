@@ -43,6 +43,14 @@ hr {
   break-after: avoid;
 }
 
+/* A section's opening heading is its chapter title, and travels as a
+   named string so a running head can pick it up with
+   string(chapter). Where that shows is the author's business; that
+   there is something to show is not. */
+section > :is(h1, h2, h3, h4, h5, h6):first-child {
+  string-set: chapter content();
+}
+
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
@@ -69,12 +77,9 @@ code { font-family: monospace }
   margin-right: 42pt;
 }
 
-/* A chapter's opening page counts but does not show its folio, and
-   neither does a blank inserted to square the sheet. */
+/* A chapter's opening page counts but does not show its folio. A
+   blank inserted to square the sheet counts too, and paints nothing
+   at all: that rule is the engine's, not this sheet's. */
 @page chapter:first {
-  @bottom-center { content: none }
-}
-
-@page :blank {
   @bottom-center { content: none }
 }

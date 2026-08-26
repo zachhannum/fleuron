@@ -18,8 +18,8 @@ use crate::fonts::GenericFamily;
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
-    Break, Content, Declaration, Edge, Family, FontStyle, Hyphens, Length, LineHeight, MarginBox,
-    TextAlign,
+    Break, Content, CounterStyle, Declaration, Edge, Family, FontStyle, Hyphens, Length,
+    LineHeight, MarginBox, StringPiece, StringSet, TextAlign,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -520,6 +520,8 @@ fn property<'i>(
         "widows" => one(Declaration::Widows(keyword_or(input, count, bad)?)),
         "page" => one(Declaration::Page(keyword_or(input, page_name, bad)?)),
         "content" => one(Declaration::Content(keyword_or(input, ornament, bad)?)),
+        "string-set" => one(Declaration::StringSet(keyword_or(input, string_set, bad)?)),
+        "counter-reset" => one(Declaration::CounterReset(keyword_or(input, counter_reset, bad)?)),
         "initial-letter" => one(Declaration::InitialLetter(keyword_or(input, count, bad)?)),
         "margin" => Ok(edges(input)
             .ok_or_else(|| input.new_custom_error(bad()))?
@@ -599,6 +601,74 @@ fn ornament(input: &mut Parser<'_, '_>) -> Option<Content> {
         .ok()?
         .eq_ignore_ascii_case("none")
         .then_some(Content::None)
+}
+
+/// `string-set: none | <name> [content() | <string>]+ [, …]`. What a
+/// running head picks up: the element's own text, literals, or both.
+fn string_set(input: &mut Parser<'_, '_>) -> Option<Vec<StringSet>> {
+    if input.try_parse(none_keyword).is_ok() {
+        return Some(Vec::new());
+    }
+    let mut sets = Vec::new();
+    loop {
+        let name = input.expect_ident().ok()?.as_ref().to_string();
+        let mut value = Vec::new();
+        loop {
+            if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
+                value.push(StringPiece::Text(text.as_ref().to_string()));
+            } else if input.try_parse(content_function).is_ok() {
+                value.push(StringPiece::Content);
+            } else {
+                break;
+            }
+        }
+        if value.is_empty() {
+            return None;
+        }
+        sets.push(StringSet { name, value });
+        if input.try_parse(|input| input.expect_comma()).is_err() {
+            return Some(sets);
+        }
+    }
+}
+
+/// `counter-reset: none | page <integer>?`. The page counter is the
+/// only one there is, and the value is the folio the page this
+/// element opens takes.
+fn counter_reset(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
+    let keyword = input.expect_ident().ok()?.clone();
+    if keyword.eq_ignore_ascii_case("none") {
+        return Some(None);
+    }
+    if !keyword.eq_ignore_ascii_case("page") {
+        return None;
+    }
+    let folio = input.try_parse(|input| input.expect_integer()).unwrap_or(1);
+    Some(Some(folio.max(0) as u32))
+}
+
+/// `content()`, the element's own text, with no argument list the
+/// engine has a second answer for.
+fn content_function<'i>(input: &mut Parser<'i, '_>) -> Result<(), ParseError<'i, StyleError<'i>>> {
+    let function = input.expect_function()?.clone();
+    if !function.eq_ignore_ascii_case("content") {
+        return Err(input.new_custom_error(StyleError::UnsupportedValue(function)));
+    }
+    input.parse_nested_block(|input| {
+        input
+            .expect_exhausted()
+            .map_err(ParseError::<StyleError<'_>>::from)
+    })
+}
+
+/// The `none` keyword, consumed only when that is what is there.
+fn none_keyword<'i>(input: &mut Parser<'i, '_>) -> Result<(), ParseError<'i, StyleError<'i>>> {
+    let keyword = input.expect_ident()?.clone();
+    if keyword.eq_ignore_ascii_case("none") {
+        Ok(())
+    } else {
+        Err(input.new_custom_error(StyleError::UnsupportedValue(keyword)))
+    }
 }
 
 fn count(input: &mut Parser<'_, '_>) -> Option<u16> {
@@ -861,7 +931,8 @@ impl<'i> RuleBodyItemParser<'i, Vec<MarginDeclaration>, StyleError<'i>> for Marg
     }
 }
 
-/// What a margin box paints: nothing, the page number, or a literal.
+/// What a margin box paints: nothing, the folio, a running string, or
+/// a literal.
 fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
     if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
         return Some(Content::Text(text.as_ref().to_string()));
@@ -871,19 +942,38 @@ fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
             .eq_ignore_ascii_case("none")
             .then_some(Content::None);
     }
-    // `counter(page)`: the folio, and the only counter there is.
     let function = input.expect_function().ok()?.clone();
-    if !function.eq_ignore_ascii_case("counter") {
-        return None;
+    // `counter(page)`: the folio, and the only counter there is.
+    if function.eq_ignore_ascii_case("counter") {
+        return input
+            .parse_nested_block(|input| {
+                input.expect_ident_matching("page")?;
+                let style = match input.try_parse(|input| input.expect_comma()) {
+                    Ok(()) => {
+                        let keyword = input.expect_ident()?.clone();
+                        CounterStyle::parse(&keyword).ok_or_else(|| {
+                            input.new_custom_error(StyleError::UnsupportedValue(keyword))
+                        })?
+                    }
+                    Err(_) => CounterStyle::Decimal,
+                };
+                Ok::<_, ParseError<'_, StyleError<'_>>>(Content::Counter(style))
+            })
+            .ok();
     }
-    input
-        .parse_nested_block(|input| {
-            input
-                .expect_ident_matching("page")
-                .map(|_| Content::PageNumber)
-                .map_err(ParseError::<StyleError<'_>>::from)
-        })
-        .ok()
+    // `string(name)`: the running string, as it stood at the page's
+    // start.
+    if function.eq_ignore_ascii_case("string") {
+        return input
+            .parse_nested_block(|input| {
+                input
+                    .expect_ident()
+                    .map(|name| Content::String(name.as_ref().to_string()))
+                    .map_err(ParseError::<StyleError<'_>>::from)
+            })
+            .ok();
+    }
+    None
 }
 
 /// `size`: one or two lengths, or a named sheet with an orientation.

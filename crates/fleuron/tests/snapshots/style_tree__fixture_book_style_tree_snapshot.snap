@@ -82,6 +82,14 @@ expression: tree
       "widows": 2,
       "page": "chapter",
       "content": "none",
+      "string_set": [
+        {
+          "name": "chapter",
+          "value": [
+            "content"
+          ]
+        }
+      ],
       "initial_letter": 0,
       "margin": {
         "top": 0.0,
@@ -179,6 +187,35 @@ expression: tree
         "left": 0.0
       },
       "break_before": "avoid",
+      "break_after": "avoid",
+      "break_inside": "auto"
+    },
+    {
+      "font_id": 0,
+      "font_family": [
+        {
+          "generic": "serif"
+        }
+      ],
+      "font_size": 18.0,
+      "font_style": "normal",
+      "font_weight": 400,
+      "line_height": 1.4,
+      "text_align": "left",
+      "text_indent": 0.0,
+      "hyphens": "none",
+      "orphans": 2,
+      "widows": 2,
+      "page": "chapter",
+      "content": "none",
+      "initial_letter": 0,
+      "margin": {
+        "top": 0.0,
+        "right": 0.0,
+        "bottom": 0.0,
+        "left": 0.0
+      },
+      "break_before": "auto",
       "break_after": "avoid",
       "break_inside": "auto"
     },
@@ -341,7 +378,7 @@ expression: tree
     {
       "id": 55,
       "element": "h2",
-      "style": 2
+      "style": 6
     },
     {
       "id": 57,
@@ -386,7 +423,7 @@ expression: tree
     {
       "id": 74,
       "element": "blockquote",
-      "style": 6
+      "style": 7
     },
     {
       "id": 75,
@@ -436,7 +473,7 @@ expression: tree
     {
       "id": 96,
       "element": "h2",
-      "style": 2
+      "style": 6
     },
     {
       "id": 98,
@@ -579,7 +616,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -632,7 +671,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -685,7 +726,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -738,7 +781,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -789,7 +834,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "none",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -948,7 +995,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -1001,7 +1050,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "page_number",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
@@ -1052,7 +1103,9 @@ expression: tree
         "boxes": [
           {
             "which": "bottom-center",
-            "content": "none",
+            "content": {
+              "counter": "decimal"
+            },
             "style": {
               "font_id": 0,
               "font_family": [
