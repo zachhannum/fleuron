@@ -47,9 +47,9 @@ pub mod budget {
     pub const LAYOUT_PEAK: u64 = 32 * 1024 * 1024;
 
     /// The same for a retained session, which is a different
-    /// question. A throwaway pass holds one section's lines at a
-    /// time. A session holds all of them next to the display list,
-    /// and holding them is what saves measuring them again.
+    /// question. A throwaway pass has one section's lines in memory
+    /// at a time. A session has all of them, beside the display
+    /// list, which is what saves measuring them again.
     pub const SESSION_PEAK: u64 = 64 * 1024 * 1024;
 
     /// What a style-only re-render costs a session on a book-scale
@@ -125,8 +125,8 @@ pub struct Report {
     /// A style-only re-render over a retained session, measured with
     /// a sheet that moves the page box.
     pub style_rerender: Duration,
-    /// Bytes a session holds at its peak, over the content tree it
-    /// was handed.
+    /// Bytes a session occupies at its peak, over the content tree
+    /// it was handed.
     pub session_peak: u64,
 }
 
@@ -285,10 +285,10 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         // A session is handed a content tree it then owns, and the
         // ceiling is about what it builds over one, so the tree is
         // cloned before the measurement opens and moved in.
-        let held = book.clone();
+        let owned = book.clone();
         let (mut session, peak) = crate::alloc::measure(|| {
             let mut session = Session::new(registry);
-            session.set_content(held);
+            session.set_content(owned);
             session.preview();
             session
         });
@@ -349,11 +349,11 @@ impl fmt::Display for Report {
                 duration.as_secs_f64() * 1000.0
             )?;
         }
-        for (held, bytes) in [("layout", self.layout_peak), ("session", self.session_peak)] {
+        for (what, bytes) in [("layout", self.layout_peak), ("session", self.session_peak)] {
             writeln!(
                 f,
                 "  {:<14} {:>9.1} MiB peak",
-                held,
+                what,
                 bytes as f64 / (1024.0 * 1024.0)
             )?;
         }

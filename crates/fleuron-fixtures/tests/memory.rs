@@ -5,7 +5,7 @@
 //! process is allocating. A test harness runs its tests on threads
 //! that allocate, and a hundred bytes freed by one of them is enough
 //! to take a reading below the work it was supposed to measure. This
-//! target carries no harness, so it runs on one thread and does one
+//! target has no harness, so it runs on one thread and does one
 //! thing at a time, which is what the numbers need to mean what they
 //! say.
 
@@ -30,8 +30,8 @@ fn main() {
 }
 
 /// The high-water mark follows a live allocation up and survives its
-/// release. The ceiling asks how much was held at once, not how much
-/// is held now.
+/// release. The ceiling asks how much was live at once, not how much
+/// is live now.
 fn a_peak_outlives_the_allocation_that_made_it() {
     let (live_at_peak, peak) = alloc::measure(|| {
         let block: Vec<u8> = vec![7; 4 * 1024 * 1024];
@@ -52,8 +52,8 @@ fn a_peak_outlives_the_allocation_that_made_it() {
 
 /// A book-scale run is bounded: the gate book sets the ~300 pages the
 /// budgets are written against, and lays them out inside both memory
-/// ceilings, the throwaway pass inside its own and a session holding
-/// every stage at once inside the one written for that.
+/// ceilings, the throwaway pass inside its own and a session with
+/// every stage live at once inside the one written for that.
 ///
 /// Timing verdicts stay with the gate binary, which warns rather than
 /// fails. A shared runner's clock is not evidence, but its allocator
@@ -67,13 +67,13 @@ fn a_book_scale_run_stays_inside_the_memory_ceilings() {
     );
     assert!(report.pdf_bytes > 0, "the run painted nothing");
 
-    let held: Vec<gate::Check> = report
+    let ceilings: Vec<gate::Check> = report
         .checks(Target::current())
         .into_iter()
         .filter(|check| check.unit == "MiB")
         .collect();
-    assert_eq!(held.len(), 2, "a memory ceiling went unchecked");
-    for peak in held {
+    assert_eq!(ceilings.len(), 2, "a memory ceiling went unchecked");
+    for peak in ceilings {
         assert!(peak.passed(), "{peak}");
     }
 }

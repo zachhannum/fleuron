@@ -32,7 +32,7 @@ Break decisions fall out of the layout pass itself, which is most of why a 333-p
 
 ## Three ways in
 
-**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. One call lays a book out, and a [session](library/sessions.md) keeps the stages between edits so that a preview re-runs only what changed. Start at the [library quickstart](library/quickstart.md).
+**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. One call lays a book out, and a [session](library/sessions.md) makes a preview re-run only the stages an edit changed. Start at the [library quickstart](library/quickstart.md).
 
 **A command-line binary.** `fleuron` reads a content tree and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
 

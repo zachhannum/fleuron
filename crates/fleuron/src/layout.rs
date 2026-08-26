@@ -35,7 +35,7 @@ use crate::{LayoutOutput, Warning};
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.
 ///
-/// A single run over a session that retains nothing. It holds one
+/// A single run over a session that retains nothing. It keeps one
 /// section's lines at a time, which is what a process that renders a
 /// book once and exits wants. A live preview wants `Session`.
 pub fn layout_book(book: &Book, styles: &StyleTree, registry: &FontRegistry) -> LayoutOutput {

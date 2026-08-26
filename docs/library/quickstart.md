@@ -82,7 +82,7 @@ Everything the built-in sheet can be overridden with is in [the CSS subset](../c
 
 ## Laying out again
 
-`layout_book` rebuilds every stage on every call, which is what a program that renders one book and exits wants. A program that lays the same book out over and over, such as a preview beside an editor, wants a [session](sessions.md) instead. It holds each stage's output and re-runs only the ones an edit invalidates, so a change to the page margins costs fragmentation instead of another pass over every line.
+`layout_book` rebuilds every stage on every call, which is what a program that renders one book and exits wants. A program that lays the same book out over and over, such as a preview beside an editor, wants a [session](sessions.md) instead. It remembers what each stage produced and re-runs only the ones an edit invalidates, so a change to the page margins costs fragmentation instead of another pass over every line.
 
 ## Where things go wrong
 

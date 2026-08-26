@@ -5,8 +5,8 @@
 //! rebuilds every stage. A process that renders one book and exits
 //! wants that. A live preview does not, because the common event
 //! there is a small change to one input while the others stand. A
-//! session holds each stage's output and works out the deepest stage
-//! an edit reaches: a colour serves the display list back, page
+//! session retains the output of each stage and works out the deepest
+//! stage an edit reaches: a colour serves the display list back, page
 //! furniture repaints, `@page` geometry re-fragments over cached
 //! lines, and only the measure or the text itself breaks lines
 //! again.
@@ -16,8 +16,8 @@
 //! Line *breaking* is section-local: where the breaks fall depends on
 //! the measure, the face and the text, not on where the section
 //! starts vertically. Line *placement* depends on position and
-//! belongs to fragmentation. So the cache holds breaks, shaped runs
-//! and advances, and holds no page coordinates. An edit to one
+//! belongs to fragmentation. So the cache stores breaks, shaped runs
+//! and advances, and no page coordinates at all. An edit to one
 //! chapter re-breaks that chapter and re-fragments the book, which
 //! for a whole novel costs about what tracking the pages that moved
 //! would.
@@ -26,8 +26,8 @@
 //! than remembered. The first is a uniform measure: masters that
 //! resolve different content widths make breaking depend on which
 //! page a line lands on. The second is that no inline text depends
-//! on pagination, which holds because `counter(page)` is legal only
-//! inside a margin box. When either one fails, the session re-breaks
+//! on pagination, which the parser guarantees: `counter(page)` is
+//! legal only inside a margin box. When either one fails, the session re-breaks
 //! everything instead of serving stale lines.
 
 use std::borrow::Cow;
@@ -67,7 +67,7 @@ enum Stale {
     Nothing,
     /// Numbering and margin boxes.
     Paint,
-    /// Fragmentation, over lines that still hold.
+    /// Fragmentation, over lines that survived.
     Flow,
     /// Line breaking, and everything below it.
     Break,
@@ -95,7 +95,7 @@ struct Cached {
 /// ```
 ///
 /// The registry is fixed for the session's life. A computed style
-/// can only resolve to a face the registry already holds, so a sheet
+/// can only resolve to a face already in the registry, so a sheet
 /// that brings its own `@font-face` needs the host to register that
 /// face before the sheet is set.
 pub struct Session<'a> {
@@ -108,14 +108,14 @@ pub struct Session<'a> {
     sheets: Option<Stylesheets>,
     styles: Cow<'a, StyleTree>,
     prints: Prints,
-    /// Whether the preconditions for reusing a section's lines hold.
+    /// Whether the preconditions for reusing a section's lines are met.
     section_local: bool,
     /// Whether the book places an image, which is what makes the
     /// page's height an input to breaking.
     images: bool,
     /// Whether the stages are kept between calls. This is the only
-    /// difference on the one-shot path, which holds one section's
-    /// lines at a time and drops them as they are flowed.
+    /// difference on the one-shot path, which keeps one section's
+    /// lines at a time and drops each as it is flowed.
     retain: bool,
     lines: Vec<Cached>,
     infos: Vec<PageInfo>,
@@ -128,7 +128,7 @@ pub struct Session<'a> {
 }
 
 impl<'a> Session<'a> {
-    /// A session over the faces `registry` holds, with no content and
+    /// A session over the faces in `registry`, with no content and
     /// the built-in sheet alone.
     pub fn new(registry: &'a FontRegistry) -> Session<'a> {
         Session::with_assets(registry, no_assets())
@@ -197,7 +197,7 @@ impl<'a> Session<'a> {
     pub fn set_content(&mut self, mut book: Book) {
         book.assign_node_ids();
         self.book = Cow::Owned(book);
-        self.images = holds_images(&self.book);
+        self.images = has_images(&self.book);
         self.recompile();
         self.stale = Stale::Break;
     }
@@ -206,8 +206,8 @@ impl<'a> Session<'a> {
     ///
     /// The source is the replaceable unit because a host names files
     /// and one file may split into several sections. A name the book
-    /// does not carry appends, which is how a file the book has not
-    /// seen before arrives.
+    /// does not already have appends instead, which is how a file it
+    /// has not seen before arrives.
     pub fn replace_source(&mut self, name: &str, sections: Vec<Section>) {
         let mut sections = sections;
         let book = self.book.to_mut();
@@ -228,7 +228,7 @@ impl<'a> Session<'a> {
         }
         book.sections = rebuilt;
         book.assign_node_ids();
-        self.images = holds_images(&self.book);
+        self.images = has_images(&self.book);
         self.recompile();
         self.stale = Stale::Break;
     }
@@ -260,7 +260,7 @@ impl<'a> Session<'a> {
         self.output.take().expect("an update leaves an output")
     }
 
-    /// The book as the session holds it, node ids assigned.
+    /// The session's own copy of the book, node ids assigned.
     pub fn book(&self) -> &Book {
         &self.book
     }
@@ -320,13 +320,13 @@ impl<'a> Session<'a> {
     /// and keeps the rest as they stand.
     fn rebreak(&mut self) {
         let against = Against::of(&self.styles, self.images);
-        let mut held: Vec<Option<Cached>> = std::mem::take(&mut self.lines)
+        let mut previous: Vec<Option<Cached>> = std::mem::take(&mut self.lines)
             .into_iter()
             .map(Some)
             .collect();
         let mut spare: HashMap<u64, Vec<usize>> = HashMap::new();
         if self.section_local {
-            for (index, cached) in held.iter().enumerate() {
+            for (index, cached) in previous.iter().enumerate() {
                 let key = cached.as_ref().expect("nothing is taken yet").key;
                 spare.entry(key).or_default().push(index);
             }
@@ -337,7 +337,7 @@ impl<'a> Session<'a> {
             let kept = spare
                 .get_mut(&key)
                 .and_then(|slots| slots.pop())
-                .and_then(|slot| held[slot].take());
+                .and_then(|slot| previous[slot].take());
             fresh.push(match kept {
                 Some(cached) => cached,
                 None => {
@@ -394,7 +394,7 @@ impl<'a> Session<'a> {
         }
     }
 
-    /// The whole pipeline, holding one section's lines at a time.
+    /// The whole pipeline, one section's lines alive at a time.
     fn run_once(&mut self) {
         let registry = self.registry;
         let paginator = Paginator::with_assets(self.registry, &self.styles, self.assets);
@@ -456,7 +456,7 @@ impl Against {
 }
 
 /// Whether any section of the book places an image.
-fn holds_images(book: &Book) -> bool {
+fn has_images(book: &Book) -> bool {
     fn walk(blocks: &[Block]) -> bool {
         blocks.iter().any(|block| match block {
             Block::Image { .. } => true,
@@ -782,8 +782,8 @@ mod tests {
         }
     }
 
-    /// Paragraphs of one word repeated: every line of a section
-    /// carries its tag, so a line can be followed across an edit.
+    /// Paragraphs of one word repeated, so that every line of a
+    /// section repeats its tag and can be followed across an edit.
     fn prose(tag: &str, paragraphs: usize) -> Vec<Block> {
         (0..paragraphs)
             .map(|_| paragraph(&format!("{tag} ").repeat(80)))
@@ -823,7 +823,7 @@ mod tests {
         session
     }
 
-    /// Every text run carrying `tag`, as `(page, x, baseline, text)`.
+    /// Every text run containing `tag`, as `(page, x, baseline, text)`.
     fn runs(output: &LayoutOutput, tag: &str) -> Vec<(usize, u32, u32, String)> {
         let mut found = Vec::new();
         for (index, page) in output.pages.iter().enumerate() {
@@ -884,8 +884,9 @@ mod tests {
         );
     }
 
-    /// A page repainted twice carries its furniture once: the paint
-    /// discards what the last one left rather than stacking on it.
+    /// A page repainted twice ends up with one set of furniture,
+    /// because the paint discards what the last one left rather than
+    /// stacking on it.
     #[test]
     fn repainting_does_not_stack_furniture() {
         let mut session = three_chapters();
@@ -978,8 +979,8 @@ mod tests {
         assert_eq!(session.book().sections.len(), 2);
     }
 
-    /// The cache holds breaks, not positions: a section the flow
-    /// moved paints at new coordinates with the same lines.
+    /// The cache stores breaks and no positions, so a section the
+    /// flow moved paints at new coordinates with the same lines.
     #[test]
     fn a_moved_section_keeps_its_breaks_and_takes_new_coordinates() {
         let mut session = Session::new(registry());

@@ -95,7 +95,7 @@ fn one_shot(book: &Book, css: &str) -> Vec<u8> {
     serde_json::to_vec(&output).expect("the output serializes")
 }
 
-/// What a host does between previews. Each edit carries everything
+/// What a host does between previews. Each edit includes everything
 /// the session needs to apply it, so the test can replay the same
 /// edits against a book of its own.
 #[derive(Debug, Clone)]

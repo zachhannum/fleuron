@@ -53,7 +53,7 @@ worker.onmessage = ({ data }) => paint(decodeDisplayList(data.bytes));
 
 `input` is one postcard-encoded buffer holding the content tree, the stylesheets and the font bytes. The output is one transferable `ArrayBuffer`: the display list, or PDF bytes. Both directions transfer instead of copying, because a book's worth of glyph positions is too much to clone twice per keystroke.
 
-The engine holds its stages between calls, so a second layout of the same book only has to carry what changed.
+Between calls the engine still has its stages, so a second layout of the same book only has to send what changed.
 
 [The wire](wire.md) has the encoding, the protocol, and the host's obligations.
 
