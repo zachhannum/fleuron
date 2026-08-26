@@ -12,6 +12,13 @@ authors.workspace = true
 name = "perf-gate"
 path = "src/bin/perf-gate.rs"
 
+# The tracker counts through a global allocator, so the tests that
+# read it run alone in a process rather than beside a harness's
+# threads.
+[[test]]
+name = "memory"
+harness = false
+
 [dependencies]
 fleuron = { path = "../fleuron" }
 pulldown-cmark.workspace = true

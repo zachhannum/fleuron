@@ -25,6 +25,7 @@ use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, ShapedRun};
 use crate::pages::{DrawItem, Glyph, Page, Side};
+use crate::session::Session;
 use crate::style::{
     Align, Band, Break, ComputedStyle, Content, Hyphens, MarginBox, MarginBoxStyle, PageQuery,
     PageStyle, Situation, StringPiece, StyleTree, TextAlign,
@@ -33,6 +34,10 @@ use crate::{LayoutOutput, Warning};
 
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.
+///
+/// A single run over a session that retains nothing. It keeps one
+/// section's lines at a time, which is what a process that renders a
+/// book once and exits wants. A live preview wants `Session`.
 pub fn layout_book(book: &Book, styles: &StyleTree, registry: &FontRegistry) -> LayoutOutput {
     layout_book_with_assets(book, styles, registry, no_assets())
 }
@@ -44,24 +49,20 @@ pub fn layout_book_with_assets(
     registry: &FontRegistry,
     assets: &Assets,
 ) -> LayoutOutput {
-    let paginator = Paginator::with_assets(registry, styles, assets);
-    let pages = paginator.paginate(book);
-    let mut warnings = styles.warnings().to_vec();
-    warnings.extend(assets.warnings().iter().cloned());
-    warnings.extend(paginator.warnings());
-    LayoutOutput {
-        pages,
-        fonts: (0..registry.len() as u16)
-            .filter_map(|id| registry.font_ref(id).cloned())
-            .collect(),
-        warnings,
-    }
+    Session::once(book, styles, registry, assets).into_output()
 }
 
 /// The asset table of a host that supplied none.
-fn no_assets() -> &'static Assets {
+pub(crate) fn no_assets() -> &'static Assets {
     static EMPTY: std::sync::OnceLock<Assets> = std::sync::OnceLock::new();
     EMPTY.get_or_init(Assets::none)
+}
+
+/// The fonts a run used, as the output indexes them.
+pub(crate) fn font_table(registry: &FontRegistry) -> Vec<crate::fonts::FontRefEntry> {
+    (0..registry.len() as u16)
+        .filter_map(|id| registry.font_ref(id).cloned())
+        .collect()
 }
 
 /// Whether a page may end above a fragment.
@@ -243,7 +244,9 @@ impl<'a> Paginator<'a> {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
         }
-        flow.finish()
+        let mut paged = flow.finish();
+        self.paint(&mut paged.pages, &paged.infos);
+        paged.pages
     }
 
     /// One section's blocks as fragments, in document order:
@@ -274,6 +277,18 @@ impl<'a> Paginator<'a> {
     /// assembly, one `Vec<Fragment>` per section of `book`. Nothing
     /// here measures — every fragment arrives with its box decided.
     pub fn flow(&self, book: &Book, sections: &[Vec<Fragment>]) -> Vec<Page> {
+        let mut paged = self.fragment(book, sections.iter().map(Vec::as_slice));
+        self.paint(&mut paged.pages, &paged.infos);
+        paged.pages
+    }
+
+    /// The same, stopping short of the furniture: pages as the flow
+    /// settled them, and what each one needs to paint its own.
+    pub(crate) fn fragment<'f>(
+        &self,
+        book: &Book,
+        sections: impl IntoIterator<Item = &'f [Fragment]>,
+    ) -> Paged {
         let mut flow = Flow::new(self);
         for (section, fragments) in book.sections.iter().zip(sections) {
             flow.section(section, fragments);
@@ -285,6 +300,9 @@ impl<'a> Paginator<'a> {
     /// then paints each page's margin boxes: a folio's digits are not
     /// known until the pages before it are.
     ///
+    /// Idempotent. What an earlier paint left is discarded first, so
+    /// a session that only changed its furniture repaints in place.
+    ///
     /// The folio counts pages, and `counter-reset: page` restarts it
     /// where a section asked; the side counts leaves, and nothing
     /// restarts that — recto and verso are where a page falls in the
@@ -293,9 +311,12 @@ impl<'a> Paginator<'a> {
     /// A page inserted to square the sheet paints no furniture. A
     /// blank leaf is blank: a page whose only content would be a
     /// running head does not carry one.
-    fn number_and_paint(&self, pages: &mut [Page], infos: &[PageInfo]) {
+    pub(crate) fn paint(&self, pages: &mut [Page], infos: &[PageInfo]) {
         let mut folio = 0;
         for ((index, page), info) in pages.iter_mut().enumerate().zip(infos) {
+            // Furniture is appended after the page's own content, so
+            // dropping the tail is all a repaint has to undo.
+            page.items.truncate(info.content_items);
             folio = info.reset.unwrap_or(folio + 1);
             page.number = folio;
             page.side = Side::of_number(index as u32 + 1);
@@ -918,10 +939,20 @@ struct Placed {
 /// What one finished page knows about itself: the master to ask for,
 /// the running strings as they stood when it opened, and the folio it
 /// restarts at.
-struct PageInfo {
+pub(crate) struct PageInfo {
     slot: PageSlot,
     strings: Strings,
     reset: Option<u32>,
+    /// Items the flow itself painted, before any furniture.
+    content_items: usize,
+}
+
+/// Pages as fragmentation settled them, and what each one needs to
+/// paint its furniture. The two travel together, because a folio is a
+/// fact about where a page landed rather than about what is on it.
+pub(crate) struct Paged {
+    pub(crate) pages: Vec<Page>,
+    pub(crate) infos: Vec<PageInfo>,
 }
 
 /// The flow: fragments in, pages out.
@@ -1125,11 +1156,13 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);
         page.items = items;
+        let content_items = page.items.len();
         self.pages.push(page);
         self.infos.push(PageInfo {
             slot: self.slot.clone(),
             strings: opened,
             reset,
+            content_items,
         });
         self.slot = self.pending_slot.take().unwrap_or(PageSlot {
             first: false,
@@ -1152,6 +1185,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 slot: blank,
                 strings: self.strings.clone(),
                 reset: None,
+                content_items: 0,
             });
         }
         self.remaster();
@@ -1174,11 +1208,12 @@ impl<'a, 'p> Flow<'a, 'p> {
             .1;
     }
 
-    fn finish(mut self) -> Vec<Page> {
+    fn finish(mut self) -> Paged {
         self.close();
-        self.paginator
-            .number_and_paint(&mut self.pages, &self.infos);
-        self.pages
+        Paged {
+            pages: self.pages,
+            infos: self.infos,
+        }
     }
 }
 

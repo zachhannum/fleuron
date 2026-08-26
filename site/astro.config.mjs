@@ -57,6 +57,7 @@ export default defineConfig({
           items: [
             { label: 'Quickstart', link: '/library/quickstart/' },
             { label: 'Fonts', link: '/library/fonts/' },
+            { label: 'Sessions', link: '/library/sessions/' },
             { label: 'Diagnostics', link: '/library/diagnostics/' },
           ],
         },

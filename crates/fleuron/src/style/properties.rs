@@ -48,7 +48,7 @@ pub enum Family {
 }
 
 /// Upright or italic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FontStyle {
     /// `normal`
@@ -58,7 +58,7 @@ pub enum FontStyle {
 }
 
 /// How a line's inline content is distributed across the measure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextAlign {
     /// `left`
@@ -72,7 +72,7 @@ pub enum TextAlign {
 }
 
 /// Whether words may be broken at syllable boundaries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Hyphens {
     /// `none`, and `manual` with it: only explicit soft hyphens break.
@@ -84,7 +84,7 @@ pub enum Hyphens {
 /// A fragmentation instruction, as `break-before`, `break-after` and
 /// `break-inside` carry it. `recto` and `verso` are the book's names
 /// for `right` and `left`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Break {
     /// `auto`
@@ -170,7 +170,7 @@ impl PageGeometry {
 }
 
 /// A page margin box, named as CSS names them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MarginBox {
     /// `@top-left-corner`
@@ -295,7 +295,7 @@ pub enum Align {
 }
 
 /// What a page margin box paints.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Content {
     /// Nothing: the box is not generated.
@@ -310,7 +310,7 @@ pub enum Content {
 }
 
 /// How a counter's value is spelled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CounterStyle {
     /// `1`, `2`, `3`
@@ -418,7 +418,7 @@ fn alpha(value: u32) -> Option<String> {
 
 /// One `string-set` entry: a named string, and what the element sets
 /// it to when the flow reaches it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct StringSet {
     /// The string's name, as `string()` asks for it.
     pub name: String,
@@ -427,7 +427,7 @@ pub struct StringSet {
 }
 
 /// One piece of a `string-set` value.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StringPiece {
     /// `content()`: the element's own text.

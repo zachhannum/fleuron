@@ -81,7 +81,7 @@ pub struct NodeStyle {
 
 /// The situation a page finds itself in, which is what `@page`
 /// selects on beyond the page's name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Situation {
     /// The page a page group opens on: `@page :first`.
@@ -155,7 +155,7 @@ pub struct PageMaster {
 }
 
 /// The compiled styling of one book.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct StyleTree {
     /// The distinct computed styles this book uses. Nodes index into
     /// it: a book has thousands of nodes and a handful of styles.
