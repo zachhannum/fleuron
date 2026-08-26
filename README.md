@@ -54,7 +54,7 @@ CSS ───────────┘                                        
                                                                                └─► PDF (export)
 ```
 
-- **`fleuron-core`** — style compilation, box construction, inline layout,
+- **`fleuron`** — style compilation, box construction, inline layout,
   fragmentation, page assembly. Pure library, no I/O.
 - **`fleuron-cli`** — `fleuron` binary: content in, PDF out. Batch-friendly.
 - **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
