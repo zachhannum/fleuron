@@ -7,10 +7,13 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use fleuron::Warning;
 use fleuron::content::Book;
+use fleuron::style::{FontLoader, Source, Stylesheets};
 
-const USAGE: &str = "usage: fleuron <input.json> -o <output.pdf>
+const USAGE: &str = "usage: fleuron <input.json> -o <output.pdf> [-c <style.css>]
 
   -o, --output <path>  where to write the PDF
+  -c, --css <path>     author stylesheet, cascading over the defaults;
+                       repeatable, applied in the order given
   -V, --version        print the version and exit
   -h, --help           print this message and exit";
 
@@ -42,7 +45,11 @@ impl Status {
 /// What the command line asked for.
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
-    Render { input: PathBuf, output: PathBuf },
+    Render {
+        input: PathBuf,
+        output: PathBuf,
+        css: Vec<PathBuf>,
+    },
     Version,
     Help,
 }
@@ -57,7 +64,7 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
             println!("{USAGE}");
             Status::Ok
         }
-        Ok(Command::Render { input, output }) => match render(&input, &output) {
+        Ok(Command::Render { input, output, css }) => match render(&input, &output, &css) {
             Ok(summary) => summary.report(&input, &output),
             Err(e) => {
                 eprintln!("fleuron: {e:#}");
@@ -74,6 +81,7 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
 fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
+    let mut css: Vec<PathBuf> = Vec::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -82,6 +90,10 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
             "-o" | "--output" => {
                 let path = args.next().ok_or_else(|| anyhow!("{arg} needs a path"))?;
                 output = Some(PathBuf::from(path));
+            }
+            "-c" | "--css" => {
+                let path = args.next().ok_or_else(|| anyhow!("{arg} needs a path"))?;
+                css.push(PathBuf::from(path));
             }
             flag if flag.starts_with('-') && flag.len() > 1 => bail!("unknown option {flag}"),
             positional => {
@@ -94,6 +106,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     Ok(Command::Render {
         input: input.ok_or_else(|| anyhow!("no input file"))?,
         output: output.ok_or_else(|| anyhow!("no output path"))?,
+        css,
     })
 }
 
@@ -128,11 +141,23 @@ impl Summary {
     }
 }
 
-fn render(input: &Path, output: &Path) -> Result<Summary> {
-    let registry = fleuron::fonts::bundled_registry().context("bundled font failed to load")?;
+fn render(input: &Path, output: &Path, css: &[PathBuf]) -> Result<Summary> {
+    let mut registry = fleuron::fonts::bundled_registry().context("bundled font failed to load")?;
     let mut book = read_book(input)?;
     book.assign_node_ids();
-    let laid_out = fleuron::layout::layout_book(&book, &registry);
+
+    let sheets = read_sheets(css)?;
+    let sources: Vec<Source> = sheets
+        .iter()
+        .map(|(name, text)| Source::author(name, text))
+        .collect();
+    let mut stylesheets = Stylesheets::parse(&sources);
+    // The engine opens nothing: `@font-face` urls are resolved here,
+    // against the directory of the sheet that asked for them.
+    stylesheets.load_fonts(&mut registry, &Files::rooted(css));
+    let styles = stylesheets.compile(&book, &registry);
+
+    let laid_out = fleuron::layout::layout_book(&book, &styles, &registry);
     let bytes = fleuron::pdf::write(&laid_out, &registry, &book.metadata)
         .with_context(|| format!("{}", input.display()))?;
     std::fs::write(output, bytes).with_context(|| format!("{}", output.display()))?;
@@ -140,6 +165,43 @@ fn render(input: &Path, output: &Path) -> Result<Summary> {
         pages: laid_out.pages.len(),
         warnings: laid_out.warnings,
     })
+}
+
+/// Every author stylesheet, as `(name for diagnostics, text)`.
+fn read_sheets(paths: &[PathBuf]) -> Result<Vec<(String, String)>> {
+    paths
+        .iter()
+        .map(|path| {
+            let text =
+                std::fs::read_to_string(path).with_context(|| format!("{}", path.display()))?;
+            Ok((path.display().to_string(), text))
+        })
+        .collect()
+}
+
+/// The host side of `@font-face`: urls are paths, resolved against
+/// the directories the stylesheets came from.
+struct Files {
+    roots: Vec<PathBuf>,
+}
+
+impl Files {
+    fn rooted(sheets: &[PathBuf]) -> Files {
+        let mut roots: Vec<PathBuf> = sheets
+            .iter()
+            .filter_map(|sheet| sheet.parent().map(Path::to_path_buf))
+            .collect();
+        roots.push(PathBuf::from("."));
+        Files { roots }
+    }
+}
+
+impl FontLoader for Files {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        self.roots
+            .iter()
+            .find_map(|root| std::fs::read(root.join(url)).ok())
+    }
 }
 
 fn read_book(input: &Path) -> Result<Book> {
@@ -166,6 +228,7 @@ mod tests {
             Command::Render {
                 input: PathBuf::from("book.json"),
                 output: PathBuf::from("out.pdf"),
+                css: Vec::new(),
             },
         );
         assert_eq!(
@@ -173,6 +236,25 @@ mod tests {
             Command::Render {
                 input: PathBuf::from("book.json"),
                 output: PathBuf::from("out.pdf"),
+                css: Vec::new(),
+            },
+        );
+        // Stylesheets cascade in the order the command line gives them.
+        assert_eq!(
+            parse(args(&[
+                "book.json",
+                "-o",
+                "out.pdf",
+                "-c",
+                "a.css",
+                "--css",
+                "b.css"
+            ]))
+            .unwrap(),
+            Command::Render {
+                input: PathBuf::from("book.json"),
+                output: PathBuf::from("out.pdf"),
+                css: vec![PathBuf::from("a.css"), PathBuf::from("b.css")],
             },
         );
         for incomplete in [

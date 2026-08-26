@@ -12,6 +12,14 @@ fn registry() -> &'static FontRegistry {
     REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
 }
 
+/// The body style the built-in sheet computes: what these properties
+/// hold for the styling a book gets by default.
+fn body() -> ParagraphStyle {
+    fleuron::style::defaults(&fleuron::content::Book::default(), registry())
+        .root()
+        .paragraph()
+}
+
 fn word_strategy() -> impl Strategy<Value = String> {
     "[a-zA-Z]{1,12}"
 }
@@ -40,7 +48,10 @@ proptest! {
         measure in 30.0f32..300.0,
         line_height in 0.8f32..2.5,
     ) {
-        let style = ParagraphStyle { line_height, ..ParagraphStyle::BODY };
+        let style = ParagraphStyle {
+            line_height,
+            ..body()
+        };
         let layout = LineLayout::new(registry());
         let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
         let leading = line_height * style.size;
@@ -65,7 +76,10 @@ proptest! {
         measure in 30.0f32..300.0,
         line_height in 0.8f32..2.5,
     ) {
-        let style = ParagraphStyle { line_height, ..ParagraphStyle::BODY };
+        let style = ParagraphStyle {
+            line_height,
+            ..body()
+        };
         let layout = LineLayout::new(registry());
         let strut = layout.strut(style);
         let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
@@ -83,7 +97,10 @@ proptest! {
         small in 6.0f32..11.0,
         line_height in 0.8f32..2.5,
     ) {
-        let style = ParagraphStyle { line_height, ..ParagraphStyle::BODY };
+        let style = ParagraphStyle {
+            line_height,
+            ..body()
+        };
         let layout = LineLayout::new(registry());
         let strut = layout.strut(style);
         let line_box = layout.line_box(&[run(big), run(small)], style);
@@ -110,6 +127,6 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
 #[test]
 fn line_box_baseline_sits_within_height() {
     let layout = LineLayout::new(registry());
-    let line_box: LineBox = layout.line_box(&[], ParagraphStyle::BODY);
+    let line_box: LineBox = layout.line_box(&[], body());
     assert!(line_box.baseline > 0.0 && line_box.baseline < line_box.height);
 }

@@ -283,7 +283,8 @@ mod tests {
     }
 
     fn laid_out(book: &Book) -> LayoutOutput {
-        crate::layout::layout_book(book, registry())
+        let styles = crate::style::defaults(book, registry());
+        crate::layout::layout_book(book, &styles, registry())
     }
 
     /// The one glyph-positioning offset inside a showing op, in

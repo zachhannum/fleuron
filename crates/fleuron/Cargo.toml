@@ -8,6 +8,9 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+cssparser.workspace = true
+selectors.workspace = true
+precomputed-hash.workspace = true
 harfrust.workspace = true
 skrifa.workspace = true
 unicode-linebreak.workspace = true
@@ -26,6 +29,10 @@ criterion.workspace = true
 # Dev-only, and a cycle only in the dev graph: the fixtures crate reads
 # the corpus through this one.
 fleuron-fixtures = { path = "../fleuron-fixtures" }
+
+[[bench]]
+name = "style"
+harness = false
 
 [[bench]]
 name = "shape"

@@ -20,6 +20,9 @@ allow = [
   "Unicode-DFS-2016",
   "Zlib",
   "CC0-1.0",
+  # Servo's selectors and its dependencies. File-level copyleft: a
+  # dependency, not a derived work.
+  "MPL-2.0",
 ]
 
 [bans]

@@ -1,0 +1,62 @@
+/* The user-agent stylesheet: fleuron's defaults, as CSS.
+   A trade paperback — 6x9in, mirrored margins, a folio in the bottom
+   margin — because that is the book most manuscripts become. Author
+   CSS cascades over every rule here. */
+
+book {
+  font-family: serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  text-align: left;
+  hyphens: none;
+  orphans: 2;
+  widows: 2;
+}
+
+/* A chapter opens on a right-hand page, and its pages are named so
+   that @page can tell an opening from a continuation. */
+section {
+  page: chapter;
+  break-before: recto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-size: 18pt;
+  break-after: avoid;
+}
+
+em { font-style: italic }
+strong { font-weight: bold }
+code { font-family: monospace }
+
+@page {
+  size: 432pt 648pt;
+  margin: 54pt 42pt 54pt 54pt;
+  @bottom-center {
+    content: counter(page);
+    font-size: 9pt;
+    line-height: 1.4;
+  }
+}
+
+/* Margins mirror across the spread: the wider one is always the
+   spine. */
+@page :left {
+  margin-left: 42pt;
+  margin-right: 54pt;
+}
+
+@page :right {
+  margin-left: 54pt;
+  margin-right: 42pt;
+}
+
+/* A chapter's opening page counts but does not show its folio, and
+   neither does a blank inserted to square the sheet. */
+@page chapter:first {
+  @bottom-center { content: none }
+}
+
+@page :blank {
+  @bottom-center { content: none }
+}

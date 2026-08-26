@@ -11,7 +11,7 @@
 
 use std::ops::Range;
 
-use crate::content::Inline;
+use crate::content::{Inline, NodeId};
 use crate::fonts::{FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
@@ -30,27 +30,23 @@ pub struct ParagraphStyle {
     pub line_height: f32,
 }
 
-/// v0.1 body text: the bundled serif at book scale.
-impl ParagraphStyle {
-    pub const BODY: ParagraphStyle = ParagraphStyle {
-        font_id: 0,
-        size: 11.0,
-        line_height: 1.4,
-    };
+/// Where line layout gets the style of one inline node.
+///
+/// The style tree answers by node id. `Inherited` answers with the
+/// block's own style, which is what a run of uniform text needs and
+/// what a caller with no tree in hand can supply.
+pub trait InlineStyles {
+    /// The style of `id`, given the style of the block it sits in.
+    fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle;
+}
 
-    /// v0.1 chapter openings: the bundled serif at display size.
-    pub const CHAPTER: ParagraphStyle = ParagraphStyle {
-        font_id: 0,
-        size: 18.0,
-        line_height: 1.4,
-    };
+/// Every inline takes the style of the block around it.
+pub struct Inherited;
 
-    /// v0.1 page furniture: the bundled serif at folio scale.
-    pub const FOLIO: ParagraphStyle = ParagraphStyle {
-        font_id: 0,
-        size: 9.0,
-        line_height: 1.4,
-    };
+impl InlineStyles for Inherited {
+    fn style(&self, _id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
+        block
+    }
 }
 
 /// Hyphenation is off unless asked for; when on, lines may end
@@ -127,30 +123,42 @@ struct FlatParagraph {
     spans: Vec<(u16, f32, Range<usize>)>,
 }
 
-fn flatten(inlines: &[Inline], style: ParagraphStyle) -> FlatParagraph {
+fn flatten(inlines: &[Inline], style: ParagraphStyle, styles: &dyn InlineStyles) -> FlatParagraph {
     let mut flat = FlatParagraph {
         text: String::new(),
         spans: Vec::new(),
     };
-    walk_inlines(inlines, style, &mut flat);
+    walk_inlines(inlines, style, styles, &mut flat);
     flat
 }
 
-fn walk_inlines(inlines: &[Inline], style: ParagraphStyle, flat: &mut FlatParagraph) {
+/// Flattens inlines, each one styled as the tree says. A style
+/// boundary is a span boundary, so a run never spans two faces.
+fn walk_inlines(
+    inlines: &[Inline],
+    style: ParagraphStyle,
+    styles: &dyn InlineStyles,
+    flat: &mut FlatParagraph,
+) {
     for inline in inlines {
         match inline {
-            Inline::Text { value, .. } | Inline::Code { value, .. } => {
+            Inline::Text { value, .. } => {
                 let start = flat.text.len();
                 flat.text.push_str(value);
                 flat.spans
                     .push((style.font_id, style.size, start..flat.text.len()));
             }
-            Inline::Emphasis { children, .. }
-            | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } => {
-                // v0.1: emphasis and strong shape with the body face;
-                // italic/bold faces arrive with the style compiler (#7).
-                walk_inlines(children, style, flat);
+            Inline::Code { id, value, .. } => {
+                let code = styles.style(*id, style);
+                let start = flat.text.len();
+                flat.text.push_str(value);
+                flat.spans
+                    .push((code.font_id, code.size, start..flat.text.len()));
+            }
+            Inline::Emphasis { id, children, .. }
+            | Inline::Strong { id, children, .. }
+            | Inline::Link { id, children, .. } => {
+                walk_inlines(children, styles.style(*id, style), styles, flat);
             }
         }
     }
@@ -214,7 +222,8 @@ impl<'a> LineLayout<'a> {
         }
     }
 
-    /// Breaks one paragraph into lines of at most `measure_pt` points.
+    /// Breaks one paragraph into lines of at most `measure_pt`
+    /// points, every inline taking the block's own style.
     pub fn layout(
         &self,
         inlines: &[Inline],
@@ -222,7 +231,19 @@ impl<'a> LineLayout<'a> {
         measure_pt: f32,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        let flat = flatten(inlines, style);
+        self.layout_styled(inlines, style, &Inherited, measure_pt, options)
+    }
+
+    /// The same, with the style tree answering for each inline.
+    pub fn layout_styled(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        measure_pt: f32,
+        options: LineBreakOptions,
+    ) -> Vec<Line> {
+        let flat = flatten(inlines, style, styles);
         if flat.text.is_empty() {
             return Vec::new();
         }
@@ -253,12 +274,6 @@ impl<'a> LineLayout<'a> {
             .char_glyph(style.font_id, ' ')
             .and_then(|g| self.registry.advance_width(style.font_id, g))
             .unwrap_or(0) as u32;
-
-        // Every line of this paragraph carries the same box unless a
-        // run on it is taller than the strut (v0.1: none — spans share
-        // the paragraph style; mixed sizes arrive with the style
-        // compiler).
-        let line_box = self.line_box(&[], style);
 
         let opportunities = self.opportunities(&flat.text, options);
         let hyphen_advance = self.hyphen_advance(style);
@@ -297,7 +312,7 @@ impl<'a> LineLayout<'a> {
                     if content_end <= line_start {
                         break; // nothing paintable left (trailing spaces)
                     }
-                    lines.push(cut_line(&flat, &shaped, line_start, end, line_box));
+                    lines.push(self.cut(&flat, &shaped, line_start, end, style));
                     line_start = skip_spaces(&flat.text, end);
                 }
                 None => {
@@ -309,12 +324,30 @@ impl<'a> LineLayout<'a> {
                         .map(|o| o.end)
                         .min()
                         .unwrap_or(flat.text.len());
-                    lines.push(cut_line(&flat, &shaped, line_start, end, line_box));
+                    lines.push(self.cut(&flat, &shaped, line_start, end, style));
                     line_start = skip_spaces(&flat.text, end);
                 }
             }
         }
         lines
+    }
+
+    /// One line's runs plus the box they occupy: a run taller than
+    /// the paragraph's strut grows the line around the baseline.
+    fn cut(
+        &self,
+        flat: &FlatParagraph,
+        shaped: &[ShapedSpan],
+        start: usize,
+        end: usize,
+        style: ParagraphStyle,
+    ) -> Line {
+        let runs = cut_runs(flat, shaped, start, end);
+        Line {
+            width: runs.iter().map(|run| run.advance).sum(),
+            box_: self.line_box(&runs, style),
+            runs,
+        }
     }
 
     /// Break opportunities for the paragraph: UAX #14 always, UAX #29
@@ -438,13 +471,12 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
 
 /// Slices shaped spans into the runs of one line. Trailing spaces are
 /// dropped from the runs — ragged right never paints them.
-fn cut_line(
+fn cut_runs(
     flat: &FlatParagraph,
     shaped: &[ShapedSpan],
     start: usize,
     end: usize,
-    line_box: LineBox,
-) -> Line {
+) -> Vec<ShapedRun> {
     let mut runs = Vec::new();
     for (span, (font_id, size, _)) in shaped.iter().zip(flat.spans.iter()) {
         if span.range.start >= end || span.range.end <= start {
@@ -475,11 +507,7 @@ fn cut_line(
             advance,
         });
     }
-    Line {
-        width: runs.iter().map(|r| r.advance).sum(),
-        runs,
-        box_: line_box,
-    }
+    runs
 }
 
 #[cfg(test)]
@@ -490,6 +518,13 @@ mod tests {
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
         REGISTRY.get_or_init(|| crate::fonts::bundled_registry().expect("bundled font parses"))
+    }
+
+    /// The body style the built-in sheet computes.
+    fn body() -> ParagraphStyle {
+        crate::style::defaults(&crate::content::Book::default(), registry())
+            .root()
+            .paragraph()
     }
 
     fn layout_body(text: &str, measure_pt: f32) -> Vec<Line> {
@@ -503,7 +538,7 @@ mod tests {
             value: text.to_string(),
             position: None,
         }];
-        layout.layout(&inlines, ParagraphStyle::BODY, measure_pt, options)
+        layout.layout(&inlines, body(), measure_pt, options)
     }
 
     fn units_per_em() -> u16 {
@@ -675,7 +710,7 @@ mod tests {
         let lines = layout_body_opts(text, 44.0, LineBreakOptions { hyphenate: true });
         assert!(lines.len() >= 2, "expected a split, got {lines:?}");
         for line in &lines {
-            let width_pt = line.width as f32 / units_per_em() as f32 * ParagraphStyle::BODY.size;
+            let width_pt = line.width as f32 / units_per_em() as f32 * body().size;
             assert!(
                 width_pt <= 44.0,
                 "line {line:?} exceeds the measure at {width_pt}pt"
@@ -717,7 +752,7 @@ mod tests {
                 position: None,
             },
         ];
-        let lines = layout.layout(&inlines, ParagraphStyle::BODY, 200.0, Default::default());
+        let lines = layout.layout(&inlines, body(), 200.0, Default::default());
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].runs.len(), 2);
         assert_eq!(line_text(&lines[0], "body code"), "body code");

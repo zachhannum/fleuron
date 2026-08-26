@@ -7,14 +7,15 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fleuron::lines::ParagraphStyle;
-use fleuron_fixtures::{Corpus, registry, shaped_texts};
+use fleuron_fixtures::{Corpus, registry, shaped_texts, styles};
 
 fn shape(c: &mut Criterion) {
     let registry = registry();
     let mut group = c.benchmark_group("shape");
     for corpus in Corpus::ALL {
-        let texts = shaped_texts(&corpus.book());
+        let book = corpus.book();
+        let body = styles(&book).root().paragraph();
+        let texts = shaped_texts(&book);
         let bytes: usize = texts.iter().map(String::len).sum();
         group.throughput(Throughput::Bytes(bytes as u64));
         group.bench_with_input(
@@ -23,7 +24,7 @@ fn shape(c: &mut Criterion) {
             |b, texts| {
                 b.iter(|| {
                     for text in texts {
-                        black_box(registry.shape(ParagraphStyle::BODY.font_id, text));
+                        black_box(registry.shape(body.font_id, text));
                     }
                 })
             },

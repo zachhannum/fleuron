@@ -3,9 +3,10 @@
 
 use fleuron::content::{Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::layout::{PageGeometry, Paginator};
+use fleuron::layout::{Paginator, margin_band};
 use fleuron::lines::ParagraphStyle;
 use fleuron::pages::{DrawItem, Page, Side};
+use fleuron::style::{Band, MarginBox, PageQuery, PageStyle, Situation, StyleTree};
 use proptest::prelude::*;
 
 fn registry() -> &'static FontRegistry {
@@ -45,7 +46,7 @@ fn book_strategy() -> impl Strategy<Value = Book> {
             position: None,
         }))
         .collect();
-        Book {
+        let mut book = Book {
             metadata: Default::default(),
             sections: vec![Section {
                 id: NodeId::UNASSIGNED,
@@ -54,17 +55,65 @@ fn book_strategy() -> impl Strategy<Value = Book> {
                 blocks,
                 position: None,
             }],
-        }
+        };
+        book.assign_node_ids();
+        book
     })
 }
 
 fn paginate(book: &Book) -> Vec<Page> {
-    Paginator::new(registry(), PageGeometry::trade_paperback()).paginate(book)
+    let styles = fleuron::style::defaults(book, registry());
+    Paginator::new(registry(), &styles).paginate(book)
+}
+
+/// The built-in sheet's own answers, which is where these properties
+/// get the geometry and sizes they check against.
+fn ua() -> &'static StyleTree {
+    static STYLES: std::sync::OnceLock<StyleTree> = std::sync::OnceLock::new();
+    STYLES.get_or_init(|| {
+        let mut book = Book {
+            metadata: Default::default(),
+            sections: vec![Section {
+                id: NodeId::UNASSIGNED,
+                source: None,
+                title: None,
+                blocks: vec![Block::Paragraph {
+                    id: NodeId::UNASSIGNED,
+                    inlines: vec![Inline::Text {
+                        id: NodeId::UNASSIGNED,
+                        value: "prose".into(),
+                        position: None,
+                    }],
+                    position: None,
+                }],
+                position: None,
+            }],
+        };
+        book.assign_node_ids();
+        fleuron::style::defaults(&book, registry())
+    })
+}
+
+/// The master a page of a one-chapter book resolves to.
+fn master(situation: Situation) -> &'static PageStyle {
+    ua().page(PageQuery {
+        name: Some("chapter"),
+        situation,
+    })
+}
+
+/// The style the built-in sheet gives the folio.
+fn folio_style() -> ParagraphStyle {
+    master(Situation::Body(Side::Recto))
+        .margin_box(MarginBox::BottomCenter)
+        .expect("body pages carry a folio")
+        .style
+        .paragraph()
 }
 
 /// Width of a folio run in points, from the registry's advances.
 fn folio_width_pt(glyphs: &[fleuron::pages::Glyph], size: f32) -> f32 {
-    let font = ParagraphStyle::FOLIO.font_id;
+    let font = folio_style().font_id;
     let upem = registry().metrics(font).unwrap().units_per_em as f32;
     glyphs
         .iter()
@@ -76,27 +125,27 @@ fn folio_width_pt(glyphs: &[fleuron::pages::Glyph], size: f32) -> f32 {
 
 /// A folio run read back as digits, inverting the cmap over 0-9.
 fn folio_digits(glyphs: &[fleuron::pages::Glyph]) -> String {
-    let font = ParagraphStyle::FOLIO.font_id;
+    let font = folio_style().font_id;
     glyphs
         .iter()
         .filter_map(|g| ('0'..='9').find(|c| registry().char_glyph(font, *c) == Some(g.id)))
         .collect()
 }
 
-/// True when a paint op is page furniture rather than content: in
-/// v0.1 the folio is the only furniture that paints, and its size
-/// identifies it.
+/// True when a paint op is page furniture rather than content: the
+/// folio is the only furniture that paints, and its size identifies
+/// it.
 fn is_folio(item: &DrawItem) -> bool {
-    matches!(item, DrawItem::Text { size, .. } if *size == ParagraphStyle::FOLIO.size)
+    matches!(item, DrawItem::Text { size, .. } if *size == folio_style().size)
 }
 
 /// Every content paint op of every page lies inside that page's
 /// content box. The folio is furniture and lives in the margin box —
 /// `folios_sit_in_the_margin_box` covers where.
 fn assert_pages_fit(pages: &[Page]) -> Result<(), TestCaseError> {
-    let geometry = PageGeometry::trade_paperback();
     for page in pages {
-        let (x, y) = geometry.content_origin(page.side);
+        let geometry = master(Situation::Body(page.side)).geometry;
+        let (x, y) = geometry.content_origin();
         let (w, h) = geometry.content_size();
         for item in &page.items {
             if is_folio(item) {
@@ -190,8 +239,8 @@ proptest! {
     #[test]
     fn baselines_increase_down_each_page(book in book_strategy()) {
         let pages = paginate(&book);
-        let geometry = PageGeometry::trade_paperback();
         for page in &pages {
+            let geometry = master(Situation::Body(page.side)).geometry;
             let baselines: Vec<f32> = page
                 .items
                 .iter()
@@ -204,7 +253,7 @@ proptest! {
             let mut sorted = baselines.clone();
             sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
             prop_assert_eq!(&baselines, &sorted, "page {}", page.number);
-            let (_, top) = geometry.content_origin(page.side);
+            let (_, top) = geometry.content_origin();
             if let Some(last) = baselines.last() {
                 prop_assert!(*last <= top + geometry.content_size().1 + 1e-3);
             }
@@ -217,9 +266,10 @@ proptest! {
     #[test]
     fn folios_sit_in_the_margin_box(book in book_strategy()) {
         let pages = paginate(&book);
-        let geometry = PageGeometry::trade_paperback();
-        let (band_top, band_height) = geometry.folio_line_box();
-        let (_, content_top) = geometry.content_origin(Side::Recto);
+        let recto = master(Situation::Body(Side::Recto));
+        let geometry = recto.geometry;
+        let (band_top, band_height) = margin_band(recto, Band::Bottom, folio_style());
+        let (_, content_top) = geometry.content_origin();
         let content_bottom = content_top + geometry.content_size().1;
         for page in &pages {
             let folios: Vec<&DrawItem> = page.items.iter().filter(|i| is_folio(i)).collect();
@@ -294,10 +344,11 @@ fn page_assembly_snapshot() {
         ],
         position: None,
     };
-    let book = Book {
+    let mut book = Book {
         metadata: Default::default(),
         sections: vec![chapter("Chapter One"), chapter("Chapter Two")],
     };
+    book.assign_node_ids();
     let pages = paginate(&book);
     insta::assert_json_snapshot!(
         pages
