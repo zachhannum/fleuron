@@ -2,7 +2,7 @@
 
 *A paged-media layout engine for book-shaped documents, in Rust.*
 
-**fleuron** takes structured content plus typed settings or CSS, performs
+**fleuron** takes structured content plus CSS, performs
 inline layout (shaping, line breaking, hyphenation), fragments it into pages,
 and emits a display list for preview and a PDF for export. It compiles to
 native and WebAssembly from the same core.
@@ -47,9 +47,9 @@ resolved representation:
 ```
 content tree ──┐
                ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
-settings ──────┤                                                        │
-user CSS ──────┘                                                        ├─► display list (preview)
-                                                                       └─► PDF (export)
+CSS ───────────┘                                                               │
+                                                                               ├─► display list (preview)
+                                                                               └─► PDF (export)
 ```
 
 - **`fleuron-core`** — style compilation, box construction, inline layout,
@@ -60,8 +60,9 @@ user CSS ──────┘                                                  
 
 ### Invariants
 
-1. **Layout never reads settings.** It consumes the style tree. Settings
-   and user CSS are just two producers of the same representation.
+1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
+   the defaults; author CSS cascades over it. Everything downstream
+   consumes the resolved style tree.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
    and PDF are interchangeable painters over the display list.
 3. **Layout never decodes images.** Header probes yield intrinsic size,

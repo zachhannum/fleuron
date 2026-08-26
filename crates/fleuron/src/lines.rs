@@ -18,7 +18,7 @@ use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 
 /// Everything one paragraph's layout depends on. The style tree
-/// compiles down to this; layout never reads settings.
+/// compiles down to this.
 #[derive(Debug, Clone, Copy)]
 pub struct ParagraphStyle {
     /// Face id from the font registry.
