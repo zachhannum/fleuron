@@ -1,0 +1,75 @@
+---
+source: crates/fleuron/tests/furniture.rs
+expression: spread
+---
+[
+  {
+    "furniture": [
+      {
+        "size": 8.0,
+        "text": "Chapter One",
+        "x": 349.5039978027344,
+        "y": 29.83599853515625
+      },
+      {
+        "size": 9.0,
+        "text": "3",
+        "x": 213.83999633789063,
+        "y": 624.1904907226563
+      }
+    ],
+    "number": 3,
+    "side": "recto"
+  },
+  {
+    "furniture": [
+      {
+        "size": 8.0,
+        "text": "Chapter One",
+        "x": 42.0,
+        "y": 29.83599853515625
+      },
+      {
+        "size": 9.0,
+        "text": "4",
+        "x": 213.83999633789063,
+        "y": 624.1904907226563
+      }
+    ],
+    "number": 4,
+    "side": "verso"
+  },
+  {
+    "furniture": [],
+    "number": 5,
+    "side": "recto"
+  },
+  {
+    "furniture": [],
+    "number": 6,
+    "side": "verso"
+  },
+  {
+    "furniture": [],
+    "number": 7,
+    "side": "recto"
+  },
+  {
+    "furniture": [
+      {
+        "size": 8.0,
+        "text": "Chapter Three",
+        "x": 42.0,
+        "y": 29.83599853515625
+      },
+      {
+        "size": 9.0,
+        "text": "8",
+        "x": 213.83999633789063,
+        "y": 624.1904907226563
+      }
+    ],
+    "number": 8,
+    "side": "verso"
+  }
+]

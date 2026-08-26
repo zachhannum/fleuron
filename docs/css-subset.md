@@ -48,6 +48,8 @@ Block box, not inherited:
 | property | values |
 |---|---|
 | `content` | `none` or a `<string>` — the ornament a thematic break is set in |
+| `string-set` | `none`, or `<name> [content() \| <string>]+`, comma-separated |
+| `counter-reset` | `none`, or `page <integer>` |
 | `initial-letter` | `<integer>` lines to sink an initial letter over, on `::first-letter` |
 | `margin` | one to four `<length>`s |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length>` |
@@ -60,6 +62,18 @@ Block box, not inherited:
 `orphans + widows` lines and it moves whole too. Where no allowed break
 remains, the page ends anyway — a book that cannot be broken is still a
 book that has to be paginated.
+
+`string-set` is where a running head's text comes from: the element
+sets the named string when the flow reaches it, and a margin box reads
+it back with `string()`. `content()` is the element's own text, which
+only headings and paragraphs have any of.
+
+`counter-reset: page <integer>` is where the folio restarts: the page
+the element opens takes that number, and the pages after it count on
+from there. Blank leaves count. Recto and verso do not follow the
+folio — which side of the spread a page falls on is where it sits in
+the sheet, not what is printed on it — so front matter restarting the
+body at 1 leaves the sides alone.
 
 An initial letter is sized from the sink rather than from `font-size`:
 its cap height spans `initial-letter` lines, so its baseline lands on
@@ -77,9 +91,20 @@ multiple of the root's.
 @page <name>? [:first | :blank | :left | :right]* {
   size: <length>{1,2} | a3 | a4 | a5 | b4 | b5 | letter | legal | ledger [portrait | landscape]?;
   margin: ...;
-  @<margin-box> { content: none | counter(page) | <string>; /* text properties */ }
+  @<margin-box> {
+    content: none | counter(page[, <counter-style>]) | string(<name>) | <string>;
+    /* text properties */
+  }
 }
 ```
+
+`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`,
+`lower-alpha` or `upper-alpha`; a value the style has no spelling for
+falls back to decimal. `string(<name>)` reads a running string **as it
+stood when the page opened**, not as the first element on the page set
+it: a chapter opening halfway down a page does not retitle the page it
+opened on. Books blind a chapter opening's head for that reason
+anyway. A string nothing has set yet paints nothing.
 
 A page group begins wherever a section opens a page, so `:first` selects
 a chapter's opening page rather than only the book's. `:blank` selects a
@@ -95,6 +120,11 @@ All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`,
 centred on the trim rather than on the content box, because a folio
 belongs on the page's axis and mirrored margins put the content box off
 it; `-left` and `-right` align to the content box's edges.
+
+A page the flow put nothing on paints no margin boxes at all: a blank
+leaf is blank, and a page whose only content would be a running head
+does not carry one. `@page :blank` still gives that leaf its trim and
+margins.
 
 ## `@font-face`
 
@@ -134,6 +164,6 @@ registered face and says that.
 
 Colour, backgrounds, borders, padding, floats, tables, grid, flexbox,
 transforms, media queries, custom properties, counters other than
-`page`, and generated content beyond page margin boxes and `content` on
-an empty element. The engine says so, per declaration, where it was
-written.
+`page`, `counter-increment`, and generated content beyond page margin
+boxes, `string-set`, and `content` on an empty element. The engine says
+so, per declaration, where it was written.

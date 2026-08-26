@@ -32,8 +32,8 @@ use crate::lines::{InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Break, ComputedStyle, Content, Edge, Edges, Family, FontStyle, Hyphens, Length,
-    LineHeight, MarginBox, PageGeometry, TextAlign,
+    Align, Band, Break, ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle,
+    Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet, TextAlign,
 };
 pub use sheet::{Origin, Source};
 
@@ -885,7 +885,7 @@ mod tests {
         let folio = recto
             .margin_box(MarginBox::BottomCenter)
             .expect("the folio is a margin box");
-        assert_eq!(folio.content, Content::PageNumber);
+        assert_eq!(folio.content, Content::Counter(CounterStyle::Decimal));
         assert_eq!(folio.style.font_size, 9.0);
         assert_eq!(folio.style.line_height, 1.4);
     }
@@ -1032,11 +1032,13 @@ mod tests {
         let blank = chapter(Situation::Blank);
 
         assert!(opening.margin_box(MarginBox::BottomCenter).is_none());
-        assert!(blank.margin_box(MarginBox::BottomCenter).is_none());
+        // A blank's master is a master like any other; that nothing
+        // paints on a blank is the flow's rule, not the sheet's.
+        assert_eq!(blank.geometry, verso.geometry);
         assert_eq!(
             body.margin_box(MarginBox::BottomCenter)
                 .map(|box_| &box_.content),
-            Some(&Content::PageNumber)
+            Some(&Content::Counter(CounterStyle::Decimal))
         );
         assert_eq!(body.geometry.margin.left, 54.0);
         assert_eq!(body.geometry.margin.right, 42.0);
@@ -1044,6 +1046,69 @@ mod tests {
         assert_eq!(verso.geometry.margin.right, 54.0);
         // Every situation of every named page has a master.
         assert_eq!(tree.masters().len(), 10);
+    }
+
+    /// The furniture grammar: what an element sets a running string
+    /// to, where the folio restarts, and what a margin box resolves
+    /// its content from.
+    #[test]
+    fn string_set_counter_reset_and_margin_box_content_compile() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "h1 { string-set: chapter \"— \" content() }
+             section { counter-reset: page 7 }
+             @page :left { @top-left { content: string(chapter) } }
+             @page :right { @top-right { content: counter(page, upper-roman) } }",
+        );
+
+        assert_eq!(
+            first(&tree, "h1").string_set,
+            vec![StringSet {
+                name: "chapter".into(),
+                value: vec![StringPiece::Text("— ".into()), StringPiece::Content],
+            }],
+        );
+        assert_eq!(first(&tree, "section").counter_reset, Some(7));
+        // Not inherited: a paragraph inside the section restarts
+        // nothing and sets nothing.
+        assert_eq!(first(&tree, "p").counter_reset, None);
+        assert!(first(&tree, "p").string_set.is_empty());
+
+        let box_content = |situation, which| {
+            tree.page(PageQuery {
+                name: Some("chapter"),
+                situation,
+            })
+            .margin_box(which)
+            .map(|box_| box_.content.clone())
+        };
+        assert_eq!(
+            box_content(Situation::Body(Side::Verso), MarginBox::TopLeft),
+            Some(Content::String("chapter".into())),
+        );
+        assert_eq!(
+            box_content(Situation::Body(Side::Recto), MarginBox::TopRight),
+            Some(Content::Counter(CounterStyle::UpperRoman)),
+        );
+    }
+
+    /// A counter style outside the subset is a diagnostic, not a
+    /// silently decimal folio.
+    #[test]
+    fn an_unsupported_counter_style_warns() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "@page { @bottom-center { content: counter(page, georgian) } }",
+        );
+        assert!(
+            tree.warnings()
+                .iter()
+                .any(|warning| warning.message == "unsupported value for `content`"),
+            "{:?}",
+            tree.warnings(),
+        );
     }
 
     /// The `@page` grammar: named pages, sheet sizes, margins, and a

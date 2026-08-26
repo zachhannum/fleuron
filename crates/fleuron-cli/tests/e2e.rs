@@ -159,6 +159,67 @@ fn page_masters_paint_what_the_author_asked() {
     );
 }
 
+/// The furniture an author asks for reaches the PDF: a running head
+/// naming the chapter each page belongs to, and folios counted in
+/// roman.
+#[test]
+fn running_heads_and_roman_folios_reach_the_pdf() {
+    let sheet = write_sheet(
+        "furniture",
+        "@page :left  { @top-left  { content: string(chapter); font-size: 8pt } }\n\
+         @page :right { @top-right { content: string(chapter); font-size: 8pt } }\n\
+         @page { @bottom-center { content: counter(page, lower-roman) } }\n",
+    );
+    let (pdf, _) = render("furniture", &[sheet.as_path()]);
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    let pages = pages_of(&text);
+    assert_eq!(pages.len(), EXPECTED_PAGES);
+
+    let chapter = squeeze(&chapter_title(&fixture_book()));
+    for (index, page) in pages.iter().enumerate().skip(1) {
+        let first = page
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or_default();
+        assert_eq!(
+            squeeze(first),
+            chapter,
+            "page {} carries no running head",
+            index + 1,
+        );
+    }
+
+    let folios: Vec<Option<String>> = pages
+        .iter()
+        .take(5)
+        .map(|page| {
+            page.lines()
+                .rfind(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string())
+        })
+        .collect();
+    assert_eq!(
+        folios,
+        ["i", "ii", "iii", "iv", "v"]
+            .map(|numeral| Some(numeral.to_string()))
+            .to_vec(),
+        "the folios did not count in roman",
+    );
+}
+
+/// The heading the fixture book's one chapter opens with, which the
+/// built-in sheet sets the `chapter` running string from.
+fn chapter_title(book: &Book) -> String {
+    let mut title = String::new();
+    if let Some(Block::Heading { inlines, .. }) = book.sections[0].blocks.first() {
+        append_inlines(inlines, &mut title);
+    }
+    assert!(!title.is_empty(), "the fixture opens with a heading");
+    title
+}
+
 /// Restyling moves the prose across different pages without losing a
 /// word of it.
 #[test]
