@@ -122,11 +122,15 @@ pub enum MarginDeclaration {
 }
 
 /// One `@font-face`: an identity, and the sources to try for it.
+///
+/// Slope and weight are what the sheet declared, not what the file
+/// says about itself; a sheet that declares neither leaves the file
+/// to describe its own cuts.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontFace {
     pub family: String,
-    pub style: FontStyle,
-    pub weight: u16,
+    pub style: Option<FontStyle>,
+    pub weight: Option<u16>,
     pub src: Vec<Src>,
 }
 
@@ -895,16 +899,16 @@ fn font_face(input: &mut Parser<'_, '_>, sheet: &str) -> (FontFace, Vec<Warning>
         .collect();
     let mut face = FontFace {
         family: String::new(),
-        style: FontStyle::Normal,
-        weight: 400,
+        style: None,
+        weight: None,
         src: Vec::new(),
     };
     let mut warnings = Vec::new();
     for result in collected {
         match result {
             Ok(FaceDeclaration::Family(family)) => face.family = family,
-            Ok(FaceDeclaration::Style(style)) => face.style = style,
-            Ok(FaceDeclaration::Weight(weight)) => face.weight = weight,
+            Ok(FaceDeclaration::Style(style)) => face.style = Some(style),
+            Ok(FaceDeclaration::Weight(weight)) => face.weight = Some(weight),
             Ok(FaceDeclaration::Src(src)) => face.src = src,
             Err(error) => warnings.push(warning(sheet, &error)),
         }

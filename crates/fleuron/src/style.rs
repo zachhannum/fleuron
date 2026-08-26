@@ -27,7 +27,7 @@ use serde::Serialize;
 
 use crate::Warning;
 use crate::content::{Book, NodeId};
-use crate::fonts::{FontRegistry, FontSource};
+use crate::fonts::{FaceAttributes, FontRegistry, FontSource};
 use crate::lines::{InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
@@ -237,6 +237,7 @@ fn resolve_masters(
     styles: &[ComputedStyle],
     root: &ComputedStyle,
     registry: &FontRegistry,
+    warnings: &mut Vec<Warning>,
 ) -> Vec<PageMaster> {
     let mut names: Vec<Option<String>> = vec![None];
     for style in styles {
@@ -253,10 +254,10 @@ fn resolve_masters(
         Situation::Body(Side::Verso),
         Situation::Blank,
     ];
-    names
-        .into_iter()
-        .flat_map(|name| {
-            situations.map(|situation| PageMaster {
+    let mut masters = Vec::new();
+    for name in names {
+        for situation in situations {
+            masters.push(PageMaster {
                 page: name.clone(),
                 situation,
                 style: resolve_page(
@@ -267,10 +268,12 @@ fn resolve_masters(
                     },
                     root,
                     registry,
+                    warnings,
                 ),
-            })
-        })
-        .collect()
+            });
+        }
+    }
+    masters
 }
 
 /// One page master: every `@page` rule that selects it, applied in
@@ -280,6 +283,7 @@ fn resolve_page(
     query: PageQuery<'_>,
     root: &ComputedStyle,
     registry: &FontRegistry,
+    warnings: &mut Vec<Warning>,
 ) -> PageStyle {
     let mut matching: Vec<&(u8, PageRule)> = pages
         .iter()
@@ -329,7 +333,9 @@ fn resolve_page(
                     }
                 }
             }
-            entry.style.font_id = resolve_face(&entry.style, registry);
+            let (font_id, warning) = resolve_face(&entry.style, registry);
+            entry.style.font_id = font_id;
+            report(warnings, warning);
         }
     }
     PageStyle {
@@ -438,6 +444,7 @@ fn register_face(
         match FontSource::from_bytes(bytes) {
             Ok(mut source) => {
                 source.family = face.family.to_lowercase();
+                source.declared = declared(face);
                 return match registry.add(source) {
                     Ok(_) => warnings,
                     Err(error) => {
@@ -465,13 +472,24 @@ fn register_face(
     warnings
 }
 
+/// What a `@font-face` declared its source to be. A sheet that
+/// declares neither slope nor weight is naming a family, not a cut,
+/// and leaves the file to say which cuts it holds.
+fn declared(face: &FontFace) -> Option<FaceAttributes> {
+    let (style, weight) = (face.style, face.weight);
+    (style.is_some() || weight.is_some()).then(|| FaceAttributes {
+        italic: style == Some(FontStyle::Italic),
+        weight: weight.unwrap_or(FaceAttributes::REGULAR.weight),
+    })
+}
+
 /// Matching and the cascade: every element gets the declarations that
 /// match it, in cascade order, applied over what it inherited.
 fn cascade(
     book: &Book,
     sheets: &[Sheet],
     registry: &FontRegistry,
-    warnings: Vec<Warning>,
+    mut warnings: Vec<Warning>,
 ) -> StyleTree {
     let elements = ElementTree::build(book);
     let mut caches = SelectorCaches::default();
@@ -529,7 +547,9 @@ fn cascade(
             let parent_size = parent.font_size;
             style.apply(declaration, parent_size, root_size.unwrap_or(parent_size));
         }
-        style.font_id = resolve_face(&style, registry);
+        let (font_id, warning) = resolve_face(&style, registry);
+        style.font_id = font_id;
+        report(&mut warnings, warning);
 
         let index_of_style = intern(&mut styles, style);
         computed.push(index_of_style);
@@ -558,7 +578,13 @@ fn cascade(
             sheet.pages.iter().cloned().map(move |rule| (level, rule))
         })
         .collect();
-    let masters = resolve_masters(&pages, &styles, &styles[root as usize].clone(), registry);
+    let masters = resolve_masters(
+        &pages,
+        &styles,
+        &styles[root as usize].clone(),
+        registry,
+        &mut warnings,
+    );
 
     StyleTree {
         styles,
@@ -593,31 +619,85 @@ fn intern(styles: &mut Vec<ComputedStyle>, style: ComputedStyle) -> u32 {
     }
 }
 
+/// Records a face diagnostic once. Thousands of nodes share a
+/// handful of styles, and a font stack that cannot be honoured is a
+/// fact about the stack, not about each node that used it.
+fn report(warnings: &mut Vec<Warning>, warning: Option<Warning>) {
+    let Some(warning) = warning else {
+        return;
+    };
+    if !warnings.iter().any(|seen| seen.message == warning.message) {
+        warnings.push(warning);
+    }
+}
+
 /// The face a computed style shapes with: the first family the
 /// registry holds, at the nearest slope and weight it has.
-fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> u16 {
-    let italic = style.font_style == FontStyle::Italic;
-    let bold = style.font_weight >= 600;
+///
+/// A family the registry does not hold is skipped — that is what a
+/// font stack is for — but a stack that resolves nothing, or a
+/// family with no cut at the slope asked for, falls back to a face
+/// that is visibly not the one requested. Both say so.
+fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> (u16, Option<Warning>) {
+    let want = FaceAttributes {
+        italic: style.font_style == FontStyle::Italic,
+        weight: style.font_weight,
+    };
     for family in &style.font_family {
-        let found = match family {
-            Family::Named(name) => registry.best_match(name, italic, bold),
+        let name = match family {
+            Family::Named(name) => Some(name.clone()),
             Family::Generic(generic) => registry
                 .generic(*generic)
-                .and_then(|id| registry.font_ref(id).map(|entry| entry.family.clone()))
-                .and_then(|family| registry.best_match(&family, italic, bold)),
+                .and_then(|id| registry.font_ref(id).map(|entry| entry.family.clone())),
         };
-        if let Some(id) = found {
-            return id;
-        }
+        let Some(found) = name.as_deref().and_then(|name| registry.select(name, want)) else {
+            continue;
+        };
+        let warning = (found.attributes.italic != want.italic).then(|| Warning {
+            message: format!(
+                "{} has no {} face; {} used instead",
+                name.unwrap_or_default(),
+                slope(want.italic),
+                slope(found.attributes.italic),
+            ),
+            origin: None,
+        });
+        return (found.id, warning);
     }
-    0
+    (
+        0,
+        Some(Warning {
+            message: format!(
+                "no registered family matches {}; the first registered face used instead",
+                stack(&style.font_family),
+            ),
+            origin: None,
+        }),
+    )
+}
+
+/// A slope as a stylesheet names it.
+fn slope(italic: bool) -> &'static str {
+    if italic { "italic" } else { "upright" }
+}
+
+/// A font stack as the sheet wrote it, for a diagnostic to quote.
+fn stack(families: &[Family]) -> String {
+    families
+        .iter()
+        .map(|family| match family {
+            Family::Named(name) => name.clone(),
+            Family::Generic(generic) => generic.keyword().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::content::{Block, HeadingLevel, Inline, Metadata, Section};
-    use crate::fonts::{BUNDLED_FONT, GenericFamily, bundled_registry};
+    use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -953,9 +1033,11 @@ mod tests {
         sheets.load_fonts(&mut registry, &OneFace);
         let tree = sheets.compile(&book, &registry);
 
-        assert_eq!(registry.len(), 2, "the loaded face joined the registry");
-        assert_eq!(registry.by_family("author serif"), Some(1));
-        assert_eq!(first(&tree, "p").font_id, 1);
+        let author = registry
+            .by_family("author serif")
+            .expect("the loaded face joined the registry");
+        assert_eq!(registry.len(), bundled_registry().unwrap().len() + 5);
+        assert_eq!(first(&tree, "p").font_id, author);
         // A face nothing resolved falls back to the next family.
         assert_eq!(first(&tree, "h1").font_id, 0);
         assert!(
@@ -977,7 +1059,7 @@ mod tests {
         let mut sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
         sheets.load_fonts(&mut registry, &NoFonts);
         let tree = sheets.compile(&book, &registry);
-        assert_eq!(registry.len(), 1);
+        assert_eq!(registry.len(), bundled_registry().unwrap().len());
         assert!(
             tree.warnings()
                 .iter()
@@ -1052,6 +1134,105 @@ mod tests {
         assert_eq!(
             paragraph.font_id,
             registry().generic(GenericFamily::Monospace).unwrap()
+        );
+    }
+
+    /// A book whose one paragraph nests `strong` inside `em`.
+    fn nested() -> Book {
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                blocks: vec![Block::Paragraph {
+                    id: NodeId::UNASSIGNED,
+                    inlines: vec![
+                        text("She said "),
+                        Inline::Emphasis {
+                            id: NodeId::UNASSIGNED,
+                            children: vec![
+                                text("never "),
+                                Inline::Strong {
+                                    id: NodeId::UNASSIGNED,
+                                    children: vec![text("again")],
+                                    position: None,
+                                },
+                            ],
+                            position: None,
+                        },
+                        text("."),
+                    ],
+                    position: None,
+                }],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// Slope and weight reach the face through the cascade: `em` and
+    /// `strong` set properties like any other rule, and `strong`
+    /// inside `em` inherits the slope on its way to a bold italic
+    /// face.
+    #[test]
+    fn emphasis_and_strong_resolve_to_their_own_faces() {
+        let book = nested();
+        let tree = defaults(&book, registry());
+        let face = |italic, weight| {
+            registry()
+                .select("eb garamond", FaceAttributes { italic, weight })
+                .unwrap()
+                .id
+        };
+        assert_eq!(first(&tree, "p").font_id, face(false, 400));
+        assert_eq!(first(&tree, "em").font_id, face(true, 400));
+        assert_eq!(first(&tree, "strong").font_id, face(true, 700));
+        // The cascade, not the element name: an author who unsets
+        // the slope gets the upright bold cut under the same markup.
+        let tree = compile(&book, "em { font-style: normal }");
+        assert_eq!(first(&tree, "strong").font_id, face(false, 700));
+    }
+
+    /// A face the registry cannot supply is a diagnostic and the
+    /// nearest cut, once, however many nodes asked for it.
+    #[test]
+    fn a_face_the_registry_lacks_warns_and_lays_out_anyway() {
+        let mut upright = FontRegistry::new();
+        upright
+            .add(crate::fonts::FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
+            .unwrap();
+        upright
+            .map_generic(GenericFamily::Serif, "eb garamond")
+            .unwrap();
+        let book = nested();
+        let tree = Stylesheets::parse(&[]).compile(&book, &upright);
+        assert_eq!(
+            first(&tree, "em").font_id,
+            first(&tree, "p").font_id,
+            "there is no italic cut, so emphasis takes the upright one",
+        );
+        let complaints: Vec<&str> = tree
+            .warnings()
+            .iter()
+            .map(|warning| warning.message.as_str())
+            .filter(|message| message.contains("italic"))
+            .collect();
+        assert_eq!(
+            complaints,
+            vec!["eb garamond has no italic face; upright used instead"],
+        );
+
+        // A stack that resolves nothing at all says so, and the book
+        // still lays out on the first registered face.
+        let tree = compile(&book, "p { font-family: \"Nowhere\", \"Nor here\" }");
+        assert_eq!(first(&tree, "p").font_id, 0);
+        assert!(
+            tree.warnings().iter().any(|warning| {
+                warning.message
+                    == "no registered family matches Nowhere, Nor here; \
+                                    the first registered face used instead"
+            }),
+            "{:?}",
+            tree.warnings(),
         );
     }
 

@@ -758,6 +758,93 @@ mod tests {
         assert_eq!(line_text(&lines[0], "body code"), "body code");
     }
 
+    /// Emphasis is its own span: a paragraph of roman prose around
+    /// italic dialogue breaks into runs at the markup's boundaries,
+    /// each on the face its style resolved to, and a nested `strong`
+    /// takes the bold italic cut.
+    #[test]
+    fn emphasis_shapes_on_its_own_face() {
+        let mut book = crate::content::Book {
+            metadata: Default::default(),
+            sections: vec![crate::content::Section {
+                blocks: vec![crate::content::Block::Paragraph {
+                    id: NodeId::UNASSIGNED,
+                    inlines: vec![
+                        Inline::Text {
+                            id: NodeId::UNASSIGNED,
+                            value: "He said ".into(),
+                            position: None,
+                        },
+                        Inline::Emphasis {
+                            id: NodeId::UNASSIGNED,
+                            children: vec![
+                                Inline::Text {
+                                    id: NodeId::UNASSIGNED,
+                                    value: "never ".into(),
+                                    position: None,
+                                },
+                                Inline::Strong {
+                                    id: NodeId::UNASSIGNED,
+                                    children: vec![Inline::Text {
+                                        id: NodeId::UNASSIGNED,
+                                        value: "again".into(),
+                                        position: None,
+                                    }],
+                                    position: None,
+                                },
+                            ],
+                            position: None,
+                        },
+                        Inline::Text {
+                            id: NodeId::UNASSIGNED,
+                            value: " to her.".into(),
+                            position: None,
+                        },
+                    ],
+                    position: None,
+                }],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        let styles = crate::style::defaults(&book, registry());
+        let crate::content::Block::Paragraph { id, inlines, .. } = &book.sections[0].blocks[0]
+        else {
+            unreachable!()
+        };
+        let lines = LineLayout::new(registry()).layout_styled(
+            inlines,
+            styles.paragraph(*id),
+            &styles,
+            400.0,
+            Default::default(),
+        );
+        assert_eq!(lines.len(), 1);
+        let runs: Vec<(u16, &str)> = lines[0]
+            .runs
+            .iter()
+            .map(|run| (run.font_id, run.text.as_str()))
+            .collect();
+        let face = |italic, weight| {
+            registry()
+                .select(
+                    "eb garamond",
+                    crate::fonts::FaceAttributes { italic, weight },
+                )
+                .unwrap()
+                .id
+        };
+        assert_eq!(
+            runs,
+            vec![
+                (face(false, 400), "He said "),
+                (face(true, 400), "never "),
+                (face(true, 700), "again"),
+                (face(false, 400), " to her."),
+            ],
+        );
+    }
+
     /// A paragraph of only spaces produces no lines.
     #[test]
     fn spaces_only_paragraph_is_empty() {

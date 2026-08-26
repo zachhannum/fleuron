@@ -6,13 +6,16 @@
 //! `FontRef` lifetime.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use harfrust::{
-    BufferClusterLevel, FontRef as HarfFontRef, Language, ShaperData, UnicodeBuffer, script,
+    BufferClusterLevel, FontRef as HarfFontRef, Language, ShaperData, ShaperInstance,
+    UnicodeBuffer, script,
 };
 use serde::Serialize;
 use skrifa::MetadataProvider;
-use skrifa::instance::{LocationRef, Size};
+use skrifa::attribute::Style as SlopeStyle;
+use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::{GlyphMetrics, Metrics};
 use skrifa::prelude::GlyphId;
 use skrifa::string::StringId;
@@ -33,6 +36,12 @@ pub struct FontSource {
     pub name: String,
     /// Style name (name id 2), e.g. "Regular".
     pub style: String,
+    /// What a stylesheet declared this face to be, overriding what
+    /// the file says about itself. A declared identity also pins
+    /// registration to the file's default instance: a sheet naming
+    /// one slope and one weight is not describing a variable
+    /// family's five.
+    pub declared: Option<FaceAttributes>,
 }
 
 impl FontSource {
@@ -51,8 +60,55 @@ impl FontSource {
             family: family.to_lowercase(),
             name,
             style,
+            declared: None,
         })
     }
+}
+
+/// The slope and weight a face is matched at: the two axes of CSS
+/// font matching the engine supports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct FaceAttributes {
+    /// True for both italic and oblique cuts; the engine draws no
+    /// distinction a book needs.
+    pub italic: bool,
+    /// Weight on the CSS 1–1000 scale.
+    pub weight: u16,
+}
+
+impl FaceAttributes {
+    /// Upright, regular: what a face is when nothing says otherwise.
+    pub const REGULAR: FaceAttributes = FaceAttributes {
+        italic: false,
+        weight: 400,
+    };
+}
+
+/// One axis of a variable face, pinned: the tag and the user-space
+/// coordinate this face sits at.
+///
+/// A face at its family's default location carries none — there is
+/// nothing to pin, and an instanced subset of the default is just
+/// the default.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct AxisSetting {
+    /// The four-byte OpenType axis tag, e.g. `wght`.
+    pub tag: [u8; 4],
+    /// The coordinate in the axis's own units.
+    pub value: f32,
+}
+
+/// The face a request for a family, slope and weight resolved to,
+/// and what that face actually is.
+///
+/// The two differ when the family has no cut at the slope or weight
+/// asked for; the caller decides whether that is worth a diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FaceMatch {
+    /// The registry id to shape and paint with.
+    pub id: u16,
+    /// What that face is, which need not be what was asked for.
+    pub attributes: FaceAttributes,
 }
 
 /// A generic family keyword, as in CSS.
@@ -108,6 +164,8 @@ pub struct FontRefEntry {
     pub name: String,
     /// Style name (name id 2).
     pub style: String,
+    /// The slope and weight this face answers for.
+    pub attributes: FaceAttributes,
 }
 
 /// Font metrics in font units.
@@ -124,12 +182,25 @@ pub struct FontMetricsTable {
 }
 
 /// One registered face: bytes plus everything decoded from them.
+///
+/// A variable file registers one face per named instance, so bytes
+/// and the shaper's per-file tables are shared and only the location
+/// differs.
 struct Face {
-    bytes: Vec<u8>,
+    bytes: Arc<Vec<u8>>,
     identity: FontRefEntry,
     metrics: FontMetricsTable,
     /// Decoded once, at registration; the shaper reads through this.
-    shaper_data: ShaperData,
+    shaper_data: Arc<ShaperData>,
+    /// Where on the file's axes this face sits, normalized. Default
+    /// for a static file.
+    location: Location,
+    /// The same location in user space, for painters that instance
+    /// the file themselves. Empty at the default location.
+    variations: Vec<AxisSetting>,
+    /// The shaper's view of `location`; `None` at the default, where
+    /// there is nothing to vary.
+    instance: Option<ShaperInstance>,
 }
 
 /// The registry: assigns `font_id`s, hands shaper access and metrics
@@ -149,32 +220,48 @@ impl FontRegistry {
         Self::default()
     }
 
-    /// Registers a face and returns its id.
+    /// Registers a font file and returns the ids of the faces it
+    /// yielded, in the order the file names them.
+    ///
+    /// A variable file yields one face per named instance: the cuts
+    /// the family says it has. Matching is then a lookup over faces
+    /// with fixed slopes and weights, which is what lets the cascade
+    /// resolve a face without a registry it may write to.
     ///
     /// Decodes metrics eagerly: a font that can't be parsed fails
     /// here, once, rather than at first shape.
-    pub fn add(&mut self, source: FontSource) -> Result<u16, FontError> {
-        let font = skrifa::FontRef::new(&source.bytes).map_err(|_| FontError::Parse)?;
-        let metrics = read_metrics(&font);
-        let shaper_data = ShaperData::new(&font);
+    pub fn add(&mut self, mut source: FontSource) -> Result<Vec<u16>, FontError> {
+        let bytes = Arc::new(std::mem::take(&mut source.bytes));
+        let font = skrifa::FontRef::new(&bytes).map_err(|_| FontError::Parse)?;
+        let shaper_data = Arc::new(ShaperData::new(&font));
+        let harf = HarfFontRef::new(&bytes).map_err(|_| FontError::Parse)?;
 
-        let id = self.faces.len() as u16;
-        let identity = FontRefEntry {
-            family: source.family.clone(),
-            name: source.name.clone(),
-            style: source.style.clone(),
-        };
-        self.by_family
-            .entry(source.family.clone())
-            .or_default()
-            .push(id);
-        self.faces.push(Face {
-            bytes: source.bytes,
-            identity,
-            metrics,
-            shaper_data,
-        });
-        Ok(id)
+        let mut ids = Vec::new();
+        for cut in cuts(&font, &source) {
+            let id = self.faces.len() as u16;
+            let instance = (!cut.variations.is_empty())
+                .then(|| ShaperInstance::from_coords(&harf, cut.location.coords().iter().copied()));
+            self.by_family
+                .entry(source.family.clone())
+                .or_default()
+                .push(id);
+            self.faces.push(Face {
+                bytes: bytes.clone(),
+                identity: FontRefEntry {
+                    family: source.family.clone(),
+                    name: cut.name,
+                    style: cut.style,
+                    attributes: cut.attributes,
+                },
+                metrics: read_metrics(&font, &cut.location),
+                shaper_data: shaper_data.clone(),
+                location: cut.location,
+                variations: cut.variations,
+                instance,
+            });
+            ids.push(id);
+        }
+        Ok(ids)
     }
 
     /// Number of registered faces. Ids are `0..len`.
@@ -210,24 +297,30 @@ impl FontRegistry {
             .and_then(|ids| ids.first().copied())
     }
 
-    /// The face of `family` that best fits a slope and weight.
+    /// The face of `family` that best answers a slope and weight.
     ///
-    /// Style matching is by the face's own style name, which is what
-    /// a font file calls itself: an author asking for italic gets the
-    /// italic cut when the family has one and the upright otherwise.
-    pub fn best_match(&self, family: &str, italic: bool, bold: bool) -> Option<u16> {
+    /// Matching follows CSS: slope decides first — a family with an
+    /// italic cut never answers an italic request with the upright —
+    /// and weight is then chosen by the desired-weight rules, which
+    /// look up before they look down in the text range and away from
+    /// it elsewhere. The match reports what it actually found, so a
+    /// caller can say when the family had nothing at the slope asked
+    /// for.
+    pub fn select(&self, family: &str, want: FaceAttributes) -> Option<FaceMatch> {
         let ids = self.by_family.get(&family.to_lowercase())?;
-        ids.iter()
-            .max_by_key(|id| {
-                let style = self
-                    .font_ref(**id)
-                    .map(|entry| entry.style.to_lowercase())
-                    .unwrap_or_default();
-                let is_italic = style.contains("italic") || style.contains("oblique");
-                let is_bold = style.contains("bold");
-                (is_italic == italic) as u8 + (is_bold == bold) as u8
-            })
-            .copied()
+        let attributes = |id: &u16| self.faces[*id as usize].identity.attributes;
+        // A family with nothing at the slope asked for answers with
+        // everything it has; one that has it answers only with that.
+        let has_slope = ids.iter().any(|id| attributes(id).italic == want.italic);
+        let id = ids
+            .iter()
+            .filter(|id| !has_slope || attributes(id).italic == want.italic)
+            .min_by_key(|id| (weight_rank(attributes(id).weight, want.weight), **id))
+            .copied()?;
+        Some(FaceMatch {
+            id,
+            attributes: attributes(&id),
+        })
     }
 
     /// Identity of a face, for the output font table.
@@ -241,17 +334,28 @@ impl FontRegistry {
     }
 
     /// The raw bytes of a face, for embedding at write time.
-    pub fn bytes(&self, id: u16) -> Option<&[u8]> {
+    ///
+    /// Shared: the faces a variable file yielded are one file, and a
+    /// painter embeds one copy of it however many cuts it draws.
+    pub fn bytes(&self, id: u16) -> Option<Arc<Vec<u8>>> {
+        self.faces.get(id as usize).map(|face| face.bytes.clone())
+    }
+
+    /// Where on its file's axes a face sits, in user space. Empty
+    /// for a static face and for a variable one at its default
+    /// location.
+    pub fn variations(&self, id: u16) -> Option<&[AxisSetting]> {
         self.faces
             .get(id as usize)
-            .map(|face| face.bytes.as_slice())
+            .map(|face| face.variations.as_slice())
     }
 
     /// Advance width of one glyph, in font units.
     pub fn advance_width(&self, id: u16, glyph: u32) -> Option<u16> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
-        let glyph_metrics = GlyphMetrics::new(&font, Size::unscaled(), LocationRef::default());
+        let glyph_metrics =
+            GlyphMetrics::new(&font, Size::unscaled(), LocationRef::from(&face.location));
         glyph_metrics
             .advance_width(GlyphId::new(glyph))
             .map(|w| w.round() as u16)
@@ -264,7 +368,8 @@ impl FontRegistry {
     pub fn advance_widths(&self, id: u16, glyphs: &[u32]) -> Option<Vec<u16>> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
-        let glyph_metrics = GlyphMetrics::new(&font, Size::unscaled(), LocationRef::default());
+        let glyph_metrics =
+            GlyphMetrics::new(&font, Size::unscaled(), LocationRef::from(&face.location));
         Some(
             glyphs
                 .iter()
@@ -295,7 +400,11 @@ impl FontRegistry {
     pub fn shape(&self, id: u16, text: &str) -> Option<Vec<ShapedGlyph>> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
-        let shaper = face.shaper_data.shaper(&font).build();
+        let shaper = face
+            .shaper_data
+            .shaper(&font)
+            .instance(face.instance.as_ref())
+            .build();
         let mut buffer = UnicodeBuffer::new();
         buffer.push_str(text);
         buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
@@ -322,14 +431,131 @@ impl FontRegistry {
     }
 }
 
+/// One face a font file yields: an identity, a location on the
+/// file's axes, and the slope and weight it is matched at.
+struct Cut {
+    name: String,
+    style: String,
+    attributes: FaceAttributes,
+    location: Location,
+    variations: Vec<AxisSetting>,
+}
+
+/// The faces a font file yields.
+///
+/// A variable file yields its named instances, which is the file's
+/// own statement of the cuts it offers. A static one — or one whose
+/// stylesheet already declared what it is — yields a single face at
+/// its default location.
+fn cuts(font: &skrifa::FontRef, source: &FontSource) -> Vec<Cut> {
+    let attributes = font.attributes();
+    let default = FaceAttributes {
+        italic: attributes.style != SlopeStyle::Normal,
+        weight: attributes.weight.value().round().clamp(1.0, 1000.0) as u16,
+    };
+    let whole_file = |attributes| {
+        vec![Cut {
+            name: source.name.clone(),
+            style: source.style.clone(),
+            attributes,
+            location: Location::default(),
+            variations: Vec::new(),
+        }]
+    };
+    if let Some(declared) = source.declared {
+        return whole_file(declared);
+    }
+    let axes: Vec<_> = font.axes().iter().collect();
+    let family = name_string(font, StringId::TYPOGRAPHIC_FAMILY_NAME)
+        .or_else(|| name_string(font, StringId::FAMILY_NAME))
+        .unwrap_or_else(|| source.name.clone());
+    let instances: Vec<Cut> = font
+        .named_instances()
+        .iter()
+        .filter_map(|instance| {
+            let style = name_string(font, instance.subfamily_name_id())?;
+            let settings: Vec<AxisSetting> = axes
+                .iter()
+                .zip(instance.user_coords())
+                .map(|(axis, value)| AxisSetting {
+                    tag: axis.tag().into_bytes(),
+                    value,
+                })
+                .collect();
+            let location = instance.location();
+            let at_default = location.coords().iter().all(|coord| coord.to_f32() == 0.0);
+            Some(Cut {
+                name: format!("{family} {style}"),
+                attributes: FaceAttributes {
+                    italic: default.italic || slanted(&settings),
+                    weight: setting(&settings, b"wght")
+                        .map(|weight| weight.round().clamp(1.0, 1000.0) as u16)
+                        .unwrap_or(default.weight),
+                },
+                style,
+                variations: if at_default { Vec::new() } else { settings },
+                location,
+            })
+        })
+        .collect();
+    if instances.is_empty() {
+        whole_file(default)
+    } else {
+        instances
+    }
+}
+
+/// The value of one axis in a face's location.
+fn setting(settings: &[AxisSetting], tag: &[u8; 4]) -> Option<f32> {
+    settings
+        .iter()
+        .find(|setting| setting.tag == *tag)
+        .map(|setting| setting.value)
+}
+
+/// Whether a location leans: a family that varies its slope says so
+/// on `ital` or `slnt` rather than in a separate file.
+fn slanted(settings: &[AxisSetting]) -> bool {
+    setting(settings, b"ital").is_some_and(|value| value >= 0.5)
+        || setting(settings, b"slnt").is_some_and(|value| value != 0.0)
+}
+
+/// Where a candidate weight sits in CSS's order of preference for a
+/// desired one: lower is better, and the tier dominates the distance.
+///
+/// The rules are asymmetric on purpose — in the text range a heavier
+/// cut is preferred to a lighter one, and outside it the search runs
+/// away from 400 first.
+fn weight_rank(candidate: u16, desired: u16) -> (u8, u16) {
+    if (400..=500).contains(&desired) {
+        if candidate >= desired && candidate <= 500 {
+            (0, candidate - desired)
+        } else if candidate < desired {
+            (1, desired - candidate)
+        } else {
+            (2, candidate - 500)
+        }
+    } else if desired < 400 {
+        if candidate <= desired {
+            (0, desired - candidate)
+        } else {
+            (1, candidate - desired)
+        }
+    } else if candidate >= desired {
+        (0, candidate - desired)
+    } else {
+        (1, desired - candidate)
+    }
+}
+
 fn name_string<'a>(font: &skrifa::FontRef<'a>, id: StringId) -> Option<String> {
     font.localized_strings(id)
         .english_or_first()
         .map(|s| s.to_string())
 }
 
-fn read_metrics(font: &skrifa::FontRef) -> FontMetricsTable {
-    let metrics = Metrics::new(font, Size::unscaled(), LocationRef::default());
+fn read_metrics(font: &skrifa::FontRef, location: &Location) -> FontMetricsTable {
+    let metrics = Metrics::new(font, Size::unscaled(), LocationRef::from(location));
     FontMetricsTable {
         units_per_em: metrics.units_per_em,
         ascender: metrics.ascent as i16,
@@ -347,14 +573,20 @@ pub enum FontError {
     MissingName,
 }
 
-/// The bundled default text face: EB Garamond (SIL OFL 1.1).
+/// The bundled upright text face: EB Garamond (SIL OFL 1.1).
 pub const BUNDLED_FONT: &[u8] = include_bytes!("../fonts/EBGaramond-VF.ttf");
 
-/// A registry with the bundled face registered and all generics
-/// mapped to it.
+/// Its italic companion, from the same release: emphasis is a
+/// different set of outlines, not a slanted copy of these.
+pub const BUNDLED_ITALIC: &[u8] = include_bytes!("../fonts/EBGaramond-Italic-VF.ttf");
+
+/// A registry with the bundled family registered — both slopes, and
+/// every weight each file names — and all generics mapped to it.
 pub fn bundled_registry() -> Result<FontRegistry, FontError> {
     let mut registry = FontRegistry::new();
-    registry.add(FontSource::from_bytes(BUNDLED_FONT.to_vec())?)?;
+    for bytes in [BUNDLED_FONT, BUNDLED_ITALIC] {
+        registry.add(FontSource::from_bytes(bytes.to_vec())?)?;
+    }
     for generic in [
         GenericFamily::Serif,
         GenericFamily::SansSerif,
@@ -381,15 +613,140 @@ mod tests {
     fn registration_assigns_sequential_ids() {
         let mut registry = FontRegistry::new();
         assert!(registry.is_empty());
-        let id = registry
-            .add(FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
-            .unwrap();
-        assert_eq!(id, 0);
-        let second = registry
-            .add(FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
-            .unwrap();
-        assert_eq!(second, 1);
+        let mut source = FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap();
+        source.declared = Some(FaceAttributes::REGULAR);
+        let id = registry.add(source.clone()).unwrap();
+        assert_eq!(id, vec![0]);
+        let second = registry.add(source).unwrap();
+        assert_eq!(second, vec![1]);
         assert_eq!(registry.len(), 2);
+    }
+
+    /// A variable file registers the cuts it names, each pinned to
+    /// its own place on the axis. The default instance pins nothing:
+    /// there is no instancing to do at the location the file already
+    /// sits at.
+    #[test]
+    fn variable_files_register_their_named_instances() {
+        let registry = registry();
+        let cuts: Vec<(&str, bool, u16)> = (0..registry.len() as u16)
+            .map(|id| {
+                let entry = registry.font_ref(id).unwrap();
+                (
+                    entry.style.as_str(),
+                    entry.attributes.italic,
+                    entry.attributes.weight,
+                )
+            })
+            .collect();
+        assert_eq!(
+            cuts,
+            vec![
+                ("Regular", false, 400),
+                ("Medium", false, 500),
+                ("SemiBold", false, 600),
+                ("Bold", false, 700),
+                ("ExtraBold", false, 800),
+                ("Italic", true, 400),
+                ("Medium Italic", true, 500),
+                ("SemiBold Italic", true, 600),
+                ("Bold Italic", true, 700),
+                ("ExtraBold Italic", true, 800),
+            ],
+        );
+        assert_eq!(registry.variations(0).unwrap(), &[]);
+        assert_eq!(
+            registry.variations(3).unwrap(),
+            &[AxisSetting {
+                tag: *b"wght",
+                value: 700.0,
+            }],
+        );
+        // The instance is shaped, not just labelled: bold outlines
+        // are wider than regular ones at the same size.
+        let regular: u32 = registry
+            .shape(0, "quantities")
+            .unwrap()
+            .iter()
+            .map(|g| g.x_advance)
+            .sum();
+        let bold: u32 = registry
+            .shape(3, "quantities")
+            .unwrap()
+            .iter()
+            .map(|g| g.x_advance)
+            .sum();
+        assert!(
+            bold > regular,
+            "bold ({bold}) is no wider than regular ({regular})"
+        );
+    }
+
+    /// Slope decides first and weight second: the family has an
+    /// italic cut, so an italic request never comes back upright,
+    /// and a bold italic request lands on the bold italic instance.
+    #[test]
+    fn faces_match_by_slope_then_weight() {
+        let registry = registry();
+        let select = |italic, weight| {
+            registry
+                .select("EB Garamond", FaceAttributes { italic, weight })
+                .unwrap()
+        };
+        assert_eq!(select(false, 400).id, 0);
+        assert_eq!(select(true, 400).id, 5);
+        assert_eq!(select(false, 700).id, 3);
+        assert_eq!(select(true, 700).id, 8, "no bold italic cut");
+        // CSS's desired-weight rules: in the text range the search
+        // runs up first, and outside it away from the range.
+        assert_eq!(select(false, 450).attributes.weight, 500);
+        assert_eq!(select(false, 100).attributes.weight, 400);
+        assert_eq!(select(false, 1000).attributes.weight, 800);
+        assert_eq!(registry.select("nowhere", FaceAttributes::REGULAR), None);
+    }
+
+    /// A family with one slope answers for both, and says which one
+    /// it handed back.
+    #[test]
+    fn a_match_reports_the_face_it_settled_for() {
+        let mut registry = FontRegistry::new();
+        registry
+            .add(FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
+            .unwrap();
+        let found = registry
+            .select(
+                "eb garamond",
+                FaceAttributes {
+                    italic: true,
+                    weight: 400,
+                },
+            )
+            .unwrap();
+        assert_eq!(found.id, 0);
+        assert!(!found.attributes.italic, "there is no italic cut to find");
+    }
+
+    /// A stylesheet that declares what its source is overrides the
+    /// file, and registers it as the one cut it was called: a sheet
+    /// naming one weight is not describing five.
+    #[test]
+    fn a_declared_face_registers_as_the_one_cut_it_was_called() {
+        let mut registry = FontRegistry::new();
+        let mut source = FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap();
+        source.family = "house".into();
+        source.declared = Some(FaceAttributes {
+            italic: true,
+            weight: 700,
+        });
+        registry.add(source).unwrap();
+        assert_eq!(registry.len(), 1);
+        assert_eq!(
+            registry.font_ref(0).unwrap().attributes,
+            FaceAttributes {
+                italic: true,
+                weight: 700,
+            },
+        );
     }
 
     /// Metrics come out in font units with the sign convention of the

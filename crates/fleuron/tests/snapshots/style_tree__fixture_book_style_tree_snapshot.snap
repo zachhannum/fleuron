@@ -1,5 +1,6 @@
 ---
 source: crates/fleuron/tests/style_tree.rs
+assertion_line: 16
 expression: tree
 ---
 {
@@ -115,7 +116,7 @@ expression: tree
       "break_inside": "auto"
     },
     {
-      "font_id": 0,
+      "font_id": 5,
       "font_family": [
         {
           "generic": "serif"
