@@ -7,7 +7,8 @@ wins and the quick fix waits for its own PR.
 ## Project shape
 
 - Workspace: `crates/fleuron` (engine), `crates/fleuron-cli` (binary),
-  `crates/fleuron-wasm` (bindings).
+  `crates/fleuron-wasm` (bindings), `crates/fleuron-fixtures` (corpus
+  and perf harness, never published).
 - Pipeline is one-way: content tree + style tree → box tree → line
   layout → fragmentation → pages → display list / PDF. Downstream never
   reaches back upstream.
@@ -50,6 +51,26 @@ in → valid PDF out**, invoked through the CLI, living in
   PRs until #12's harness has a stable baseline. After that, a
   regression > 20% on the 300-page bench fails CI.
 
+## Perf harness
+
+- The corpus is two public-domain books in `fixtures/corpus/`, checked
+  in as markdown and read into content trees by the fixtures crate.
+  Pride and Prejudice is the gate: ~330 pages, the book scale the
+  budgets are written against. The Count of Monte Cristo is four times
+  that, and exists to expose superlinearity. No generated prose — it is
+  uniform, and uniform text hides the tail cases that make layout slow.
+- Budgets live in `fleuron_fixtures::gate::budget` as absolute
+  ceilings, not comparisons against a stored baseline.
+  `cargo run --release -p fleuron-fixtures --bin perf-gate` checks
+  them; CI runs the same binary natively and under wasmtime.
+- Timing verdicts warn rather than fail — a shared runner's clock is a
+  trend, not a regression — and `--strict` is the switch to throw once
+  the numbers have held still. The memory ceiling does fail today:
+  allocation counts are identical on every machine.
+- A stage that gets a bench gets a seam it can be timed through. If
+  timing a stage separately means reaching into a private method, the
+  seam is missing, not the bench.
+
 ## PR creation and CI
 
 - One issue per branch: `feat/<issue>-slug`, `chore/<issue>-slug`,
@@ -88,6 +109,8 @@ in → valid PDF out**, invoked through the CLI, living in
 6. wasm32 build check: `cargo build -p fleuron-wasm
    --target wasm32-unknown-unknown` — the bindings must never silently
    rot while only native gets exercised
+7. perf job: book-scale invariants in release, then `perf-gate` against
+   the budgets natively and under wasmtime, reported to the run summary
 
 ## Documentation rules
 
@@ -115,4 +138,4 @@ docs/) and external (README).
 - Public API docs (`///`) on every public item; the display-list types
   are a cross-painter contract and get treated like documentation.
 - Benchmarks: criterion, in `crates/fleuron/benches/`, one bench per
-  pipeline stage.
+  pipeline stage, run over the fixture corpus.

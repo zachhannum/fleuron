@@ -37,6 +37,58 @@ jobs:
           pdftotext out.pdf out.txt
           test "$(wc -w < out.txt)" -gt 0
 
+  # Warns, does not fail: a shared runner's clock is evidence of a trend,
+  # not of a regression. `--strict` is the switch to throw once the
+  # numbers have held still. The memory ceiling is a hard failure — the
+  # allocator counts the same bytes on every machine.
+  perf:
+    runs-on: ubuntu-latest
+    env:
+      WASMTIME_VERSION: v29.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Book-scale invariants
+        run: cargo test --release -p fleuron-fixtures
+      - name: Native budgets
+        run: |
+          mkdir -p reports
+          cargo run --release -p fleuron-fixtures --bin perf-gate -- --runs 3 \
+            | tee reports/native.txt
+      - name: Install wasmtime
+        run: |
+          curl -sSfL -o wasmtime.tar.xz \
+            "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz"
+          tar xf wasmtime.tar.xz
+          echo "$PWD/wasmtime-${WASMTIME_VERSION}-x86_64-linux" >> "$GITHUB_PATH"
+      # A standalone runtime, not a browser: the worker's real engine is
+      # someone else's, and this is the closest reproducible proxy. Both
+      # books, as natively — the constrained target is where a curve
+      # that has stopped being linear shows up first.
+      - name: Worker budgets
+        run: |
+          cargo build --release -p fleuron-fixtures --bin perf-gate --target wasm32-wasip1
+          wasmtime run target/wasm32-wasip1/release/perf-gate.wasm -- --runs 3 \
+            | tee reports/wasm.txt
+      # Whatever got measured before the failure is still worth reading.
+      - name: Publish reports
+        if: always()
+        run: |
+          for report in reports/*.txt; do
+            printf '### perf-gate — %s\n\n```\n' "$(basename "$report" .txt)" >> "$GITHUB_STEP_SUMMARY"
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            printf '```\n\n' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-reports
+          path: reports/
+          if-no-files-found: ignore
+
   advisories:
     runs-on: ubuntu-latest
     steps:
@@ -52,3 +104,86 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p fleuron-wasm --target wasm32-unknown-unknown
+
+  # One comment per PR, rewritten in place on every run: the checks tab
+  # says whether the run was green, and the perf numbers say what a
+  # reviewer actually has to look at. A fork's token cannot comment, so
+  # this does not run for one.
+  report:
+    if: >-
+      always() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [test, e2e, perf, advisories, wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: perf-reports
+          path: reports
+      - name: Post the run's results
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MARKER: <!-- ci-report -->
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" > jobs.json
+
+          # This job is still running and would only ever report itself
+          # as the reason the table is incomplete.
+          rows=$(jq -r '.jobs[] | select(.name != "report")
+                        | [.name, (.conclusion // "running"), .started_at, (.completed_at // .started_at)]
+                        | @tsv' jobs.json)
+          green=true
+          table=""
+          while IFS=$'\t' read -r name conclusion started completed; do
+            [ -n "$name" ] || continue
+            case "$conclusion" in
+              success) icon="✅" ;;
+              skipped) icon="⏭️" ;;
+              cancelled) icon="⚠️" ; green=false ;;
+              *) icon="❌" ; green=false ;;
+            esac
+            seconds=$(( $(date -u -d "$completed" +%s) - $(date -u -d "$started" +%s) ))
+            table="${table}| \`${name}\` | ${icon} ${conclusion} | $((seconds / 60))m$(printf '%02d' $((seconds % 60)))s |"$'\n'
+          done <<< "$rows"
+
+          {
+            echo "$MARKER"
+            if [ "$green" = true ]; then
+              echo "## CI — all green"
+            else
+              echo "## CI — not green"
+            fi
+            echo
+            echo "| job | result | time |"
+            echo "|---|---|---|"
+            printf '%s' "$table"
+            echo
+            for report in reports/*.txt; do
+              [ -e "$report" ] || continue
+              echo "### perf-gate — $(basename "$report" .txt)"
+              echo
+              echo '```'
+              cat "$report"
+              echo '```'
+              echo
+            done
+            echo "[Full run]($RUN_URL) · commit \`${HEAD_SHA:0:8}\`"
+          } > body.md
+
+          # Rewrite the standing comment rather than stacking a new one
+          # on every push.
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            --jq "[.[] | select(.body | startswith(\"$MARKER\"))] | first | .id // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@body.md --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@body.md --silent
+          fi

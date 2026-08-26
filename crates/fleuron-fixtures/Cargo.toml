@@ -1,0 +1,17 @@
+[package]
+name = "fleuron-fixtures"
+description = "Fixture corpus and measurement harness: public-domain books as content trees, stage timings, and the budgets CI gates on"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "perf-gate"
+path = "src/bin/perf-gate.rs"
+
+[dependencies]
+fleuron = { path = "../fleuron" }
+pulldown-cmark.workspace = true
