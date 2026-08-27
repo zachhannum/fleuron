@@ -20,16 +20,18 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
   -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
-  -m, --metadata <path> the book's title and author, for a book that is
-                       several files and so has no one file to read them
-                       from
+  --title <text>       the book's title
+  --author <text>      the book's author
+  --meta <key=value>   any other metadata field; repeatable. `language`
+                       is the one the PDF writer reads
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 
 Markdown files compose in the order given. One markdown file is a whole
 book, so its frontmatter is the book's; several are chapters, and each
-file's frontmatter is its own. A single .json file is read as a content
-tree instead, which is the same document one stage later.";
+file's frontmatter is its own, which is what --title and --author are
+for. A single .json file is read as a content tree instead, which is
+the same document one stage later.";
 
 fn main() -> ExitCode {
     dispatch(std::env::args().skip(1)).code()
@@ -57,15 +59,16 @@ impl Status {
 }
 
 /// What the command line asked for.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 enum Command {
     Render {
         inputs: Vec<PathBuf>,
         output: PathBuf,
         css: Vec<PathBuf>,
-        /// Where the book's own metadata comes from, when no single
-        /// input file speaks for the whole book.
-        metadata: Option<PathBuf>,
+        /// The book's own metadata, named on the command line. Fields
+        /// left unset here fall back to frontmatter when one input
+        /// speaks for the whole book.
+        metadata: Metadata,
         /// How the markdown frontend reads each file.
         reading: Options,
     },
@@ -89,7 +92,7 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
             css,
             metadata,
             reading,
-        }) => match render(&inputs, &output, &css, metadata.as_deref(), &reading) {
+        }) => match render(&inputs, &output, &css, metadata, &reading) {
             Ok(summary) => summary.report(&inputs, &output),
             Err(e) => {
                 eprintln!("fleuron: {e:#}");
@@ -107,7 +110,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     let mut inputs: Vec<PathBuf> = Vec::new();
     let mut output: Option<PathBuf> = None;
     let mut css: Vec<PathBuf> = Vec::new();
-    let mut metadata: Option<PathBuf> = None;
+    let mut metadata = Metadata::default();
     let mut reading = Options::default();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -117,7 +120,15 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
             "-h" | "--help" => return Ok(Command::Help),
             "-o" | "--output" => output = Some(PathBuf::from(value()?)),
             "-c" | "--css" => css.push(PathBuf::from(value()?)),
-            "-m" | "--metadata" => metadata = Some(PathBuf::from(value()?)),
+            "--title" => metadata.title = Some(value()?),
+            "--author" => metadata.author = Some(value()?),
+            "--meta" => {
+                let field = value()?;
+                let (key, held) = field
+                    .split_once('=')
+                    .ok_or_else(|| anyhow!("--meta takes key=value, got {field}"))?;
+                metadata.extra.insert(key.to_string(), held.to_string());
+            }
             "-s" | "--split" => reading.sections = split(&value()?)?,
             "-d" | "--dialect" => reading.dialect = dialect(&value()?)?,
             flag if flag.starts_with('-') && flag.len() > 1 => bail!("unknown option {flag}"),
@@ -223,7 +234,7 @@ fn render(
     inputs: &[PathBuf],
     output: &Path,
     css: &[PathBuf],
-    metadata: Option<&Path>,
+    metadata: Metadata,
     reading: &Options,
 ) -> Result<Summary> {
     let mut registry = fleuron::fonts::bundled_registry().context("bundled font failed to load")?;
@@ -308,14 +319,14 @@ impl ImageLoader for Files {
 /// Reads the inputs into one book, with whatever the reading had to
 /// complain about.
 ///
-/// Book metadata is the file `--metadata` names. Without one, a lone
-/// markdown input is the whole book and its frontmatter is the book's.
-/// Several inputs are chapters: each file's frontmatter belongs to the
-/// section it became, and the book is left unnamed rather than named
-/// after whichever chapter happened to come first.
+/// The book's metadata is what the command line named. A lone markdown
+/// input is the whole book, so its frontmatter fills whatever the
+/// command line left unset. Several inputs are chapters: each file's
+/// frontmatter belongs to the section it became, and the book is left
+/// unnamed rather than named after whichever chapter came first.
 fn read_book(
     inputs: &[PathBuf],
-    metadata: Option<&Path>,
+    named: Metadata,
     reading: &Options,
 ) -> Result<(Book, Vec<Warning>)> {
     if let [tree] = inputs
@@ -334,17 +345,14 @@ fn read_book(
         sources.push((input.display().to_string(), text));
     }
 
-    let metadata = match metadata {
-        Some(path) => {
-            let text =
-                std::fs::read_to_string(path).with_context(|| format!("{}", path.display()))?;
-            fleuron_markdown::metadata(&text)
-        }
-        None => match sources.as_slice() {
-            [(_, text)] => fleuron_markdown::frontmatter(text),
-            _ => Metadata::default(),
-        },
+    let mut metadata = match sources.as_slice() {
+        [(_, text)] => fleuron_markdown::frontmatter(text),
+        _ => Metadata::default(),
     };
+    // What the command line said outranks what a file said.
+    metadata.title = named.title.or(metadata.title);
+    metadata.author = named.author.or(metadata.author);
+    metadata.extra.extend(named.extra);
 
     let mut sections = Vec::new();
     let mut warnings = Vec::new();
@@ -388,7 +396,7 @@ mod tests {
                 inputs: vec![PathBuf::from("manuscript.md")],
                 output: PathBuf::from("out.pdf"),
                 css: Vec::new(),
-                metadata: None,
+                metadata: Metadata::default(),
                 reading: Options::default(),
             },
         );
@@ -398,7 +406,7 @@ mod tests {
                 inputs: vec![PathBuf::from("book.json")],
                 output: PathBuf::from("out.pdf"),
                 css: Vec::new(),
-                metadata: None,
+                metadata: Metadata::default(),
                 reading: Options::default(),
             },
         );
@@ -409,7 +417,7 @@ mod tests {
                 inputs: vec![PathBuf::from("a.md")],
                 output: PathBuf::from("out.pdf"),
                 css: vec![PathBuf::from("a.css"), PathBuf::from("b.css")],
-                metadata: None,
+                metadata: Metadata::default(),
                 reading: Options::default(),
             },
         );
@@ -432,6 +440,36 @@ mod tests {
         assert_eq!(inputs, [PathBuf::from("two.md"), PathBuf::from("one.md")]);
         assert!(parse(args(&["a.json", "b.json", "-o", "out.pdf"])).is_err());
         assert!(parse(args(&["a.md", "b.json", "-o", "out.pdf"])).is_err());
+    }
+
+    #[test]
+    fn metadata_fields_are_named_on_the_command_line() {
+        let Command::Render { metadata, .. } = render_of(&[
+            "book.md",
+            "-o",
+            "out.pdf",
+            "--title",
+            "The Levant Papers",
+            "--author",
+            "E. Marsh",
+            "--meta",
+            "language=en",
+        ]) else {
+            panic!("expected a render");
+        };
+        assert_eq!(metadata.title.as_deref(), Some("The Levant Papers"));
+        assert_eq!(metadata.author.as_deref(), Some("E. Marsh"));
+        assert_eq!(
+            metadata.extra.get("language").map(String::as_str),
+            Some("en"),
+        );
+
+        for bad in [
+            vec!["book.md", "-o", "out.pdf", "--meta", "language"],
+            vec!["book.md", "-o", "out.pdf", "--title"],
+        ] {
+            assert!(parse(args(&bad)).is_err(), "{bad:?}");
+        }
     }
 
     #[test]
@@ -467,9 +505,9 @@ mod tests {
     }
 
     /// One file is a book and speaks for itself; several are chapters
-    /// and do not.
+    /// and do not, so the command line has to.
     #[test]
-    fn book_metadata_comes_from_one_file_or_from_the_flag() {
+    fn book_metadata_comes_from_one_file_or_from_the_command_line() {
         let dir = std::env::temp_dir().join("fleuron-cli-metadata");
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let chapter = |name: &str, title: &str| {
@@ -489,12 +527,13 @@ mod tests {
         };
 
         // One file: its frontmatter is the book's.
-        let (book, _) = read_book(std::slice::from_ref(&one), None, &whole).unwrap();
+        let (book, _) = read_book(std::slice::from_ref(&one), Metadata::default(), &whole).unwrap();
         assert_eq!(book.metadata.title.as_deref(), Some("The Ambassador"));
 
         // Several: the book is unnamed, and each chapter keeps its own
         // title rather than lending it to the work.
-        let (book, _) = read_book(&[one.clone(), two.clone()], None, &whole).unwrap();
+        let (book, _) =
+            read_book(&[one.clone(), two.clone()], Metadata::default(), &whole).unwrap();
         assert_eq!(book.metadata.title, None);
         let chapters: Vec<Option<&str>> = book
             .sections
@@ -503,15 +542,22 @@ mod tests {
             .collect();
         assert_eq!(chapters, [Some("The Ambassador"), Some("A Cold Reception")]);
 
-        // Named explicitly, the work has a title and the chapters keep
-        // theirs.
-        let book_file = dir.join("meta-book.yaml");
-        std::fs::write(&book_file, "title: The Levant Papers\nauthor: E. Marsh\n")
-            .expect("the book file is writable");
-        let (book, _) = read_book(&[one, two], Some(&book_file), &whole).unwrap();
-        assert_eq!(book.metadata.title.as_deref(), Some("The Levant Papers"));
-        assert_eq!(book.metadata.author.as_deref(), Some("E. Marsh"));
+        // Named on the command line, the work has a title and the
+        // chapters keep theirs.
+        let named = Metadata {
+            title: Some("The Levant Papers".into()),
+            author: Some("E. Marsh".into()),
+            extra: [("language".to_string(), "en".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        let (book, _) = read_book(&[one.clone(), two], named.clone(), &whole).unwrap();
+        assert_eq!(book.metadata, named);
         assert_eq!(book.sections[0].title.as_deref(), Some("The Ambassador"));
+
+        // A flag outranks the frontmatter it overlaps.
+        let (book, _) = read_book(std::slice::from_ref(&one), named, &whole).unwrap();
+        assert_eq!(book.metadata.title.as_deref(), Some("The Levant Papers"));
     }
 
     #[test]
@@ -530,7 +576,7 @@ mod tests {
     #[test]
     fn a_missing_file_is_an_error_not_a_panic() {
         let missing = [PathBuf::from("no/such/book.md")];
-        let e = read_book(&missing, None, &Options::default()).unwrap_err();
+        let e = read_book(&missing, Metadata::default(), &Options::default()).unwrap_err();
         assert!(format!("{e:#}").contains("no/such/book.md"), "{e:#}");
     }
 
@@ -539,7 +585,12 @@ mod tests {
         let e = parse_tree("{ not a content tree", Path::new("book.json")).unwrap_err();
         assert!(format!("{e:#}").contains("book.json"), "{e:#}");
         assert!(parse_tree("[]", Path::new("book.json")).is_err());
-        let e = read_book(&[PathBuf::from("notes.txt")], None, &Options::default()).unwrap_err();
+        let e = read_book(
+            &[PathBuf::from("notes.txt")],
+            Metadata::default(),
+            &Options::default(),
+        )
+        .unwrap_err();
         assert!(format!("{e:#}").contains("notes.txt"), "{e:#}");
     }
 

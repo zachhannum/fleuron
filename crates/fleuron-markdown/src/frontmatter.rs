@@ -13,21 +13,10 @@ use fleuron::content::Metadata;
 /// A source with no leading block has no metadata, which lays out
 /// fine.
 pub fn frontmatter(text: &str) -> Metadata {
-    match block(text) {
-        Some(block) => fields(block),
-        None => Metadata::default(),
-    }
-}
-
-/// Reads a file that is nothing but metadata, whether or not it
-/// fences itself: a book file beside the chapters, naming the work
-/// that the chapters have no business naming.
-pub fn metadata(text: &str) -> Metadata {
-    fields(block(text).unwrap_or(text))
-}
-
-fn fields(block: &str) -> Metadata {
     let mut metadata = Metadata::default();
+    let Some(block) = block(text) else {
+        return metadata;
+    };
     for line in block.lines() {
         let Some((key, value)) = line.split_once(':') else {
             continue;

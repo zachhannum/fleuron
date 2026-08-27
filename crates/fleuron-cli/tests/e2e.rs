@@ -485,10 +485,10 @@ fn several_markdown_files_compose_in_argument_order() {
     );
 }
 
-/// A chapter's frontmatter is the chapter's. The book is named by the
-/// file `-m` points at, not by whichever chapter came first.
+/// A chapter's frontmatter is the chapter's. The book is named on the
+/// command line, not by whichever chapter came first.
 #[test]
-fn a_multi_file_book_takes_its_metadata_from_the_book_file() {
+fn a_multi_file_book_is_named_on_the_command_line() {
     let first = write_source(
         "meta-one",
         "---\ntitle: The Ambassador\nstatus: draft\n---\n\nHe arrived on a Tuesday.\n",
@@ -498,8 +498,8 @@ fn a_multi_file_book_takes_its_metadata_from_the_book_file() {
         "---\ntitle: A Cold Reception\nstatus: revised\n---\n\nNobody met him at the gate.\n",
     );
 
-    // No book file: nothing is promoted to the book, and nothing warns
-    // about two chapters disagreeing over a title neither was claiming.
+    // Unnamed: nothing is promoted to the book, and nothing warns about
+    // two chapters disagreeing over a title neither was claiming.
     let (pdf, stderr) = run_with("unnamed", &[&first, &second], &[], &["-s", "none"]);
     assert!(!stderr.contains("warning"), "{stderr}");
     if let Some(info) = pdf_info(&pdf) {
@@ -509,14 +509,18 @@ fn a_multi_file_book_takes_its_metadata_from_the_book_file() {
         );
     }
 
-    let book = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("meta-book.yaml");
-    std::fs::write(&book, "title: The Levant Papers\nauthor: E. Marsh\n")
-        .expect("the book file is writable");
     let (pdf, stderr) = run_with(
         "named",
         &[&first, &second],
         &[],
-        &["-s", "none", "-m", book.to_str().expect("a utf-8 path")],
+        &[
+            "-s",
+            "none",
+            "--title",
+            "The Levant Papers",
+            "--author",
+            "E. Marsh",
+        ],
     );
     assert!(!stderr.contains("warning"), "{stderr}");
     let Some(info) = pdf_info(&pdf) else {

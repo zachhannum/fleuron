@@ -41,16 +41,11 @@ year: 1813
 
 A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out today; it is carried through the tree for whatever does.
 
-That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows, and `metadata` reads a file that is nothing but fields:
-
-```yaml
-title: The Levant Papers
-author: E. Marsh
-```
+That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows and the CLI passes what its flags named.
 
 Sixty chapter files have sixty frontmatter blocks and none of them describes the work. Reading the book's title out of whichever file came first is how a chapter ends up naming the book, so the frontend does not do it.
 
-A book with no metadata lays out.
+A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is carried for whoever wants it.
 
 ## Blocks
 

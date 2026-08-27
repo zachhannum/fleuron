@@ -34,18 +34,14 @@ fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 
 Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in rather than at the run.
 
-One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed rather than named after whichever file came first. `-m` is where the work's own title and author come from:
+One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed rather than named after whichever file came first. That leaves the work's own title and author to the command line:
 
 ```sh
-fleuron ch01.md ch02.md ch03.md -o book.pdf -m book.yaml
+fleuron ch01.md ch02.md ch03.md -o book.pdf \
+  --title "The Levant Papers" --author "E. Marsh"
 ```
 
-```yaml
-title: The Levant Papers
-author: E. Marsh
-```
-
-The file may be bare fields like that, or a markdown file with a `---` block; either reads the same.
+A flag outranks frontmatter where the two overlap, so a single file can be retitled without editing it.
 
 ## Where sections begin
 

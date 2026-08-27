@@ -32,7 +32,7 @@ mod convert;
 mod frontmatter;
 
 pub use cache::{Cache, SourceKey};
-pub use frontmatter::{frontmatter, metadata};
+pub use frontmatter::frontmatter;
 
 use fleuron::Warning;
 use fleuron::content::{Book, HeadingLevel, Metadata, Section};
@@ -202,7 +202,11 @@ mod tests {
             sections.extend(to_sections(markdown, name, &per_file).0);
         }
         let book = assemble(
-            metadata("title: The Levant Papers\nauthor: E. Marsh\n"),
+            Metadata {
+                title: Some("The Levant Papers".into()),
+                author: Some("E. Marsh".into()),
+                ..Metadata::default()
+            },
             sections,
         );
 

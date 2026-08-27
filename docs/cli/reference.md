@@ -13,9 +13,10 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
   -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
-  -m, --metadata <path> the book's title and author, for a book that is
-                       several files and so has no one file to read them
-                       from
+  --title <text>       the book's title
+  --author <text>      the book's author
+  --meta <key=value>   any other metadata field; repeatable. `language`
+                       is the one the PDF writer reads
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 ```
@@ -28,7 +29,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
 **`-d`, `--dialect`** — which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.md).
 
-**`-m`, `--metadata`** — a file holding the book's `title`, `author` and any other fields, either bare or in a `---` block. Without it, a lone markdown input is the whole book and its frontmatter is the book's; several inputs are chapters, and each file's frontmatter stays with the section it became.
+**`--title`, `--author`, `--meta`** — the book's own metadata. A lone markdown input is the whole book, so its frontmatter fills whatever these leave unset; several inputs are chapters, and each file's frontmatter stays with the section it became. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language.
 
 **`-o`, `--output`** — where the PDF goes. Required. The path is written whole; nothing is created alongside it.
 
