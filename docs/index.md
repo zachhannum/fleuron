@@ -26,7 +26,7 @@ Break decisions fall out of the layout pass itself, which is most of why a 333-p
 
 ## Three invariants
 
-**Styling enters as CSS.** A built-in user-agent stylesheet supplies the defaults; author CSS cascades over it. The supported subset is written down in [the CSS subset](css-subset.md); anything outside it is reported with the line and column it was written at, and the run continues.
+**Styling enters as CSS.** A built-in user-agent stylesheet supplies the defaults; author CSS cascades over it. The supported subset is written down in [the CSS subset](css-subset.mdx); anything outside it is reported with the line and column it was written at, and the run continues.
 
 **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas and PDF are interchangeable painters over one display list.
 
@@ -36,9 +36,9 @@ Break decisions fall out of the layout pass itself, which is most of why a 333-p
 
 **A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. `fleuron-markdown` is the frontend in front of it. One call lays a book out, and a [session](library/sessions.md) makes a preview re-run only the stages an edit changed. Start at the [library quickstart](library/quickstart.md).
 
-**A command-line binary.** `fleuron` reads markdown and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
+**A command-line binary.** `fleuron` reads markdown and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.mdx).
 
-**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access, and an SVG painter over what comes back. Start at the [wasm quickstart](wasm/quickstart.md).
+**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access, and an SVG painter over what comes back. Start at the [wasm quickstart](wasm/quickstart.md), or open [the demos](https://zachhannum.github.io/fleuron/demos/) and edit a book in your browser.
 
 ## Scope
 

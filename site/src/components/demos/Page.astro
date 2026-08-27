@@ -1,0 +1,41 @@
+---
+/**
+ * One page of a book, in the middle of prose.
+ *
+ * Held until the reader asks: a docs page carrying three of these
+ * would otherwise fetch the engine three times over for a reader who
+ * came to read. The poster underneath is a real page either way.
+ */
+import '../../styles/demos.css';
+import { demo } from '../../demos/catalogue.mjs';
+import { poster } from '../../demos/posters.mjs';
+import { PageView } from './PageView';
+
+interface Props {
+  /** Which demo's manuscript and stylesheet to set. */
+  demo: string;
+  /** The page to show, counting from 1. */
+  page?: number;
+  /** What the prose is pointing at: `baselines`, or `glyphs:N`. */
+  highlight?: string;
+  /** What the page is, in one line, under it. */
+  caption?: string;
+}
+
+const { demo: id, page, highlight, caption } = Astro.props;
+const inputs = demo(id);
+---
+
+<div class="not-content">
+  <PageView
+    client:visible
+    id={id}
+    markdown={inputs.markdown}
+    css={inputs.css}
+    name={inputs.name}
+    page={page ?? inputs.page}
+    poster={poster(id)}
+    highlight={highlight}
+    caption={caption}
+  />
+</div>

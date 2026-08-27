@@ -87,7 +87,7 @@ A host with a tree of its own, such as a CMS or a docx converter, can skip the f
 
 `Stylesheets::parse(&[])` compiles the built-in sheet alone, which is a trade paperback: 5.5×8.5 inches, EB Garamond at 11 points, justified, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
 
-Everything the built-in sheet can be overridden with is in [the CSS subset](../css-subset.md).
+Everything the built-in sheet can be overridden with is in [the CSS subset](../css-subset.mdx).
 
 ## Laying out again
 

@@ -15,6 +15,11 @@ fleuron: fixtures/gulliver-excerpt.md → book.pdf: 34 pages
 
 That is an excerpt of *Gulliver's Travels* — dialogue, em-dashes, hyphenation-prone words — laid out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
 
+<Page
+  demo="quickstart"
+  caption="Page 1 of book.pdf, laid out from the same manuscript and the same stylesheet as the command above."
+/>
+
 ## Without the clone
 
 ```sh
@@ -76,7 +81,7 @@ book { font-size: 12pt; line-height: 1.5; }
 h1, h2, h3 { font-size: 20pt; }
 ```
 
-[The CSS subset](../css-subset.md) is everything the engine understands. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
+[The CSS subset](../css-subset.mdx) is everything the engine understands. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
 
 ## Fonts
 

@@ -1,3 +1,10 @@
 node_modules/
 dist/
 .astro/
+
+# Built by `npm run demos`: the module the worker fetches, the book the
+# bench lays out, and a poster for every demo. All painted from the
+# commit being built, so none of them is checked in.
+public/fleuron_bg.wasm
+public/fixtures/
+src/generated/

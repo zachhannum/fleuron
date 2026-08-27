@@ -1,0 +1,38 @@
+---
+/**
+ * The split view, mounted: the manuscript, the stylesheet and the
+ * page the two make, side by side.
+ *
+ * The island hydrates on sight and fetches the engine itself. What
+ * the server sends is the poster, a real page painted by the engine
+ * at build time, so the slot is a typeset page from the first paint
+ * and stays one if the script never runs.
+ */
+import '../../styles/demos.css';
+import { demo } from '../../demos/catalogue.mjs';
+import { poster } from '../../demos/posters.mjs';
+import { Playground } from './Playground';
+
+interface Props {
+  /** Which demo's manuscript and stylesheet to open with. */
+  demo?: string;
+  /** Whether the stylesheet editor is open to begin with. */
+  stylesheet?: boolean;
+  /** Whether to wait for a press before fetching the module. */
+  held?: boolean;
+}
+
+const { demo: id = 'playground', stylesheet = true, held = false } = Astro.props;
+const inputs = demo(id);
+---
+
+<Playground
+  client:visible
+  id={id}
+  markdown={inputs.markdown}
+  css={inputs.css}
+  name={inputs.name}
+  poster={poster(id)}
+  stylesheet={stylesheet}
+  held={held}
+/>
