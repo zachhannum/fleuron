@@ -21,13 +21,26 @@ import { Playground } from './Playground';
 interface Props {
   /** Which demo's manuscript and stylesheet to open with. */
   demo?: string;
-  /** Whether the stylesheet editor is open to begin with. */
-  stylesheet?: boolean;
-  /** Whether to wait for a press before fetching the module. */
-  held?: boolean;
+  /** Which editors are on screen: `markdown`, `css`, or both. */
+  editors?: 'markdown' | 'css' | 'both';
+  /** The page to open on, counting from 1. */
+  page?: number;
+  /** What the display list is drawn as over the page it made. */
+  highlight?: string;
+  /** Whether the warnings are open to begin with. */
+  warnings?: boolean;
+  /** What the demo is, in one line, under it. */
+  caption?: string;
 }
 
-const { demo: id = 'playground', stylesheet = true, held = false } = Astro.props;
+const {
+  demo: id = 'playground',
+  editors = 'both',
+  page,
+  highlight,
+  warnings = false,
+  caption,
+} = Astro.props;
 const inputs = demo(id);
 ---
 
@@ -38,8 +51,12 @@ const inputs = demo(id);
     markdown={inputs.markdown}
     css={inputs.css}
     name={inputs.name}
-    stylesheet={stylesheet}
-    held={held}
+    dialect={inputs.dialect}
+    editors={editors}
+    page={page ?? inputs.page}
+    highlight={highlight}
+    warnings={warnings}
+    caption={caption}
   >
     <Fragment set:html={poster(id)} />
   </Playground>

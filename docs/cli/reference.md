@@ -31,7 +31,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-o`, `--output` | Where the PDF goes. Required, except under `--dump-tree`. The path is written whole and nothing is created alongside it. |
 | `-c`, `--css` | An author stylesheet. Repeatable. Sheets parse in the order given and cascade in that order, all of them over the built-in user-agent sheet. Omitting it entirely gives you the built-in design. |
 | `-s`, `--split` | Where a markdown file's sections begin. A level of 1 to 6 opens a section at every heading of that level or shallower. `none` opens none, so the file is one section. Default 1. |
-| `-d`, `--dialect` | Which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.md). |
+| `-d`, `--dialect` | Which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx). |
 | `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
 | `-V`, `--version` | Prints `fleuron <version>` and exits 0, whether or not a job was named. |
@@ -69,7 +69,7 @@ fleuron: warning: chapter-03.md:88:1: family "House Sans" resolved nothing
 fleuron: 2 warnings; the PDF was written anyway
 ```
 
-The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.md) covers what warns and why.
+The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
 
 ## Fonts on the command line
 

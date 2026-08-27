@@ -5,7 +5,7 @@ description: The engine's input contract, and the semantic document it lays out.
 
 The content tree is a semantic document, not markup. Everything downstream consumes these types, and nothing widens the vocabulary without a fixture and a test.
 
-Most callers never build one. [Markdown](markdown.md) is the usual input, and the frontend produces this. The types are here for a host whose source is already structured, such as a CMS or a docx converter: it constructs a `Book` in Rust, typed and checked by the compiler, with no schema document to keep in step.
+Most callers never build one. [Markdown](markdown.mdx) is the usual input, and the frontend produces this. The types are here for a host whose source is already structured, such as a CMS or a docx converter: it constructs a `Book` in Rust, typed and checked by the compiler, with no schema document to keep in step.
 
 The tree serializes, internally tagged so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast). That is an output only: `fleuron manuscript.md --dump-tree` reads back what the frontend did, and nothing parses one back into a `Book`.
 

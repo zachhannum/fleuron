@@ -5,11 +5,12 @@ description: Every property, at-rule and selector the engine honours, and what i
 
 fleuron understands the CSS a book needs and reports the rest. Everything below is honoured by the pipeline. Anything outside it becomes a warning naming the line and column it was written at, and the run continues.
 
-The page below is what a stylesheet built out of this vocabulary produces: mirrored margins, a folio, a running head from `string-set`, and a drop cap from `initial-letter`.
+The stylesheet below is written in this vocabulary: mirrored margins, a folio, a running head from `string-set`, and a drop cap from `initial-letter`. Change a rule and the chapter is set again.
 
-<Page
+<Playground
   demo="css-subset"
-  caption="A chapter opening under a stylesheet written in the subset. The playground opens the same book with the stylesheet next to it."
+  editors="css"
+  caption="A chapter opening, and the stylesheet that set it."
 />
 
 ## Selectors

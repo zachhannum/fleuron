@@ -9,6 +9,15 @@ A warning means the book laid out anyway. Unsupported CSS, a font that would not
 
 An error means the book did not lay out. Malformed input, a face that cannot be embedded, geometry a PDF cannot express.
 
+The stylesheet below has two declarations the engine has no room for. Both are reported, with the line and column they were written at, and the chapter sets anyway.
+
+<Playground
+  demo="warnings"
+  editors="css"
+  warnings
+  caption="A stylesheet outside the subset, and the page it did not stop."
+/>
+
 ## Reading warnings
 
 Warnings come back on the output:
@@ -31,7 +40,7 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 
 | | |
 |---|---|
-| a construct the content vocabulary has no room for | A list, a table, a code block. The frontend sets them as prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.md) is the full list. |
+| a construct the content vocabulary has no room for | A list, a table, a code block. The frontend sets them as prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.mdx) is the full list. |
 | a declaration outside the subset | The property, the at-rule or the selector, at the line and column it was written at. See [the CSS subset](../css-subset.mdx). |
 | a font that would not load | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a font this build can read. Text falls back to the next family in the list. |
 | a family that resolved nothing | The whole `font-family` stack came up empty and the first registered face answered. Usually a spelling mistake, or a loader rooted in the wrong directory. |

@@ -148,6 +148,40 @@ p {
 `;
 
 /**
+ * Every construct the mapping names, in one manuscript: the blocks
+ * and inlines the content tree has a counterpart for, and the ones
+ * it has none for, which are set as prose.
+ */
+export const MAPPING_MD = `## The Levant Papers
+
+The letter reached Marsh on a Tuesday, in *the second post*, and it was
+**not** what he had been waiting for. It began \`Dear sir\` and ended
+without a name, which is [the whole of the difficulty](https://example.com).
+
+> Nothing in the file said where the ship had gone.
+>
+> > And nothing said who had asked.
+
+---
+
+What the vocabulary has no room for is set as prose and reported:
+
+1. a numbered list, one paragraph per item
+2. and its second item
+
+| construct | becomes |
+|---|---|
+| a table | one paragraph per cell |
+
+\`\`\`
+a code block, one paragraph
+\`\`\`
+
+Marsh was ~~certain~~ almost certain, and wrote to the shipping office
+that afternoon.
+`;
+
+/**
  * Every demo the site mounts, and the poster each one is drawn on
  * top of until it does.
  */
@@ -178,6 +212,21 @@ export const DEMOS = {
     name: 'gulliver-excerpt.md',
     markdown: fixture('gulliver-excerpt.md'),
     css: fixture('styled.css'),
+    page: 1,
+  }),
+  /** Every construct the mapping names, including the ones that warn. */
+  mapping: () => ({
+    name: 'chapter-01.md',
+    markdown: MAPPING_MD,
+    css: BOOK_CSS,
+    dialect: 'gfm',
+    page: 1,
+  }),
+  /** A stylesheet with declarations outside the subset, and a book anyway. */
+  warnings: () => ({
+    name: 'pride-and-prejudice.md',
+    markdown: chapter('corpus/pride-and-prejudice.md', 1),
+    css: OUTSIDE_CSS,
     page: 1,
   }),
   /** The bare sheet, for holding the styled one against. */

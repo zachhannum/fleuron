@@ -19,7 +19,7 @@ pub struct LayoutOutput {
 
 `fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named cuts are one file at several locations, and the location is what tells them apart.
 
-`warnings` holds the whole run's, style compilation included. See [diagnostics](../library/diagnostics.md).
+`warnings` holds the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
 ## `Page`
 
@@ -56,10 +56,11 @@ Text {
 
 One run of shaped glyphs sharing a font, a size and a baseline. `y` is the baseline, not the top of the line box.
 
-<Page
+<Playground
   demo="display-list"
+  editors="markdown"
   highlight="baselines"
-  caption="Every text run of a page, with a rule drawn on the y the display list gave it. The rules sit on the letters rather than above them, which is what a baseline is."
+  caption="Every text run of a page, with a rule drawn on the y the display list gave it. The rules sit on the letters rather than above them, which is what a baseline is. Edit the manuscript and the rules move with the runs."
 />
 
 `text` is the string the glyphs were shaped from. It travels with the run because only the shaper knew which glyph came from which character, and a painter that wants text extraction, selection or copy-and-paste needs that correspondence back. A painter that only draws can ignore it.
@@ -100,4 +101,4 @@ For each page, set up a coordinate system in points with the origin top-left, th
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
 
-The SVG painter in `@fleuron/wasm` is one worked example. See [the preview](../wasm/preview.md).
+The SVG painter in `@fleuron/wasm` is one worked example. See [the preview](../wasm/preview.mdx).

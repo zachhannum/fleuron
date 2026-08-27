@@ -51,7 +51,7 @@ The pipeline runs one way. Nothing downstream reaches back upstream.
 | crate | |
 |---|---|
 | `fleuron` | The engine: style compilation, box construction, inline layout, fragmentation, page assembly. No I/O. |
-| `fleuron-markdown` | Markdown in, sections out. The mapping is in [`docs/reference/markdown.md`](docs/reference/markdown.md). |
+| `fleuron-markdown` | Markdown in, sections out. The mapping is in [`docs/reference/markdown.mdx`](docs/reference/markdown.mdx). |
 | `fleuron-cli` | The `fleuron` binary. Markdown in, PDF out. |
 | `fleuron-wasm` | WASM bindings, plus a worker, a display-list reader and an SVG painter in TypeScript. Ships as `@fleuron/wasm`. |
 

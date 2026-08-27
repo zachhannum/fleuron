@@ -7,9 +7,9 @@
  * and reports what came back. It knows the shape of a display list
  * and nothing about how one is made.
  *
- * The module is not fetched until a demo asks for it. A visitor who
- * never scrolls to one, and a visitor on a metered connection who
- * never presses the button, downloads no engine.
+ * The module is not fetched until a demo is on screen, so a visitor
+ * who never scrolls to one downloads no engine. A visitor whose
+ * browser says the connection is metered is asked first.
  */
 
 import { Preview, type LayoutOutput } from '@fleuron/wasm';
@@ -19,7 +19,7 @@ import { spawn } from './spawn';
 
 /** Where a demo is in its life. */
 export type Status =
-  /** Waiting to be asked: nothing has been fetched. */
+  /** Waiting to be asked on a metered connection: nothing has been fetched. */
   | 'held'
   /** The module is on its way. */
   | 'loading'
@@ -40,8 +40,8 @@ export interface Inputs {
   name?: string;
   /** The page to show, counting from 1. */
   page?: number;
-  /** Whether to wait for a press before fetching the module. */
-  held?: boolean;
+  /** Which markdown the manuscript is written in. */
+  dialect?: 'commonmark' | 'gfm' | 'obsidian';
 }
 
 /** A demo, mounted. */
@@ -62,7 +62,7 @@ export interface Running {
    * scripts never run.
    */
   hydrated: boolean;
-  /** Fetches the module and mounts, for a demo that was held. */
+  /** Fetches the module and mounts, for a demo a metered browser held. */
   start: () => void;
 }
 
@@ -135,20 +135,19 @@ function metered(): boolean {
 }
 
 export function usePreview(inputs: Inputs): Running {
-  const { id, markdown, css, name, page, held } = inputs;
+  const { id, markdown, css, name, page, dialect } = inputs;
   const sheet = useRef<HTMLDivElement | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [wanted, setWanted] = useState(!(held ?? false));
-  const [status, setStatus] = useState<Status>(held === true ? 'held' : 'loading');
+  const [wanted, setWanted] = useState(true);
+  const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<LayoutOutput | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => setHydrated(true), []);
 
-  // The reader's own setting outranks the demo's: a demo told to
-  // start on sight still waits for a press on a connection the
-  // browser says is metered.
+  // The reader's own setting outranks the demo: a demo waits for a
+  // press on a connection the browser says is metered.
   useEffect(() => {
     if (wanted && metered()) {
       setWanted(false);
@@ -171,6 +170,7 @@ export function usePreview(inputs: Inputs): Running {
     const open = (opening: Worker): void => {
       void Preview.mount(sheet.current as Element, {
         worker: opening,
+        dialect,
         // The site already serves the face the engine shaped with,
         // subset from the same file, so the painter's stack resolves
         // to it and no book face crosses back over the wall.

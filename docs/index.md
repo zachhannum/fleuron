@@ -32,7 +32,7 @@ Content enters as markdown and becomes a semantic tree. Styling enters as CSS. E
 
 Break decisions come out of the layout pass, which is most of why a 333-page book reaches PDF bytes in 287 ms.
 
-[The markdown mapping](reference/markdown.md) says what each construct becomes. Most callers write markdown; the [content tree](reference/content-tree.md) stays public for a host that already has structured content.
+[The markdown mapping](reference/markdown.mdx) says what each construct becomes. Most callers write markdown; the [content tree](reference/content-tree.md) stays public for a host that already has structured content.
 
 ## Invariants
 
