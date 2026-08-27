@@ -80,14 +80,16 @@ function paint(item: DrawItem, options: PaintOptions): string {
 function text(item: TextItem, options: PaintOptions): string {
   const entry = options.fonts?.[item.fontId];
   const xs = positions(item);
-  // Weight and slope are pinned rather than inherited: the face is
-  // registered as its own family at one cut, and a host container
-  // that happens to be bold must not make the browser synthesise a
-  // second one over it.
+  // Slope and weight are the face's own rather than the container's.
+  // A host element that happens to be bold would otherwise have the
+  // browser synthesise a second bold over a face that is already
+  // one, and a face that did not arrive would fall back upright.
   return (
     `<text x="${xs.map(num).join(' ')}" y="${num(item.y)}"` +
     ` font-family="${escape(stack(item.fontId, entry))}"` +
-    ` font-size="${num(item.size)}" font-weight="normal" font-style="normal"` +
+    ` font-size="${num(item.size)}"` +
+    ` font-weight="${entry?.attributes.weight ?? 400}"` +
+    ` font-style="${entry?.attributes.italic === true ? 'italic' : 'normal'}"` +
     ` style="${escape(style(entry))}" xml:space="preserve"` +
     (entry === undefined ? ` data-missing-font="${item.fontId}"` : '') +
     `>${escape(item.text)}</text>`

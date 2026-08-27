@@ -243,7 +243,14 @@ export class Preview {
   private async face(id: number): Promise<void> {
     try {
       const bytes = await this.client.fontBytes(id);
-      const face = new FontFace(faceFamily(id), bytes.buffer as ArrayBuffer);
+      // Registered as what it is, so that asking for it by that
+      // slope and weight is an exact match and the browser
+      // synthesises nothing over the cut the engine shaped with.
+      const attributes = this.output?.fonts[id]?.attributes;
+      const face = new FontFace(faceFamily(id), bytes.buffer as ArrayBuffer, {
+        style: attributes?.italic === true ? 'italic' : 'normal',
+        weight: String(attributes?.weight ?? 400),
+      });
       await face.load();
       this.faces.set(id, face);
       this.element.ownerDocument.fonts.add(face);

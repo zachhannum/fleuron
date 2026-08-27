@@ -33,8 +33,13 @@ import { chromium } from 'playwright';
 const CELL = 24;
 /** And on average, over the page. */
 const MEAN = 3;
-/** Where the ink's centre of mass may differ across the page, in pixels. */
-const CENTRE = 0.5;
+/**
+ * Where the ink's centre of mass may differ across the page, in
+ * pixels. It comes out at 0.004 against poppler on one machine and
+ * 0.27 on another, and a baseline a point out of place would move it
+ * by two.
+ */
+const CENTRE = 1;
 /** The side of one coverage cell, in device pixels. */
 const GRID = 16;
 /** Points to pixels for both sides of the comparison. */
