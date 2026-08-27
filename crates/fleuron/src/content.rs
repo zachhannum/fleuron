@@ -36,13 +36,13 @@
 
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Identity of one node in the content tree, for diagnostics and
 /// incremental relayout.
 ///
 /// Assigned in document order, starting at 1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct NodeId(u32);
 
 impl NodeId {
@@ -59,7 +59,7 @@ impl NodeId {
 ///
 /// Line and column are as the markdown parser reported them. This is
 /// diagnostic data, never layout input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SourcePos {
     /// 1-based line in the source markdown.
     pub line: u32,
@@ -80,7 +80,7 @@ pub fn origin(source: Option<&str>, position: Option<SourcePos>) -> String {
 }
 
 /// Book metadata: everything about the work that isn't content.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Metadata {
     /// Title, for the half-title and running heads.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,7 +96,7 @@ pub struct Metadata {
 }
 
 /// The root of the content tree: one book.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Book {
     /// The work's title, author and frontend extensions.
     pub metadata: Metadata,
@@ -106,7 +106,7 @@ pub struct Book {
 
 /// A chapter or file: the unit of markdown input and of source
 /// attribution for diagnostics.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     /// Engine-assigned identity, for diagnostics; never serialized.
     #[serde(skip)]
@@ -126,7 +126,7 @@ pub struct Section {
 }
 
 /// A block-level element: the unit of fragmentation input.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Block {
     /// `#` through `######`; levels outside 1–6 are rejected at parse.
@@ -191,8 +191,8 @@ pub enum Block {
 }
 
 /// A heading level, 1–6, as markdown defines them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
-#[serde(into = "u8")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(into = "u8", try_from = "u8")]
 pub enum HeadingLevel {
     /// `#`
     H1,
@@ -243,7 +243,7 @@ impl TryFrom<u8> for HeadingLevel {
 pub struct InvalidHeadingLevel(pub u8);
 
 /// An inline element: participates in line layout.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Inline {
     /// A run of text. The frontend has already decoded entities; the

@@ -12,7 +12,7 @@ use harfrust::{
     BufferClusterLevel, FontRef as HarfFontRef, Language, ShaperData, ShaperInstance,
     UnicodeBuffer, script,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use skrifa::MetadataProvider;
 use skrifa::attribute::Style as SlopeStyle;
 use skrifa::instance::{Location, LocationRef, Size};
@@ -67,7 +67,7 @@ impl FontSource {
 
 /// The slope and weight a face is matched at: the two axes of CSS
 /// font matching the engine supports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FaceAttributes {
     /// True for both italic and oblique cuts; the engine draws no
     /// distinction a book needs.
@@ -160,7 +160,7 @@ pub struct ShapedGlyph {
 }
 
 /// A font's identity, as carried in the engine's output.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FontRefEntry {
     /// Family for matching (lowercase).
     pub family: String,

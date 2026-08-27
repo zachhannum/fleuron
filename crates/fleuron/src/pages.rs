@@ -6,10 +6,10 @@
 
 use std::ops::Range;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Which side of the spread a page falls on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     /// A right-hand page.
@@ -31,7 +31,7 @@ impl Side {
 
 /// One typeset page: a number, a side, a trim size, and what to
 /// paint on it.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Page {
     /// Folio, counting from 1.
     pub number: u32,
@@ -46,7 +46,7 @@ pub struct Page {
 }
 
 /// A single paint operation. Deliberately tiny: text, rules, images.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum DrawItem {
     /// A run of shaped glyphs sharing a font, size, and baseline.
     Text {
@@ -95,7 +95,7 @@ pub enum DrawItem {
 /// One glyph: an id in its font and an absolute x. Kerning and
 /// justification mean no two glyphs are uniformly spaced — the glyph is
 /// the atom of layout, so positions are per-glyph.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Glyph {
     /// Glyph id in the run's font.
     pub id: u32,

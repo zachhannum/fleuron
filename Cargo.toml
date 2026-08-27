@@ -20,6 +20,7 @@ authors = ["Zach Hannum"]
 [workspace.dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 
 # style
 cssparser = "0.37"
@@ -31,7 +32,9 @@ harfrust = "0.13"
 skrifa = "0.46"
 unicode-linebreak = "0.1"
 unicode-bidi = "0.3"
-hypher = "0.1"
+# Only the English patterns: the one language the hyphenator asks for,
+# and the other fifty ride into every binary that links it.
+hypher = { version = "0.1", default-features = false, features = ["english"] }
 icu_segmenter = "2"
 
 # pdf

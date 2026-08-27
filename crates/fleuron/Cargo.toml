@@ -21,6 +21,7 @@ hypher.workspace = true
 icu_segmenter.workspace = true
 thiserror.workspace = true
 serde.workspace = true
+postcard.workspace = true
 krilla.workspace = true
 
 [dev-dependencies]
