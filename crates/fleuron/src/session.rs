@@ -383,7 +383,7 @@ impl<'a> Session<'a> {
     pub fn export(&mut self) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
-        pdf::write_with_assets(
+        pdf::write(
             output,
             self.registry.get(),
             self.assets.get(),

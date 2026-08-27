@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let assets = Assets::probe(&book, &files);
 
     // One call from styled tree to pages of draw items.
-    let output = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
+    let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     for warning in complaints.iter().chain(&output.warnings) {
         match &warning.origin {
             Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // The PDF is painted from the display list. Nothing lays out twice.
-    let bytes = fleuron::pdf::write_with_assets(&output, &registry, &assets, &book.metadata)?;
+    let bytes = fleuron::pdf::write(&output, &registry, &assets, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());
     Ok(())

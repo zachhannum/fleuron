@@ -38,12 +38,10 @@ use crate::{LayoutOutput, Warning};
 /// A single run over a session that retains nothing. It keeps one
 /// section's lines at a time, which is what a process that renders a
 /// book once and exits wants. A live preview wants `Session`.
-pub fn layout_book(book: &Book, styles: &StyleTree, registry: &FontRegistry) -> LayoutOutput {
-    layout_book_with_assets(book, styles, registry, no_assets())
-}
-
-/// The same, over images the host has already probed.
-pub fn layout_book_with_assets(
+///
+/// `assets` is the images the host probed. A book with none of them
+/// passes [`Assets::none`].
+pub fn layout_book(
     book: &Book,
     styles: &StyleTree,
     registry: &FontRegistry,
@@ -2248,7 +2246,7 @@ mod tests {
         ])]);
         let styles = crate::style::defaults(&book, registry());
         let assets = crate::images::Assets::probe(&book, &Png);
-        let output = layout_book_with_assets(&book, &styles, registry(), &assets);
+        let output = layout_book(&book, &styles, registry(), &assets);
 
         let placed: Vec<(f32, f32, u32)> = output
             .pages

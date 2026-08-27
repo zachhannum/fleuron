@@ -32,7 +32,7 @@ const EXPECTED_PAGES: usize = 23;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 34;
+const STYLED_PAGES: usize = 35;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
@@ -55,7 +55,7 @@ const STYLED_HEAD: &str = "STYLED BY FLEURON";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "94c99dd7d7b06d87617048e711ab560c1cc52a2c9b92d53e57cdd1e23e9773de";
+    "18aa46203201ba452e5171abad2fc4156a96d09fb14f4e4022ec4d23108a63c0";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -677,7 +677,7 @@ fn fixture_display_list() -> Vec<u8> {
     let book = fixture_book();
     let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
     let assets = Assets::probe(&book, &Beside);
-    let output = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
+    let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     fleuron::wire::encode(&output).expect("a display list encodes")
 }
 

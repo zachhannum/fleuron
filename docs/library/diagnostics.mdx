@@ -23,7 +23,7 @@ The stylesheet below has two declarations the engine has no room for. Both are r
 Warnings come back on the output:
 
 ```rust
-let output = fleuron::layout::layout_book(&book, &styles, &registry);
+let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
 for warning in &output.warnings {
     match &warning.origin {
         Some(origin) => eprintln!("warning: {origin}: {}", warning.message),

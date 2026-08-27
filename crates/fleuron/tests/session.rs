@@ -4,6 +4,7 @@
 
 use fleuron::content::{Block, Book, HeadingLevel, Inline, Metadata, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
+use fleuron::images::Assets;
 use fleuron::layout::layout_book;
 use fleuron::session::Session;
 use fleuron::style::{Source, Stylesheets};
@@ -127,7 +128,7 @@ fn one_shot(book: &Book, css: &str) -> Vec<u8> {
     book.assign_node_ids();
     let sheets = parse(css);
     let styles = sheets.compile(&book, registry());
-    let output = layout_book(&book, &styles, registry());
+    let output = layout_book(&book, &styles, registry(), &Assets::none());
     serde_json::to_vec(&output).expect("the output serializes")
 }
 

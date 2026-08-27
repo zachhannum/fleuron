@@ -7,6 +7,7 @@
 use fleuron::LayoutOutput;
 use fleuron::content::{Block, Book, Inline};
 use fleuron::fonts::{FontRegistry, bundled_registry};
+use fleuron::images::Assets;
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page};
 use fleuron::style::{PageQuery, Situation, Source, StyleTree, Stylesheets};
@@ -33,7 +34,7 @@ fn fixture() -> Book {
 
 fn lay_out(book: &Book) -> (StyleTree, LayoutOutput) {
     let styles = fleuron::style::defaults(book, registry());
-    let output = layout_book(book, &styles, registry());
+    let output = layout_book(book, &styles, registry(), &Assets::none());
     (styles, output)
 }
 
@@ -119,7 +120,7 @@ fn the_fixture_manuscript_exercises_the_vocabulary() {
 fn with_css(book: &Book, css: &str) -> LayoutOutput {
     let styles = Stylesheets::parse(&[Source::author("book.css", css)]).compile(book, registry());
     assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
-    layout_book(book, &styles, registry())
+    layout_book(book, &styles, registry(), &Assets::none())
 }
 
 /// The baselines of one page, each with the right edge of the last

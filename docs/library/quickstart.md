@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let assets = Assets::probe(&book, &files);
 
     // One call from styled tree to pages of draw items.
-    let output = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
+    let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     for warning in complaints.iter().chain(&output.warnings) {
         match &warning.origin {
             Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // The PDF is painted from the display list. Nothing lays out twice.
-    let bytes = fleuron::pdf::write_with_assets(&output, &registry, &assets, &book.metadata)?;
+    let bytes = fleuron::pdf::write(&output, &registry, &assets, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());
     Ok(())
@@ -95,8 +95,8 @@ Against the manuscript in the repository, that prints `34 pages` and writes `boo
 | `load_fonts` | Hands each `@font-face` url to your `FontLoader`. |
 | `compile` | Resolves the cascade against the book. |
 | `Assets::probe` | Hands each image url to your `ImageLoader` and reads the header for the intrinsic size. With `load_fonts`, these are the only steps that reach outside the engine. |
-| `layout_book_with_assets` | Style tree in, `LayoutOutput` out: pages of draw items, the font and asset tables those items index, and every warning the run collected. `layout_book` is the same over a book with no images. |
-| `pdf::write_with_assets` | Paints the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs and image indexes through the same table that sized them, so the embedded subset holds the outlines the shaper used and the embedded image is the file the header came from. |
+| `layout_book` | Style tree in, `LayoutOutput` out: pages of draw items, the font and asset tables those items index, and every warning the run collected. A book with no images passes `Assets::none()`. |
+| `pdf::write` | Paints the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs and image indexes through the same table that sized them, so the embedded subset holds the outlines the shaper used and the embedded image is the file the header came from. |
 
 Parsing, font loading and compiling are three calls rather than one because they have different lifetimes. Sheets parse once and style many books.
 

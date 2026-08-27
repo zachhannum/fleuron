@@ -22,7 +22,7 @@ preview.zoom = 1.5;
 
 ## Images
 
-The engine opens nothing, so a manuscript's plates arrive as bytes:
+`![a plate](plates/frontispiece.jpg)` in a manuscript is a url and nothing else. Nothing in the package will go and fetch it, so fetch it yourself and hand over what comes back:
 
 ```js
 const preview = await Preview.mount(element, {

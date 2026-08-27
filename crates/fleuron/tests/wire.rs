@@ -7,7 +7,7 @@
 //! through: encode, decode, encode again, and the second buffer is
 //! the first one.
 
-use fleuron::images::{Asset, Intrinsic};
+use fleuron::images::{Asset, Assets, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Page, Side};
 use fleuron::wire;
 use fleuron::{LayoutOutput, Warning};
@@ -154,7 +154,7 @@ fn a_laid_out_book_round_trips() {
         .0,
     );
     let styles = fleuron::style::defaults(&book, &registry);
-    let laid_out = fleuron::layout::layout_book(&book, &styles, &registry);
+    let laid_out = fleuron::layout::layout_book(&book, &styles, &registry, &Assets::none());
 
     let bytes = wire::encode(&laid_out).expect("a laid-out book encodes");
     let read = wire::decode(&bytes).expect("and reads back");

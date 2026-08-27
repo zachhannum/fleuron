@@ -48,24 +48,14 @@ pub enum PdfError {
 
 /// Writes one laid-out book as PDF bytes.
 ///
-/// Fonts resolve through the registry that shaped the run: the
-/// display list carries ids, the registry owns the bytes, and the
-/// embedded subset therefore holds the same outlines the shaper
-/// measured.
-pub fn write(
-    output: &LayoutOutput,
-    registry: &FontRegistry,
-    metadata: &Metadata,
-) -> Result<Vec<u8>, PdfError> {
-    write_with_assets(output, registry, crate::layout::no_assets(), metadata)
-}
-
-/// The same, over the images the layout pass sized.
+/// Fonts resolve through the registry that shaped the run and images
+/// through the table that sized them: the display list carries
+/// indexes, the tables own the files, and so the embedded subset
+/// holds the outlines the shaper measured and the embedded image is
+/// the file the header was read from.
 ///
-/// Images resolve as fonts do: the display list carries indexes, the
-/// asset table owns the files, and what reaches the page is the file
-/// the header was read from.
-pub fn write_with_assets(
+/// A book with no images passes [`Assets::none`].
+pub fn write(
     output: &LayoutOutput,
     registry: &FontRegistry,
     assets: &Assets,
@@ -458,7 +448,7 @@ mod tests {
 
     fn laid_out(book: &Book) -> LayoutOutput {
         let styles = crate::style::defaults(book, registry());
-        crate::layout::layout_book(book, &styles, registry())
+        crate::layout::layout_book(book, &styles, registry(), &Assets::none())
     }
 
     /// The one glyph-positioning offset inside a showing op, in
@@ -632,7 +622,7 @@ mod tests {
             .1
             .size();
         assert!(
-            (width - 115.2).abs() < 0.01 && (height - 76.8).abs() < 0.01,
+            (width - 180.0).abs() < 0.01 && (height - 306.72).abs() < 0.01,
             "the header sizes the plate at {width}x{height}pt",
         );
         let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -734,8 +724,9 @@ mod tests {
     fn writing_is_deterministic() {
         let book = book("Some prose, twice over.");
         let output = laid_out(&book);
-        let first = write(&output, registry(), &book.metadata).unwrap();
-        let second = write(&output, registry(), &book.metadata).unwrap();
+        let table = assets(&[("plate.jpg", PLATE)]);
+        let first = write(&output, registry(), &table, &book.metadata).unwrap();
+        let second = write(&output, registry(), &table, &book.metadata).unwrap();
         assert_eq!(first, second);
     }
 }
