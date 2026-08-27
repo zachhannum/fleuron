@@ -109,13 +109,13 @@ function open(): { client: Client; worker: Worker } {
 }
 
 const markdown = readFileSync(fixture, 'utf8');
-/** The plates the fixture book refers to, as the CLI resolves them. */
-const plates: [string, Uint8Array][] = ['images/plate.jpg', 'images/fleuron.png'].map((url) => [
+/** The images the fixture book refers to, as the CLI resolves them. */
+const pictures: [string, Uint8Array][] = ['images/plate.jpg', 'images/fleuron.png'].map((url) => [
   url,
   new Uint8Array(readFileSync(join(root, 'fixtures', url))),
 ]);
 const book: Op[] = [
-  ...plates.map(([url, bytes]): Op => ({ op: 'image', url, bytes })),
+  ...pictures.map(([url, bytes]): Op => ({ op: 'image', url, bytes })),
   { op: 'markdown', name: 'gulliver-excerpt.md', text: markdown },
 ];
 
@@ -155,13 +155,13 @@ check(
 );
 check(
   'the asset table names the images the host handed over',
-  preview.assets.map((asset) => asset.url).join(', ') === plates.map(([url]) => url).join(', '),
+  preview.assets.map((asset) => asset.url).join(', ') === pictures.map(([url]) => url).join(', '),
   preview.assets.map((asset) => `${asset.url} ${asset.intrinsic.width}px`).join(', '),
 );
 check(
   'and the pages place them',
   preview.pages.flatMap((page) => page.items).filter((item) => item.kind === 'image').length ===
-    plates.length,
+    pictures.length,
 );
 
 // The painter. Every page is painted, and every glyph the display

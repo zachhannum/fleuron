@@ -48,9 +48,9 @@ const ZOOM = 2;
  * The page the two rasters are held against, which is one of running
  * text.
  *
- * The two sides resample a photograph differently, so a page whose
- * ink is mostly one tonal block measures the resampling rather than
- * where the glyphs are.
+ * The two sides resample an image differently, so a page whose ink is
+ * mostly one tonal block measures the resampling rather than where
+ * the glyphs are.
  */
 const COMPARED = 2;
 
@@ -132,9 +132,9 @@ check('a missing face falls back visibly rather than painting nothing', fallback
 // The export of the same run, rastered by something that is not a
 // browser, held against a screenshot of the page on screen. Both are
 // made at the same zoom, so a pixel is a pixel on either side.
-// The plates the harness handed over are on the page, drawn from the
+// The images the harness handed over are on the page, drawn from the
 // same files the engine sized them by.
-const plates = await page.evaluate((count: number) => {
+const drawn = await page.evaluate((count: number) => {
   const preview = globalThis.preview;
   let drawn = 0;
   for (let number = 1; number <= count; number += 1) {
@@ -144,7 +144,7 @@ const plates = await page.evaluate((count: number) => {
   preview.page = 1;
   return drawn;
 }, pages);
-check('the images the host handed over are painted, not outlined', plates === 2, `${plates} drawn`);
+check('the images the host handed over are painted, not outlined', drawn === 2, `${drawn} drawn`);
 
 await page.evaluate(([zoom, number]: [number, number]) => {
   globalThis.preview.zoom = zoom;
@@ -160,7 +160,7 @@ await page.evaluate(([zoom, number]: [number, number]) => {
   document.querySelector('.sheet')?.setAttribute('style', 'line-height: 0');
   scrollTo(0, 0);
 }, [ZOOM, COMPARED] as [number, number]);
-const plated = await page.evaluate(
+const pictures = await page.evaluate(
   () => document.querySelectorAll('#preview svg image').length,
 );
 const pdf = await page.evaluate(async () => {
@@ -200,9 +200,9 @@ if (rastered.status !== 0) {
   }
 } else {
   check(
-    'the page the two rasters are held against carries no plate',
-    plated === 0,
-    `${plated} on page ${COMPARED}`,
+    'the page the two rasters are held against carries no image',
+    pictures === 0,
+    `${pictures} on page ${COMPARED}`,
   );
   const reference = readFileSync(join(work, 'page.png'));
   const difference = await page.evaluate(

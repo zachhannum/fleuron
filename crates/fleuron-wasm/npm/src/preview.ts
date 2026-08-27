@@ -60,7 +60,7 @@ export interface PreviewOptions {
   ink?: string;
   /**
    * The images the manuscript refers to, by the url it names them
-   * by. The engine opens nothing, so a host that wants a plate on
+   * by. Nothing here fetches a url, so a host that wants an image on
    * the page fetches the file itself and hands over the bytes.
    *
    * The same bytes both size the box and fill it: the module reads

@@ -19,9 +19,9 @@ from `fixtures/`.
 Drop any markdown file on the manuscript input, and any stylesheet on
 the other one.
 
-The fixture book's plates are fetched by the page and handed to the
-preview as bytes, which is what a host does: the engine opens
-nothing.
+The fixture book's images are fetched by the page and handed to the
+preview as bytes, which is what a host does: nothing in the package
+fetches a url.
 
 `harness.js` is written the way a consumer of `@fleuron/wasm` writes
 one: it names no buffer, no worker and no display list. That is why the

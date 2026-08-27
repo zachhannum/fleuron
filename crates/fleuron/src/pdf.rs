@@ -350,9 +350,9 @@ mod tests {
     use crate::fonts::{BUNDLED_FONT, bundled_registry};
     use crate::pages::{Glyph, Side};
 
-    /// The fixture plate: a JPEG at 300dpi, so its intrinsic size is
-    /// not its pixel count.
-    const PLATE: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
+    /// The fixture map: a JPEG whose JFIF density is not 96dpi, so
+    /// its intrinsic size is not its pixel count.
+    const MAP: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
 
     /// The fixture ornament: a PNG whose ground is transparent, and
     /// the same image as lossless WebP.
@@ -555,12 +555,12 @@ mod tests {
             h: 76.8,
             asset: 0,
         }];
-        let table = assets(&[("plate.jpg", PLATE)]);
+        let table = assets(&[("plate.jpg", MAP)]);
         let bytes = bytes_of(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
         let pdf = latin1(&bytes);
-        assert!(pdf.contains("/DCTDecode"), "the plate was re-encoded");
+        assert!(pdf.contains("/DCTDecode"), "the map was re-encoded");
         assert!(
-            bytes.windows(PLATE.len()).any(|window| window == PLATE),
+            bytes.windows(MAP.len()).any(|window| window == MAP),
             "the embedded stream is not the file that went in",
         );
     }
@@ -615,15 +615,15 @@ mod tests {
             h: 48.0,
             asset: 0,
         }];
-        let table = assets(&[("plate.jpg", PLATE)]);
+        let table = assets(&[("plate.jpg", MAP)]);
         let (width, height) = table
             .lookup("plate.jpg")
-            .expect("the plate is an asset")
+            .expect("the map is an asset")
             .1
             .size();
         assert!(
             (width - 180.0).abs() < 0.01 && (height - 306.72).abs() < 0.01,
-            "the header sizes the plate at {width}x{height}pt",
+            "the header sizes the map at {width}x{height}pt",
         );
         let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
         // krilla draws an image into the unit square, so the box is
@@ -631,7 +631,7 @@ mod tests {
         // asked for, measured up from the foot of the page.
         assert!(
             pdf.contains("72 0 0 48 54 510 cm"),
-            "the plate is not placed at 72x48pt at (54, 90):\n{pdf}",
+            "the image is not placed at 72x48pt at (54, 90):\n{pdf}",
         );
     }
 
@@ -644,7 +644,7 @@ mod tests {
                 blocks: vec![Block::Image {
                     id: Default::default(),
                     url: "missing.png".into(),
-                    alt: "a plate".into(),
+                    alt: "a map".into(),
                     position: None,
                 }],
                 ..Default::default()
@@ -724,7 +724,7 @@ mod tests {
     fn writing_is_deterministic() {
         let book = book("Some prose, twice over.");
         let output = laid_out(&book);
-        let table = assets(&[("plate.jpg", PLATE)]);
+        let table = assets(&[("plate.jpg", MAP)]);
         let first = write(&output, registry(), &table, &book.metadata).unwrap();
         let second = write(&output, registry(), &table, &book.metadata).unwrap();
         assert_eq!(first, second);

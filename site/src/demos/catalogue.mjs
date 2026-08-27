@@ -221,8 +221,8 @@ export const DEMOS = {
     name: 'gulliver-excerpt.md',
     markdown: fixture('gulliver-excerpt.md'),
     css: fixture('styled.css'),
-    // The engine opens nothing, so the plates the manuscript names
-    // are handed over as urls the demo fetches for itself.
+    // Nothing fetches a url for the demo, so the images the
+    // manuscript names are handed over as urls it fetches itself.
     images: ['images/plate.jpg', 'images/fleuron.png'],
     page: 1,
   }),

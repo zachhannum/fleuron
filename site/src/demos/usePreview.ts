@@ -44,7 +44,7 @@ export interface Inputs {
   dialect?: 'commonmark' | 'gfm' | 'obsidian';
   /**
    * The images the manuscript refers to, by the url it names them
-   * by. The engine opens nothing, so the island fetches each one
+   * by. Nothing fetches a url for the island, so it fetches each one
    * from where the site serves it and hands over the bytes.
    */
   images?: string[];
@@ -195,7 +195,7 @@ export function usePreview(inputs: Inputs): Running {
             mounted.destroy();
             return;
           }
-          // The plates cross before the manuscript, so the first
+          // The images cross before the manuscript, so the first
           // page painted already has room reserved for them.
           for (const url of images ?? []) {
             const file = await fetch(`${import.meta.env.BASE_URL}fixtures/${url}`);

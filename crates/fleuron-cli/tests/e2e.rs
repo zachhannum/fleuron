@@ -9,7 +9,7 @@
 //! trim, mirrored margins, a head and a folio on the opening page —
 //! and the PDF that comes back is checked for all of it.
 //!
-//! The book carries a plate and an ornament, so the same run covers
+//! The book carries a map and an ornament, so the same run covers
 //! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
 //! transparency kept as a soft mask, and `qpdf --check` clean over
 //! both.
@@ -370,23 +370,23 @@ fn emphasis_embeds_a_second_face_and_keeps_every_word() {
     );
 }
 
-/// The plate is embedded as the file it came in as. PDF's
-/// `DCTDecode` is the JPEG stream itself, so the bytes in the file
-/// are the bytes on disk, verbatim, and a writer that re-encoded
-/// one would spend the quality for nothing.
+/// The map is embedded as the file it came in as. PDF's `DCTDecode`
+/// is the JPEG stream itself, so the bytes in the file are the bytes
+/// on disk, verbatim, and a writer that re-encoded one would spend
+/// the quality for nothing.
 #[test]
 fn the_fixture_jpeg_embeds_byte_for_byte() {
     let (pdf, _) = render("images", &[]);
     let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
-    let plate = std::fs::read(fixture_path().with_file_name("images/plate.jpg"))
-        .expect("the plate is checked in");
+    let map = std::fs::read(fixture_path().with_file_name("images/plate.jpg"))
+        .expect("the map is checked in");
     assert!(
-        bytes.windows(plate.len()).any(|window| window == plate),
-        "the plate's {} bytes are not in the PDF as they went in",
-        plate.len(),
+        bytes.windows(map.len()).any(|window| window == map),
+        "the map's {} bytes are not in the PDF as they went in",
+        map.len(),
     );
     let readable: String = bytes.iter().map(|b| *b as char).collect();
-    assert!(readable.contains("/DCTDecode"), "the plate was re-encoded");
+    assert!(readable.contains("/DCTDecode"), "the map was re-encoded");
     // The ornament's ground is transparent, and stays that way.
     assert!(readable.contains("/SMask"), "the ornament lost its alpha");
 }

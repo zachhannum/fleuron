@@ -26,7 +26,7 @@ export interface PreviewProps extends PreviewOptions {
   zoom?: number;
   /**
    * The images the manuscript refers to, by the url it names them
-   * by. A url that arrives after the book does is registered when it
+   * by. One that arrives after the book does is registered when it
    * arrives, and the pages are laid out again around it.
    */
   images?: Record<string, Uint8Array>;
@@ -92,9 +92,9 @@ export function Preview(props: PreviewProps): React.ReactElement {
     }
   }, [preview, zoom]);
 
-  // Images are registered rather than passed at mount, so a plate
-  // that arrives after the manuscript still reaches the page. A url
-  // the session already holds costs no layout.
+  // Images are registered rather than passed at mount, so one that
+  // arrives after the manuscript still reaches the page. A url the
+  // session already holds costs no layout.
   useEffect(() => {
     if (preview !== null && images !== undefined) {
       for (const [url, bytes] of Object.entries(images)) {

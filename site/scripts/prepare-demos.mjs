@@ -56,7 +56,7 @@ for (const id of Object.keys(DEMOS)) {
   if (dialect !== undefined) {
     session.setDialect(dialect);
   }
-  // The plates cross the wall before the manuscript, so the first
+  // The images cross the wall before the manuscript, so the first
   // layout already knows how much room each one takes.
   const held = new Map(images.map((url) => [url, image(url)]));
   for (const [url, bytes] of held) {
@@ -77,7 +77,7 @@ for (const id of Object.keys(DEMOS)) {
     paper: null,
     ink: 'currentColor',
     // A poster is markup in a document rather than a page fetching
-    // its own files, so a plate travels inside it.
+    // its own files, so an image travels inside it.
     asset: (asset) => inline(held.get(asset.url)),
   });
   writeFileSync(new URL(`${id}.svg`, posters), `${lighter(svg)}\n`);
@@ -102,8 +102,8 @@ cpSync(
   new URL('fixtures/corpus/pride-and-prejudice.md', root),
   new URL('public/fixtures/pride-and-prejudice.md', site),
 );
-// The plates the demos hand the engine are fetched by the island,
-// the way a host fetches its own images.
+// The images the demos hand the engine are fetched by the island,
+// the way a host fetches its own.
 for (const url of new Set(Object.keys(DEMOS).flatMap((id) => demo(id).images))) {
   mkdirSync(new URL(`public/fixtures/${dirname(url)}/`, site), { recursive: true });
   cpSync(new URL(`fixtures/${url}`, root), new URL(`public/fixtures/${url}`, site));

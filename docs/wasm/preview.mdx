@@ -22,13 +22,13 @@ preview.zoom = 1.5;
 
 ## Images
 
-`![a plate](plates/frontispiece.jpg)` in a manuscript is a url and nothing else. Nothing in the package will go and fetch it, so fetch it yourself and hand over what comes back:
+`![a map](images/lilliput.jpg)` in a manuscript is a url and nothing else. Nothing in the package will go and fetch it, so fetch it yourself and hand over what comes back:
 
 ```js
 const preview = await Preview.mount(element, {
-  images: { 'plates/frontispiece.jpg': bytes },
+  images: { 'images/lilliput.jpg': bytes },
 });
-await preview.addImage('plates/colophon.png', more);
+await preview.addImage('images/colophon.png', more);
 ```
 
 The key is the url the manuscript writes, and the bytes are the file it stands for. The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
@@ -111,7 +111,7 @@ import { Preview } from '@fleuron/react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so a plate that arrives after the book does still reaches the page. `onMount` gives you the underlying preview, for the page count and the PDF export.
+The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` gives you the underlying preview, for the page count and the PDF export.
 
 React is not a dependency of `@fleuron/wasm`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 

@@ -338,9 +338,8 @@ impl<'a> Converter<'a> {
     /// An image is a block in the vocabulary and inline in markdown,
     /// so one written among prose is set after the prose that held
     /// it, which is a move worth reporting. An image written on a
-    /// line of its own, the way a manuscript writes a plate,
-    /// displaces nothing, and reporting every picture in the book
-    /// would be noise.
+    /// line of its own displaces nothing, and reporting every picture
+    /// in the book would be noise.
     fn displaced(&mut self, siblings: &[Inline]) {
         if siblings.is_empty() {
             return;
@@ -478,7 +477,7 @@ mod tests {
         }
     }
 
-    /// A plate written on its own line displaces no prose, and says
+    /// An image written on its own line displaces no prose, and says
     /// nothing. One written among prose is set after the paragraph
     /// that held it, and says so.
     #[test]

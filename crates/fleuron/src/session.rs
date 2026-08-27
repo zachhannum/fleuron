@@ -937,8 +937,8 @@ mod tests {
         REGISTRY.get_or_init(|| crate::fonts::bundled_registry().expect("bundled font parses"))
     }
 
-    /// The fixture plate: a JPEG at 300dpi.
-    const PLATE: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
+    /// The fixture map: a JPEG the layout pass sizes from its header.
+    const MAP: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
 
     /// An image the host pushes reaches the display list: the box is
     /// placed, the asset table names the url, and the pages are
@@ -950,7 +950,7 @@ mod tests {
                 blocks: vec![Block::Image {
                     id: NodeId::UNASSIGNED,
                     url: "plate.jpg".into(),
-                    alt: "a plate".into(),
+                    alt: "a map".into(),
                     position: None,
                 }],
                 ..Default::default()
@@ -967,7 +967,7 @@ mod tests {
         );
 
         assert_eq!(
-            session.add_image("plate.jpg", PLATE.to_vec()).unwrap(),
+            session.add_image("plate.jpg", MAP.to_vec()).unwrap(),
             Some(0),
         );
         let output = session.preview();
@@ -979,7 +979,7 @@ mod tests {
             .flat_map(|page| &page.items)
             .filter(|item| matches!(item, DrawItem::Image { .. }))
             .collect();
-        assert_eq!(placed.len(), 1, "the plate was not placed");
+        assert_eq!(placed.len(), 1, "the map was not placed");
         assert!(
             output.warnings.is_empty(),
             "a supplied image still complains: {:?}",
@@ -993,7 +993,7 @@ mod tests {
     fn a_borrowed_asset_table_refuses_an_image() {
         let mut session = Session::new(registry());
         assert!(matches!(
-            session.add_image("plate.jpg", PLATE.to_vec()),
+            session.add_image("plate.jpg", MAP.to_vec()),
             Err(AddImageError::Borrowed),
         ));
     }
