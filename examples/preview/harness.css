@@ -1,0 +1,101 @@
+:root {
+  color-scheme: light dark;
+  --ground: #d8d4cc;
+  --panel: #f3f1ec;
+  --line: #b9b3a8;
+  --text: #24211c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #1a1917;
+    --panel: #232120;
+    --line: #3d3a36;
+    --text: #e8e4dc;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--ground);
+  color: var(--text);
+  font: 13px/1.5 system-ui, sans-serif;
+}
+
+header,
+footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--panel);
+  border-block: 1px solid var(--line);
+}
+
+footer {
+  flex-direction: column;
+  align-items: start;
+  gap: 0.25rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.spacer {
+  flex: 1;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.file input {
+  width: 11rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.1rem 0.6rem;
+  cursor: pointer;
+}
+
+output {
+  min-width: 6rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+main {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  align-items: start;
+  padding: 1.5rem;
+  overflow: auto;
+}
+
+.sheet {
+  line-height: 0;
+  box-shadow: 0 1px 12px rgb(0 0 0 / 0.28);
+}
+
+.sheet embed {
+  display: block;
+  border: 0;
+}
+
+#warnings {
+  margin: 0;
+  padding-left: 1.2rem;
+  max-height: 6rem;
+  overflow: auto;
+  color: #a4442c;
+}

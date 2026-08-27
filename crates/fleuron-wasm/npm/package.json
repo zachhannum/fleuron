@@ -30,10 +30,12 @@
     "build": "node scripts/prepare.mjs && tsc -p tsconfig.json",
     "build:test": "tsc -p tsconfig.test.json",
     "test": "npm run build:test && node build/harness.js",
-    "size": "npm run build:test && node build/size.js"
+    "size": "npm run build:test && node build/size.js",
+    "test:browser": "npm run build:test && node build/browser.js"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
+    "playwright": "1.56.1",
     "typescript": "^5.9.2"
   },
   "publishConfig": {
