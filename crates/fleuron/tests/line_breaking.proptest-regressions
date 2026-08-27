@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc f3ebd122bd0aa81b81abcf1c8f3de26df9f94908bb36f23fa30996181a456751 # shrinks to text = "MMUakHAa", measure = 40.0
 cc 83245ffa07a66ed9e66ad9687aaf7f3f6776adbdda8c2f5e4603c29d17befe3d # shrinks to text = "ff", measure = 30.0
+cc 3df6f886e8d1f527375cec00a916db6c8f9548d9a25944bddba29f8c71e92e06 # shrinks to text = "KAAA WKaAkA maaaaaAaa kAmaaaAAA aaauma K aagpqzVQe kwu tZo cp PcJPawnruv IFMiTlJqYX qDAmzfCICK", measure = 274.77505

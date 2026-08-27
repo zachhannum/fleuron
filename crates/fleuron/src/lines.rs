@@ -1,10 +1,16 @@
 //! Line layout: text in, broken lines out.
 //!
-//! Greedy first-fit to a measure, ragged right. A paragraph is
-//! flattened into style runs, shaped, and broken at opportunities;
-//! the break source is UAX #14 with word boundaries from UAX #29,
-//! plus optional hyphenation. `Line` carries shaped runs — measurement
-//! happened here; downstream stages position, never re-measure.
+//! Knuth-Plass total fit. A paragraph is flattened into style runs,
+//! shaped, and modelled as boxes, glue and penalties; the breaker
+//! picks the set of breaks with the fewest demerits over the whole
+//! paragraph rather than the most text on each line. The break
+//! source is UAX #14 with word boundaries from UAX #29, plus
+//! optional hyphenation, which enters as a flagged penalty.
+//!
+//! Justified text has its glue stretched or shrunk to the measure
+//! here. The adjustment lands on the glyphs' own advances, so a
+//! painter positions what it is given and never re-derives spacing.
+//! `Line` carries shaped runs: measurement happened here.
 //!
 //! Units: advances come out of the shaper in font units; the measure
 //! arrives in points and converts once, via `units_per_em * size`.
@@ -15,7 +21,54 @@ use crate::content::{Inline, NodeId};
 use crate::fonts::{FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
+use serde::Serialize;
 use unicode_linebreak::{BreakOpportunity, linebreaks};
+
+/// What a word space may give and take, as a fraction of its own
+/// width: TeX's interword glue, half of stretch and a third of
+/// shrink.
+const SPACE_STRETCH: f32 = 0.5;
+const SPACE_SHRINK: f32 = 1.0 / 3.0;
+
+/// The same for the space between letters, which only
+/// `text-justify: inter-character` opens up. Small on purpose: the
+/// eye reads a word by its shape, and a word spaced wider than this
+/// stops being one.
+const LETTER_STRETCH: f32 = 0.02;
+const LETTER_SHRINK: f32 = 0.01;
+
+/// What a ragged line may leave at the right, as a fraction of the
+/// measure, before it counts as loose. Ragged setting has no glue to
+/// stretch, so badness has nothing else to read the gap against.
+const RAGGED_STRETCH: f32 = 0.1;
+
+/// Knuth's demerit weights. A line costs `(line + badness)^2`, so a
+/// paragraph of evenly loose lines beats one tight line and one
+/// gaping one; the rest are the surcharges for breaking a word, for
+/// doing it twice running, and for setting a tight line under a
+/// loose one.
+const LINE_PENALTY: f64 = 10.0;
+const HYPHEN_PENALTY: f64 = 50.0;
+const DOUBLE_HYPHEN_DEMERITS: f64 = 10_000.0;
+const ADJACENT_DEMERITS: f64 = 10_000.0;
+
+/// What breaking before a dash costs. UAX #14 allows a line to end
+/// on either side of one; a book only ever ends on the far side, so
+/// the near side has to be worth something to be taken.
+const DASH_PENALTY: f64 = 200.0;
+
+/// The worst a line may be counted as. Without a ceiling a single
+/// unbreakable line swamps every other term in the paragraph.
+const MAX_BADNESS: f64 = 10_000.0;
+
+/// What a line that overflows the measure costs, per em it overflows
+/// by and once besides. Larger than any feasible paragraph, so text
+/// runs into the margin only where nothing else will set, and the
+/// least of it wins.
+const OVERFULL_DEMERITS: f64 = 1e12;
+
+/// Hyphenated line ends allowed in a row.
+const MAX_CONSECUTIVE_HYPHENS: u8 = 2;
 
 /// Everything one paragraph's layout depends on. The style tree
 /// compiles down to this.
@@ -90,13 +143,57 @@ impl From<f32> for Measure {
     }
 }
 
-/// Hyphenation is off unless asked for; when on, lines may end
-/// inside words, at syllable boundaries, with a hyphen charged to the
-/// line.
-#[derive(Debug, Clone, Copy, Default)]
+/// Which marks may hang past the measure, from
+/// `hanging-punctuation`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+pub struct HangingPunctuation {
+    /// `first`: opening punctuation hangs into the margin the line
+    /// starts at.
+    pub first: bool,
+    /// `allow-end` or `force-end`.
+    pub end: HangEnd,
+    /// `last`: the mark a paragraph ends on hangs past the measure.
+    pub last: bool,
+}
+
+impl HangingPunctuation {
+    /// Nothing hangs.
+    pub const NONE: HangingPunctuation = HangingPunctuation {
+        first: false,
+        end: HangEnd::None,
+        last: false,
+    };
+}
+
+/// How far `hanging-punctuation` goes at the end of a line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HangEnd {
+    /// Nothing hangs at a line end.
+    #[default]
+    None,
+    /// `allow-end`: a mark hangs only where hanging is what makes the
+    /// line fit.
+    Allow,
+    /// `force-end`: a mark at a line end always hangs.
+    Force,
+}
+
+/// How a paragraph is broken and filled. The defaults are ragged
+/// right, no hyphenation, and no mark hanging past the measure.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct LineBreakOptions {
     /// Whether `hyphens: auto` is in force.
     pub hyphenate: bool,
+    /// Whether the lines fill the measure, from
+    /// `text-align: justify`. Left, right and centred text all break
+    /// the same way; where the line then sits is the caller's.
+    pub justify: bool,
+    /// Whether justification also opens the space between letters,
+    /// from `text-justify: inter-character`.
+    pub inter_character: bool,
+    /// Which marks hang past the measure.
+    pub hanging: HangingPunctuation,
 }
 
 /// A run of glyphs sharing one font and size — the paintable unit.
@@ -153,8 +250,14 @@ pub struct Line {
     pub runs: Vec<ShapedRun>,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
-    /// joins the runs when the display list paints it.
+    /// joins the runs when the display list paints it. What hangs
+    /// past the measure is charged here too, and taken off again by
+    /// `overhang` and `protrusion`.
     pub width: u32,
+    /// Points the line's last glyph hangs past the measure.
+    pub overhang: f32,
+    /// Points the line's first glyph hangs before the line's origin.
+    pub protrusion: f32,
     /// The line's vertical geometry — computed here, in points;
     /// downstream stages position against it, never re-measure.
     pub box_: LineBox,
@@ -211,8 +314,7 @@ fn walk_inlines(
 }
 
 /// A candidate line end: the exclusive byte offset where a line may
-/// end, plus the width contribution of a hyphen when the break falls
-/// inside a word.
+/// end, plus whether the break falls inside a word.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Opportunity {
     /// Exclusive end of the line's text.
@@ -220,6 +322,87 @@ struct Opportunity {
     /// True when this break sits inside a word and the line must be
     /// charged for a hyphen glyph.
     hyphen: bool,
+}
+
+/// One place a line may end, with everything the breaker measures it
+/// by. Widths are read out of the prefix tables at these offsets.
+#[derive(Debug, Clone, Copy)]
+struct Break {
+    /// Where the line's paintable text ends: `end` less the spaces
+    /// the break swallows.
+    content_end: usize,
+    /// Where the line after this one starts.
+    next: usize,
+    /// Whether taking this break puts a hyphen on the line.
+    hyphen: bool,
+    /// Whether the line after this break would open with a dash.
+    dash: bool,
+    /// Font units of the last glyph that may hang past the measure.
+    hang_end: f32,
+    /// Font units the first glyph of the following line may hang
+    /// before the measure.
+    hang_start: f32,
+}
+
+/// A chosen line end, with the adjustment its glue takes.
+#[derive(Debug, Clone, Copy)]
+struct Fitted {
+    /// Index into the break list.
+    at: usize,
+    /// The line's adjustment ratio: what fraction of its stretch or
+    /// shrink the glue gives up to reach the measure.
+    ratio: f32,
+    /// Font units hanging past the measure at the line's end.
+    overhang: f32,
+    /// Font units hanging before the line's origin.
+    protrusion: f32,
+}
+
+/// Prefix sums over the paragraph's shaped glyphs, in the
+/// paragraph's own font units: the width of any byte range is one
+/// subtraction.
+struct Widths {
+    /// Advance of every glyph whose cluster starts before byte `i`.
+    text: Vec<f32>,
+    /// The same for space glyphs alone, which is where the glue is.
+    spaces: Vec<f32>,
+    /// Whether a glyph's cluster starts at byte `i`. A break inside
+    /// a cluster would cut a ligature in half and lose it.
+    starts: Vec<bool>,
+}
+
+impl Widths {
+    fn build(text: &str, shaped: &[ShapedSpan]) -> Widths {
+        let mut widths = Widths {
+            text: vec![0.0; text.len() + 1],
+            spaces: vec![0.0; text.len() + 1],
+            starts: vec![false; text.len() + 1],
+        };
+        let bytes = text.as_bytes();
+        for span in shaped {
+            for glyph in &span.glyphs {
+                let at = (span.range.start + glyph.cluster as usize).min(text.len());
+                let advance = glyph.x_advance as f32 * span.scale;
+                widths.text[at] += advance;
+                if bytes.get(at) == Some(&b' ') {
+                    widths.spaces[at] += advance;
+                }
+                widths.starts[at] = true;
+            }
+        }
+        // Exclusive prefixes: entry `i` totals the glyphs that
+        // start before byte `i`, which is exactly the glyphs a line
+        // ending there carries.
+        let (mut text_total, mut space_total) = (0.0, 0.0);
+        for at in 0..widths.text.len() {
+            let (here, space) = (widths.text[at], widths.spaces[at]);
+            widths.text[at] = text_total;
+            widths.spaces[at] = space_total;
+            text_total += here;
+            space_total += space;
+        }
+        widths
+    }
 }
 
 /// The layout pass: one paragraph → lines that fit the measure.
@@ -298,91 +481,73 @@ impl<'a> LineLayout<'a> {
         let Some(metrics) = self.registry.metrics(style.font_id) else {
             return Vec::new();
         };
+        let upem = metrics.units_per_em as f32;
         // Points → font units: measure / size gives ems, ems *
         // units_per_em gives font units.
-        let to_units = |points: f32| points / style.size * metrics.units_per_em as f32;
+        let to_points = |units: f32| units / upem * style.size;
 
         // Shape each span; glyphs carry cluster offsets into the span,
         // which index the paragraph text once offset by span start.
+        // A span set at another size measures in its own font units,
+        // so `scale` takes it into the paragraph's.
         let shaped: Vec<ShapedSpan> = flat
             .spans
             .iter()
-            .map(|(font_id, _, range)| ShapedSpan {
+            .map(|(font_id, size, range)| ShapedSpan {
                 range: range.clone(),
+                scale: self.scale(*font_id, *size, style, upem),
                 glyphs: self
                     .registry
                     .shape(*font_id, &flat.text[range.clone()])
                     .unwrap_or_default(),
             })
             .collect();
-        // The space glyph's advance, for measuring candidate lines
-        // without their trailing spaces.
-        let space_advance = self
-            .registry
-            .char_glyph(style.font_id, ' ')
-            .and_then(|g| self.registry.advance_width(style.font_id, g))
-            .unwrap_or(0) as u32;
 
-        let opportunities = self.opportunities(&flat.text, options);
-        let hyphen_advance = self.hyphen_advance(style);
+        let widths = Widths::build(&flat.text, &shaped);
+        let hyphen = self.hyphen_advance(style) as f32;
+        let breaks = self.break_points(&flat.text, &widths, hyphen, options);
+        let breaker = Breaker {
+            breaks: &breaks,
+            widths: &widths,
+            measure,
+            upem,
+            size: style.size,
+            hyphen,
+            options,
+        };
 
         let mut lines = Vec::new();
-        let mut line_start = 0usize;
-        while line_start < flat.text.len() {
-            let measure_units = to_units(measure.at(lines.len()));
-            // Candidate ends for this line, in order: the first
-            // opportunity whose width fits wins. Trailing spaces are
-            // not charged; a hyphenated candidate is.
-            let mut last_fitting: Option<(usize, bool)> = None;
-            for opportunity in opportunities.iter().filter(|o| o.end > line_start) {
-                let mut width = spanned_width(&shaped, line_start, opportunity.end);
-                width -=
-                    trailing_spaces(&flat.text, line_start, opportunity.end) as u32 * space_advance;
-                if opportunity.hyphen {
-                    width += hyphen_advance;
+        let mut start = 0usize;
+        for fit in breaker.run() {
+            let at = &breaks[fit.at];
+            if at.content_end > start {
+                let mut line = self.cut(&flat, &shaped, start, at.content_end, style);
+                self.adjust(&mut line, &flat.text, fit.ratio, options);
+                if at.hyphen {
+                    self.hyphenate(&mut line, style);
                 }
-                if width <= measure_units as u32 {
-                    last_fitting = Some((opportunity.end, opportunity.hyphen));
-                } else {
-                    break;
-                }
+                line.overhang = to_points(fit.overhang);
+                line.protrusion = to_points(fit.protrusion);
+                lines.push(line);
             }
-            // Greedy: keep the LAST candidate that fits — lines carry
-            // as much text as the measure allows.
-            match last_fitting {
-                Some((end, hyphen)) => {
-                    let content_end = {
-                        let mut e = end;
-                        while e > line_start && flat.text.as_bytes()[e - 1] == b' ' {
-                            e -= 1;
-                        }
-                        e
-                    };
-                    if content_end <= line_start {
-                        break; // nothing paintable left (trailing spaces)
-                    }
-                    let mut line = self.cut(&flat, &shaped, line_start, end, style);
-                    if hyphen {
-                        self.hyphenate(&mut line, style);
-                    }
-                    lines.push(line);
-                    line_start = skip_spaces(&flat.text, end);
-                }
-                None => {
-                    // No opportunity fits: a single unit longer than
-                    // the measure. Overflow rather than drop text.
-                    let end = opportunities
-                        .iter()
-                        .filter(|o| o.end > line_start)
-                        .map(|o| o.end)
-                        .min()
-                        .unwrap_or(flat.text.len());
-                    lines.push(self.cut(&flat, &shaped, line_start, end, style));
-                    line_start = skip_spaces(&flat.text, end);
-                }
-            }
+            start = at.next;
         }
         lines
+    }
+
+    /// What a span's own font units are worth in the paragraph's.
+    /// One em of a 6pt face is not one em of an 11pt one, and the
+    /// measure is written in the paragraph's.
+    fn scale(&self, font_id: u16, size: f32, style: ParagraphStyle, upem: f32) -> f32 {
+        let span_upem = self
+            .registry
+            .metrics(font_id)
+            .map(|m| m.units_per_em as f32)
+            .unwrap_or(upem);
+        if span_upem <= 0.0 || style.size <= 0.0 {
+            return 1.0;
+        }
+        size / span_upem * upem / style.size
     }
 
     /// One line's runs plus the box they occupy: a run taller than
@@ -398,6 +563,8 @@ impl<'a> LineLayout<'a> {
         let runs = cut_runs(flat, shaped, start, end);
         Line {
             width: runs.iter().map(|run| run.advance).sum(),
+            overhang: 0.0,
+            protrusion: 0.0,
             box_: self.line_box(&runs, style),
             runs,
         }
@@ -406,7 +573,12 @@ impl<'a> LineLayout<'a> {
     /// Break opportunities for the paragraph: UAX #14 always, UAX #29
     /// word boundaries to bound hyphenation, `hypher` for syllables
     /// when enabled.
-    fn opportunities(&self, text: &str, options: LineBreakOptions) -> Vec<Opportunity> {
+    fn opportunities(
+        &self,
+        text: &str,
+        widths: &Widths,
+        options: LineBreakOptions,
+    ) -> Vec<Opportunity> {
         let mut opportunities: Vec<Opportunity> = linebreaks(text)
             .filter(|(_, kind)| {
                 matches!(
@@ -420,14 +592,16 @@ impl<'a> LineLayout<'a> {
             })
             .collect();
         if options.hyphenate {
-            self.add_hyphenation(text, &mut opportunities);
+            self.add_hyphenation(text, widths, &mut opportunities);
         }
-        opportunities.sort_unstable_by_key(|o| o.end);
+        // A hyphen and a space at the same offset are the same
+        // break, and the one that costs nothing wins it.
+        opportunities.sort_unstable_by_key(|o| (o.end, o.hyphen));
         opportunities.dedup_by_key(|o| o.end);
         opportunities
     }
 
-    fn add_hyphenation(&self, text: &str, opportunities: &mut Vec<Opportunity>) {
+    fn add_hyphenation(&self, text: &str, widths: &Widths, opportunities: &mut Vec<Opportunity>) {
         use hypher::Lang;
         let mut start = 0usize;
         for boundary in self.segmenter.segment_str(text) {
@@ -441,7 +615,10 @@ impl<'a> LineLayout<'a> {
                 let mut offset = start;
                 for syllable in syllables.iter().take(syllables.len().saturating_sub(1)) {
                     offset += syllable.len();
-                    if offset > start && offset < boundary {
+                    // A syllable boundary inside a ligature is not a
+                    // place a line can end: the glyph belongs to
+                    // neither half on its own.
+                    if offset > start && offset < boundary && widths.starts[offset] {
                         opportunities.push(Opportunity {
                             end: offset,
                             hyphen: true,
@@ -451,6 +628,105 @@ impl<'a> LineLayout<'a> {
             }
             start = boundary;
         }
+    }
+
+    /// The paragraph's break list: every opportunity, with the text
+    /// it leaves behind and the marks that may hang at either end.
+    fn break_points(
+        &self,
+        text: &str,
+        widths: &Widths,
+        hyphen: f32,
+        options: LineBreakOptions,
+    ) -> Vec<Break> {
+        let hangs = options.hanging != HangingPunctuation::NONE;
+        let start_hang = |at: usize| {
+            if !hangs {
+                return 0.0;
+            }
+            match text[at..].chars().next() {
+                Some(first) if widths.starts[at] => {
+                    hang_start(first) * (widths.text[at + first.len_utf8()] - widths.text[at])
+                }
+                _ => 0.0,
+            }
+        };
+        let mut breaks = vec![Break {
+            content_end: 0,
+            next: 0,
+            hyphen: false,
+            dash: false,
+            hang_end: 0.0,
+            hang_start: start_hang(0),
+        }];
+        for opportunity in self.opportunities(text, widths, options) {
+            let content_end = opportunity.end - trailing_spaces(text, 0, opportunity.end);
+            let next = skip_spaces(text, opportunity.end);
+            let hang = if !hangs {
+                0.0
+            } else if opportunity.hyphen {
+                hang_end('-') * hyphen
+            } else {
+                match text[..content_end].chars().next_back() {
+                    Some(last) if widths.starts[content_end - last.len_utf8()] => {
+                        hang_end(last)
+                            * (widths.text[content_end]
+                                - widths.text[content_end - last.len_utf8()])
+                    }
+                    _ => 0.0,
+                }
+            };
+            breaks.push(Break {
+                content_end,
+                next,
+                hyphen: opportunity.hyphen,
+                dash: matches!(
+                    text[next..].chars().next(),
+                    Some('-' | '\u{2010}' | '\u{2013}' | '\u{2014}')
+                ),
+                hang_end: hang,
+                hang_start: start_hang(next),
+            });
+        }
+        breaks
+    }
+
+    /// Spreads a line's adjustment over the glue it was measured
+    /// with. The ratio was chosen against the shaped advances, so it
+    /// lands on them: a painter is handed positions, not a rule for
+    /// working them out.
+    ///
+    /// The residue is carried from glyph to glyph rather than
+    /// dropped, so a line of rounded advances still totals the
+    /// measure.
+    fn adjust(&self, line: &mut Line, text: &str, ratio: f32, options: LineBreakOptions) {
+        if !options.justify || !ratio.is_finite() || ratio == 0.0 {
+            return;
+        }
+        let ratio = ratio.max(-1.0);
+        let (space, letter) = if ratio > 0.0 {
+            (SPACE_STRETCH, LETTER_STRETCH)
+        } else {
+            (SPACE_SHRINK, LETTER_SHRINK)
+        };
+        let letter = if options.inter_character { letter } else { 0.0 };
+        let bytes = text.as_bytes();
+        let (mut wanted, mut applied) = (0.0f32, 0i64);
+        for run in &mut line.runs {
+            let mut advance = 0i64;
+            for glyph in &mut run.glyphs {
+                let is_space = bytes.get(glyph.cluster as usize) == Some(&b' ');
+                let share = if is_space { space } else { letter };
+                wanted += ratio * share * glyph.x_advance as f32;
+                let step = wanted.round() as i64 - applied;
+                applied += step;
+                let width = (glyph.x_advance as i64 + step).max(0);
+                advance += width - glyph.x_advance as i64;
+                glyph.x_advance = width as u32;
+            }
+            run.advance = (run.advance as i64 + advance).max(0) as u32;
+        }
+        line.width = line.runs.iter().map(|run| run.advance).sum();
     }
 
     /// Draws the hyphen a break inside a word leaves behind.
@@ -509,28 +785,434 @@ impl<'a> LineLayout<'a> {
     }
 }
 
+/// How much of a mark hangs past the measure it ends a line at, as a
+/// fraction of its advance. The lighter the mark, the further it
+/// goes: a full stop leaves a hole in the margin that the eye reads
+/// as a ragged edge, a colon does not.
+fn hang_end(mark: char) -> f32 {
+    match mark {
+        '.' | ',' => 0.7,
+        '-' | '\u{2010}' | '\u{2013}' => 0.5,
+        '"' | '\'' | '\u{201d}' | '\u{2019}' | '\u{00bb}' => 0.4,
+        '\u{2014}' => 0.25,
+        ';' | ':' | '!' | '?' => 0.2,
+        _ => 0.0,
+    }
+}
+
+/// The same for the mark a line opens with, hanging back into the
+/// margin the line starts at.
+fn hang_start(mark: char) -> f32 {
+    match mark {
+        '"' | '\'' | '\u{201c}' | '\u{2018}' | '\u{00ab}' => 0.4,
+        '(' | '[' | '\u{2013}' | '\u{2014}' => 0.25,
+        _ => 0.0,
+    }
+}
+
+/// One paragraph's total-fit pass: break list in, chosen line ends
+/// out.
+struct Breaker<'a> {
+    breaks: &'a [Break],
+    widths: &'a Widths,
+    measure: Measure,
+    upem: f32,
+    size: f32,
+    /// Font units a hyphenated break is charged for.
+    hyphen: f32,
+    options: LineBreakOptions,
+}
+
+/// How one candidate line comes out: how far its glue is from its
+/// natural width, and what that costs.
+struct Fit {
+    ratio: f32,
+    badness: f64,
+    /// Font units the line runs past the measure by, if it does.
+    overflow: f32,
+    overhang: f32,
+    protrusion: f32,
+}
+
+/// A breakpoint reached by a path, and the best path to it.
+struct Node {
+    /// Index into the break list.
+    at: usize,
+    /// Lines the paragraph has taken to get here.
+    line: usize,
+    /// Which of the four fitness classes the line ending here fell
+    /// in.
+    fitness: u8,
+    /// Hyphenated line ends in a row up to and including this one.
+    hyphens: u8,
+    demerits: f64,
+    ratio: f32,
+    overhang: f32,
+    protrusion: f32,
+    /// The node this one was reached from; the root has none.
+    previous: Option<usize>,
+}
+
+/// A line end worth keeping, before it becomes a node.
+struct Candidate {
+    at: usize,
+    line: usize,
+    fitness: u8,
+    hyphens: u8,
+    demerits: f64,
+    ratio: f32,
+    overhang: f32,
+    protrusion: f32,
+    previous: usize,
+}
+
+impl Breaker<'_> {
+    /// Points → the paragraph's font units.
+    fn units(&self, points: f32) -> f32 {
+        if self.size > 0.0 {
+            points / self.size * self.upem
+        } else {
+            0.0
+        }
+    }
+
+    /// The last breakpoint, which every path has to reach.
+    fn end(&self) -> usize {
+        self.breaks.len() - 1
+    }
+
+    /// Measures the line that runs from break `a` to break `b`.
+    fn fit(&self, a: usize, b: usize, line: usize) -> Fit {
+        let start = self.breaks[a].next;
+        let end = self.breaks[b].content_end.max(start);
+        let measure = self.units(self.measure.at(line - 1));
+        let text = self.widths.text[end] - self.widths.text[start];
+        let spaces = self.widths.spaces[end] - self.widths.spaces[start];
+        let hyphen = if self.breaks[b].hyphen {
+            self.hyphen
+        } else {
+            0.0
+        };
+        let protrusion = if self.options.hanging.first {
+            self.breaks[a].hang_start
+        } else {
+            0.0
+        };
+        let natural = text + hyphen - protrusion;
+        let overhang = self.overhang(b, natural, measure);
+        let width = natural - overhang;
+
+        let last = b == self.end();
+        // The last line of a paragraph fills whatever it fills: the
+        // glue that finishes it stretches without limit.
+        let (stretch, shrink) = if last {
+            let shrink = if self.options.justify {
+                spaces * SPACE_SHRINK
+            } else {
+                0.0
+            };
+            (f32::INFINITY, shrink)
+        } else if self.options.justify {
+            let letters = if self.options.inter_character {
+                text - spaces
+            } else {
+                0.0
+            };
+            (
+                spaces * SPACE_STRETCH + letters * LETTER_STRETCH,
+                spaces * SPACE_SHRINK + letters * LETTER_SHRINK,
+            )
+        } else {
+            // Ragged setting has no glue to open, so the gap at the
+            // right is read against a fraction of the measure.
+            (measure * RAGGED_STRETCH, 0.0)
+        };
+
+        let gap = measure - width;
+        let ratio = if gap > 0.0 {
+            if stretch > 0.0 {
+                gap / stretch
+            } else {
+                f32::INFINITY
+            }
+        } else if gap < 0.0 {
+            if shrink > 0.0 {
+                gap / shrink
+            } else {
+                f32::NEG_INFINITY
+            }
+        } else {
+            0.0
+        };
+        Fit {
+            ratio,
+            badness: badness(ratio),
+            overflow: (-gap).max(0.0),
+            overhang,
+            protrusion,
+        }
+    }
+
+    /// What hangs past the measure at break `b`, given how wide the
+    /// line would otherwise be.
+    fn overhang(&self, b: usize, natural: f32, measure: f32) -> f32 {
+        let hang = self.breaks[b].hang_end;
+        if hang <= 0.0 {
+            return 0.0;
+        }
+        if b == self.end() && self.options.hanging.last {
+            return hang;
+        }
+        match self.options.hanging.end {
+            HangEnd::Force => hang,
+            HangEnd::Allow if natural > measure && natural - hang <= measure => hang,
+            _ => 0.0,
+        }
+    }
+
+    /// The chosen line ends, first to last.
+    fn run(&self) -> Vec<Fitted> {
+        let mut nodes = vec![Node {
+            at: 0,
+            line: 0,
+            fitness: 1,
+            hyphens: 0,
+            demerits: 0.0,
+            ratio: 0.0,
+            overhang: 0.0,
+            protrusion: 0.0,
+            previous: None,
+        }];
+        let mut active = vec![0usize];
+        let mut candidates: Vec<Candidate> = Vec::new();
+
+        for b in 1..self.breaks.len() {
+            let forced = b == self.end();
+            // The cheapest way to break here anyway, for a paragraph
+            // that cannot be set inside the measure at all.
+            let mut overfull: Option<Candidate> = None;
+            let mut index = 0;
+            while index < active.len() {
+                let a = active[index];
+                let line = nodes[a].line + 1;
+                let fit = self.fit(nodes[a].at, b, line);
+                if let Some(candidate) = self.candidate(&nodes[a], a, b, line, &fit) {
+                    self.keep_best(&mut candidates, candidate);
+                }
+                let long = fit.ratio < -1.0;
+                if long {
+                    let candidate = Candidate {
+                        demerits: nodes[a].demerits
+                            + OVERFULL_DEMERITS * (1.0 + (fit.overflow / self.upem) as f64),
+                        ratio: -1.0,
+                        fitness: 0,
+                        ..self.forced(&nodes[a], a, b, line, &fit)
+                    };
+                    if overfull
+                        .as_ref()
+                        .is_none_or(|held| candidate.demerits < held.demerits)
+                    {
+                        overfull = Some(candidate);
+                    }
+                }
+                if long || forced {
+                    active.remove(index);
+                } else {
+                    index += 1;
+                }
+            }
+            if candidates.is_empty() {
+                if !active.is_empty() {
+                    continue;
+                }
+                // Nothing fits and nothing is left to try: overflow
+                // the measure rather than drop the text.
+                candidates.push(overfull.expect("a line was too long to set"));
+            }
+            for candidate in candidates.drain(..) {
+                nodes.push(Node {
+                    at: candidate.at,
+                    line: candidate.line,
+                    fitness: candidate.fitness,
+                    hyphens: candidate.hyphens,
+                    demerits: candidate.demerits,
+                    ratio: candidate.ratio,
+                    overhang: candidate.overhang,
+                    protrusion: candidate.protrusion,
+                    previous: Some(candidate.previous),
+                });
+                active.push(nodes.len() - 1);
+            }
+        }
+
+        let best = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.at == self.end())
+            .min_by(|(_, one), (_, other)| one.demerits.total_cmp(&other.demerits))
+            .map(|(index, _)| index);
+        let mut chosen = Vec::new();
+        let mut at = best;
+        while let Some(index) = at {
+            let node = &nodes[index];
+            if node.previous.is_none() {
+                break;
+            }
+            chosen.push(Fitted {
+                at: node.at,
+                ratio: node.ratio,
+                overhang: node.overhang,
+                protrusion: node.protrusion,
+            });
+            at = node.previous;
+        }
+        chosen.reverse();
+        chosen
+    }
+
+    /// Keeps the cheapest candidate of each kind. Two paths that
+    /// reach the same break and are alike in everything the rest of
+    /// the paragraph can see are interchangeable, so only the cheaper
+    /// survives, which is what keeps the active list from growing
+    /// with the paragraph.
+    fn keep_best(&self, candidates: &mut Vec<Candidate>, candidate: Candidate) {
+        let key = |candidate: &Candidate| {
+            (
+                candidate.fitness,
+                candidate.hyphens,
+                // Only a shortened measure makes the line number
+                // visible from here on; past it every line is the
+                // same width.
+                candidate.line.min(self.measure.shortened + 1),
+            )
+        };
+        match candidates
+            .iter_mut()
+            .find(|held| key(held) == key(&candidate))
+        {
+            Some(held) if held.demerits <= candidate.demerits => {}
+            Some(held) => *held = candidate,
+            None => candidates.push(candidate),
+        }
+    }
+
+    /// Break `b` reached from node `a` whatever it costs: the line
+    /// between them is wider than the measure, and setting it is
+    /// still better than losing the words.
+    fn forced(&self, from: &Node, a: usize, b: usize, line: usize, fit: &Fit) -> Candidate {
+        Candidate {
+            at: b,
+            line,
+            fitness: 0,
+            hyphens: self.hyphens(from, b),
+            demerits: from.demerits,
+            ratio: fit.ratio,
+            overhang: fit.overhang,
+            protrusion: fit.protrusion,
+            previous: a,
+        }
+    }
+
+    /// Hyphenated line ends in a row, counting the one break `b`
+    /// would add.
+    fn hyphens(&self, from: &Node, b: usize) -> u8 {
+        if self.breaks[b].hyphen {
+            from.hyphens + 1
+        } else {
+            0
+        }
+    }
+
+    /// Break `b` reached from node `a`, if the line between them can
+    /// be set at all.
+    fn candidate(
+        &self,
+        from: &Node,
+        a: usize,
+        b: usize,
+        line: usize,
+        fit: &Fit,
+    ) -> Option<Candidate> {
+        if fit.ratio < -1.0 {
+            return None;
+        }
+        let hyphens = self.hyphens(from, b);
+        if hyphens > MAX_CONSECUTIVE_HYPHENS {
+            return None;
+        }
+        // The last line is not stretched to the measure, so what is
+        // left at its right is not a fault to be charged for.
+        let ratio = if b == self.end() && fit.ratio > 0.0 {
+            0.0
+        } else {
+            fit.ratio
+        };
+        let penalty = if self.breaks[b].hyphen {
+            HYPHEN_PENALTY
+        } else if self.breaks[b].dash {
+            DASH_PENALTY
+        } else {
+            0.0
+        };
+        let fitness = fitness(ratio);
+        let mut demerits = (LINE_PENALTY + fit.badness + penalty).powi(2);
+        if hyphens > 1 {
+            demerits += DOUBLE_HYPHEN_DEMERITS;
+        }
+        if fitness.abs_diff(from.fitness) > 1 {
+            demerits += ADJACENT_DEMERITS;
+        }
+        Some(Candidate {
+            at: b,
+            line,
+            fitness,
+            hyphens,
+            demerits: from.demerits + demerits,
+            ratio,
+            overhang: fit.overhang,
+            protrusion: fit.protrusion,
+            previous: a,
+        })
+    }
+}
+
+/// How bad a line of this adjustment ratio is. Cubic, so one gaping
+/// line costs more than several slightly loose ones.
+fn badness(ratio: f32) -> f64 {
+    if !ratio.is_finite() {
+        return MAX_BADNESS;
+    }
+    (100.0 * (ratio.abs() as f64).powi(3)).min(MAX_BADNESS)
+}
+
+/// Knuth's four fitness classes: tight, decent, loose, very loose. A
+/// tight line under a very loose one reads as a mistake even when
+/// each of them on its own does not, which is why the class and not
+/// the ratio is what the demerits compare.
+fn fitness(ratio: f32) -> u8 {
+    if ratio < -0.5 {
+        0
+    } else if ratio <= 0.5 {
+        1
+    } else if ratio < 1.0 {
+        2
+    } else {
+        3
+    }
+}
+
 /// One shaped span, its glyphs still carrying cluster offsets relative
 /// to the span's own text.
 struct ShapedSpan {
     /// Byte range of the span in the paragraph text.
     range: Range<usize>,
+    /// What one of this span's font units is worth in the
+    /// paragraph's.
+    scale: f32,
     glyphs: Vec<ShapedGlyph>,
 }
 
 impl ShapedSpan {
-    /// Advance of the glyphs whose clusters fall in `[start, end)` of
-    /// the paragraph text.
-    fn width_in(&self, start: usize, end: usize) -> u32 {
-        self.glyphs
-            .iter()
-            .filter(|g| {
-                let cluster = self.range.start + g.cluster as usize;
-                cluster >= start && cluster < end
-            })
-            .map(|g| g.x_advance)
-            .sum()
-    }
-
     /// The glyphs whose clusters fall in `[start, end)`, clusters
     /// rebased to the paragraph text.
     fn glyphs_in(&self, start: usize, end: usize) -> Vec<ShapedGlyph> {
@@ -548,15 +1230,6 @@ impl ShapedSpan {
     }
 }
 
-/// Width in font units of the text in `[start, end)`.
-fn spanned_width(shaped: &[ShapedSpan], start: usize, end: usize) -> u32 {
-    shaped
-        .iter()
-        .filter(|span| span.range.start < end && span.range.end > start)
-        .map(|span| span.width_in(start, end))
-        .sum()
-}
-
 /// Number of trailing ASCII spaces in `[start, end)`.
 fn trailing_spaces(text: &str, start: usize, end: usize) -> usize {
     let bytes = &text.as_bytes()[start..end];
@@ -570,8 +1243,9 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
     at
 }
 
-/// Slices shaped spans into the runs of one line. Trailing spaces are
-/// dropped from the runs — ragged right never paints them.
+/// Slices shaped spans into the runs of one line. `end` is where the
+/// line's paintable text stops: the spaces a break swallows are
+/// already off it.
 fn cut_runs(
     flat: &FlatParagraph,
     shaped: &[ShapedSpan],
@@ -583,22 +1257,13 @@ fn cut_runs(
         if span.range.start >= end || span.range.end <= start {
             continue;
         }
-        // Trim trailing spaces from the line's last run: re-slice
-        // against the last non-space byte.
-        let content_end = {
-            let mut e = end;
-            while e > start && flat.text.as_bytes()[e - 1] == b' ' {
-                e -= 1;
-            }
-            e
-        };
-        let glyphs = span.glyphs_in(start, content_end);
+        let glyphs = span.glyphs_in(start, end);
         if glyphs.is_empty() {
             continue;
         }
         let advance = glyphs.iter().map(|g| g.x_advance).sum();
         let text_start = span.range.start.max(start);
-        let text_end = span.range.end.min(content_end).max(text_start);
+        let text_end = span.range.end.min(end).max(text_start);
         runs.push(ShapedRun {
             font_id: *font_id,
             size: *size,
@@ -630,6 +1295,22 @@ mod tests {
 
     fn layout_body(text: &str, measure_pt: f32) -> Vec<Line> {
         layout_body_opts(text, measure_pt, LineBreakOptions::default())
+    }
+
+    /// Justification on, everything else at its default.
+    fn justified() -> LineBreakOptions {
+        LineBreakOptions {
+            justify: true,
+            ..Default::default()
+        }
+    }
+
+    /// Hyphenation on, everything else at its default.
+    fn hyphenated() -> LineBreakOptions {
+        LineBreakOptions {
+            hyphenate: true,
+            ..Default::default()
+        }
     }
 
     fn layout_body_opts(text: &str, measure_pt: f32, options: LineBreakOptions) -> Vec<Line> {
@@ -717,9 +1398,10 @@ mod tests {
         assert_eq!(reconstructed, text);
     }
 
-    /// Greedy first-fit: line 1 carries as much text as fits.
+    /// A paragraph with only one sensible answer gets it: everything
+    /// that fits on one line stays on it.
     #[test]
-    fn greedy_fits_the_maximum_on_line_one() {
+    fn a_paragraph_with_one_answer_gets_it() {
         let text = "aa bb cc";
         let lines = layout_body(text, 100.0);
         assert_eq!(lines.len(), 1, "everything fits: {lines:?}");
@@ -788,7 +1470,7 @@ mod tests {
     #[test]
     fn hyphenation_splits_long_words() {
         let text = "extraordinarily";
-        let lines = layout_body_opts(text, 44.0, LineBreakOptions { hyphenate: true });
+        let lines = layout_body_opts(text, 44.0, hyphenated());
         assert!(lines.len() >= 2, "expected a split, got {lines:?}");
         for line in &lines {
             let width_pt = line.width as f32 / units_per_em() as f32 * body().size;
@@ -808,7 +1490,7 @@ mod tests {
         let text = "extraordinarily";
         // 53.0 fits extraordi+hyphen (40.77) but not extraordinar+
         // hyphen (54.64).
-        let lines = layout_body_opts(text, 53.0, LineBreakOptions { hyphenate: true });
+        let lines = layout_body_opts(text, 53.0, hyphenated());
         assert!(lines.len() >= 2, "expected a split, got {lines:?}");
         let first = line_text(&lines[0]);
         assert!(
@@ -823,7 +1505,7 @@ mod tests {
     #[test]
     fn a_hyphenated_line_carries_the_hyphen_it_paid_for() {
         let text = "extraordinarily";
-        let lines = layout_body_opts(text, 53.0, LineBreakOptions { hyphenate: true });
+        let lines = layout_body_opts(text, 53.0, hyphenated());
         let first = &lines[0];
         assert_eq!(line_text(first), "extraordi-");
 
@@ -1016,17 +1698,180 @@ mod tests {
         );
     }
 
-    /// Acceptance: fixture-paragraph breaks match a hand-computed
-    /// reference. The opening of Gulliver §2, widths derived
-    /// independently of this module (per-word sums of hb-shape
-    /// advances for EB Garamond), greedy-packed by hand at five
-    /// measures.
+    /// Justified: every line but the last reaches the right edge of
+    /// the measure. The tolerance is the rounding the shaper's
+    /// integer advances force: the adjustment is spread over the
+    /// line's spaces and each lands on a whole font unit, so a line
+    /// can miss by half a unit, which at 11pt is 0.006pt.
+    #[test]
+    fn justified_lines_fill_the_measure() {
+        let text = "My father had a small estate in Nottinghamshire, and I was the \
+                    third of five sons. He sent me to Emanuel College in Cambridge \
+                    at fourteen years old, where I resided three years.";
+        let lines = layout_body_opts(text, 140.0, justified());
+        assert!(lines.len() > 3, "expected several lines: {lines:?}");
+        for line in &lines[..lines.len() - 1] {
+            let width = line.width as f32 / units_per_em() as f32 * body().size;
+            assert!(
+                (width - 140.0).abs() < 0.01,
+                "justified line is {width}pt against a 140pt measure",
+            );
+        }
+        let last = lines.last().unwrap();
+        let width = last.width as f32 / units_per_em() as f32 * body().size;
+        assert!(width < 140.0, "the last line was stretched to {width}pt");
+    }
+
+    /// The adjustment lands on the spaces. Ragged and justified
+    /// settings of the same line carry the same letters at the same
+    /// advances; only what is between the words moves.
+    #[test]
+    fn justification_opens_the_spaces_and_nothing_else() {
+        let text = "one two three four five six seven eight nine ten";
+        let ragged = layout_body_opts(text, 100.0, Default::default());
+        let justified = layout_body_opts(text, 100.0, justified());
+        assert_eq!(ragged.len(), justified.len());
+        let space = registry().char_glyph(0, ' ').unwrap();
+        let glyphs = |line: &Line| -> Vec<(u32, u32)> {
+            line.runs
+                .iter()
+                .flat_map(|run| run.glyphs.iter())
+                .map(|glyph| (glyph.id, glyph.x_advance))
+                .collect()
+        };
+        let (before, after) = (glyphs(&ragged[0]), glyphs(&justified[0]));
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "justification changed the glyphs on the line",
+        );
+        for (was, now) in before.iter().zip(after.iter()) {
+            assert_eq!(was.0, now.0, "justification reshaped the line");
+            if was.0 == space {
+                assert!(now.1 > was.1, "the spaces did not open: {was:?} {now:?}");
+            } else {
+                assert_eq!(was.1, now.1, "a letter moved: {was:?} {now:?}");
+            }
+        }
+    }
+
+    /// Inter-letter spacing is opt-in: the same line justified with
+    /// `text-justify: inter-character` widens its letters, and the
+    /// default leaves them alone.
+    #[test]
+    fn inter_letter_spacing_is_off_until_asked_for() {
+        let text = "one two three four five six seven eight nine ten";
+        let letters = |line: &Line| -> u32 {
+            let space = registry().char_glyph(0, ' ').unwrap();
+            line.runs
+                .iter()
+                .flat_map(|run| run.glyphs.iter())
+                .filter(|glyph| glyph.id != space)
+                .map(|glyph| glyph.x_advance)
+                .sum()
+        };
+        let words = layout_body_opts(text, 100.0, justified());
+        let characters = layout_body_opts(
+            text,
+            100.0,
+            LineBreakOptions {
+                inter_character: true,
+                ..justified()
+            },
+        );
+        assert!(letters(&characters[0]) > letters(&words[0]));
+        let width = |line: &Line| line.width as f32 / units_per_em() as f32 * body().size;
+        assert!(
+            (width(&characters[0]) - 100.0).abs() < 0.01,
+            "the line stopped filling the measure: {}pt",
+            width(&characters[0]),
+        );
+    }
+
+    /// Hanging punctuation: a mark at a line end is not charged to
+    /// the measure, so a word that would not otherwise fit does.
+    #[test]
+    fn a_mark_at_a_line_end_hangs_past_the_measure() {
+        // `My father had a small estate,` is 117.74pt: over a 116pt
+        // measure by less than the comma hangs.
+        let text = "My father had a small estate, and I was the third of five sons.";
+        let hanging = LineBreakOptions {
+            hanging: HangingPunctuation {
+                end: HangEnd::Force,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let flush = layout_body(text, 116.0);
+        let hung = layout_body_opts(text, 116.0, hanging);
+        assert_eq!(line_text(&flush[0]), "My father had a small");
+        assert_eq!(line_text(&hung[0]), "My father had a small estate,");
+        assert!(hung[0].overhang > 0.0, "the comma was still charged");
+    }
+
+    /// Margin kerning: a line opening on a quotation mark starts
+    /// before the measure does, by part of the mark's own width.
+    #[test]
+    fn an_opening_mark_hangs_into_the_margin() {
+        let text = "\"He said it would be so,\" and it was.";
+        let kerned = LineBreakOptions {
+            hanging: HangingPunctuation {
+                first: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let lines = layout_body_opts(text, 200.0, kerned);
+        assert_eq!(lines.len(), 1);
+        assert!(
+            lines[0].protrusion > 0.0,
+            "the quotation mark was not pulled out",
+        );
+        let quote = registry()
+            .advance_width(0, registry().char_glyph(0, '"').unwrap())
+            .unwrap() as f32
+            / units_per_em() as f32
+            * body().size;
+        assert!(
+            lines[0].protrusion < quote,
+            "the whole mark left the measure",
+        );
+    }
+
+    /// Acceptance: hyphenation never runs to three line ends in a
+    /// row, whatever the demerits would otherwise say. A narrow
+    /// measure over long words is where a breaker would do it.
+    #[test]
+    fn hyphens_never_run_three_deep() {
+        let text = "extraordinarily complicated administrative organisation \
+                    demonstrably incomprehensible";
+        let lines = layout_body_opts(text, 40.0, hyphenated());
+        let hyphenated: Vec<bool> = lines
+            .iter()
+            .map(|line| line_text(line).ends_with('-'))
+            .collect();
+        assert!(
+            hyphenated.iter().any(|end| *end),
+            "nothing was hyphenated: {hyphenated:?}",
+        );
+        assert!(
+            !hyphenated.windows(3).any(|run| run == [true, true, true]),
+            "three hyphenated line ends in a row: {hyphenated:?}",
+        );
+    }
+
+    /// Acceptance: the fixture paragraph breaks where total fit says
+    /// it should, and at one of these measures that is not where
+    /// greedy would have put it. The opening of Gulliver §2, widths
+    /// derived independently of this module (per-word sums of
+    /// hb-shape advances for EB Garamond).
+    ///
+    /// Per-word widths (pt): My 14.29, father 24.70, had 15.62,
+    /// a 4.39, small 21.78, estate 23.43, in 8.50,
+    /// Nottinghamshire: 75.57; space 2.20.
     #[test]
     fn breaks_match_hand_computed_reference() {
         let text = "My father had a small estate in Nottinghamshire:";
-        // Per-word widths (pt): My 14.29, father 24.70, had 15.62,
-        // a 4.39, small 21.78, estate 23.43, in 8.50,
-        // Nottinghamshire: 75.57; space 2.2.
         let expected: &[(f32, &[&str])] = &[
             (
                 50.0,
@@ -1034,11 +1879,11 @@ mod tests {
             ),
             (
                 60.0,
-                &["My father had", "a small estate", "in", "Nottinghamshire:"],
+                &["My father", "had a small", "estate in", "Nottinghamshire:"],
             ),
             (
                 80.0,
-                &["My father had a", "small estate in", "Nottinghamshire:"],
+                &["My father had", "a small estate in", "Nottinghamshire:"],
             ),
             (
                 120.0,
@@ -1051,5 +1896,34 @@ mod tests {
             let got: Vec<String> = lines.iter().map(line_text).collect();
             assert_eq!(&got, want_lines, "measure {measure}: {lines:?}");
         }
+    }
+
+    /// The arithmetic behind the 80pt row above, which is the row
+    /// where the two breakers part.
+    ///
+    /// Ragged badness is `100 * r^3`, where `r` is the gap left at
+    /// the right over a tenth of the measure, and a line costs
+    /// `(10 + badness)^2`, with 10,000 more when its fitness class is
+    /// two off the line before it. The last line fills what it fills
+    /// and costs 100.
+    ///
+    /// Total fit: 59.01 (r 2.62, 3.30M) + 64.70 (r 1.91, 0.50M)
+    /// + 75.57 (100) = 3.82M, two class changes included.
+    ///
+    /// Greedy: 65.60 (r 1.80, 0.35M) + 58.11 (r 2.74, 4.24M)
+    /// + 75.57 (100) = 4.61M, the same two.
+    ///
+    /// Greedy wins line one and loses the paragraph: the word it
+    /// pulls up leaves a hole on line two larger than the one it
+    /// filled.
+    #[test]
+    fn total_fit_beats_greedy_where_they_disagree() {
+        let text = "My father had a small estate in Nottinghamshire:";
+        let got: Vec<String> = layout_body(text, 80.0).iter().map(line_text).collect();
+        assert_eq!(got[0], "My father had", "line 1: {got:?}");
+        assert_ne!(
+            got[0], "My father had a",
+            "line 1 was packed greedily: {got:?}",
+        );
     }
 }

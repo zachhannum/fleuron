@@ -41,7 +41,7 @@ const STYLED_HEAD: &str = "STYLED BY FLEURON";
 /// SHA-256 of the fixture book's PDF under the built-in sheet alone.
 /// Layout is deterministic, so these bytes are a fact about the
 /// pipeline: a digest that moves is a change someone meant to make.
-const DEFAULT_PDF: &str = "21617b8774ba2698cd9caa65a99da7ea426fe1e288cfd72736835257e7c69dbb";
+const DEFAULT_PDF: &str = "29d799bb9448822b7be8e04ff0bd22b10fc68ae2ce9bda8db6ddbb3b0b30c9ac";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
