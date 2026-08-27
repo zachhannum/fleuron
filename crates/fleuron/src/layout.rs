@@ -663,6 +663,16 @@ impl Builder<'_, '_> {
                 narrow: measure - cap.reserved,
                 shortened: cap.lines,
             },
+            // An indent is a shorter first line that starts where
+            // that line's measure ends, which is what a drop cap
+            // already asks of the emit below. A cap outranks it: the
+            // first line is already displaced, and a book does not
+            // indent the paragraph a chapter opens with.
+            None if computed.text_indent != 0.0 => Measure {
+                full: measure,
+                narrow: measure - computed.text_indent,
+                shortened: 1,
+            },
             None => Measure::uniform(measure),
         };
         let lines = self.paginator.lines.layout_styled(
@@ -1964,6 +1974,58 @@ mod tests {
                         page.number,
                     );
                 }
+            }
+        }
+    }
+
+    /// `text-indent` sinks the first line of a paragraph and leaves
+    /// the rest of it at the full measure.
+    #[test]
+    fn text_indent_moves_the_first_line_and_nothing_else() {
+        let indent = 18.0;
+        let pages = paginate_styled(
+            &format!("p {{ text-indent: {indent}pt; text-align: left }}"),
+            vec![section(vec![paragraph(&"a word ".repeat(60))])],
+        );
+        let page = pages.first().expect("the paragraph set no pages");
+        let (left, _) = origin_of(page);
+        let lines = content_lines(page);
+        assert!(
+            lines.len() > 2,
+            "the paragraph broke into {} line(s)",
+            lines.len()
+        );
+
+        let (_, first) = &lines[0];
+        assert!(
+            (first[0].0 - left - indent).abs() < 1e-3,
+            "the first line starts at {}, not {indent} in",
+            first[0].0 - left,
+        );
+        for (_, runs) in &lines[1..] {
+            assert!(
+                (runs[0].0 - left).abs() < 1e-3,
+                "a later line starts at {}, not at the margin",
+                runs[0].0 - left,
+            );
+        }
+
+        // The indent is taken out of the measure rather than hung
+        // past it: the first line still ends inside the content box.
+        let measure = master(Situation::Body(page.side)).geometry.measure();
+        for item in &page.items {
+            let DrawItem::Text { glyphs, size, .. } = item else {
+                continue;
+            };
+            if *size == folio_size() {
+                continue;
+            }
+            for glyph in glyphs {
+                assert!(
+                    glyph.x <= left + measure,
+                    "a glyph at {} runs past the measure",
+                    glyph.x - left,
+                );
             }
         }
     }
