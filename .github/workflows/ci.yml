@@ -120,7 +120,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/fleuron-wasm/npm/package-lock.json
+          cache-dependency-path: |
+            crates/fleuron-wasm/npm/package-lock.json
+            packages/react/package-lock.json
       - name: Install PDF validation tools
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
       # wasm-pack fetches a matching wasm-bindgen on first use; keeping
@@ -151,6 +153,25 @@ jobs:
         env:
           FLEURON_WASM_REQUIRE_TOOLS: "1"
         run: npm test
+      # The painter needs a browser to be a painter. The same book, in
+      # Chromium, with page one held against a raster of the PDF the
+      # same run exported.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('crates/fleuron-wasm/npm/package-lock.json') }}
+      - name: Install the browser
+        working-directory: crates/fleuron-wasm/npm
+        run: npx playwright install --with-deps chromium
+      - name: The fixture book in a browser
+        working-directory: crates/fleuron-wasm/npm
+        env:
+          FLEURON_WASM_REQUIRE_TOOLS: "1"
+        run: npm run test:browser
+      # The React wrapper is checked for what it does not contain.
+      - name: The wrapper stays a wrapper
+        working-directory: packages/react
+        run: npm ci && npm test
       - name: Size budget
         working-directory: crates/fleuron-wasm/npm
         run: npm run size | tee -a "$GITHUB_STEP_SUMMARY"

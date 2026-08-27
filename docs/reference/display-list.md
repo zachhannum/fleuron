@@ -17,7 +17,7 @@ pub struct LayoutOutput {
 }
 ```
 
-`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. `warnings` is the whole run's, style compilation included — see [diagnostics](../library/diagnostics.md).
+`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named cuts are one file at several locations, and the location is what tells them apart. `warnings` is the whole run's, style compilation included — see [diagnostics](../library/diagnostics.md).
 
 ## `Page`
 
@@ -90,4 +90,6 @@ A placed image. `asset` indexes the asset table; the pixels are the host's. Layo
 
 The whole job is: for each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
 
-For text, resolve `font_id` through `LayoutOutput::fonts`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
+For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
+
+The SVG painter in `@fleuron/wasm` is one worked example, and [the preview](../wasm/preview.md) is where it is written down.

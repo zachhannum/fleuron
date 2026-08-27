@@ -1,6 +1,5 @@
 ---
 source: crates/fleuron/tests/font_table.rs
-assertion_line: 26
 expression: "(output, generics)"
 ---
 [
@@ -14,7 +13,8 @@ expression: "(output, generics)"
         "attributes": {
           "italic": false,
           "weight": 400
-        }
+        },
+        "variations": []
       },
       {
         "family": "eb garamond",
@@ -23,7 +23,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": false,
           "weight": 500
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 500.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -32,7 +38,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": false,
           "weight": 600
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 600.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -41,7 +53,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": false,
           "weight": 700
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 700.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -50,7 +68,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": false,
           "weight": 800
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 800.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -59,7 +83,8 @@ expression: "(output, generics)"
         "attributes": {
           "italic": true,
           "weight": 400
-        }
+        },
+        "variations": []
       },
       {
         "family": "eb garamond",
@@ -68,7 +93,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": true,
           "weight": 500
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 500.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -77,7 +108,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": true,
           "weight": 600
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 600.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -86,7 +123,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": true,
           "weight": 700
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 700.0
+          }
+        ]
       },
       {
         "family": "eb garamond",
@@ -95,7 +138,13 @@ expression: "(output, generics)"
         "attributes": {
           "italic": true,
           "weight": 800
-        }
+        },
+        "variations": [
+          {
+            "tag": "wght",
+            "value": 800.0
+          }
+        ]
       }
     ],
     "warnings": []

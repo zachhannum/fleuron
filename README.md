@@ -63,7 +63,9 @@ CSS ───────────────────────┘    
   Batch-friendly.
 - **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
   PDF bytes out, zero DOM access. Ships as `@fleuron/wasm`, with the
-  worker protocol and the display-list reader in TypeScript beside it.
+  worker protocol, the display-list reader and an SVG painter in
+  TypeScript beside it. `Preview` mounts that painter into an element;
+  `@fleuron/react` is the same thing as a component.
 
 The content tree stays public for a host with a structured source of
 its own, such as a CMS or a docx converter, but markdown is the way in.
@@ -76,7 +78,10 @@ its own, such as a CMS or a docx converter, but markdown is the way in.
    down in [`docs/css-subset.md`](docs/css-subset.md); anything outside
    it is reported with the line and column it was written at.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
-   and PDF are interchangeable painters over the display list.
+   and PDF are interchangeable painters over the display list. The SVG
+   preview gives each run an x per character, taken from the glyph the
+   shaper put there, so the browser positions rather than shapes and
+   cannot disagree with the export.
 3. **Layout never decodes images.** Header probes yield intrinsic size,
    orientation, and DPI; painters decode pixels on their own side of the
    wall.

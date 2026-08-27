@@ -9,3 +9,9 @@
 /crates/fleuron-wasm/npm/dist
 /crates/fleuron-wasm/npm/build
 /crates/fleuron-wasm/npm/*.tgz
+
+# The React wrapper: what tsc makes of it, and what npm installs to
+# build it.
+/packages/react/node_modules
+/packages/react/dist
+/packages/react/*.tgz

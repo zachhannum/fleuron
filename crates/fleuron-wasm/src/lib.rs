@@ -24,7 +24,7 @@
 use std::collections::BTreeMap;
 
 use fleuron::Warning;
-use fleuron::content::{Book, HeadingLevel};
+use fleuron::content::{Book, HeadingLevel, Metadata};
 use fleuron::fonts::{FontSource, bundled_registry};
 use fleuron::session::Session as Engine;
 use fleuron::style::{Source, Stylesheets};
@@ -125,6 +125,64 @@ impl Session {
         self.complain(name, complaints);
     }
 
+    /// Reads several markdown sources as one book, in the order
+    /// given.
+    ///
+    /// A lone source is the whole book, so its frontmatter is the
+    /// book's. Several are chapters: each file's frontmatter belongs
+    /// to the section it became, and the book is left unnamed rather
+    /// than named after whichever chapter came first, which is what
+    /// [`Session::set_metadata`] is for.
+    #[wasm_bindgen(js_name = setSources)]
+    pub fn set_sources(&mut self, names: Vec<String>, texts: Vec<String>) -> Result<(), JsError> {
+        if names.len() != texts.len() {
+            return Err(JsError::new(&format!(
+                "{} sources named and {} handed over",
+                names.len(),
+                texts.len()
+            )));
+        }
+        let metadata = match texts.as_slice() {
+            [whole] => fleuron_markdown::frontmatter(whole),
+            _ => Metadata::default(),
+        };
+        self.complaints.clear();
+        let mut sections = Vec::new();
+        for (name, text) in names.iter().zip(&texts) {
+            let (read, complaints) = fleuron_markdown::to_sections(text, name, &self.reading);
+            sections.extend(read);
+            self.complaints.insert(name.clone(), complaints);
+        }
+        self.engine
+            .set_content(fleuron_markdown::assemble(metadata, sections));
+        self.reflect();
+        Ok(())
+    }
+
+    /// Drops every section that came from one source, and the
+    /// complaints reading it raised.
+    #[wasm_bindgen(js_name = removeMarkdown)]
+    pub fn remove_markdown(&mut self, name: &str) {
+        self.engine.replace_source(name, Vec::new());
+        self.complaints.remove(name);
+        self.reflect();
+    }
+
+    /// Names the book, from JSON: `title`, `author`, and an `extra`
+    /// object for whatever else a frontend carries.
+    ///
+    /// A book read from several sources has no frontmatter of its
+    /// own, so this is how it gets a title. Nothing between the
+    /// content tree and the page reads metadata, so a book renamed
+    /// between renders re-runs no stage; the PDF writer is the one
+    /// thing that reads it.
+    #[wasm_bindgen(js_name = setMetadata)]
+    pub fn set_metadata(&mut self, json: &str) -> Result<(), JsError> {
+        let metadata: Metadata = serde_json::from_str(json).map_err(js_error)?;
+        self.engine.set_metadata(metadata);
+        Ok(())
+    }
+
     /// Replaces every section that came from one source, reparsing
     /// that source alone. A name the book does not carry appends
     /// instead, which is how a file it has not seen before arrives.
@@ -166,6 +224,23 @@ impl Session {
             .set_style(Stylesheets::parse(&[Source::author("author.css", css)]));
     }
 
+    /// The file a face was registered from, for a painter that has
+    /// to draw with the bytes the engine shaped with.
+    ///
+    /// The bundled face is the case that needs this: it is inside
+    /// the module and there is no URL a host could fetch it from.
+    /// A variable file answers for every cut it named, so the same
+    /// bytes come back for each of them, and the face's variations
+    /// on the display list say which instance to draw.
+    #[wasm_bindgen(js_name = fontBytes)]
+    pub fn font_bytes(&self, font_id: u16) -> Result<Vec<u8>, JsError> {
+        self.engine
+            .fonts()
+            .bytes(font_id)
+            .map(|bytes| bytes.to_vec())
+            .ok_or_else(|| JsError::new(&format!("no face is registered as font {font_id}")))
+    }
+
     /// The display list, postcard-encoded, version first.
     pub fn preview(&mut self) -> Result<Vec<u8>, JsError> {
         wire::encode(self.engine.preview()).map_err(js_error)
@@ -197,6 +272,11 @@ impl Session {
     /// beside what the styling and the layout said.
     fn complain(&mut self, name: &str, complaints: Vec<Warning>) {
         self.complaints.insert(name.to_string(), complaints);
+        self.reflect();
+    }
+
+    /// Hands the engine every source's complaints as they stand.
+    fn reflect(&mut self) {
         self.engine
             .set_source_warnings(self.complaints.values().flatten().cloned().collect());
     }

@@ -38,7 +38,7 @@ Break decisions fall out of the layout pass itself, which is most of why a 333-p
 
 **A command-line binary.** `fleuron` reads markdown and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
 
-**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access. The [wasm section](wasm/quickstart.md) states the contract; the bindings have not landed.
+**A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access, and an SVG painter over what comes back. Start at the [wasm quickstart](wasm/quickstart.md).
 
 ## Scope
 

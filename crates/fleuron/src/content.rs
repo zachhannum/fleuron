@@ -14,9 +14,11 @@
 //! # Reading a tree back
 //!
 //! The tree serializes, internally tagged (`{"type": "paragraph", …}`)
-//! so the shape maps one-to-one onto mdast, and that is an output: it
-//! is how to see what a frontend made of a manuscript. Nothing parses
-//! one back into a `Book`.
+//! so the shape maps one-to-one onto mdast. It is mostly an output: it
+//! is how to see what a frontend made of a manuscript. It reads back
+//! too, which is the door a host with a structured source of its own
+//! comes in through, so what the engine writes is what a host may hand
+//! it again.
 //!
 //! # Node identity
 //!
@@ -91,7 +93,11 @@ pub struct Metadata {
     /// Frontend-defined extensions (language, ISBN, subtitle…) keyed
     /// by name. Opaque to the engine; style reads them, layout
     /// doesn't.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Left out of the JSON when empty, and so it has to be
+    /// optional coming back in: what the engine writes is what a
+    /// host hands it again.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, String>,
 }
 
@@ -393,6 +399,19 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: value.into(),
             position: None,
+        }
+    }
+
+    /// What the engine writes, a host may hand back. The fields
+    /// left out of the JSON when they are empty are the ones this
+    /// catches: a book with no extras serializes without the map it
+    /// then has to be readable without.
+    #[test]
+    fn a_tree_the_engine_wrote_reads_back() {
+        for book in [sample_book(), Book::default()] {
+            let json = serde_json::to_string(&book).unwrap();
+            let read: Book = serde_json::from_str(&json).unwrap();
+            assert_eq!(read, book, "{json}");
         }
     }
 

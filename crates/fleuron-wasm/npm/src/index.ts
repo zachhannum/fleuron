@@ -6,6 +6,9 @@
  * {@link Engine}, and between them the engine's session keeps every
  * stage of the pipeline so that a second render pays for the edit
  * rather than for the book.
+ *
+ * {@link Preview} is all of that behind one object: an element, a
+ * manuscript, and a page on screen.
  */
 
 export { Client, SUPERSEDED, type Transport } from './client.js';
@@ -15,19 +18,24 @@ export {
   isRendered,
   type Applied,
   type Failed,
+  type Metadata,
   type Op,
   type Rendered,
   type Request,
   type Response,
+  type Source,
   type Superseded,
   type Want,
 } from './protocol.js';
+export { Preview, type PreviewOptions } from './preview.js';
+export { faceFamily, paintPage, type PaintOptions } from './svg.js';
 export {
   WIRE_VERSION,
   WireError,
   decodeDisplayList,
   wireVersionOf,
   type DrawItem,
+  type AxisSetting,
   type FaceAttributes,
   type FontRefEntry,
   type Glyph,

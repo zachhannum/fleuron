@@ -34,7 +34,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use crate::content::{Block, Book, Inline, NodeId, Section};
+use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
 use crate::images::Assets;
 use crate::layout::{Fragment, PageInfo, Paginator, font_table, no_assets};
@@ -354,6 +354,16 @@ impl<'a> Session<'a> {
         self.output.take().expect("an update leaves an output")
     }
 
+    /// Names the book: title, author, and whatever else a frontend
+    /// carries.
+    ///
+    /// Nothing between the content tree and the page reads metadata,
+    /// so this invalidates no stage. The pages already laid out are
+    /// the pages the export writes under the new name.
+    pub fn set_metadata(&mut self, metadata: Metadata) {
+        self.book.to_mut().metadata = metadata;
+    }
+
     /// The session's own copy of the book, node ids assigned.
     pub fn book(&self) -> &Book {
         &self.book
@@ -362,6 +372,15 @@ impl<'a> Session<'a> {
     /// The compiled styling behind the last update.
     pub fn styles(&self) -> &StyleTree {
         &self.styles
+    }
+
+    /// The faces this session lays out against.
+    ///
+    /// A painter that has to draw with the same file the shaper used
+    /// reaches the bytes through here; the display list carries ids,
+    /// and the registry is what they index.
+    pub fn fonts(&self) -> &FontRegistry {
+        self.registry.get()
     }
 
     /// How many times each stage has run.
@@ -916,6 +935,30 @@ mod tests {
         ]));
         session.preview();
         session
+    }
+
+    /// Naming a book costs nothing: no stage between the content
+    /// tree and the page reads metadata, so the pages already laid
+    /// out are the ones the export writes under the new name.
+    #[test]
+    fn naming_a_book_re_runs_no_stage() {
+        let mut session = three_chapters();
+        let before = session.stages();
+        let pages = session.preview().pages.len();
+        session.set_metadata(Metadata {
+            title: Some("Gulliver's Travels".into()),
+            author: Some("Jonathan Swift".into()),
+            extra: [("language".to_string(), "en".to_string())]
+                .into_iter()
+                .collect(),
+        });
+        let after = session.preview().pages.len();
+        assert_eq!(session.stages(), before);
+        assert_eq!(after, pages);
+        assert_eq!(
+            session.book().metadata.title.as_deref(),
+            Some("Gulliver's Travels")
+        );
     }
 
     /// Every text run containing `tag`, as `(page, x, baseline, text)`.

@@ -23,6 +23,8 @@ A version leads the encoding, and a host reads it before anything else. The enco
 
 **Coordinates are points, origin top-left.** Every painter (SVG, canvas, PDF) consumes the same numbers. A preview that disagrees with the export about where a glyph goes has a bug in the painter, not in the engine.
 
+**Faces carry their instance.** The font table says where on its file's axes each face sits. A variable file names several cuts and they are one file, so a painter that does not pin the axes draws the default weight for every one of them.
+
 **Glyphs carry their text.** Each text run holds the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so it travels with the glyphs. A painter that wants selection, copy-and-paste or accessible text reads it through those ranges; a painter that only draws ignores it.
 
 ## One book, both targets
@@ -33,13 +35,15 @@ PDF bytes are not identical across targets, though the PDF is the same book, of 
 
 ## The protocol
 
-A request is an edit, a render, or both:
+A request is an edit, a render, a question, or an edit and one of those:
 
 ```js
 { id, generation, ops: [{ op: 'style', css }], want: 'preview' }
 ```
 
 Request and response are paired by `id`, and each request carries a generation the worker echoes back untouched.
+
+`want: 'font'` is the question: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. Nothing overtakes it and it overtakes nothing — a face keeps its id for the session's life, so the answer cannot go stale.
 
 The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or a new manuscript. A response whose generation is behind the current one is dropped without painting. The engine does not need to know why.
 

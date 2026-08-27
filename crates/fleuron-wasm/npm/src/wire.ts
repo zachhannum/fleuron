@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader understands. */
-export const WIRE_VERSION = 1;
+export const WIRE_VERSION = 2;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -91,6 +91,14 @@ export interface Page {
   items: DrawItem[];
 }
 
+/** One axis of a variable face, pinned. */
+export interface AxisSetting {
+  /** The four-character OpenType axis tag, e.g. `wght`. */
+  tag: string;
+  /** The coordinate in the axis's own units. */
+  value: number;
+}
+
 /** The slope and weight a face answers for. */
 export interface FaceAttributes {
   /** True for italic and oblique alike. */
@@ -109,6 +117,13 @@ export interface FontRefEntry {
   style: string;
   /** What this face answers for. */
   attributes: FaceAttributes;
+  /**
+   * Where on its file's axes this face sits, in user space. Empty
+   * for a static face and for a variable one at its default
+   * location. A painter pins these axes and draws the cut the run
+   * was shaped at rather than the file's default.
+   */
+  variations: AxisSetting[];
 }
 
 /** A book that laid out anyway, and what it had to complain about. */
@@ -260,6 +275,7 @@ function font(r: Reader): FontRefEntry {
     name: r.string(),
     style: r.string(),
     attributes: { italic: r.bool(), weight: r.varint() },
+    variations: r.seq(() => ({ tag: r.string(), value: r.f32() })),
   };
 }
 

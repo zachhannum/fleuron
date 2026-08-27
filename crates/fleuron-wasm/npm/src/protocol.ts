@@ -9,6 +9,24 @@
  * one is dropped rather than painted.
  */
 
+/** One markdown source: what it is called, and what is in it. */
+export interface Source {
+  /** What the book calls this file, and what an edit replaces. */
+  name: string;
+  /** Its markdown. */
+  text: string;
+}
+
+/** What names a book: its title, its author, and whatever else. */
+export interface Metadata {
+  /** Title, for the half-title and running heads. */
+  title?: string;
+  /** Author, for the title page. */
+  author?: string;
+  /** Anything else a frontend carries, such as `language`. */
+  extra?: Record<string, string>;
+}
+
 /** One input reaching the engine. */
 export type Op =
   /** Font bytes, registered once and kept for the session's life. */
@@ -19,6 +37,12 @@ export type Op =
   | { op: 'split'; level: number }
   /** One markdown source as the whole book. */
   | { op: 'markdown'; name: string; text: string }
+  /** Every markdown source of a book, in reading order. */
+  | { op: 'book'; sources: Source[] }
+  /** One source dropped, and the rest of the book left standing. */
+  | { op: 'remove'; name: string }
+  /** What names the book, for a book whose sources cannot say. */
+  | { op: 'metadata'; metadata: Metadata }
   /** One source replaced: the keystroke path, where the rest of the book stands. */
   | { op: 'edit'; name: string; text: string }
   /** A content tree, as JSON, for a host with a structured source of its own. */
@@ -26,10 +50,16 @@ export type Op =
   /** The author stylesheet, as CSS text. */
   | { op: 'style'; css: string };
 
-/** What a request wants back, if anything. */
-export type Want = 'preview' | 'pdf';
+/**
+ * What a request wants back, if anything: a display list, a PDF, or
+ * the file a face was registered from.
+ *
+ * The first two are renders and the last is a question, which is
+ * what decides whether a later request may overtake it.
+ */
+export type Want = 'preview' | 'pdf' | 'font';
 
-/** An edit, a render, or both. */
+/** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
   /** Pairs the reply with the call. */
   id: number;
@@ -39,9 +69,11 @@ export interface Request {
   ops: Op[];
   /** What to send back once they have been applied. */
   want?: Want;
+  /** Which face `want: 'font'` is asking for. */
+  font?: number;
 }
 
-/** The bytes a render produced: a display list, or a PDF. */
+/** The bytes a request produced: a display list, a PDF, or a font file. */
 export interface Rendered {
   id: number;
   generation: number;

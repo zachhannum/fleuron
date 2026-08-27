@@ -77,6 +77,22 @@ export class Client {
     return this.render(ops, 'pdf');
   }
 
+  /**
+   * The file a face was registered from, for a painter that has to
+   * draw with the bytes the engine shaped with.
+   *
+   * A question rather than a render: nothing overtakes it, and the
+   * answer does not go stale, since a face keeps its id for the
+   * session's life.
+   */
+  async fontBytes(font: number): Promise<Uint8Array> {
+    const response = await this.send({ ops: [], want: 'font', font });
+    if (!isRendered(response)) {
+      throw new Error(`the engine sent no bytes for font ${font}`);
+    }
+    return response.bytes;
+  }
+
   /** Applies inputs and asks for nothing back. */
   async apply(ops: Op[]): Promise<void> {
     await this.send({ ops });
@@ -103,13 +119,19 @@ export class Client {
     return response.bytes;
   }
 
-  private send(what: { ops: Op[]; want?: Want; generation?: number }): Promise<Response> {
+  private send(what: {
+    ops: Op[];
+    want?: Want;
+    generation?: number;
+    font?: number;
+  }): Promise<Response> {
     this.id += 1;
     const request: Request = {
       id: this.id,
       generation: what.generation ?? this.generation,
       ops: what.ops,
       ...(what.want === undefined ? {} : { want: what.want }),
+      ...(what.font === undefined ? {} : { font: what.font }),
     };
     const transfer = request.ops
       .filter((op) => op.op === 'font')

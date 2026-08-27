@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fleuron ❦ preview</title>
+    <link rel="stylesheet" href="./harness.css" />
+  </head>
+  <body>
+    <header>
+      <h1>fleuron ❦</h1>
+      <label class="file">
+        manuscript
+        <input id="manuscript" type="file" accept=".md,.markdown,text/markdown" />
+      </label>
+      <label class="file">
+        stylesheet
+        <input id="stylesheet" type="file" accept=".css,text/css" />
+      </label>
+      <span class="spacer"></span>
+      <span class="pager">
+        <button id="previous" type="button" title="previous page">←</button>
+        <output id="folio"></output>
+        <button id="next" type="button" title="next page">→</button>
+      </span>
+      <label class="zoom">
+        zoom
+        <input id="zoom" type="range" min="0.5" max="3" step="0.25" value="1.5" />
+      </label>
+      <label class="beside">
+        <input id="beside" type="checkbox" />
+        beside the PDF
+      </label>
+    </header>
+
+    <main>
+      <div id="preview" class="sheet"></div>
+      <div id="export" class="sheet" hidden></div>
+    </main>
+
+    <footer>
+      <span id="status">loading the module…</span>
+      <ul id="warnings"></ul>
+    </footer>
+
+    <script type="module" src="./harness.js"></script>
+  </body>
+</html>

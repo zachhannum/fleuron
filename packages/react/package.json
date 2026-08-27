@@ -1,0 +1,43 @@
+{
+  "name": "@fleuron/react",
+  "version": "0.0.1",
+  "description": "The fleuron preview as a React component, and nothing else",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zachhannum/fleuron.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://zachhannum.github.io/fleuron/",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node test/wrapper.mjs"
+  },
+  "peerDependencies": {
+    "@fleuron/wasm": "0.0.1",
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@fleuron/wasm": "file:../../crates/fleuron-wasm/npm",
+    "@types/react": "^19.2.2",
+    "react": "^19.2.0",
+    "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

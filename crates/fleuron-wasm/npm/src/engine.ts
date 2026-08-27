@@ -101,12 +101,11 @@ export class Engine {
         reply({ id, generation, applied: true }, []);
         return;
       }
-      if (!render) {
+      if (!render && request.want !== 'font') {
         reply({ id, generation, superseded: true }, []);
         return;
       }
-      const bytes =
-        request.want === 'pdf' ? this.session.exportPdf() : this.session.preview();
+      const bytes = this.produce(request);
       const stages = this.session.stages();
       reply(
         {
@@ -120,6 +119,17 @@ export class Engine {
       );
     } catch (error) {
       reply({ id, generation, error: String(error) }, []);
+    }
+  }
+
+  private produce(request: Request): Uint8Array {
+    switch (request.want) {
+      case 'pdf':
+        return this.session.exportPdf();
+      case 'font':
+        return this.session.fontBytes(request.font ?? 0);
+      default:
+        return this.session.preview();
     }
   }
 
@@ -137,6 +147,18 @@ export class Engine {
       case 'markdown':
         this.session.setMarkdown(op.name, op.text);
         break;
+      case 'book':
+        this.session.setSources(
+          op.sources.map((source) => source.name),
+          op.sources.map((source) => source.text),
+        );
+        break;
+      case 'remove':
+        this.session.removeMarkdown(op.name);
+        break;
+      case 'metadata':
+        this.session.setMetadata(JSON.stringify(op.metadata));
+        break;
       case 'edit':
         this.session.updateMarkdown(op.name, op.text);
         break;
@@ -150,10 +172,16 @@ export class Engine {
   }
 }
 
-/** Which request in a batch is the one whose render still matters. */
+/**
+ * Which request in a batch is the one whose render still matters.
+ *
+ * A question is not a render: asking for a face's bytes neither
+ * overtakes a render nor is overtaken by one.
+ */
 function lastRenderIn(batch: Pending[]): number {
   for (let index = batch.length - 1; index >= 0; index -= 1) {
-    if (batch[index]?.request.want !== undefined) {
+    const want = batch[index]?.request.want;
+    if (want === 'preview' || want === 'pdf') {
       return index;
     }
   }
