@@ -26,10 +26,16 @@ export type Op =
   /** The author stylesheet, as CSS text. */
   | { op: 'style'; css: string };
 
-/** What a request wants back, if anything. */
-export type Want = 'preview' | 'pdf';
+/**
+ * What a request wants back, if anything: a display list, a PDF, or
+ * the file a face was registered from.
+ *
+ * The first two are renders and the last is a question, which is
+ * what decides whether a later request may overtake it.
+ */
+export type Want = 'preview' | 'pdf' | 'font';
 
-/** An edit, a render, or both. */
+/** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
   /** Pairs the reply with the call. */
   id: number;
@@ -39,9 +45,11 @@ export interface Request {
   ops: Op[];
   /** What to send back once they have been applied. */
   want?: Want;
+  /** Which face `want: 'font'` is asking for. */
+  font?: number;
 }
 
-/** The bytes a render produced: a display list, or a PDF. */
+/** The bytes a request produced: a display list, a PDF, or a font file. */
 export interface Rendered {
   id: number;
   generation: number;
