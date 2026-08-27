@@ -1,5 +1,5 @@
 //! The fixture manuscript through the engine: the excerpt the e2e
-//! renders, read by the shipped frontend rather than adapted by hand.
+//! renders, read by the shipped frontend.
 //!
 //! It lives here rather than beside the layout code because reading it
 //! means the markdown crate, which depends on this one.

@@ -93,7 +93,7 @@ A face that resolves nowhere warns and the text falls back. See [fonts](../libra
 
 ## Reading the tree back
 
-Markdown is the only input. To see what the frontend made of a manuscript (which heading opened a section, where a construct degraded) dump the [content tree](../reference/content-tree.md) instead of laying it out:
+To see what the frontend made of a manuscript (which heading opened a section, where a construct degraded) dump the [content tree](../reference/content-tree.md) instead of laying it out:
 
 ```sh
 fleuron manuscript.md --dump-tree

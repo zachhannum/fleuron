@@ -15,8 +15,8 @@
 //!
 //! The tree serializes, internally tagged (`{"type": "paragraph", …}`)
 //! so the shape maps one-to-one onto mdast, and that is an output: it
-//! is how to see what a frontend made of a manuscript. Nothing reads a
-//! tree back in: markdown is the serialized form.
+//! is how to see what a frontend made of a manuscript. Nothing parses
+//! one back into a `Book`.
 //!
 //! # Node identity
 //!

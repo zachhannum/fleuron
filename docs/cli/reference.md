@@ -25,7 +25,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
 ## Arguments
 
-**`<input.md…>`** — one or more markdown files, composed in the order given, each carrying its own name into the tree. Markdown is the only serialized input; an extension that is not `.md` or `.markdown` is an error naming the file.
+**`<input.md…>`** — one or more markdown files, composed in the order given, each carrying its own name into the tree. An extension that is not `.md` or `.markdown` is an error naming the file.
 
 **`-s`, `--split`** — where a markdown file's sections begin. A level 1 to 6 opens a section at every heading of that level or shallower; `none` opens none, so the file is one section. Default 1.
 

@@ -47,10 +47,8 @@ There is exactly one e2e definition in this repo: **fixture book
 markdown in → valid PDF out**, invoked through the CLI, living in
 `crates/fleuron-cli/tests/`.
 
-- Input: `fixtures/gulliver-excerpt.md`, checked in. Realistic prose:
-  dialogue, em-dashes, hyphenation-prone words; never lorem. Markdown
-  is the only serialized input, so the path CI proves is the path a
-  reader walks.
+- Input: `fixtures/gulliver-excerpt.md`, checked in: realistic prose,
+  dialogue, em-dashes, hyphenation-prone words; never lorem.
 - CI validates the output three ways: `qpdf --check` (structure),
   `pdftotext` round-trip (word count preserved, hyphenation off for the
   test config), page-count assertions.

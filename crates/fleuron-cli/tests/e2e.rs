@@ -2,9 +2,7 @@
 //! the PDF that comes back validated three ways — structure, text
 //! round-trip, page count.
 //!
-//! Markdown in, a PDF out, which is the path a reader walks. The
-//! excerpt is checked in, and the tree it becomes is the frontend's
-//! reading of it rather than a transcription kept in step by hand.
+//! Markdown in, a PDF out, which is the path a reader walks.
 //!
 //! Author CSS travels the same path, and is validated the same three
 //! ways: `fixtures/styled.css` restyles the same book — a different
