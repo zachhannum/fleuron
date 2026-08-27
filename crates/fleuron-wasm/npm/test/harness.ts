@@ -20,10 +20,17 @@ import { Worker } from 'node:worker_threads';
 import {
   Client,
   Session,
+  WIRE_VERSION,
   decodeDisplayList,
+  faceFamily,
   initWasm,
+  paintPage,
+  wireVersion,
+  type LayoutOutput,
   type Op,
+  type Page,
   type Response,
+  type TextItem,
 } from '../dist/index.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -130,6 +137,97 @@ check(
   preview.fonts.some((font) => font.family === 'eb garamond'),
 );
 
+// The painter. Every page is painted, and every glyph the display
+// list placed is checked against the x the SVG puts that character
+// at — mechanically, over the draw items, with the byte-to-character
+// mapping recomputed here rather than borrowed from the painter.
+
+/** The `<text>` elements of a painted page, in paint order. */
+function texts(svg: string): { x: string[]; content: string }[] {
+  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map((element) => ({
+    x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+    content: unescape_(element[2] ?? ''),
+  }));
+}
+
+function unescape_(markup: string): string {
+  return markup
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+}
+
+/** Which character of a run a byte offset falls on. */
+function characterAt(text: string, byte: number): number {
+  return [...Buffer.from(text, 'utf8').subarray(0, byte).toString('utf8')].length;
+}
+
+/** Every glyph of a page, held against the x the painter wrote. */
+function misplaced(page: Page, output: LayoutOutput): string | null {
+  const painted = texts(paintPage(page, { fonts: output.fonts }));
+  const runs = page.items.filter((item): item is TextItem => item.kind === 'text');
+  if (painted.length !== runs.length) {
+    return `page ${page.number} has ${runs.length} runs and ${painted.length} <text>`;
+  }
+  for (const [at, run] of runs.entries()) {
+    const element = painted[at];
+    if (element === undefined || element.content !== run.text) {
+      return `page ${page.number} run ${at} paints ${JSON.stringify(element?.content)}, not ${JSON.stringify(run.text)}`;
+    }
+    for (const glyph of run.glyphs) {
+      const index = characterAt(run.text, glyph.range[0]);
+      const written = element.x[index];
+      if (written === undefined || Math.fround(Number(written)) !== glyph.x) {
+        return `page ${page.number} run ${at} puts character ${index} at ${written}, not ${glyph.x}`;
+      }
+    }
+  }
+  return null;
+}
+
+const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
+check('every glyph is painted at the x the display list gave it', wrong === undefined, wrong ?? '');
+check(
+  'every page paints',
+  preview.pages.every((page) => {
+    const svg = paintPage(page, { fonts: preview.fonts });
+    return svg.startsWith('<svg') && svg.includes(`data-page="${page.number}"`);
+  }),
+);
+check(
+  'a run is drawn in the face the engine shaped it with, at the cut it shaped at',
+  preview.pages.some((page) => {
+    const svg = paintPage(page, { fonts: preview.fonts });
+    return svg.includes(faceFamily(0)) && svg.includes('white-space: pre');
+  }),
+);
+
+// A face the painter was told nothing about still paints: the stack
+// falls through to whatever the reader has.
+const unnamed = paintPage(preview.pages[0] as Page, { fonts: [] });
+check(
+  'a missing face falls back visibly rather than painting nothing',
+  unnamed.includes('data-missing-font=') &&
+    unnamed.includes('serif') &&
+    texts(unnamed).every((element) => element.content.length > 0),
+);
+
+// The bytes a painter draws with are the bytes the engine shaped
+// with: the module hands the file back rather than leaving a host to
+// find the bundled face somewhere else.
+const file = await client.fontBytes(0);
+check(
+  'the module hands back the file it shaped with',
+  Buffer.from(file).equals(readFileSync(join(root, 'crates', 'fleuron', 'fonts', 'EBGaramond-VF.ttf'))),
+  `${file.byteLength} bytes`,
+);
+check(
+  'the font table says which instance a cut sits at',
+  preview.fonts[0]?.variations.length === 0 &&
+    preview.fonts.some((font) => font.variations.some((axis) => axis.tag === 'wght')),
+);
+
 // The export path. The bytes are not compared to the CLI's byte for
 // byte: the PDF writer orders its font objects by a hash that is not
 // the same width on a 32-bit target as on a 64-bit one, so the two
@@ -214,6 +312,7 @@ const once = new Session();
 once.setMarkdown('gulliver-excerpt.md', markdown);
 const direct = decodeDisplayList(once.preview());
 check('the same module used once agrees with the worker', direct.pages.length === cli.pages);
+check('the module and the reader agree on the wire version', wireVersion() === WIRE_VERSION);
 once.free();
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
