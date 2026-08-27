@@ -16,7 +16,7 @@ fleuron = { git = "https://github.com/zachhannum/fleuron" }
 fleuron-markdown = { git = "https://github.com/zachhannum/fleuron" }
 ```
 
-`fleuron-markdown` is the frontend: markdown in, sections out. Leave it out if your source is already structured and you build a `Book` yourself, and add `serde_json` instead if you are reading a content tree off disk.
+`fleuron-markdown` is the frontend: markdown in, sections out. Leave it out if your source is already structured and you build a `Book` yourself.
 
 Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O of its own, and pulls in no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
 

@@ -17,13 +17,15 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`
                        is the one the PDF writer reads
+  --dump-tree          write the content tree the frontend read to
+                       stdout as JSON, and lay nothing out
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 ```
 
 ## Arguments
 
-**`<input.md…>`** — one or more markdown files, composed in the order given, each carrying its own name into the tree. A single `.json` argument is read as a [content tree](../reference/content-tree.md) instead; two of those, or a tree beside markdown, is a usage error. An extension that is neither is an error naming the file.
+**`<input.md…>`** — one or more markdown files, composed in the order given, each carrying its own name into the tree. Markdown is the only serialized input; an extension that is not `.md` or `.markdown` is an error naming the file.
 
 **`-s`, `--split`** — where a markdown file's sections begin. A level 1 to 6 opens a section at every heading of that level or shallower; `none` opens none, so the file is one section. Default 1.
 
@@ -31,7 +33,9 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
 **`--title`, `--author`, `--meta`** — the book's own metadata. A lone markdown input is the whole book, so its frontmatter fills whatever these leave unset; several inputs are chapters, and each file's frontmatter stays with the section it became. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language.
 
-**`-o`, `--output`** — where the PDF goes. Required. The path is written whole; nothing is created alongside it.
+**`-o`, `--output`** — where the PDF goes. Required, except under `--dump-tree`. The path is written whole; nothing is created alongside it.
+
+**`--dump-tree`** — writes the [content tree](../reference/content-tree.md) the frontend read to stdout, as JSON, and lays nothing out. It is how to see what a manuscript became, and the same manuscript dumps the same bytes every time.
 
 **`-c`, `--css`** — an author stylesheet. Repeatable. Sheets are parsed in the order given and cascade in that order, all of them over the built-in user-agent sheet. Omitting it entirely is legal and gives you the built-in design.
 
@@ -53,7 +57,7 @@ An unrecognised option beginning with `-` is a usage error. There is no `--` sep
 
 ## stderr
 
-Everything the run has to say goes to stderr; stdout carries only what `--version` and `--help` print. A summary comes first:
+Everything the run has to say goes to stderr; stdout carries only what `--version`, `--help` and `--dump-tree` print. A summary comes first:
 
 ```text
 fleuron: manuscript.md → book.pdf: 333 pages

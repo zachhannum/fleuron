@@ -24,14 +24,15 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`
                        is the one the PDF writer reads
+  --dump-tree          write the content tree the frontend read to
+                       stdout as JSON, and lay nothing out
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 
 Markdown files compose in the order given. One markdown file is a whole
 book, so its frontmatter is the book's; several are chapters, and each
 file's frontmatter is its own, which is what --title and --author are
-for. A single .json file is read as a content tree instead, which is
-the same document one stage later.";
+for.";
 
 fn main() -> ExitCode {
     dispatch(std::env::args().skip(1)).code()
@@ -72,6 +73,12 @@ enum Command {
         /// How the markdown frontend reads each file.
         reading: Options,
     },
+    /// Write the tree the frontend read, and lay nothing out.
+    DumpTree {
+        inputs: Vec<PathBuf>,
+        metadata: Metadata,
+        reading: Options,
+    },
     Version,
     Help,
 }
@@ -99,6 +106,20 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
                 Status::Failure
             }
         },
+        Ok(Command::DumpTree {
+            inputs,
+            metadata,
+            reading,
+        }) => match dump_tree(&inputs, metadata, &reading) {
+            Ok(warnings) => {
+                report_warnings(&warnings);
+                Status::Ok
+            }
+            Err(e) => {
+                eprintln!("fleuron: {e:#}");
+                Status::Failure
+            }
+        },
         Err(e) => {
             eprintln!("fleuron: {e}\n{USAGE}");
             Status::Usage
@@ -112,6 +133,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     let mut css: Vec<PathBuf> = Vec::new();
     let mut metadata = Metadata::default();
     let mut reading = Options::default();
+    let mut dump = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or_else(|| anyhow!("{arg} needs a value"));
@@ -129,6 +151,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
                     .ok_or_else(|| anyhow!("--meta takes key=value, got {field}"))?;
                 metadata.extra.insert(key.to_string(), held.to_string());
             }
+            "--dump-tree" => dump = true,
             "-s" | "--split" => reading.sections = split(&value()?)?,
             "-d" | "--dialect" => reading.dialect = dialect(&value()?)?,
             flag if flag.starts_with('-') && flag.len() > 1 => bail!("unknown option {flag}"),
@@ -138,10 +161,12 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     if inputs.is_empty() {
         bail!("no input file");
     }
-    // A content tree is a whole book already; there is no rule for
-    // merging two of them that would not have to arbitrate metadata.
-    if inputs.iter().any(|input| kind(input) == Some(Input::Tree)) && inputs.len() > 1 {
-        bail!("one content tree at a time");
+    if dump {
+        return Ok(Command::DumpTree {
+            inputs,
+            metadata,
+            reading,
+        });
     }
     Ok(Command::Render {
         inputs,
@@ -175,27 +200,16 @@ fn dialect(value: &str) -> Result<Dialect> {
     }
 }
 
-/// What an input file holds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Input {
-    Markdown,
-    Tree,
-}
-
-/// What the extension says the file is. The engine reads two things,
-/// and a name it does not recognise is a question rather than a
-/// guess.
-fn kind(path: &Path) -> Option<Input> {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())?
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "md" | "markdown" => Some(Input::Markdown),
-        "json" => Some(Input::Tree),
-        _ => None,
-    }
+/// Whether the extension says the file is markdown. Markdown is what
+/// the binary reads, and a name it does not recognise is a question
+/// rather than a guess.
+fn is_markdown(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            let ext = ext.to_ascii_lowercase();
+            ext == "md" || ext == "markdown"
+        })
 }
 
 /// What one rendered book has to say for itself.
@@ -213,12 +227,7 @@ impl Summary {
             output.display(),
             self.pages,
         );
-        for warning in &self.warnings {
-            match &warning.origin {
-                Some(origin) => eprintln!("fleuron: warning: {origin}: {}", warning.message),
-                None => eprintln!("fleuron: warning: {}", warning.message),
-            }
-        }
+        report_warnings(&self.warnings);
         if !self.warnings.is_empty() {
             eprintln!(
                 "fleuron: {} warning{}; the PDF was written anyway",
@@ -227,6 +236,16 @@ impl Summary {
             );
         }
         Status::Ok
+    }
+}
+
+/// Everything the reading had to complain about, one per line.
+fn report_warnings(warnings: &[Warning]) {
+    for warning in warnings {
+        match &warning.origin {
+            Some(origin) => eprintln!("fleuron: warning: {origin}: {}", warning.message),
+            None => eprintln!("fleuron: warning: {}", warning.message),
+        }
     }
 }
 
@@ -329,16 +348,10 @@ fn read_book(
     named: Metadata,
     reading: &Options,
 ) -> Result<(Book, Vec<Warning>)> {
-    if let [tree] = inputs
-        && kind(tree) == Some(Input::Tree)
-    {
-        return Ok((read_tree(tree)?, Vec::new()));
-    }
-
     let mut sources = Vec::with_capacity(inputs.len());
     for input in inputs {
-        if kind(input) != Some(Input::Markdown) {
-            bail!("{}: not markdown or a content tree", input.display());
+        if !is_markdown(input) {
+            bail!("{}: not markdown", input.display());
         }
         let text =
             std::fs::read_to_string(input).with_context(|| format!("{}", input.display()))?;
@@ -364,16 +377,13 @@ fn read_book(
     Ok((fleuron_markdown::assemble(metadata, sections), warnings))
 }
 
-fn read_tree(input: &Path) -> Result<Book> {
-    let text = std::fs::read_to_string(input).with_context(|| format!("{}", input.display()))?;
-    parse_tree(&text, input)
-}
-
-fn parse_tree(text: &str, input: &Path) -> Result<Book> {
-    let mut book: Book = serde_json::from_str(text)
-        .with_context(|| format!("{}: not a content tree", input.display()))?;
-    book.assign_node_ids();
-    Ok(book)
+/// Writes the tree the frontend read to stdout, so what a manuscript
+/// became is readable without a PDF in between.
+fn dump_tree(inputs: &[PathBuf], named: Metadata, reading: &Options) -> Result<Vec<Warning>> {
+    let (book, warnings) = read_book(inputs, named, reading)?;
+    let tree = serde_json::to_string_pretty(&book).context("the content tree serializes")?;
+    println!("{tree}");
+    Ok(warnings)
 }
 
 #[cfg(test)]
@@ -401,9 +411,9 @@ mod tests {
             },
         );
         assert_eq!(
-            render_of(&["--output", "out.pdf", "book.json"]),
+            render_of(&["--output", "out.pdf", "manuscript.markdown"]),
             Command::Render {
-                inputs: vec![PathBuf::from("book.json")],
+                inputs: vec![PathBuf::from("manuscript.markdown")],
                 output: PathBuf::from("out.pdf"),
                 css: Vec::new(),
                 metadata: Metadata::default(),
@@ -430,16 +440,14 @@ mod tests {
         }
     }
 
-    /// Markdown composes; a content tree is a whole book already.
+    /// Markdown composes in the order the command line gives it.
     #[test]
-    fn several_markdown_files_compose_and_a_tree_stands_alone() {
+    fn several_markdown_files_compose_in_argument_order() {
         let Command::Render { inputs, .. } = render_of(&["two.md", "one.md", "-o", "out.pdf"])
         else {
             panic!("expected a render");
         };
         assert_eq!(inputs, [PathBuf::from("two.md"), PathBuf::from("one.md")]);
-        assert!(parse(args(&["a.json", "b.json", "-o", "out.pdf"])).is_err());
-        assert!(parse(args(&["a.md", "b.json", "-o", "out.pdf"])).is_err());
     }
 
     #[test]
@@ -580,11 +588,10 @@ mod tests {
         assert!(format!("{e:#}").contains("no/such/book.md"), "{e:#}");
     }
 
+    /// Markdown is what the binary reads, and a file it cannot place
+    /// is named rather than guessed at.
     #[test]
-    fn an_unreadable_input_is_an_error_not_a_panic() {
-        let e = parse_tree("{ not a content tree", Path::new("book.json")).unwrap_err();
-        assert!(format!("{e:#}").contains("book.json"), "{e:#}");
-        assert!(parse_tree("[]", Path::new("book.json")).is_err());
+    fn an_input_that_is_not_markdown_is_an_error_not_a_panic() {
         let e = read_book(
             &[PathBuf::from("notes.txt")],
             Metadata::default(),
@@ -592,6 +599,53 @@ mod tests {
         )
         .unwrap_err();
         assert!(format!("{e:#}").contains("notes.txt"), "{e:#}");
+        assert!(
+            read_book(
+                &[PathBuf::from("book.json")],
+                Metadata::default(),
+                &Options::default(),
+            )
+            .is_err()
+        );
+    }
+
+    /// The tree is a job of its own: it needs no output path, and two
+    /// dumps of one manuscript are the same bytes.
+    #[test]
+    fn dump_tree_is_a_job_of_its_own() {
+        assert_eq!(
+            parse(args(&["book.md", "--dump-tree"])).unwrap(),
+            Command::DumpTree {
+                inputs: vec![PathBuf::from("book.md")],
+                metadata: Metadata::default(),
+                reading: Options::default(),
+            },
+        );
+
+        let dir = std::env::temp_dir().join("fleuron-cli-dump");
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let source = dir.join("dump.md");
+        std::fs::write(
+            &source,
+            "---\ntitle: The Levant Papers\n---\n\n# One\n\nHe arrived on a Tuesday.\n",
+        )
+        .expect("the source is writable");
+
+        let read = || {
+            let (book, warnings) = read_book(
+                std::slice::from_ref(&source),
+                Metadata::default(),
+                &Options::default(),
+            )
+            .unwrap();
+            assert!(warnings.is_empty());
+            serde_json::to_string_pretty(&book).unwrap()
+        };
+        let tree = read();
+        assert!(tree.contains("The Levant Papers"));
+        assert!(tree.contains("\"type\": \"heading\""));
+        assert!(!tree.contains("\"id\""), "ids do not travel");
+        assert_eq!(tree, read(), "the dump moved between runs");
     }
 
     #[test]

@@ -41,7 +41,7 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 
 ## What fails
 
-**Input that is neither markdown nor a content tree.** A file the CLI cannot place by extension, or JSON that does not deserialize. This is the caller's error, not the book's.
+**Input that is not markdown.** A file the CLI cannot place by extension. This is the caller's error, not the book's.
 
 **A face that could not be embedded.** `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer refuses.
 

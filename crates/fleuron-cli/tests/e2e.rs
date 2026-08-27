@@ -1,10 +1,10 @@
-//! The e2e definition: the fixture book through the CLI, and the PDF
-//! that comes back validated three ways — structure, text round-trip,
-//! page count.
+//! The e2e definition: the fixture manuscript through the CLI, and
+//! the PDF that comes back validated three ways — structure, text
+//! round-trip, page count.
 //!
-//! The manuscript takes the path a reader takes, markdown in and no
-//! JSON step, and the content tree takes the same path one stage
-//! later. Both are checked in, and both are the same excerpt.
+//! Markdown in, a PDF out, which is the path a reader walks. The
+//! excerpt is checked in, and the tree it becomes is the frontend's
+//! reading of it rather than a transcription kept in step by hand.
 //!
 //! Author CSS travels the same path, and is validated the same three
 //! ways: `fixtures/styled.css` restyles the same book — a different
@@ -20,15 +20,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use fleuron::content::{Block, Book, Inline};
+use fleuron_markdown::Options;
 
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
 const EXPECTED_PAGES: usize = 23;
-
-/// Pages the markdown excerpt sets under the built-in sheet alone.
-/// It is the same prose as the content tree, read through the
-/// frontend rather than adapted by hand, so it sets its own count.
-const MANUSCRIPT_PAGES: usize = 22;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
@@ -47,7 +43,7 @@ const STYLED_HEAD: &str = "STYLED BY FLEURON";
 /// SHA-256 of the fixture book's PDF under the built-in sheet alone.
 /// Layout is deterministic, so these bytes are a fact about the
 /// pipeline: a digest that moves is a change someone meant to make.
-const DEFAULT_PDF: &str = "1ccd22621a3abc01ed0b69f9fc8140401a6c5bf66b962b1e1326bb37dc614720";
+const DEFAULT_PDF: &str = "21617b8774ba2698cd9caa65a99da7ea426fe1e288cfd72736835257e7c69dbb";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -402,34 +398,18 @@ fn the_page_count_is_what_the_layout_says() {
     assert_eq!(counted, EXPECTED_PAGES);
 }
 
-/// A manuscript renders with no JSON step: markdown in, an author
-/// sheet over the defaults, a PDF out.
+/// The manuscript reads clean, and its frontmatter is metadata
+/// rather than the book's opening lines.
 #[test]
-fn a_markdown_manuscript_renders_without_a_json_step() {
-    let (pdf, stderr) = run("manuscript", &[&manuscript_path()], &[&styled_sheet()]);
-    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
-    assert!(bytes.starts_with(b"%PDF-"), "no PDF header");
+fn the_manuscript_reads_clean_and_sets_no_frontmatter() {
+    let (pdf, stderr) = render("manuscript", &[]);
     assert!(
         !stderr.contains("warning"),
         "the excerpt is clean: {stderr}"
     );
-    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
-        assert!(
-            check.status.success(),
-            "qpdf --check: {}",
-            String::from_utf8_lossy(&check.stdout),
-        );
-    }
-
-    let (pdf, stderr) = run("manuscript-plain", &[&manuscript_path()], &[]);
-    assert!(
-        stderr.contains(&format!("{MANUSCRIPT_PAGES} pages")),
-        "the run did not report its page count: {stderr}",
-    );
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    assert_eq!(pages_of(&text).len(), MANUSCRIPT_PAGES);
     assert!(
         text.contains("Lilliput"),
         "the manuscript's prose is not in the PDF",
@@ -438,6 +418,43 @@ fn a_markdown_manuscript_renders_without_a_json_step() {
         !text.contains("title: Gulliver"),
         "the frontmatter was set as prose",
     );
+}
+
+/// The tree the frontend read is readable without a PDF in between,
+/// and two dumps of one manuscript are the same bytes.
+#[test]
+fn dump_tree_emits_a_stable_tree() {
+    let dumped = dump_tree();
+    let tree: serde_json::Value =
+        serde_json::from_str(&dumped).expect("the dump is a JSON content tree");
+    assert_eq!(
+        tree["metadata"]["title"], "Gulliver's Travels",
+        "the frontmatter did not reach the tree",
+    );
+    let blocks = tree["sections"][0]["blocks"]
+        .as_array()
+        .expect("the section has blocks");
+    assert!(
+        blocks.iter().any(|block| block["type"] == "thematic_break"),
+        "the scene break is not in the tree",
+    );
+    assert!(!dumped.contains("\"id\""), "ids do not travel");
+    assert_eq!(dumped, dump_tree(), "the dump moved between runs");
+}
+
+/// The tree the CLI writes for the fixture manuscript.
+fn dump_tree() -> String {
+    let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
+        .arg(fixture_path())
+        .arg("--dump-tree")
+        .output()
+        .expect("the CLI runs");
+    assert!(
+        run.status.success(),
+        "the CLI failed: {}",
+        String::from_utf8_lossy(&run.stderr),
+    );
+    String::from_utf8(run.stdout).expect("the CLI writes UTF-8")
 }
 
 /// Several files compose in the order the command line gives them,
@@ -537,10 +554,6 @@ fn write_source(name: &str, markdown: &str) -> PathBuf {
     path
 }
 
-fn manuscript_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/gulliver-excerpt.md")
-}
-
 /// Runs the fixture book through the CLI exactly as the epic's
 /// definition of done words it, and returns the PDF and what the run
 /// had to say.
@@ -617,12 +630,16 @@ fn folio_of(page: &str) -> Option<String> {
 }
 
 fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/book.json")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/gulliver-excerpt.md")
 }
 
+/// The tree the CLI lays out, read the way the CLI reads it.
 fn fixture_book() -> Book {
     let text = std::fs::read_to_string(fixture_path()).expect("the fixture book is checked in");
-    serde_json::from_str(&text).expect("the fixture book parses")
+    let source = fixture_path().display().to_string();
+    let (sections, warnings) = fleuron_markdown::to_sections(&text, &source, &Options::default());
+    assert!(warnings.is_empty(), "the excerpt is clean: {warnings:?}");
+    fleuron_markdown::assemble(fleuron_markdown::frontmatter(&text), sections)
 }
 
 /// The PDF's text, or `None` when `pdftotext` is not installed.
