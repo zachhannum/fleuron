@@ -1,0 +1,20 @@
+---
+/**
+ * The perf table, run here.
+ *
+ * The book is fetched by the worker rather than bundled: nothing on
+ * this page's critical path is a novel.
+ */
+import '../../styles/demos.css';
+import { Bench } from './Bench';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<div class="not-content">
+  <Bench
+    client:visible
+    book={`${base}/fixtures/pride-and-prejudice.md`}
+    title="Pride and Prejudice"
+  />
+</div>

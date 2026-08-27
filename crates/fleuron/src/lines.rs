@@ -350,7 +350,7 @@ impl<'a> LineLayout<'a> {
             // Greedy: keep the LAST candidate that fits — lines carry
             // as much text as the measure allows.
             match last_fitting {
-                Some((end, _hyphen)) => {
+                Some((end, hyphen)) => {
                     let content_end = {
                         let mut e = end;
                         while e > line_start && flat.text.as_bytes()[e - 1] == b' ' {
@@ -361,7 +361,11 @@ impl<'a> LineLayout<'a> {
                     if content_end <= line_start {
                         break; // nothing paintable left (trailing spaces)
                     }
-                    lines.push(self.cut(&flat, &shaped, line_start, end, style));
+                    let mut line = self.cut(&flat, &shaped, line_start, end, style);
+                    if hyphen {
+                        self.hyphenate(&mut line, style);
+                    }
+                    lines.push(line);
                     line_start = skip_spaces(&flat.text, end);
                 }
                 None => {
@@ -447,6 +451,54 @@ impl<'a> LineLayout<'a> {
             }
             start = boundary;
         }
+    }
+
+    /// Draws the hyphen a break inside a word leaves behind.
+    ///
+    /// The break was charged for it when it was chosen, so it is
+    /// drawn in the same face the charge was read from: a hyphen
+    /// taken from one face and paid for out of another is a line
+    /// that measures one width and paints a different one.
+    fn hyphenate(&self, line: &mut Line, style: ParagraphStyle) {
+        let Some(id) = self.registry.char_glyph(style.font_id, '-') else {
+            return;
+        };
+        let advance = self
+            .registry
+            .advance_width(style.font_id, id)
+            .unwrap_or_default() as u32;
+        let ending = line
+            .runs
+            .last()
+            .map(|run| run.text_start + run.text.len() as u32)
+            .unwrap_or_default();
+        match line.runs.last_mut() {
+            Some(run) if run.font_id == style.font_id && run.size == style.size => {
+                run.text.push('-');
+                run.glyphs.push(ShapedGlyph {
+                    id,
+                    x_advance: advance,
+                    cluster: ending,
+                });
+                run.advance += advance;
+            }
+            // A break inside an emphasised word: the hyphen is the
+            // paragraph's own, so it goes in a run of its own rather
+            // than into a face it was not measured in.
+            _ => line.runs.push(ShapedRun {
+                font_id: style.font_id,
+                size: style.size,
+                text: "-".to_string(),
+                text_start: ending,
+                glyphs: vec![ShapedGlyph {
+                    id,
+                    x_advance: advance,
+                    cluster: ending,
+                }],
+                advance,
+            }),
+        }
+        line.width += advance;
     }
 
     fn hyphen_advance(&self, style: ParagraphStyle) -> u32 {
@@ -594,29 +646,12 @@ mod tests {
         registry().metrics(0).unwrap().units_per_em
     }
 
-    /// Reconstructs a line's text from its clusters — glyphs map back
-    /// to the paragraph text, so a line's content is checkable.
-    fn line_text<'t>(line: &Line, text: &'t str) -> &'t str {
-        let first = line
-            .runs
-            .iter()
-            .flat_map(|r| r.glyphs.iter())
-            .map(|g| g.cluster as usize)
-            .min()
-            .unwrap_or(0);
-        let last = line
-            .runs
-            .iter()
-            .flat_map(|r| r.glyphs.iter())
-            .map(|g| g.cluster as usize)
-            .max()
-            .unwrap_or(0);
-        // Last glyph's cluster starts a grapheme; advance past it.
-        let mut end = last + 1;
-        while end < text.len() && !text.is_char_boundary(end) {
-            end += 1;
-        }
-        &text[first..end]
+    /// A line's text, as its runs carry it.
+    ///
+    /// Read off the runs rather than sliced out of the paragraph: a
+    /// hyphenated line ends in a character the paragraph never had.
+    fn line_text(line: &Line) -> String {
+        line.runs.iter().map(|run| run.text.as_str()).collect()
     }
 
     /// A run's glyphs map back to the characters they were shaped
@@ -662,7 +697,7 @@ mod tests {
     fn short_text_is_one_line() {
         let lines = layout_body("hello", 200.0);
         assert_eq!(lines.len(), 1);
-        assert_eq!(line_text(&lines[0], "hello"), "hello");
+        assert_eq!(line_text(&lines[0]), "hello");
         let glyph_count: usize = lines[0].runs.iter().map(|r| r.glyphs.len()).sum();
         assert_eq!(glyph_count, 5);
     }
@@ -676,7 +711,7 @@ mod tests {
         assert!(lines.len() >= 2, "expected wrapping, got {lines:?}");
         let reconstructed: String = lines
             .iter()
-            .map(|l| line_text(l, text).trim_end())
+            .map(|l| line_text(l).trim_end().to_string())
             .collect::<Vec<_>>()
             .join(" ");
         assert_eq!(reconstructed, text);
@@ -689,7 +724,7 @@ mod tests {
         let lines = layout_body(text, 100.0);
         assert_eq!(lines.len(), 1, "everything fits: {lines:?}");
         let lines = layout_body(text, 30.0);
-        assert_eq!(line_text(&lines[0], text), "aa bb");
+        assert_eq!(line_text(&lines[0]), "aa bb");
     }
 
     /// Em-dash: UAX #14 allows the break after B2-class characters,
@@ -699,7 +734,7 @@ mod tests {
         let text = "word—word word—word";
         let lines = layout_body(text, 34.0);
         assert!(lines.len() >= 2);
-        let first = line_text(&lines[0], text);
+        let first = line_text(&lines[0]);
         assert!(
             first.ends_with("word—") || first.ends_with("—"),
             "line 1 should end at the em-dash: {first:?}"
@@ -719,13 +754,13 @@ mod tests {
         // forbids is a continuation line starting with the closing
         // punctuation stranded from its word.
         for line in lines.iter().skip(1) {
-            let t = line_text(line, text);
+            let t = line_text(line);
             assert!(
                 !t.starts_with('.') && !t.starts_with(','),
                 "punctuation started a line: {t:?}"
             );
         }
-        let first = line_text(&lines[0], text);
+        let first = line_text(&lines[0]);
         assert!(first.ends_with("said.\""), "line 1: {first:?}");
     }
 
@@ -745,10 +780,7 @@ mod tests {
     fn long_word_overflows_unhyphenated() {
         let lines = layout_body("tick extraordinary", 40.0);
         assert!(lines.len() >= 2);
-        assert_eq!(
-            line_text(&lines[lines.len() - 1], "tick extraordinary"),
-            "extraordinary"
-        );
+        assert_eq!(line_text(&lines[lines.len() - 1]), "extraordinary");
     }
 
     /// Hyphenation on: a long word splits at syllable boundaries and
@@ -778,10 +810,52 @@ mod tests {
         // hyphen (54.64).
         let lines = layout_body_opts(text, 53.0, LineBreakOptions { hyphenate: true });
         assert!(lines.len() >= 2, "expected a split, got {lines:?}");
-        let first = line_text(&lines[0], text);
+        let first = line_text(&lines[0]);
         assert!(
-            first.ends_with("extraordi"),
+            first.ends_with("extraordi-"),
             "greedy undercharged the hyphen: line 1 is {first:?}"
+        );
+    }
+
+    /// The hyphen is painted as well as charged: the run carries the
+    /// character and a glyph for it, and the last line carries
+    /// neither.
+    #[test]
+    fn a_hyphenated_line_carries_the_hyphen_it_paid_for() {
+        let text = "extraordinarily";
+        let lines = layout_body_opts(text, 53.0, LineBreakOptions { hyphenate: true });
+        let first = &lines[0];
+        assert_eq!(line_text(first), "extraordi-");
+
+        let run = first.runs.last().expect("the line has no runs");
+        assert_eq!(
+            run.glyphs.len(),
+            run.text.chars().count(),
+            "the hyphen is in the text and not in the glyphs",
+        );
+        let ranges = run.glyph_ranges();
+        let last = ranges.last().expect("the run has no glyphs");
+        assert_eq!(
+            &run.text[last.start as usize..last.end as usize],
+            "-",
+            "the last glyph does not stand for the hyphen",
+        );
+
+        // Charged and drawn are the same number: the line's width
+        // covers the glyph it ends with.
+        let hyphen = run.glyphs.last().expect("the run has no glyphs").x_advance;
+        assert!(hyphen > 0, "the hyphen has no advance");
+        assert_eq!(
+            first.width,
+            first.runs.iter().map(|r| r.advance).sum::<u32>(),
+            "the line's width and its runs disagree",
+        );
+
+        let last_line = lines.last().expect("no lines");
+        assert!(
+            !line_text(last_line).ends_with('-'),
+            "the last line was hyphenated: {:?}",
+            line_text(last_line),
         );
     }
 
@@ -804,7 +878,7 @@ mod tests {
         let lines = layout.layout(&inlines, body(), 200.0, Default::default());
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].runs.len(), 2);
-        assert_eq!(line_text(&lines[0], "body code"), "body code");
+        assert_eq!(line_text(&lines[0]), "body code");
     }
 
     /// Emphasis is its own span: a paragraph of roman prose around
@@ -937,11 +1011,7 @@ mod tests {
         let uniform = layout.layout(&inlines, body(), 120.0, Default::default());
         assert!(uniform.len() < lines.len());
         assert_eq!(
-            lines
-                .iter()
-                .map(|l| line_text(l, text))
-                .collect::<Vec<_>>()
-                .join(" "),
+            lines.iter().map(line_text).collect::<Vec<_>>().join(" "),
             text,
         );
     }
@@ -978,7 +1048,7 @@ mod tests {
         ];
         for (measure, want_lines) in expected {
             let lines = layout_body(text, *measure);
-            let got: Vec<&str> = lines.iter().map(|l| line_text(l, text)).collect();
+            let got: Vec<String> = lines.iter().map(line_text).collect();
             assert_eq!(&got, want_lines, "measure {measure}: {lines:?}");
         }
     }

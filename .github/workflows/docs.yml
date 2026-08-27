@@ -25,6 +25,7 @@ env:
   # lib crates deny missing docs; this catches everything else rustdoc
   # has to say.
   RUSTDOCFLAGS: -D warnings
+  WASM_PACK_VERSION: v0.15.0
 
 jobs:
   build:
@@ -36,10 +37,35 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: site/package-lock.json
+          cache-dependency-path: |
+            site/package-lock.json
+            crates/fleuron-wasm/npm/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+
+      # The demos run the engine, so the deploy builds one. From this
+      # commit, which is what stops a stale artifact from being
+      # served: there is nowhere else for the site to get a module.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-${{ env.WASM_PACK_VERSION }}
+      - name: Install wasm-pack
+        run: |
+          curl -sSfL -o wasm-pack.tar.gz \
+            "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          tar xf wasm-pack.tar.gz
+          echo "$PWD/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: Build the module
+        run: |
+          wasm-pack build crates/fleuron-wasm --target web --release --no-pack \
+            --out-dir npm/wasm --out-name fleuron
+      - name: Build the package the site consumes
+        working-directory: crates/fleuron-wasm/npm
+        run: npm ci && npm run build
 
       - name: Install the site
         working-directory: site
@@ -64,6 +90,20 @@ jobs:
       - name: Build the site
         working-directory: site
         run: npm run build
+
+      # The demos, driven: every glyph an island paints is held
+      # against the display list the worker sent it, and the landing
+      # page is opened once with scripting off.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('site/package-lock.json') }}
+      - name: Install the browser
+        working-directory: site
+        run: npx playwright install --with-deps chromium
+      - name: The landing demo in a browser
+        working-directory: site
+        run: npm run demos:check
 
       - name: Fold the rustdoc in
         run: |

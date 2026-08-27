@@ -19,7 +19,7 @@ A version leads the encoding, and a host reads it before anything else. The enco
 
 ## The display list
 
-[The display-list reference](../reference/display-list.md) is the structure. Two things about it matter to a host in particular.
+[The display-list reference](../reference/display-list.mdx) is the structure. Two things about it matter to a host in particular.
 
 **Coordinates are points, origin top-left.** Every painter (SVG, canvas, PDF) consumes the same numbers. A preview that disagrees with the export about where a glyph goes has a bug in the painter, not in the engine.
 

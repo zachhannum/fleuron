@@ -54,6 +54,12 @@ Text {
 
 One run of shaped glyphs sharing a font, a size and a baseline. `y` is the baseline, not the top of the line box.
 
+<Page
+  demo="display-list"
+  highlight="baselines"
+  caption="Every text run of a page, with a rule drawn on the y the display list gave it. The rules sit on the letters rather than above them, which is what a baseline is."
+/>
+
 `text` is the string the glyphs were shaped from. It travels with the run because only the shaper knew which glyph came from which character, and a painter that wants text extraction, selection or copy-and-paste needs that correspondence back. A painter that only draws can ignore it.
 
 ### `Glyph`

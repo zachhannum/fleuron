@@ -2,7 +2,7 @@
 import '../styles/theme.css';
 import { Code } from 'astro:components';
 import Consumers from '../components/Consumers.astro';
-import HeroPage from '../components/HeroPage.astro';
+import Playground from '../components/demos/Playground.astro';
 import garamond from '../assets/fonts/ebgaramond-subset.woff2';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -90,11 +90,22 @@ const description =
           </div>
           <p class="claim">
             <em>Pride and Prejudice</em>, 333 pages, becomes a PDF in
-            287&nbsp;ms.
+            287&nbsp;ms, and the book below is being set by the same engine,
+            here, rather than pictured.
           </p>
         </div>
-        <div class="hero-page">
-          <HeroPage />
+      </section>
+
+      <section class="stage">
+        <div class="wrap">
+          <Playground demo="playground" />
+          <p class="stage-note">
+            <span class="f-mark" aria-hidden="true">&#10086;</span>
+            Chapter 1 of <em>Pride and Prejudice</em>, typeset in this browser
+            by the engine itself. Change the manuscript or the stylesheet and
+            the book is laid out again. The preview and the PDF are painted
+            from the same display list.
+          </p>
         </div>
       </section>
 
@@ -151,7 +162,9 @@ const description =
             </table>
           </div>
           <p class="speed-note">
-            Apple M-series
+            Apple M-series. <a href={`${base}/demos/`}>Run it on yours</a>: the
+            same two books, laid out in your browser, with the machine named
+            beside the numbers.
           </p>
         </div>
       </section>
@@ -166,8 +179,8 @@ const description =
             manuscript into the content tree the engine lays out.
             <code>fleuron</code> is the core library, pure Rust with no I/O.
             <code>fleuron-cli</code> reads a manuscript and stylesheets and writes
-            a PDF. <code>fleuron-wasm</code> will run layout in the browser, but it
-            has no exports yet and is not usable.
+            a PDF. <code>fleuron-wasm</code> runs the same pipeline in a worker,
+            which is what the book above is set by.
           </p>
           <Consumers />
         </div>
@@ -268,19 +281,28 @@ const description =
   }
 
   .hero {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: clamp(3rem, 6vw, 5rem);
-    align-items: center;
     width: min(72rem, 100% - clamp(2rem, 8vw, 6rem));
     margin-inline: auto;
-    padding-block: clamp(4rem, 9vw, 7rem) clamp(3rem, 7vw, 6rem);
+    padding-block: clamp(3rem, 6vw, 5rem) clamp(1.5rem, 3vw, 2.5rem);
   }
 
-  @media (min-width: 60rem) {
-    .hero {
-      grid-template-columns: 1.15fr 0.85fr;
-    }
+  /* The demo is the hero image, so it gets the width the page has
+     and the copy above it keeps a reading measure. */
+  .stage {
+    padding-bottom: clamp(3.5rem, 8vw, 6rem);
+  }
+
+  .stage-note {
+    max-width: 42rem;
+    margin: 1.25rem 0 0;
+    font-size: 0.875rem;
+    line-height: 1.65;
+    color: var(--f-text-muted);
+  }
+
+  .stage-note .f-mark {
+    color: var(--f-ember);
+    margin-right: 0.35rem;
   }
 
   .eyebrow {

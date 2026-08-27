@@ -34,15 +34,21 @@ That puts a `fleuron` binary on your path. It reads markdown and writes a PDF; a
 fleuron manuscript.md -o book.pdf -c book.css
 ```
 
-Go on to the [CLI quickstart](cli/quickstart.md).
+Go on to the [CLI quickstart](cli/quickstart.mdx).
 
 ## As a WebAssembly module
 
-:::caution[Not shipped yet]
-`fleuron-wasm` has no exports today. The crate builds for `wasm32-unknown-unknown` in CI, and the engine already runs under WebAssembly — the perf gate holds both corpus novels against their budgets under wasmtime — but the bindings that would expose it do not exist.
+```sh
+npm install @fleuron/wasm
+```
 
-The [wasm section](wasm/quickstart.md) describes the contract those bindings are being written against. Nothing in it is installable today.
-:::
+The module, a worker, a client, a reader for the display list and an SVG painter over it. Layout runs off the main thread and nothing in the package touches the DOM.
+
+```sh
+npm install @fleuron/react
+```
+
+The same preview as a React component, and nothing else. Go on to the [wasm quickstart](wasm/quickstart.md), or to [the demos](https://zachhannum.github.io/fleuron/demos/), which run this package in your browser.
 
 ## Working on fleuron itself
 

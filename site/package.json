@@ -4,15 +4,21 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build && node scripts/check-landing.mjs && node scripts/check-contrast.mjs",
+    "build": "node scripts/check-doc-links.mjs && astro check && astro build && node scripts/check-landing.mjs && node scripts/check-contrast.mjs",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "demos": "node scripts/prepare-demos.mjs",
+    "demos:check": "node scripts/check-island.mjs",
+    "predev": "npm run demos",
+    "prebuild": "npm run demos"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.2.4",
+    "@astrojs/mdx": "^7.0.8",
     "@astrojs/react": "^6.0.4",
     "@astrojs/starlight": "^0.41.9",
     "@astrojs/starlight-tailwind": "^5.0.0",
+    "@fleuron/wasm": "file:../crates/fleuron-wasm/npm",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -25,6 +31,8 @@
     "typescript": "^5.7.0"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10"
+    "@astrojs/check": "^0.9.10",
+    "acorn": "^8.15.0",
+    "playwright": "1.56.1"
   }
 }

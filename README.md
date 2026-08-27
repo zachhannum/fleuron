@@ -2,7 +2,7 @@
 
 *A paged-media layout engine for book-shaped documents, in Rust.*
 
-[**Documentation**](https://zachhannum.github.io/fleuron/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
+[**Documentation**](https://zachhannum.github.io/fleuron/) · [**Demos**](https://zachhannum.github.io/fleuron/demos/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
 
 **fleuron** takes markdown plus CSS, performs
 inline layout (shaping, line breaking, hyphenation), fragments it into pages,
@@ -75,7 +75,7 @@ its own, such as a CMS or a docx converter, but markdown is the way in.
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
    the defaults; author CSS cascades over it. Everything downstream
    consumes the resolved style tree. The supported subset is written
-   down in [`docs/css-subset.md`](docs/css-subset.md); anything outside
+   down in [`docs/css-subset.mdx`](docs/css-subset.mdx); anything outside
    it is reported with the line and column it was written at.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
    and PDF are interchangeable painters over the display list. The SVG
@@ -106,7 +106,12 @@ again. Restyling *Pride and Prejudice* with a sheet that moves
 the page box costs 6 ms, against the 128 ms of line breaking it does
 not repeat.
 
-Apple M-series, release build, best of three. Budgets: a book-scale
+Apple M-series, release build, best of three. The
+[demos](https://zachhannum.github.io/fleuron/demos/) run the same two
+books in your browser and name the machine they ran on, which is the
+only way a number like this one is worth anything to a reader.
+
+Budgets: a book-scale
 manuscript reaches PDF bytes in under a second natively, lays out in
 under half a second in a WebAssembly worker, stays under 32 MiB while
 doing it, and re-renders a style change in under 20 ms from a session

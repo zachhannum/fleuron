@@ -1,64 +1,86 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import EngineProbe from '../components/EngineProbe';
+import Playground from '../components/demos/Playground.astro';
+import Bench from '../components/demos/Bench.astro';
+import Diagnostics from '../components/demos/Diagnostics.astro';
 ---
 
 <StarlightPage
   frontmatter={{
     title: 'Live demos',
     description:
-      'Where the engine will run in your browser, and the island seam waiting for it.',
+      'The engine, running in your browser: a book you can edit, a bench you can run, and the diagnostics channel with something wrong in it.',
     tableOfContents: false,
   }}
 >
   <p>
-    fleuron's two claims — that a book paginates in hundreds of milliseconds,
-    and that the preview is exactly the export — are ones you should be able to
-    check here, on your own machine. Not yet: the WebAssembly bindings and the
-    SVG painter have not landed, so there is nothing on this page to run.
+    fleuron makes two claims: that a book paginates in hundreds of
+    milliseconds, and that the preview is exactly the export. Both are
+    checkable on your own machine, so they are checked here rather than
+    quoted from someone else's laptop.
   </p>
 
   <p>
-    The panel below is the seam they will mount into: a React island hydrated
-    with <code>client:visible</code>, so it ships no JavaScript until it scrolls
-    into view, and none at all to any other page.
+    Everything below runs the real engine, compiled to WebAssembly, in a
+    worker. The worker holds the module and has never seen an element; the
+    page holds the DOM and has never seen the engine. What crosses between
+    them is a display list, and the SVG on screen is painted from it.
   </p>
 
-  <div class="not-content probe-frame">
-    <EngineProbe client:visible />
+  <h2>The playground</h2>
+
+  <p>
+    A chapter of <em>Pride and Prejudice</em> and the stylesheet that sets it.
+    Change either and the book is laid out again, a fifth of a second after you
+    stop typing. The stylesheet editor can be closed from the settings; what
+    you end up with is in the URL, so a question about the CSS subset can be a
+    link.
+  </p>
+
+  <div class="demo-frame">
+    <Playground demo="playground" />
   </div>
 
+  <h2>The bench</h2>
+
   <p>
-    Prose pages ship no JavaScript, which is why the site is built this way. A
-    demo carrying a WebAssembly engine can afford to be expensive as long as
-    nothing else on the site is.
+    <em>Pride and Prejudice</em> entire, fetched and laid out here. Each row
+    says which stages the engine ran for it, taken from its own counters, so a
+    row that reused a stage cannot pass itself off as a row that ran one. The
+    machine is named because a number without one is marketing.
+  </p>
+
+  <div class="demo-frame">
+    <Bench />
+  </div>
+
+  <h2>Diagnostics</h2>
+
+  <p>
+    A declaration outside <a href={`${import.meta.env.BASE_URL}css-subset/`}
+      >the subset</a
+    > is reported at the line and column it was written at, and the book lays out
+    anyway. Take one out, or put a new one in, and watch the report change.
+  </p>
+
+  <div class="demo-frame">
+    <Diagnostics />
+  </div>
+
+  <h2>What this costs</h2>
+
+  <p>
+    The module weighs about 3.7&nbsp;MB over the wire, because it carries its
+    own text face, its own hyphenation patterns and its own segmentation data:
+    the engine reads no files and asks its host for nothing. Nothing on this
+    page fetches it until a demo scrolls into view, no other page on this site
+    fetches it at all, and a browser that says the connection is metered is
+    asked before anything is spent.
   </p>
 </StarlightPage>
 
 <style is:global>
-  .probe-frame {
-    margin: 2rem 0;
-    padding: 1.5rem;
-    background: var(--f-glass-solid);
-    border: 1px solid var(--f-hairline);
-    border-radius: var(--f-radius);
-  }
-
-  .probe-state {
-    margin: 0 0 0.75rem;
-    font-family: var(--f-mono);
-    font-size: 0.875rem;
-    color: var(--f-text);
-  }
-
-  .probe-state span {
-    color: var(--f-ember);
-  }
-
-  .probe-note {
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    color: var(--f-text-muted);
+  .demo-frame {
+    margin: 1.5rem 0 2.5rem;
   }
 </style>

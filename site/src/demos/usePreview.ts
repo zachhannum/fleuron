@@ -1,0 +1,253 @@
+/**
+ * The island's half of the wall: an element, the inputs, and a page
+ * on screen.
+ *
+ * Everything about the engine lives in the worker. This holds a
+ * `Preview` from `@fleuron/wasm`, hands it whatever prop changed,
+ * and reports what came back. It knows the shape of a display list
+ * and nothing about how one is made.
+ *
+ * The module is not fetched until a demo asks for it. A visitor who
+ * never scrolls to one, and a visitor on a metered connection who
+ * never presses the button, downloads no engine.
+ */
+
+import { Preview, type LayoutOutput } from '@fleuron/wasm';
+import { useEffect, useRef, useState } from 'react';
+
+import { spawn } from './spawn';
+
+/** Where a demo is in its life. */
+export type Status =
+  /** Waiting to be asked: nothing has been fetched. */
+  | 'held'
+  /** The module is on its way. */
+  | 'loading'
+  /** A page is on screen. */
+  | 'live'
+  /** Something threw, and `error` says what. */
+  | 'broken';
+
+/** What a demo runs. */
+export interface Inputs {
+  /** What this demo is called on the console registry. */
+  id: string;
+  /** The manuscript. */
+  markdown: string;
+  /** The author stylesheet. */
+  css: string;
+  /** What the manuscript is called, which is what an edit replaces. */
+  name?: string;
+  /** The page to show, counting from 1. */
+  page?: number;
+  /** Whether to wait for a press before fetching the module. */
+  held?: boolean;
+}
+
+/** A demo, mounted. */
+export interface Running {
+  /** The element the preview paints into. */
+  sheet: React.RefObject<HTMLDivElement | null>;
+  status: Status;
+  /** What broke, when something did. */
+  error: string | null;
+  /** The last render that reached the screen. */
+  output: LayoutOutput | null;
+  /**
+   * Whether the island is running yet.
+   *
+   * What the server sends is a poster and nothing else: a button
+   * that cannot be pressed, or a note about a fetch that is not
+   * happening, is worse than no chrome at all to a reader whose
+   * scripts never run.
+   */
+  hydrated: boolean;
+  /** Fetches the module and mounts, for a demo that was held. */
+  start: () => void;
+}
+
+/**
+ * Every mounted demo, by id, for a console and for the browser check
+ * that holds an island's SVG against the display list behind it.
+ */
+declare global {
+  // eslint-disable-next-line no-var
+  var fleuron: Map<string, { preview: Preview; output: LayoutOutput | null }> | undefined;
+}
+
+function register(id: string, preview: Preview): void {
+  globalThis.fleuron ??= new Map();
+  globalThis.fleuron.set(id, { preview, output: null });
+}
+
+function recorded(id: string, output: LayoutOutput): void {
+  const entry = globalThis.fleuron?.get(id);
+  if (entry !== undefined) {
+    entry.output = output;
+  }
+}
+
+/**
+ * Runs once the page has finished loading and the browser has
+ * nothing better to do.
+ *
+ * The module is megabytes. A fetch that starts while the page is
+ * still painting takes the bandwidth the page is painting with, and
+ * the reader waits for a book they have not asked to see yet.
+ */
+function whenIdle(run: () => void): () => void {
+  let cancelled = false;
+  const soon = (): void => {
+    if (cancelled) {
+      return;
+    }
+    const go = (): void => {
+      if (!cancelled) {
+        run();
+      }
+    };
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(go, { timeout: 2000 });
+    } else {
+      setTimeout(go, 200);
+    }
+  };
+  if (document.readyState === 'complete') {
+    soon();
+  } else {
+    addEventListener('load', soon, { once: true });
+  }
+  return () => {
+    cancelled = true;
+  };
+}
+
+/** Whether the reader has asked their browser to spend less. */
+function metered(): boolean {
+  const connection = (
+    navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }
+  ).connection;
+  return (
+    connection?.saveData === true ||
+    connection?.effectiveType === 'slow-2g' ||
+    connection?.effectiveType === '2g'
+  );
+}
+
+export function usePreview(inputs: Inputs): Running {
+  const { id, markdown, css, name, page, held } = inputs;
+  const sheet = useRef<HTMLDivElement | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [wanted, setWanted] = useState(!(held ?? false));
+  const [status, setStatus] = useState<Status>(held === true ? 'held' : 'loading');
+  const [error, setError] = useState<string | null>(null);
+  const [output, setOutput] = useState<LayoutOutput | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => setHydrated(true), []);
+
+  // The reader's own setting outranks the demo's: a demo told to
+  // start on sight still waits for a press on a connection the
+  // browser says is metered.
+  useEffect(() => {
+    if (wanted && metered()) {
+      setWanted(false);
+      setStatus('held');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!wanted) {
+      return;
+    }
+    let live = true;
+    let opened: Preview | null = null;
+    let worker: Worker | null = null;
+    const cancel = whenIdle(() => {
+      worker = spawn();
+      open(worker);
+    });
+
+    const open = (opening: Worker): void => {
+      void Preview.mount(sheet.current as Element, {
+        worker: opening,
+        // The site already serves the face the engine shaped with,
+        // subset from the same file, so the painter's stack resolves
+        // to it and no book face crosses back over the wall.
+        faces: 'host',
+        paper: null,
+        ink: 'currentColor',
+        onRender: (rendered) => {
+          recorded(id, rendered);
+          setOutput(rendered);
+          setStatus('live');
+        },
+      })
+        .then((mounted) => {
+          opened = mounted;
+          if (!live) {
+            mounted.destroy();
+            return;
+          }
+          register(id, mounted);
+          setPreview(mounted);
+        })
+        .catch((thrown: unknown) => {
+          if (live) {
+            setError(String(thrown));
+            setStatus('broken');
+          }
+        });
+    };
+
+    return () => {
+      live = false;
+      cancel();
+      opened?.destroy();
+      worker?.terminate();
+      globalThis.fleuron?.delete(id);
+    };
+  }, [wanted, id]);
+
+  // The stylesheet reaches the engine before the manuscript, so the
+  // first page painted is already the styled one.
+  useEffect(() => {
+    if (preview !== null) {
+      run(() => preview.setStyle(css));
+    }
+  }, [preview, css]);
+
+  useEffect(() => {
+    if (preview !== null) {
+      // The keystroke path: one source replaced, and the rest of
+      // the book left standing. A name the book has not seen yet is
+      // appended, so the first edit is also how it is opened.
+      run(() => preview.edit(name ?? 'manuscript.md', markdown));
+    }
+  }, [preview, markdown, name]);
+
+  useEffect(() => {
+    if (preview !== null && page !== undefined) {
+      preview.page = page;
+    }
+  }, [preview, page, output]);
+
+  function run(call: () => Promise<void>): void {
+    call().catch((thrown: unknown) => {
+      setError(String(thrown));
+      setStatus('broken');
+    });
+  }
+
+  return {
+    sheet,
+    status,
+    error,
+    output,
+    hydrated,
+    start: () => {
+      setWanted(true);
+      setStatus('loading');
+    },
+  };
+}
