@@ -20,6 +20,10 @@ preview.zoom = 1.5;
 
 `Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display list yourself, though all three stay exported if you want them.
 
+<Playground
+  caption="A mounted Preview: setStyle and edit on one side, the page it painted on the other."
+/>
+
 Everything in the first table changes an input and repaints. Everything in the second only reads or moves what is already there.
 
 | | |
@@ -39,7 +43,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `page` | the page on screen, counting from 1; assigning to it turns the page |
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
-| `warnings` | [what the run had to complain about](../library/diagnostics.md) |
+| `warnings` | [what the run had to complain about](../library/diagnostics.mdx) |
 | `svg(page?)` | the markup for a page, painted but not mounted |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |

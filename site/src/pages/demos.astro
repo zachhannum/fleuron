@@ -71,10 +71,9 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
   <p>
     The module weighs about 3.7&nbsp;MB over the wire. It carries its own text
     face, its own hyphenation patterns and its own segmentation data, since
-    the engine reads no files and asks its host for nothing. Nothing on this
-    page fetches it until a demo scrolls into view, and no other page on this
-    site fetches it at all. If the browser reports a metered connection, you
-    are asked first.
+    the engine reads no files and asks its host for nothing. Nothing fetches
+    it until a demo scrolls into view, and a page with no demo on it never
+    does. If the browser reports a metered connection, you are asked first.
   </p>
 </StarlightPage>
 

@@ -30,18 +30,21 @@ export interface SheetProps {
   onStart: () => void;
   /** What broke, when something did. */
   error?: string | null;
+  /** The display list, drawn over the page it made. */
+  marks?: React.ReactNode;
   /** The size of the module, for a reader deciding whether to spend it. */
   weight?: string;
 }
 
 export function Sheet(props: SheetProps): React.ReactElement {
-  const { sheet, poster, status, hydrated, onStart, error, weight = '3.7 MB' } = props;
+  const { sheet, poster, status, hydrated, onStart, error, marks, weight = '3.7 MB' } = props;
   return (
     <div className="d-sheet" data-status={status}>
       <div className="d-paper d-poster" aria-hidden={status === 'live'}>
         {poster}
       </div>
       <div className="d-paper d-live" ref={sheet} />
+      {marks}
       {hydrated && status === 'held' && (
         <div className="d-veil">
           <button type="button" className="d-run" onClick={onStart}>

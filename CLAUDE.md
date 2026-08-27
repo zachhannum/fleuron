@@ -22,7 +22,7 @@ wins and the quick fix waits for its own PR.
   a structured source of its own, but the docs lead with markdown and it
   is not advertised as a peer.
 - The mapping from markdown to content tree lives in
-  `docs/reference/markdown.md` and is implemented once. A construct the
+  `docs/reference/markdown.mdx` and is implemented once. A construct the
   vocabulary cannot hold warns with line and column; prose is never
   dropped.
 - The three invariants (see README): styling enters as CSS; the engine

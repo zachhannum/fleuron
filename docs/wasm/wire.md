@@ -57,7 +57,7 @@ That is also what makes it cache-safe. A superseded render is one that never sta
 
 A request the engine refuses, font bytes that are not a font, a content tree that will not parse: each replies with an error, and the session carries on rendering.
 
-A warning is different. A book that laid out anyway reports through the display list's own `warnings`, which holds the whole run's, [the frontend's complaints included](../library/diagnostics.md).
+A warning is different. A book that laid out anyway reports through the display list's own `warnings`, which holds the whole run's, [the frontend's complaints included](../library/diagnostics.mdx).
 
 ## Host duties
 

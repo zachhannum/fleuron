@@ -258,7 +258,6 @@ check(
 check('and says which machine it ran on', bench.machine.length > 0, bench.machine);
 
 await demos.locator('.d-diagnostics').scrollIntoViewIfNeeded();
-await demos.getByRole('button', { name: 'Compile it here' }).click();
 await demos.waitForSelector('.d-warnlist li', { timeout: 300_000 });
 const reported = await demos.evaluate(() =>
   [...document.querySelectorAll('.d-warnlist li')].map((item) => ({

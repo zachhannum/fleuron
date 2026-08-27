@@ -50,8 +50,11 @@ mkdirSync(posters, { recursive: true });
 
 let wrong = 0;
 for (const id of Object.keys(DEMOS)) {
-  const { name, markdown, css, page } = demo(id);
+  const { name, markdown, css, page, dialect } = demo(id);
   const session = new Session();
+  if (dialect !== undefined) {
+    session.setDialect(dialect);
+  }
   session.setMarkdown(name, markdown);
   session.setStyle(css);
   const output = decodeDisplayList(session.preview());

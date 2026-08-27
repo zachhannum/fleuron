@@ -23,7 +23,7 @@ await preview.setMarkdown(markdown);
 preview.page = 12;
 ```
 
-Layout is already running off the main thread, and page 12 is on the screen. Most hosts want this. [The preview](preview.md) has the rest of its surface.
+Layout is already running off the main thread, and page 12 is on the screen. Most hosts want this. [The preview](preview.mdx) has the rest of its surface.
 
 ## Assembling it yourself
 
@@ -79,7 +79,7 @@ if (output !== null) {
 
 `null` means a later render overtook this one before it finished, so there is nothing to paint and the newer render is on its way. [The wire](wire.md) has the protocol that decides that.
 
-Painting a run in the right font takes one more step, since the browser needs the font files as `FontFace`s. See [the preview](preview.md#fonts).
+Painting a run in the right font takes one more step, since the browser needs the font files as `FontFace`s. See [the preview](preview.mdx#fonts).
 
 ### Sending what changed
 
@@ -116,7 +116,7 @@ A book of one source takes its title and author from that source's frontmatter. 
 
 `client.preview` hands back a display list: pages of text runs, rules and images, in points, origin top left. See [the display-list reference](../reference/display-list.mdx) for the structure, and [the wire](wire.md) for the postcard encoding underneath it.
 
-Turning those pages into pixels is a painter's job. `paintPage` is the one the package ships. See [the preview](preview.md).
+Turning those pages into pixels is a painter's job. `paintPage` is the one the package ships. See [the preview](preview.mdx).
 
 ### Exporting
 

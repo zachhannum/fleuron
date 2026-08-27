@@ -45,7 +45,7 @@ const docLinks = [remarkDocLinks, { root: docsRoot, base: '/fleuron' }];
  * there. A page that wants a demo writes the tag and nothing else.
  */
 function demoComponents() {
-  const source = "import Page from '~/components/demos/Page.astro';";
+  const source = "import Playground from '~/components/demos/Playground.astro';";
   const estree = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
   return () => (tree) => {
     tree.children.unshift({ type: 'mdxjsEsm', value: source, data: { estree } });
@@ -150,7 +150,11 @@ export default defineConfig({
             '/fleuron/api/**',
             '/fleuron/css-subset/',
             '/fleuron/cli/quickstart/',
+            '/fleuron/library/diagnostics/',
             '/fleuron/reference/display-list/',
+            '/fleuron/reference/markdown/',
+            '/fleuron/wasm/preview/',
+            '/fleuron/wasm/preview/**',
           ],
         }),
       ],

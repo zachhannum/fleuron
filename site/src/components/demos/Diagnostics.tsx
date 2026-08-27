@@ -31,7 +31,6 @@ export function Diagnostics(props: DiagnosticsProps): React.ReactElement {
     markdown: SPECIMEN,
     css,
     name: 'specimen.md',
-    held: true,
   });
 
   useEffect(() => {

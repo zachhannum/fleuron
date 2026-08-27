@@ -107,6 +107,15 @@ A line wrapped in the source is a space in the tree. The shaper never sees the m
 
 ## What warns
 
+The manuscript below uses every construct in the tables above, the ones with no counterpart included. What the vocabulary holds is set; the rest is set as prose and reported under the page.
+
+<Playground
+  demo="mapping"
+  editors="markdown"
+  warnings
+  caption="One manuscript through the frontend, read as GFM so the table is a table. Take a construct out, or put another in, and the report changes with it."
+/>
+
 These constructs have no counterpart in the content tree. The frontend sets them as prose and reports the file, line and column. Prose is never dropped: a manuscript that quietly loses a paragraph is worse than one that warns about a table.
 
 | construct | becomes |
