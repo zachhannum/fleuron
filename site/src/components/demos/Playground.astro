@@ -7,6 +7,11 @@
  * the server sends is the poster, a real page painted by the engine
  * at build time, so the slot is a typeset page from the first paint
  * and stays one if the script never runs.
+ *
+ * `not-content` is what keeps a demo out of Starlight's prose
+ * styling. A page of chrome inside the markdown body inherits a
+ * reading line-height and a margin between every pair of siblings,
+ * which is right for prose and wrong for a toolbar.
  */
 import '../../styles/demos.css';
 import { demo } from '../../demos/catalogue.mjs';
@@ -26,14 +31,16 @@ const { demo: id = 'playground', stylesheet = true, held = false } = Astro.props
 const inputs = demo(id);
 ---
 
-<Playground
-  client:visible
-  id={id}
-  markdown={inputs.markdown}
-  css={inputs.css}
-  name={inputs.name}
-  stylesheet={stylesheet}
-  held={held}
->
-  <Fragment set:html={poster(id)} />
-</Playground>
+<div class="not-content">
+  <Playground
+    client:visible
+    id={id}
+    markdown={inputs.markdown}
+    css={inputs.css}
+    name={inputs.name}
+    stylesheet={stylesheet}
+    held={held}
+  >
+    <Fragment set:html={poster(id)} />
+  </Playground>
+</div>

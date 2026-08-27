@@ -38,6 +38,16 @@
   box-sizing: border-box;
 }
 
+/* A demo sets its own leading. Dropped into prose it would otherwise
+   inherit a reading line-height, and a toolbar set for reading is a
+   toolbar half as tall again as the one on the landing page. */
+.d-split,
+.d-diagnostics,
+.d-bench,
+.d-figure {
+  line-height: normal;
+}
+
 .d-split {
   display: grid;
   grid-template-columns: 1fr;
