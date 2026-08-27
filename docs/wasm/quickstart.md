@@ -100,12 +100,17 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | op | what crosses |
 |---|---|
 | `markdown` | one source as the whole book, its frontmatter the book's metadata |
+| `book` | every source of a book, in reading order |
 | `edit` | one source replaced, or appended when the book has not seen the name |
+| `remove` | one source dropped, the rest of the book left standing |
+| `metadata` | title, author and a frontend's own fields |
 | `content` | a content tree as JSON, for a host with a structured source of its own |
 | `style` | the author stylesheet, as CSS text |
 | `font` | font bytes, registered for the session's life |
 | `dialect` | `commonmark`, `gfm` or `obsidian` |
 | `split` | the heading level a section begins at, or `0` for one section per file |
+
+A book of one source takes its title and author from that source's frontmatter. A book of several has no frontmatter of its own, so `metadata` is how it gets a name; only the PDF writer reads it, so sending it costs no layout.
 
 ### What comes back
 

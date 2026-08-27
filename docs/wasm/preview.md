@@ -20,25 +20,66 @@ preview.zoom = 1.5;
 
 That is a working preview. `Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display list yourself, though all three stay exported if you want them.
 
-Every method that changes an input lays the book out again and repaints, so calling them on a keystroke is the intended use. A render the reader has already typed past is dropped rather than painted, so a burst of edits costs one repaint, not one per keystroke.
-
-```js
-await preview.edit('ch03.md', text);
-await preview.setStyle(css);
-```
-
-The rest of the surface:
+The rest of the surface. Everything in the first group changes an input and repaints; everything in the second only reads or moves what is already there.
 
 | | |
 |---|---|
-| `preview.pages` | how many pages the book set to |
-| `preview.page` | the page on screen, counting from 1; assigning to it turns the page |
-| `preview.next()`, `preview.previous()` | the same, one page at a time |
-| `preview.zoom` | points to CSS pixels |
-| `preview.warnings` | [what the run had to complain about](../library/diagnostics.md) |
-| `preview.svg(page)` | the markup for a page, painted but not mounted |
-| `preview.exportPdf()` | the same run as PDF bytes |
-| `preview.destroy()` | closes the worker and empties the element |
+| `setMarkdown(text, name?)` | one markdown source as the whole book |
+| `setBook(sources)` | several sources, in reading order |
+| `edit(name, text)` | one source replaced, the rest of the book left standing |
+| `remove(name)` | one source dropped |
+| `setMetadata({ title, author, extra })` | what names the book |
+| `setStyle(css)` | the author stylesheet |
+| `addFont(bytes)` | a face, registered for the session's life |
+| `render(ops?)` | lay out again, or apply anything the methods above do not reach |
+
+| | |
+|---|---|
+| `pages` | how many pages the book set to |
+| `page` | the page on screen, counting from 1; assigning to it turns the page |
+| `next()`, `previous()` | the same, one page at a time |
+| `zoom` | points to CSS pixels |
+| `warnings` | [what the run had to complain about](../library/diagnostics.md) |
+| `svg(page?)` | the markup for a page, painted but not mounted |
+| `exportPdf()` | the same run as PDF bytes |
+| `destroy()` | closes the worker and empties the element |
+
+The dialect and the section-splitting level are set when the preview is mounted and not after. Changing either means reading every source again, which needs the sources, and the preview does not keep a copy of them.
+
+## A book of several files
+
+`setBook` takes the sources in reading order:
+
+```js
+await preview.setBook([
+  { name: 'ch01.md', text: one },
+  { name: 'ch02.md', text: two },
+]);
+```
+
+After that, `edit(name, text)` is the keystroke path: it reads that one file again and every other file keeps the lines it already has. A name the book has not seen is appended, so `edit` is also how a file arrives mid-session, and `remove(name)` is how one leaves.
+
+Metadata is the part that catches people out. A book of one file takes its title and author from that file's frontmatter. A book of several has no frontmatter of its own, so it is left unnamed rather than named after whichever chapter happened to come first, and you name it yourself:
+
+```js
+await preview.setMetadata({
+  title: "Gulliver's Travels",
+  author: 'Jonathan Swift',
+  extra: { language: 'en' },
+});
+```
+
+Only the PDF writer reads metadata, so naming a book costs no layout: the pages already on screen are the pages the export writes under the new name.
+
+## When it renders
+
+Every method that changes an input renders. There is no timer anywhere, and that is deliberate rather than an omission.
+
+The worker lets everything the host has already posted arrive before it renders anything. So a burst of edits fired without awaiting them collapses into one render: twenty of them cost one paint, not twenty. Every edit is still applied, in order, and the render that survives produces exactly what it would have produced had nobody typed. The ones it overtook resolve to nothing rather than painting a stale page.
+
+Nothing is interrupted to make that happen. A render occupies the worker from start to finish, so the collapsing happens in the gap before one begins. Change something while a render is running and it finishes, its output is dropped as stale, and yours renders next. A superseded render is one that never started, not one abandoned half-way, which is what keeps the session's caches sound.
+
+The effect is a debounce whose delay is the last render's duration: a long book waits behind its own slow render, a short one repaints at once, and neither pays a fixed delay it did not need. A host that wants a fixed one puts it in front of these calls.
 
 ## In React
 

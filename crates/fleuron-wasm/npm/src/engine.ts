@@ -147,6 +147,18 @@ export class Engine {
       case 'markdown':
         this.session.setMarkdown(op.name, op.text);
         break;
+      case 'book':
+        this.session.setSources(
+          op.sources.map((source) => source.name),
+          op.sources.map((source) => source.text),
+        );
+        break;
+      case 'remove':
+        this.session.removeMarkdown(op.name);
+        break;
+      case 'metadata':
+        this.session.setMetadata(JSON.stringify(op.metadata));
+        break;
       case 'edit':
         this.session.updateMarkdown(op.name, op.text);
         break;

@@ -9,6 +9,24 @@
  * one is dropped rather than painted.
  */
 
+/** One markdown source: what it is called, and what is in it. */
+export interface Source {
+  /** What the book calls this file, and what an edit replaces. */
+  name: string;
+  /** Its markdown. */
+  text: string;
+}
+
+/** What names a book: its title, its author, and whatever else. */
+export interface Metadata {
+  /** Title, for the half-title and running heads. */
+  title?: string;
+  /** Author, for the title page. */
+  author?: string;
+  /** Anything else a frontend carries, such as `language`. */
+  extra?: Record<string, string>;
+}
+
 /** One input reaching the engine. */
 export type Op =
   /** Font bytes, registered once and kept for the session's life. */
@@ -19,6 +37,12 @@ export type Op =
   | { op: 'split'; level: number }
   /** One markdown source as the whole book. */
   | { op: 'markdown'; name: string; text: string }
+  /** Every markdown source of a book, in reading order. */
+  | { op: 'book'; sources: Source[] }
+  /** One source dropped, and the rest of the book left standing. */
+  | { op: 'remove'; name: string }
+  /** What names the book, for a book whose sources cannot say. */
+  | { op: 'metadata'; metadata: Metadata }
   /** One source replaced: the keystroke path, where the rest of the book stands. */
   | { op: 'edit'; name: string; text: string }
   /** A content tree, as JSON, for a host with a structured source of its own. */

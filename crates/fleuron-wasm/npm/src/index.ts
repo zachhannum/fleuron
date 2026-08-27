@@ -18,10 +18,12 @@ export {
   isRendered,
   type Applied,
   type Failed,
+  type Metadata,
   type Op,
   type Rendered,
   type Request,
   type Response,
+  type Source,
   type Superseded,
   type Want,
 } from './protocol.js';

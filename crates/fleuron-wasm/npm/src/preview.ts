@@ -10,10 +10,15 @@
  *
  * One page at a time, because that is what a page-through needs and
  * what a scrolling preview would have to virtualise anyway.
+ *
+ * Every method that changes an input renders. Nothing here is on a
+ * timer: renders that pile up while the engine is busy collapse into
+ * one, and an engine with nothing to do repaints straight away. A
+ * host that wants a fixed delay puts one in front of these calls.
  */
 
 import { Client, type Transport } from './client.js';
-import type { Op, Response } from './protocol.js';
+import type { Metadata, Op, Response, Source } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
 import type { LayoutOutput, Warning } from './wire.js';
 
@@ -107,8 +112,38 @@ export class Preview {
   }
 
   /**
+   * Sets the manuscript from several sources, in reading order.
+   *
+   * A book of one file takes its title and author from that file's
+   * frontmatter. A book of several has no frontmatter of its own, so
+   * it is left unnamed until {@link setMetadata} names it, rather
+   * than named after whichever chapter came first.
+   */
+  async setBook(sources: Source[]): Promise<void> {
+    await this.render([{ op: 'book', sources }]);
+  }
+
+  /** Drops one source and leaves the rest of the book standing. */
+  async remove(name: string): Promise<void> {
+    await this.render([{ op: 'remove', name }]);
+  }
+
+  /**
+   * Names the book. Only the PDF export reads this, so it costs no
+   * layout.
+   */
+  async setMetadata(metadata: Metadata): Promise<void> {
+    await this.render([{ op: 'metadata', metadata }]);
+  }
+
+  /**
    * Replaces one source and leaves the rest of the book standing.
-   * This is the keystroke path.
+   * This is the keystroke path: the sections that came from this
+   * file are read again and every other file keeps the lines it
+   * already has.
+   *
+   * A name the book has not seen is appended, which is one way to
+   * add a file to a book already open.
    */
   async edit(name: string, text: string): Promise<void> {
     await this.render([{ op: 'edit', name, text }]);

@@ -11,7 +11,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,13 +69,22 @@ function flag(name: string): string | undefined {
   return at === -1 ? undefined : process.argv[at + 1];
 }
 
-/** What the CLI makes of the fixture book: the run this one is held to. */
-function reference(): { pages: number; pdf: Uint8Array } {
+/** What `pdfinfo` says about a PDF, or null where it is not installed. */
+function info(pdf: Uint8Array): string | null {
+  const run = spawnSync('pdfinfo', ['-'], { input: Buffer.from(pdf), encoding: 'utf8' });
+  return run.status === 0 ? run.stdout : null;
+}
+
+/** What the CLI makes of some markdown: the run this one is held to. */
+function reference(inputs: string[] = [fixture], named: string[] = []): {
+  pages: number;
+  pdf: Uint8Array;
+} {
   const cli = flag('--cli') ?? join(root, 'target', 'release', 'fleuron');
   const out = join(mkdtempSync(join(tmpdir(), 'fleuron-harness-')), 'reference.pdf');
-  const run = spawnSync(cli, [fixture, '-o', out], { encoding: 'utf8' });
+  const run = spawnSync(cli, [...inputs, ...named, '-o', out], { encoding: 'utf8' });
   if (run.status !== 0) {
-    throw new Error(`the CLI did not render the fixture book: ${run.stderr ?? run.error}`);
+    throw new Error(`the CLI did not render ${inputs.join(', ')}: ${run.stderr ?? run.error}`);
   }
   // The page count is on stderr, where the CLI reports what it did.
   const counted = /(\d+) pages/.exec(run.stderr);
@@ -302,6 +311,61 @@ try {
 check('bytes that are not a font come back on the error channel', refused.includes('font'), refused);
 const alive = await client.preview([]);
 check('and the session that refused them still renders', alive !== null && alive.pages.length > 0);
+
+// A book of several files. The CLI is the reference again: the same
+// two files on its command line, named with the same flags, since a
+// book split across files has no frontmatter of its own to read a
+// title out of.
+const split = markdown.lastIndexOf('\n### ');
+const parts = [markdown.slice(0, split), markdown.slice(split)];
+const folder = mkdtempSync(join(tmpdir(), 'fleuron-book-'));
+const paths = parts.map((text, at) => {
+  const path = join(folder, `part-${at + 1}.md`);
+  writeFileSync(path, text);
+  return path;
+});
+const sources = parts.map((text, at) => ({ name: `part-${at + 1}.md`, text }));
+const naming = { title: "Gulliver's Travels", author: 'Jonathan Swift' };
+const named = ['--title', naming.title, '--author', naming.author];
+
+const whole = reference(paths, named);
+const assembled = await client.preview([
+  // The checks above left author styling on the session, and the
+  // CLI is being run without any.
+  { op: 'style', css: '' },
+  { op: 'book', sources },
+  { op: 'metadata', metadata: naming },
+]);
+check(
+  'a book of several sources sets in the same pages as the CLI sets the same files',
+  assembled !== null && assembled.pages.length === whole.pages,
+  `worker ${assembled?.pages.length}, CLI ${whole.pages}`,
+);
+
+const titled = await client.exportPdf();
+const said = titled === null ? null : info(titled);
+if (said === null) {
+  console.log('  skip  the name the host gave the book reaches the PDF (pdfinfo not installed)');
+  if (process.env['FLEURON_WASM_REQUIRE_TOOLS'] === '1') {
+    failures += 1;
+  }
+} else {
+  check(
+    'the name the host gave the book reaches the PDF',
+    said.includes(naming.title) && said.includes(naming.author),
+    said.split('\n').slice(0, 2).join('; '),
+  );
+}
+
+// One file dropped, and what is left is the book the CLI sets from
+// the rest of them.
+const rest = reference([paths[0] as string], named);
+const remaining = await client.preview([{ op: 'remove', name: 'part-2.md' }]);
+check(
+  'dropping a source leaves the book the CLI sets from the ones that remain',
+  remaining !== null && remaining.pages.length === rest.pages,
+  `worker ${remaining?.pages.length}, CLI ${rest.pages}`,
+);
 
 await worker.terminate();
 
