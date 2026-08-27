@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Book, Inline, NodeId, Section};
-use crate::fonts::FontRegistry;
+use crate::fonts::{FontError, FontRegistry, FontSource};
 use crate::images::Assets;
 use crate::layout::{Fragment, PageInfo, Paginator, font_table, no_assets};
 use crate::pdf::{self, PdfError};
@@ -73,6 +73,45 @@ enum Stale {
     Break,
 }
 
+/// The faces a session lays out against: a caller's registry, or
+/// one of its own.
+///
+/// A host with a registry to lend keeps lending it. A worker has
+/// nowhere to keep one, since the module is all there is, so it
+/// hands the registry over and adds faces through the session.
+enum Held<'a> {
+    Borrowed(&'a FontRegistry),
+    Owned(Box<FontRegistry>),
+}
+
+impl Held<'_> {
+    fn get(&self) -> &FontRegistry {
+        match self {
+            Held::Borrowed(registry) => registry,
+            Held::Owned(registry) => registry,
+        }
+    }
+
+    fn get_mut(&mut self) -> Option<&mut FontRegistry> {
+        match self {
+            Held::Borrowed(_) => None,
+            Held::Owned(registry) => Some(registry),
+        }
+    }
+}
+
+/// Why a face did not reach a session's registry.
+#[derive(Debug, thiserror::Error)]
+pub enum AddFontError {
+    /// The session lays out against a registry it borrowed, and the
+    /// caller who owns it is the one who can add to it.
+    #[error("the session borrows its font registry")]
+    Borrowed,
+    /// The bytes are not a face this build can read.
+    #[error(transparent)]
+    Font(#[from] FontError),
+}
+
 /// One section's lines, and what building them had to complain about.
 struct Cached {
     key: u64,
@@ -99,7 +138,7 @@ struct Cached {
 /// that brings its own `@font-face` needs the host to register that
 /// face before the sheet is set.
 pub struct Session<'a> {
-    registry: &'a FontRegistry,
+    registry: Held<'a>,
     assets: &'a Assets,
     book: Cow<'a, Book>,
     /// The sheets the tree was compiled from. `None` on the one-shot
@@ -123,6 +162,9 @@ pub struct Session<'a> {
     /// What building lines complained about, deduped in the order the
     /// sections raised it.
     flow_warnings: Vec<Warning>,
+    /// What a frontend had to say about the sources it read, which
+    /// happened upstream of every stage here.
+    source_warnings: Vec<Warning>,
     stale: Stale,
     stages: Stages,
 }
@@ -136,9 +178,13 @@ impl<'a> Session<'a> {
 
     /// The same, over images the host has already probed.
     pub fn with_assets(registry: &'a FontRegistry, assets: &'a Assets) -> Session<'a> {
+        Session::over(Held::Borrowed(registry), assets)
+    }
+
+    fn over(registry: Held<'a>, assets: &'a Assets) -> Session<'a> {
         let book = Book::default();
         let sheets = Stylesheets::parse(&[]);
-        let styles = sheets.compile(&book, registry);
+        let styles = sheets.compile(&book, registry.get());
         Session {
             registry,
             assets,
@@ -153,12 +199,23 @@ impl<'a> Session<'a> {
             infos: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),
+            source_warnings: Vec::new(),
             stale: Stale::Break,
             stages: Stages {
                 style: 1,
                 ..Stages::default()
             },
         }
+    }
+
+    /// A session that owns the faces it lays out against, and takes
+    /// more through [`add_font`](Session::add_font).
+    ///
+    /// This is the shape a worker needs: font bytes cross the
+    /// boundary once, the module holds them, and no caller on the
+    /// other side of the wall has a registry to lend.
+    pub fn owning(registry: FontRegistry) -> Session<'static> {
+        Session::over(Held::Owned(Box::new(registry)), no_assets())
     }
 
     /// The single run `layout_book` makes, over inputs the caller
@@ -171,7 +228,7 @@ impl<'a> Session<'a> {
         assets: &'a Assets,
     ) -> Session<'a> {
         Session {
-            registry,
+            registry: Held::Borrowed(registry),
             assets,
             book: Cow::Borrowed(book),
             sheets: None,
@@ -184,6 +241,7 @@ impl<'a> Session<'a> {
             infos: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),
+            source_warnings: Vec::new(),
             stale: Stale::Break,
             stages: Stages::default(),
         }
@@ -233,11 +291,47 @@ impl<'a> Session<'a> {
         self.stale = Stale::Break;
     }
 
+    /// Carries a frontend's complaints into the run's diagnostics.
+    ///
+    /// A construct the content vocabulary cannot hold is reported
+    /// where the source was read, which is upstream of every stage a
+    /// session runs. The output's warnings are the whole run's, so
+    /// they belong in the same channel rather than in a second one
+    /// the host has to remember to read. Which of them still apply
+    /// after an edit is the caller's to decide; this replaces the
+    /// lot.
+    pub fn set_source_warnings(&mut self, warnings: Vec<Warning>) {
+        self.source_warnings = warnings;
+    }
+
     /// Sets the styling, and with it whichever stage the change
     /// reaches, which is usually far short of everything.
     pub fn set_style(&mut self, sheets: Stylesheets) {
         self.sheets = Some(sheets);
         self.recompile();
+    }
+
+    /// Registers a face, and re-runs everything a face can change.
+    ///
+    /// A family the registry did not have is a family the cascade
+    /// resolved to something else, so the styling is compiled again
+    /// and the lines are broken again. The font table the output
+    /// carries is rebuilt with them.
+    ///
+    /// Only a session that owns its registry has one to add to; one
+    /// that borrowed it says so instead.
+    pub fn add_font(&mut self, source: FontSource) -> Result<Vec<u16>, AddFontError> {
+        let ids = self
+            .registry
+            .get_mut()
+            .ok_or(AddFontError::Borrowed)?
+            .add(source)?;
+        // The table is built with the output and never patched, so
+        // the output goes rather than outlive the ids it indexes.
+        self.output = None;
+        self.stale = Stale::Break;
+        self.recompile();
+        Ok(ids)
     }
 
     /// The display list, brought up to date.
@@ -251,7 +345,7 @@ impl<'a> Session<'a> {
     pub fn export(&mut self) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
-        pdf::write(output, self.registry, &self.book.metadata)
+        pdf::write(output, self.registry.get(), &self.book.metadata)
     }
 
     /// The display list by value, consuming the session.
@@ -288,7 +382,7 @@ impl<'a> Session<'a> {
         let Some(sheets) = &self.sheets else {
             return;
         };
-        let styles = sheets.compile(&self.book, self.registry);
+        let styles = sheets.compile(&self.book, self.registry.get());
         self.stages.style += 1;
         let prints = Prints::of(&styles, self.images);
         self.stale = self.stale.max(self.prints.against(&prints));
@@ -344,7 +438,7 @@ impl<'a> Session<'a> {
                     // One paginator per section, so the warnings it
                     // collects are the ones this section raised.
                     let paginator =
-                        Paginator::with_assets(self.registry, &self.styles, self.assets);
+                        Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -372,8 +466,8 @@ impl<'a> Session<'a> {
 
     /// Flows the cached lines into pages. Nothing here measures.
     fn reflow(&mut self) {
-        let registry = self.registry;
-        let paginator = Paginator::with_assets(self.registry, &self.styles, self.assets);
+        let registry = self.registry.get();
+        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
         let paged = paginator.fragment(
             &self.book,
             self.lines.iter().map(|cached| cached.fragments.as_slice()),
@@ -387,7 +481,7 @@ impl<'a> Session<'a> {
 
     /// Repaints the furniture over pages the flow already settled.
     fn repaint(&mut self) {
-        let paginator = Paginator::with_assets(self.registry, &self.styles, self.assets);
+        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
         if let Some(output) = &mut self.output {
             paginator.paint(&mut output.pages, &self.infos);
             self.stages.paint += 1;
@@ -396,8 +490,8 @@ impl<'a> Session<'a> {
 
     /// The whole pipeline, one section's lines alive at a time.
     fn run_once(&mut self) {
-        let registry = self.registry;
-        let paginator = Paginator::with_assets(self.registry, &self.styles, self.assets);
+        let registry = self.registry.get();
+        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
         let pages = paginator.paginate(&self.book);
         self.stages.lines += self.book.sections.len() as u32;
         self.stages.flow += 1;
@@ -411,7 +505,8 @@ impl<'a> Session<'a> {
     /// Everything the run has to complain about, in the order the
     /// stages raised it.
     fn collect_warnings(&mut self) {
-        let mut warnings = self.styles.warnings().to_vec();
+        let mut warnings = self.source_warnings.clone();
+        warnings.extend(self.styles.warnings().iter().cloned());
         warnings.extend(self.assets.warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
         if let Some(output) = &mut self.output {
@@ -1113,6 +1208,59 @@ mod tests {
             before.lines,
             "renumbering alone cost a re-break"
         );
+    }
+
+    /// A session that owns its registry takes a face after it was
+    /// made, and lays out against it: bytes cross once, and the
+    /// session they crossed into is the one that keeps them.
+    #[test]
+    fn an_owning_session_takes_a_face_and_uses_it() {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book(vec![section("one.md", prose("alpha", 2))]));
+        let faces = session.preview().fonts.len();
+
+        let mut source = crate::fonts::FontSource::from_bytes(crate::fonts::BUNDLED_FONT.to_vec())
+            .expect("the bundled face parses");
+        source.family = "borrowed garamond".into();
+        source.declared = Some(crate::fonts::FaceAttributes::REGULAR);
+        let ids = session
+            .add_font(source)
+            .expect("an owning session registers");
+        assert_eq!(ids.len(), 1);
+
+        let css = "book { font-family: 'borrowed garamond' }";
+        session.set_style(Stylesheets::parse(&[Source::author("faces.css", css)]));
+        let output = session.preview();
+        assert_eq!(
+            output.fonts.len(),
+            faces + 1,
+            "the font table did not grow with the registry"
+        );
+        assert!(
+            output
+                .pages
+                .iter()
+                .flat_map(|page| &page.items)
+                .any(|item| matches!(
+                    item,
+                    DrawItem::Text { font_id, .. } if *font_id == ids[0]
+                )),
+            "the face that was registered set nothing"
+        );
+    }
+
+    /// A session laying out against someone else's registry has none
+    /// of its own to add to, and says so rather than laying out
+    /// against a face that is not there.
+    #[test]
+    fn a_borrowed_registry_refuses_a_face() {
+        let mut session = Session::new(registry());
+        let source = crate::fonts::FontSource::from_bytes(crate::fonts::BUNDLED_FONT.to_vec())
+            .expect("the bundled face parses");
+        assert!(matches!(
+            session.add_font(source),
+            Err(AddFontError::Borrowed)
+        ));
     }
 
     /// A section that moves in the book keeps its lines: the key
