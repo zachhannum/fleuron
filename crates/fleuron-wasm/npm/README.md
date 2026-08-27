@@ -26,11 +26,11 @@ preview.page = 12;
 preview.zoom = 1.5;
 ```
 
-`Preview` opens the worker, loads the module, keeps the session behind
-it, loads the faces the run drew with, and paints a page as SVG. The
-buffer, the protocol and the display list are what it is built out of
-rather than what it asks a caller to hold — all of them stay exported
-for a host that wants the pieces.
+`Preview` starts the worker, loads the module into it, keeps the
+session, fetches the fonts the book was set in, and paints a page as
+SVG. You never handle the encoded buffer, the worker messages or the
+display list yourself, though all three stay exported for a host that
+wants to assemble the same thing from the pieces.
 
 `@fleuron/react` is the same thing as a component, and holds no engine
 logic of its own.
@@ -110,10 +110,11 @@ points, origin top left. Each text run carries the string it was shaped
 from and each glyph a byte range into it, which is what a painter needs
 for selection and copy-and-paste.
 
-`paintPage` draws one of them as SVG: one `<text>` per run with an x
-for every character, so the browser positions rather than shapes.
-`exportPdf` returns PDF bytes from the same stages, which is why the
-two cannot disagree.
+`paintPage` draws one of them as SVG. Each run becomes one `<text>`
+carrying an x for every character in it, so the browser places the
+glyphs where the engine put them instead of working out positions of
+its own. `exportPdf` writes the same pages as PDF, which is why the
+two cannot come out different.
 
 The bytes underneath are postcard with a version in front of them.
 `decodeDisplayList` is what the client reads them with, exported for a

@@ -9,23 +9,33 @@ The engine compiles to WebAssembly and ships as `@fleuron/wasm`: the module, a w
 npm install @fleuron/wasm
 ```
 
-## On screen
+## The short way
 
-A host that wants to see a book says where to put it and hands over the manuscript.
+`Preview` is the whole thing in one object. It starts the worker, loads the module into it, keeps the session, fetches the fonts and paints pages into an element you give it.
 
 ```js
 import { Preview } from '@fleuron/wasm';
 
 const preview = await Preview.mount(document.querySelector('#book'));
+await preview.setStyle(css);
 await preview.setMarkdown(markdown);
+
 preview.page = 12;
 ```
 
-[The preview](preview.md) is what that mounts, what it paints, and how a host paints its own instead. Everything below is what it is built out of, and stays exported for a host that wants the pieces.
+There is nothing else to wire up: layout is already running off the main thread, and page 12 is on the screen. Most hosts want this, and [the preview](preview.md) is the rest of its surface.
 
-## In a worker
+## The long way
+
+The same thing is also available in pieces: a worker, a client that talks to it, a reader for what comes back, and a painter. Assemble them yourself when you want to paint the pages some other way, put the engine somewhere a `Worker` is not what runs it, or take the pages without putting any of them on a screen. The rest of this page is those pieces.
+
+### The worker
 
 Layout belongs off the main thread. A book-scale manuscript is hundreds of milliseconds of work, and that much time on the main thread drops interactions.
+
+You do not have to write the worker file. The package ships one at the `@fleuron/wasm/worker` export, which is what `Preview` starts, and a host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
+
+Writing your own is six lines, and worth doing when the worker has to hold something else, or when your bundler needs to hand the module its bytes rather than let it fetch them:
 
 ```js
 // fleuron.worker.js
@@ -40,9 +50,11 @@ self.onmessage = ({ data }) => {
 };
 ```
 
-That is the whole worker, and the package ships it: a host with nothing to add points `new Worker` at `@fleuron/wasm/worker` instead.
+Note that the handler is installed before the module has finished loading, rather than after an `await`. A worker that awaits the load first drops whatever the host posted while the module was still coming down, and a host that opens a preview and immediately hands it a manuscript posts exactly then.
 
-The handler goes on before the module has arrived, on purpose. A worker that awaits the load first loses whatever the host posted while the module was still coming down, and a host that mounts a preview and hands it a manuscript posts exactly then.
+### The client
+
+The host side keeps a `Client`, which pairs replies with calls and decides which renders are still worth painting:
 
 ```js
 // the host
@@ -65,9 +77,11 @@ if (output !== null) {
 }
 ```
 
-`null` is a render the reader typed past: a later one overtook it, and there is nothing to paint. [The wire](wire.md) has the protocol that decides that.
+`null` means the render was overtaken by a later one before it finished, so there is nothing to paint and the newer render is on its way. [The wire](wire.md) has the protocol that decides that.
 
-## Sending what changed
+Painting a run in the right font takes one more step, since the browser needs the font files as `FontFace`s; [the preview](preview.md#fonts) has it.
+
+### Sending what changed
 
 The module holds a [session](../library/sessions.md) between calls, so the second render of a book pays for the edit rather than for the book.
 
@@ -81,7 +95,7 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 
 `client.stages` reports how many times each stage has run since the session opened. A host reading it can see a cache serve, where a clock would only show a fast machine.
 
-## The ops
+### The ops
 
 | op | what crosses |
 |---|---|
@@ -93,19 +107,19 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `dialect` | `commonmark`, `gfm` or `obsidian` |
 | `split` | the heading level a section begins at, or `0` for one section per file |
 
-## What comes back
+### What comes back
 
 `client.preview` hands back a display list: pages of text runs, rules and images, in points, origin top left. [The display-list reference](../reference/display-list.md) is the structure. The postcard encoding underneath it is the client's business rather than a caller's, and [the wire](wire.md) is where it is written down.
 
-Turning those pages into pixels is a painter's job. `paintPage` is the one the package ships, `exportPdf` below is the other, and [the preview](preview.md) has both.
+Turning those pages into pixels is a painter's job. `paintPage` is the one the package ships, and [the preview](preview.md) is where it is written down.
 
-## Exporting
+### Exporting
 
 ```js
 const pdf = await client.exportPdf();
 ```
 
-The stages above the painter are the ones the preview used, so the PDF cannot contradict what is on screen.
+The export draws from the same laid-out pages the preview drew, rather than laying the book out a second time, so it cannot come out different from what is on screen.
 
 ## Batch
 
@@ -134,7 +148,7 @@ cd crates/fleuron-wasm/npm && npm ci && npm run build
 
 ## What the host owns
 
-**Fonts.** The engine reads no paths. Fetch them, cache them, send the bytes once. What it shaped with comes back from `fontBytes`, which is how a painter draws with the bundled face.
+**Fonts.** The engine reads no paths. Fetch the files, cache them, send the bytes once. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine: it has no URL to fetch it from.
 
 **Images.** Layout never decodes an image. The host probes the header for intrinsic size and draws the pixels on its own side of the wall.
 
