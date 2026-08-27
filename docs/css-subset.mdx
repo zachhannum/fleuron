@@ -1,16 +1,11 @@
 ---
-title: The novel subset
+title: CSS subset
 description: Every property, at-rule and selector the engine honours, and what it does with the rest.
 ---
 
-fleuron understands the CSS a book needs and reports the rest. Every
-property, at-rule and selector below is honoured by the pipeline;
-anything outside them becomes a warning naming the line and column it
-was written at, and the run continues.
+fleuron understands the CSS a book needs and reports the rest. Everything below is honoured by the pipeline. Anything outside it becomes a warning naming the line and column it was written at, and the run continues.
 
-The page below is what a stylesheet built out of this vocabulary
-produces: mirrored margins, a folio, a running head from `string-set`,
-and a drop cap from `initial-letter`.
+The page below is what a stylesheet built out of this vocabulary produces: mirrored margins, a folio, a running head from `string-set`, and a drop cap from `initial-letter`.
 
 <Page
   demo="css-subset"
@@ -19,21 +14,13 @@ and a drop cap from `initial-letter`.
 
 ## Selectors
 
-Type, universal, descendant, child, adjacent and general sibling, the
-structural pseudo-classes (`:first-child`, `:nth-child()`, `:only-child`,
-`:empty`, `:root`), `:is()`, `:where()`, `:not()` and `:has()`.
+Type, universal, descendant, child, adjacent and general sibling. The structural pseudo-classes `:first-child`, `:nth-child()`, `:only-child`, `:empty` and `:root`. Also `:is()`, `:where()`, `:not()` and `:has()`.
 
-Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`,
-`p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no
-classes, ids, attributes or namespaces — the content tree carries none —
-and no pseudo-classes that describe a document being interacted with.
+Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree carries none, and no pseudo-classes that describe a document being interacted with.
 
-One pseudo-element: `::first-letter`, which is where a drop cap comes
-from. It cascades over the style of the element it belongs to, so a rule
-that names it starts from that element's own font and size.
+There is one pseudo-element, `::first-letter`, which is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size.
 
-Text runs are not elements: they take the style of the inline or block
-around them, and never count towards `:first-child`.
+Text runs are not elements. They take the style of the inline or block around them, and never count towards `:first-child`.
 
 ## Properties
 
@@ -56,7 +43,7 @@ Block box, not inherited:
 
 | property | values |
 |---|---|
-| `content` | `none` or a `<string>` — the ornament a thematic break is set in |
+| `content` | `none` or a `<string>`, the ornament a thematic break is set in |
 | `string-set` | `none`, or `<name> [content() \| <string>]+`, comma-separated |
 | `counter-reset` | `none`, or `page <integer>` |
 | `initial-letter` | `<integer>` lines to sink an initial letter over, on `::first-letter` |
@@ -66,33 +53,25 @@ Block box, not inherited:
 
 `recto` and `verso` are the book's names for `right` and `left`.
 
-`break-inside: avoid` moves a block whole rather than split it, and
-`orphans` and `widows` bound where a paragraph may be cut: fewer than
-`orphans + widows` lines and it moves whole too. Where no allowed break
-remains, the page ends anyway — a book that cannot be broken is still a
-book that has to be paginated.
+Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`, and everything computes to points. `em` in `font-size` is a multiple of the parent's size and elsewhere of the element's own. `rem` is always a multiple of the root's.
 
-`string-set` is where a running head's text comes from: the element
-sets the named string when the flow reaches it, and a margin box reads
-it back with `string()`. `content()` is the element's own text, which
-only headings and paragraphs have any of.
+### Breaking
 
-`counter-reset: page <integer>` is where the folio restarts: the page
-the element opens takes that number, and the pages after it count on
-from there. Blank leaves count. Recto and verso do not follow the
-folio — which side of the spread a page falls on is where it sits in
-the sheet, not what is printed on it — so front matter restarting the
-body at 1 leaves the sides alone.
+`break-inside: avoid` moves a block whole rather than split it. `orphans` and `widows` bound where a paragraph may be cut: fewer than `orphans + widows` lines and it moves whole too. Where no allowed break remains, the page ends anyway.
 
-An initial letter is sized from the sink rather than from `font-size`:
-its cap height spans `initial-letter` lines, so its baseline lands on
-the last of them and its top on the first line's cap height. The lines
-beside it break to the measure it leaves.
+### Running heads
 
-Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`.
-Everything computes to points. `em` in `font-size` is a multiple of the
-parent's size and elsewhere of the element's own; `rem` is always a
-multiple of the root's.
+`string-set` is where a running head's text comes from. The element sets the named string when the flow reaches it, and a margin box reads it back with `string()`. `content()` is the element's own text, which only headings and paragraphs have any of.
+
+### Folios
+
+`counter-reset: page <integer>` is where the folio restarts. The page the element opens takes that number, and the pages after it count on from there. Blank leaves count.
+
+Recto and verso do not follow the folio. Which side of the spread a page falls on is where it sits in the sheet, not what is printed on it, so front matter restarting the body at 1 leaves the sides alone.
+
+### Drop caps
+
+An initial letter is sized from the sink rather than from `font-size`. Its cap height spans `initial-letter` lines, so its baseline lands on the last of them and its top on the first line's cap height. The lines beside it break to the measure it leaves.
 
 ## `@page`
 
@@ -107,33 +86,17 @@ multiple of the root's.
 }
 ```
 
-`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`,
-`lower-alpha` or `upper-alpha`; a value the style has no spelling for
-falls back to decimal. `string(<name>)` reads a running string **as it
-stood when the page opened**, not as the first element on the page set
-it: a chapter opening halfway down a page does not retitle the page it
-opened on. Books blind a chapter opening's head for that reason
-anyway. A string nothing has set yet paints nothing.
+`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` or `upper-alpha`. A value the style has no spelling for falls back to decimal.
 
-A page group begins wherever a section opens a page, so `:first` selects
-a chapter's opening page rather than only the book's. `:blank` selects a
-page inserted to square the sheet. `:left` and `:right` are verso and
-recto.
+`string(<name>)` reads a running string as it stood when the page opened, not as the first element on the page set it, so a chapter opening halfway down a page does not retitle the page it opened on. A string nothing has set yet paints nothing.
 
-Page selectors cascade like any other rule: origin first, then
-specificity — the name outweighs `:first` and `:blank`, which outweigh
-`:left` and `:right` — then source order.
+A page group begins wherever a section opens a page, so `:first` selects a chapter's opening page rather than only the book's. `:blank` selects a page inserted to square the sheet. `:left` and `:right` are verso and recto.
 
-All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`,
-`@top-right` and their `@bottom-` counterparts. A `-center` box is
-centred on the trim rather than on the content box, because a folio
-belongs on the page's axis and mirrored margins put the content box off
-it; `-left` and `-right` align to the content box's edges.
+Page selectors cascade like any other rule: origin first, then specificity, then source order. The name outweighs `:first` and `:blank`, which outweigh `:left` and `:right`.
 
-A page the flow put nothing on paints no margin boxes at all: a blank
-leaf is blank, and a page whose only content would be a running head
-does not carry one. `@page :blank` still gives that leaf its trim and
-margins.
+All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`, `@top-right` and their `@bottom-` counterparts. A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
+
+A page the flow put nothing on paints no margin boxes at all, so a blank leaf is blank and a page whose only content would be a running head does not carry one. `@page :blank` still gives that leaf its trim and margins.
 
 ## `@font-face`
 
@@ -146,33 +109,10 @@ margins.
 }
 ```
 
-`src` urls mean whatever the host says they mean: the engine hands each
-one to the loader it was given and reads no path of its own. A face that
-resolves is registered under the family the sheet declared, not the one
-inside the file. A face that resolves nowhere is a warning, and text
-falls back to the next family in the list.
+`src` urls mean whatever the host says they mean. The engine hands each one to the loader it was given and reads no path of its own. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
 
-A variable file registers one face per named instance, so a family
-declared once holds every cut the file names. Declaring `font-style` or
-`font-weight` overrides that: the sheet has said what this source is,
-and it registers as that one cut.
-
-## Font matching
-
-`font-family` is tried in order and the first registered family answers.
-Within it, slope decides before weight: a family with an italic cut
-never answers an italic request with the upright one. Weight then
-follows CSS, which looks up before it looks down between 400 and 500 and
-away from that range elsewhere.
-
-Nothing is synthesised. A family with no italic cut lays out upright and
-says so, and a stack that resolves nothing falls back to the first
-registered face and says that.
+`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. Nothing is synthesised. [Fonts](library/fonts.md) has the whole of the matching rules and what variable files do.
 
 ## Not in the subset
 
-Colour, backgrounds, borders, padding, floats, tables, grid, flexbox,
-transforms, media queries, custom properties, counters other than
-`page`, `counter-increment`, and generated content beyond page margin
-boxes, `string-set`, and `content` on an empty element. The engine says
-so, per declaration, where it was written.
+Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element. The engine says so, per declaration, where it was written.

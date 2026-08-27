@@ -1,49 +1,42 @@
 # fleuron ❦
 
-*A paged-media layout engine for book-shaped documents, in Rust.*
+A paged-media layout engine for book-shaped documents, in Rust.
 
-[**Documentation**](https://zachhannum.github.io/fleuron/) · [**Demos**](https://zachhannum.github.io/fleuron/demos/) · [**API**](https://zachhannum.github.io/fleuron/api/fleuron/)
+[Documentation](https://zachhannum.github.io/fleuron/) · [Demos](https://zachhannum.github.io/fleuron/demos/) · [API](https://zachhannum.github.io/fleuron/api/fleuron/)
 
-**fleuron** takes markdown plus CSS, performs
-inline layout (shaping, line breaking, hyphenation), fragments it into pages,
-and emits a display list for preview and a PDF for export. It compiles to
-native and WebAssembly from the same core.
+fleuron takes markdown and CSS and gives back a typeset book. It shapes
+the text, breaks and hyphenates the lines, fragments the result into
+pages, and emits a display list for preview and a PDF for export. The
+same source compiles to native and to WebAssembly.
 
-> A *fleuron* is the printer's flower ❦ — the ornament set into a page to
-> mark a pause. This is one, in Rust.
+A fleuron is the printer's flower ❦, the ornament set into a page to
+mark a pause.
 
-## Why
+## What it does
 
-fleuron is built to repaginate a full-length manuscript while someone
-waits, and to give that person a preview the export cannot contradict.
+fleuron repaginates a full-length manuscript while the writer waits, and
+gives them a preview that matches the export.
 
-Both come from owning the pipeline end to end: harfrust shaping, Unicode
-line breaking and segmentation, Knuth-Plass-quality justification, and
-CSS Fragmentation semantics applied to a box tree it builds itself.
-Break decisions fall out of the layout pass, so a 333-page novel reaches
-PDF bytes in 287 ms. The preview is *exactly* the export, because both
-are painted from the same display list. And because the engine does no
-I/O and depends on no platform library, all of it runs anywhere Rust
-does, WebAssembly included.
-
-Shaping is [harfrust], the pure-Rust HarfBuzz port from the Google Fonts
-team (successor to the archived rustybuzz).
+It owns the whole pipeline: [harfrust] shaping, Unicode line breaking
+and segmentation, Knuth-Plass justification, and CSS Fragmentation over
+a box tree it builds itself. Break decisions come out of the layout
+pass, so a 333-page novel reaches PDF bytes in 287 ms. The preview and
+the PDF are painted from the same display list, so they cannot come out
+different. The engine does no I/O and links no platform library, so it
+builds for any target Rust does.
 
 ## Scope
 
-fleuron is scoped to **book-shaped documents**: flowing prose with
-headings, block quotes, scene breaks, drop caps, images, running heads,
-footnotes, and page machinery (recto/verso, page counters, named pages).
+fleuron handles book-shaped documents: flowing prose with headings,
+block quotes, scene breaks, drop caps, images, running heads, footnotes,
+and page furniture like recto and verso, page counters and named pages.
 
 It is not a browser engine. There is no float layout, no tables, no grid
-or flexbox, no transforms. CSS that falls outside the supported subset is
-reported through the diagnostics channel rather than silently ignored.
+or flexbox, no transforms. CSS the engine does not support is reported
+with the line and column it was written at, and the book lays out
+anyway.
 
 ## Architecture
-
-The pipeline is one-way. Content enters as markdown and becomes a
-semantic tree, styling enters through the style compiler, and everything
-downstream consumes a single resolved representation:
 
 ```
 markdown ─► content tree ──┐
@@ -53,44 +46,36 @@ CSS ───────────────────────┘    
                                                                                            └─► PDF (export)
 ```
 
-- **`fleuron`** — style compilation, box construction, inline layout,
-  fragmentation, page assembly. Pure library, no I/O.
-- **`fleuron-markdown`** — the frontend: source text in, sections out,
-  with the constructs the vocabulary cannot hold reported rather than
-  dropped. The mapping is written down in
-  [`docs/reference/markdown.md`](docs/reference/markdown.md).
-- **`fleuron-cli`** — `fleuron` binary: markdown in, PDF out.
-  Batch-friendly.
-- **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
-  PDF bytes out, zero DOM access. Ships as `@fleuron/wasm`, with the
-  worker protocol, the display-list reader and an SVG painter in
-  TypeScript beside it. `Preview` mounts that painter into an element;
-  `@fleuron/react` is the same thing as a component.
+The pipeline runs one way. Nothing downstream reaches back upstream.
 
-The content tree stays public for a host with a structured source of
-its own, such as a CMS or a docx converter, but markdown is the way in.
+| crate | |
+|---|---|
+| `fleuron` | The engine: style compilation, box construction, inline layout, fragmentation, page assembly. No I/O. |
+| `fleuron-markdown` | Markdown in, sections out. The mapping is in [`docs/reference/markdown.md`](docs/reference/markdown.md). |
+| `fleuron-cli` | The `fleuron` binary. Markdown in, PDF out. |
+| `fleuron-wasm` | WASM bindings, plus a worker, a display-list reader and an SVG painter in TypeScript. Ships as `@fleuron/wasm`. |
+
+`@fleuron/react` wraps the preview as a component and holds no engine
+logic.
+
+Most callers write markdown. The content tree stays public for a host
+that already has structured content, such as a CMS or a docx converter.
 
 ### Invariants
 
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
-   the defaults; author CSS cascades over it. Everything downstream
-   consumes the resolved style tree. The supported subset is written
-   down in [`docs/css-subset.mdx`](docs/css-subset.mdx); anything outside
-   it is reported with the line and column it was written at.
-2. **The engine never touches the DOM.** Bytes in, bytes out. SVG, canvas,
-   and PDF are interchangeable painters over the display list. The SVG
-   preview gives each run an x per character, taken from the glyph the
-   shaper put there, so the browser positions rather than shapes and
-   cannot disagree with the export.
-3. **Layout never decodes images.** Header probes yield intrinsic size,
-   orientation, and DPI; painters decode pixels on their own side of the
-   wall.
+   the defaults and author CSS cascades over it. Everything downstream
+   reads the resolved style tree. [`docs/css-subset.mdx`](docs/css-subset.mdx)
+   lists what the engine understands.
+2. **The engine never touches the DOM.** Bytes in, bytes out. SVG,
+   canvas and PDF are interchangeable painters over the display list.
+3. **Layout never decodes images.** A header probe gives intrinsic size,
+   orientation and DPI. Painters decode the pixels themselves.
 
 ## Performance
 
-The harness lays out two complete public-domain novels — *Pride and
-Prejudice* at book scale and *The Count of Monte Cristo* at four times
-it — and holds the result against fixed budgets:
+Two public-domain novels, laid out from markdown and held against fixed
+budgets.
 
 | | pages | parse | style | line layout | fragment | PDF | end to end | layout peak |
 |---|---|---|---|---|---|---|---|---|
@@ -100,24 +85,20 @@ it — and holds the result against fixed budgets:
 Four times the book costs about four times the time and four times the
 memory.
 
-A [session](docs/library/sessions.md) is the same pipeline left open:
-the stages stay in memory, and only the ones an edit invalidates run
-again. Restyling *Pride and Prejudice* with a sheet that moves
-the page box costs 6 ms, against the 128 ms of line breaking it does
-not repeat.
+A [session](docs/library/sessions.md) keeps the same pipeline open and
+re-runs only the stages an edit invalidates. Restyling *Pride and
+Prejudice* with a sheet that moves the page box costs 6 ms, against the
+128 ms of line breaking it skips.
 
 Apple M-series, release build, best of three. The
 [demos](https://zachhannum.github.io/fleuron/demos/) run the same two
-books in your browser and name the machine they ran on, which is the
-only way a number like this one is worth anything to a reader.
+books in your browser and name the machine they ran on.
 
-Budgets: a book-scale
-manuscript reaches PDF bytes in under a second natively, lays out in
-under half a second in a WebAssembly worker, stays under 32 MiB while
-doing it, and re-renders a style change in under 20 ms from a session
-whose own ceiling is 64 MiB. Criterion benches time each stage on its own; a
-gate binary runs the same budgets natively and under wasm, and CI
-reports both on every pull request.
+The budgets: a book-scale manuscript reaches PDF bytes in under a second
+natively, lays out in under half a second in a WebAssembly worker, stays
+under 32 MiB doing it, and re-renders a style change in under 20 ms from
+a session capped at 64 MiB. CI checks them natively and under wasm on
+every pull request.
 
 ```
 cargo run --release -p fleuron-fixtures --bin perf-gate
@@ -126,10 +107,9 @@ cargo bench -p fleuron
 
 ## Status
 
-Pre-alpha. Development happens in service of [Orca], the Obsidian
-novel-writing suite — fleuron is its pagination backend, extracted. The
-build order lives in the issue tracker; the first milestone that matters
-is *fixture book in, valid PDF out*.
+Pre-alpha. fleuron is the pagination backend for [Orca], the Obsidian
+novel-writing suite, extracted into its own project. The build order is
+in the issue tracker.
 
 ## License
 

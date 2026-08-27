@@ -5,7 +5,7 @@ description: The engine's only product, and the contract every painter shares.
 
 The display list is what the engine produces. Painters consume it and never re-derive layout, which is why a preview and an export cannot disagree: they are two renderings of the same numbers.
 
-Coordinates are page units — points — with the origin at the top left of the trimmed page.
+Coordinates are points, with the origin at the top left of the trimmed page.
 
 ## `LayoutOutput`
 
@@ -17,7 +17,9 @@ pub struct LayoutOutput {
 }
 ```
 
-`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named cuts are one file at several locations, and the location is what tells them apart. `warnings` is the whole run's, style compilation included — see [diagnostics](../library/diagnostics.md).
+`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named cuts are one file at several locations, and the location is what tells them apart.
+
+`warnings` holds the whole run's, style compilation included. See [diagnostics](../library/diagnostics.md).
 
 ## `Page`
 
@@ -31,13 +33,13 @@ pub struct Page {
 }
 ```
 
-`number` is the folio, counting from 1. `side` is `recto` or `verso`; books open on a right-hand page, so odd numbers are recto. `width` and `height` are the trim, in points — per page, because a book may change page size at a named page.
+`number` is the folio, counting from 1. `side` is `recto` or `verso`; books open on a right-hand page, so odd numbers are recto. `width` and `height` are the trim, in points, per page, because a book may change page size at a named page.
 
 `items` is in paint order.
 
 ## `DrawItem`
 
-Deliberately tiny: three variants, and a painter that handles all three can paint any page the engine produces.
+Three variants. A painter that handles all three can paint any page the engine produces.
 
 ### `Text`
 
@@ -72,7 +74,7 @@ pub struct Glyph {
 }
 ```
 
-`id` is a glyph id in the run's font — not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
+`id` is a glyph id in the run's font, not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
 
 `range` is the byte range in the run's `text` that this glyph stands for. A ligature spans several characters; a decomposed cluster puts several glyphs on one range. A painter that treats the range as a mapping rather than a bijection handles both.
 
@@ -90,12 +92,12 @@ A filled rectangle: rules, borders, backgrounds.
 Image { x: f32, y: f32, w: f32, h: f32, asset: u32 }
 ```
 
-A placed image. `asset` indexes the asset table; the pixels are the host's. Layout never decoded them, so the placement is derived from a header probe and the painter is the first thing in the pipeline to see the image itself.
+A placed image. `asset` indexes the asset table, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter is the first thing in the pipeline to see the image itself.
 
 ## Writing a painter
 
-The whole job is: for each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
+For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
 
-The SVG painter in `@fleuron/wasm` is one worked example, and [the preview](../wasm/preview.md) is where it is written down.
+The SVG painter in `@fleuron/wasm` is one worked example. See [the preview](../wasm/preview.md).

@@ -13,21 +13,21 @@ cargo run --release -p fleuron-cli -- fixtures/gulliver-excerpt.md -o book.pdf -
 fleuron: fixtures/gulliver-excerpt.md → book.pdf: 34 pages
 ```
 
-That is an excerpt of *Gulliver's Travels* — dialogue, em-dashes, hyphenation-prone words — laid out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
+That is an excerpt of *Gulliver's Travels*: dialogue, em-dashes, hyphenation-prone words. It comes out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
 
 <Page
   demo="quickstart"
   caption="Page 1 of book.pdf, laid out from the same manuscript and the same stylesheet as the command above."
 />
 
-## Without the clone
+## Install it instead
 
 ```sh
 cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
 fleuron manuscript.md -o book.pdf
 ```
 
-With no `-c`, the built-in stylesheet is the whole of the styling: a trade paperback, justified, chapters opening recto. It is a finished design, and a book that never overrides it still comes out looking like a book.
+With no `-c`, the built-in stylesheet does all the styling: a trade paperback, justified, chapters opening recto. A book that never overrides it still comes out looking like a book.
 
 ## Several files
 
@@ -37,28 +37,30 @@ Markdown files compose in the order the command line gives them:
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 ```
 
-Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in rather than at the run.
+Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in.
 
-One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed rather than named after whichever file came first. That leaves the work's own title and author to the command line:
+## Naming the book
+
+One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed. That leaves the work's own title and author to the command line:
 
 ```sh
 fleuron ch01.md ch02.md ch03.md -o book.pdf \
   --title "The Levant Papers" --author "E. Marsh"
 ```
 
-A flag outranks frontmatter where the two overlap, so a single file can be retitled without editing it.
+A flag outranks frontmatter where the two overlap, so you can retitle a single file without editing it.
 
 ## Where sections begin
 
-A section is what the fragmenter opens a page on, so where they begin decides the page count before any styling does. `--split` names the rule:
+A section is what the fragmenter opens a page on, so where sections begin decides the page count before any styling does. `--split` names the rule:
 
 ```sh
 fleuron manuscript.md -o book.pdf --split 2
 ```
 
-A heading at level 2 or shallower opens a section, which is the shape of a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, which is what a vault of one chapter per file wants: the file is the section.
+A heading at level 2 or shallower opens a section, which suits a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, which is what a vault of one chapter per file wants: the file is the section.
 
-`--dialect` says which markdown is being read: `commonmark`, `gfm` or `obsidian`. [The markdown mapping](../reference/markdown.md) is what each construct becomes, and which of them warn.
+`--dialect` says which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.md) for what each construct becomes and which of them warn.
 
 ## Adding your own styling
 
@@ -68,7 +70,7 @@ Stylesheets cascade in the order the command line gives them, over the built-in 
 fleuron manuscript.md -o book.pdf -c house.css -c series.css
 ```
 
-So `house.css` sets the press's defaults and `series.css` overrides the handful of things this series does differently. Author CSS outranks the built-in sheet whatever the specificity of the built-in rule, so you never have to out-specify a default you are trying to replace.
+So `house.css` sets the press's defaults and `series.css` overrides the handful of things this series does differently. Author CSS outranks the built-in sheet whatever the specificity of the built-in rule, so you never have to out-specify a default you are replacing.
 
 ```css
 @page {
@@ -85,7 +87,7 @@ h1, h2, h3 { font-size: 20pt; }
 
 ## Fonts
 
-`@font-face` urls are resolved as paths, relative to the directory of the stylesheet that asked for them, and then relative to the working directory:
+`@font-face` urls are resolved as paths: first against the directory of the stylesheet that asked for them, then against the working directory.
 
 ```css
 @font-face {
@@ -98,7 +100,7 @@ A face that resolves nowhere warns and the text falls back. See [fonts](../libra
 
 ## Reading the tree back
 
-To see what the frontend made of a manuscript (which heading opened a section, where a construct degraded) dump the [content tree](../reference/content-tree.md) instead of laying it out:
+To see what the frontend made of a manuscript, which heading opened a section, or where a construct degraded, dump the [content tree](../reference/content-tree.md) instead of laying it out:
 
 ```sh
 fleuron manuscript.md --dump-tree
@@ -106,6 +108,6 @@ fleuron manuscript.md --dump-tree
 
 It goes to stdout, and the same manuscript dumps the same bytes every time.
 
-## What it tells you
+## What it prints
 
-The summary line goes to stderr, so `fleuron manuscript.md -o /dev/stdout` is still a PDF on stdout. Warnings follow it, one per line, and then a count. Exit codes are in [the reference](reference.md).
+The summary line goes to stderr, so `fleuron manuscript.md -o /dev/stdout` is still a PDF on stdout. Warnings follow it, one per line, and then a count. [The reference](reference.md) has the exit codes.

@@ -1,15 +1,15 @@
 ---
 title: Library quickstart
-description: Markdown plus stylesheets plus fonts, to a LayoutOutput, to PDF bytes.
+description: Read a manuscript, compile styling against it, lay it out, write the PDF.
 ---
 
-Four steps, in one direction: read a manuscript, compile styling against it, lay it out, write the PDF. The whole of it is below, and it is also `crates/fleuron/examples/quickstart.rs` in the repository, so it compiles and runs.
+Four steps, in one direction: read a manuscript, compile styling against it, lay it out, write the PDF. The program below does all four. It is also `crates/fleuron/examples/quickstart.rs`, so it compiles and runs.
 
 ```sh
 cargo run --example quickstart -p fleuron
 ```
 
-## The whole thing
+## The whole program
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -19,7 +19,7 @@ use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::Options;
 
 /// Resolves `@font-face` urls against one directory. The engine reads
-/// no paths of its own; this is the host half of that contract.
+/// no paths of its own, so the host supplies this half.
 struct Files(PathBuf);
 
 impl FontLoader for Files {
@@ -29,17 +29,17 @@ impl FontLoader for Files {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Content enters as markdown. The frontend reads one source into
-    // sections; assembly composes the sources into a book and numbers
-    // it in document order, which is what diagnostics point at.
+    // The frontend reads one source into sections. Assembly composes
+    // sources into a book and numbers the tree in document order,
+    // which is what diagnostics point at.
     let source = "gulliver-excerpt.md";
     let markdown = std::fs::read_to_string(Path::new("fixtures").join(source))?;
     let (sections, complaints) =
         fleuron_markdown::to_sections(&markdown, source, &Options::default());
     let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections);
 
-    // Styling enters as CSS. The built-in sheet is always first;
-    // author sheets cascade over it in the order given.
+    // The built-in sheet is always first. Author sheets cascade over
+    // it in the order given.
     let css = std::fs::read_to_string("fixtures/styled.css")?;
     let mut registry = bundled_registry()?;
     let mut sheets = Stylesheets::parse(&[Source::author("styled.css", &css)]);
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // The PDF is painted from the display list, not laid out again.
+    // The PDF is painted from the display list. Nothing lays out twice.
     let bytes = fleuron::pdf::write(&output, &registry, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());
@@ -63,36 +63,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Against the manuscript that ships with the repository, that prints `34 pages` and writes `book.pdf` into the working directory.
+Against the manuscript in the repository, that prints `34 pages` and writes `book.pdf` into the working directory.
 
-## What each step is for
+## What each call does
 
-**`to_sections` and `assemble`.** `fleuron-markdown` is the frontend: one source in, that source's sections and its diagnostics out. [The markdown mapping](../reference/markdown.md) is what it does with each construct, and `Options` is where the section policy and the dialect are named. Assembly is a step of its own because composing sources is the caller's decision, not the parser's: you order them and you decide the metadata. It also numbers the tree, in document order, which is what diagnostics point at.
+| call | |
+|---|---|
+| `to_sections` | Reads one markdown source into sections, plus that source's diagnostics. [The markdown mapping](../reference/markdown.md) covers what each construct becomes, and `Options` is where the section policy and the dialect are set. |
+| `frontmatter` | Reads the `---` block at the top of a source. |
+| `assemble` | Composes sections into a book and numbers the tree in document order. |
+| `bundled_registry` | EB Garamond, upright and italic, registered as the default serif. Everything else arrives through `@font-face`. See [fonts](fonts.md). |
+| `Stylesheets::parse` | Parses author sheets. The built-in user-agent sheet always goes first, so author CSS cascades over the defaults instead of replacing them. |
+| `load_fonts` | Hands each `@font-face` url to your `FontLoader`. This is the only step that reaches outside the engine. |
+| `compile` | Resolves the cascade against the book. |
+| `layout_book` | Style tree in, `LayoutOutput` out: pages of draw items, the font table those items index, and every warning the run collected. |
+| `pdf::write` | Paints the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs, so the embedded subset holds the outlines the shaper used. |
 
-**`frontmatter`.** The `---` block at the top of a source. This manuscript is one file, so the block describes the book and goes straight to assembly. A host composing a chapter per file passes its own `Metadata` instead, because sixty chapter files have sixty frontmatter blocks and none of them names the work; each file's own `title:` becomes its section's. [The markdown mapping](../reference/markdown.md) has the rest of it.
+Parsing, font loading and compiling are three calls rather than one because they have different lifetimes. Sheets parse once and style many books.
 
-**`frontmatter`.** The `---` block at the top of a source. This manuscript is one file, so the block describes the book and goes straight to assembly. A host composing a chapter per file builds its own `Metadata` and passes that instead, because sixty chapter files have sixty frontmatter blocks and none of them names the work; each file's own `title:` becomes its section's. [Several sources](../reference/markdown.md) is that loop.
+## Composing several files
 
-A host with a tree of its own, such as a CMS or a docx converter, can skip the frontend and hand the engine a `Book` directly; [the content tree reference](../reference/content-tree.md) is that schema.
+Assembly is a step of its own because ordering sources and choosing metadata are the caller's decisions, not the parser's.
 
-**`FontRegistry`.** `bundled_registry()` gives you EB Garamond, upright and italic, registered as the default serif. Everything else a stylesheet asks for arrives through `@font-face`. See [fonts](fonts.md).
+The manuscript above is a single file, so its frontmatter describes the book and goes straight to `assemble`. A host reading a chapter per file builds its own `Metadata` instead: sixty chapter files have sixty frontmatter blocks and none of them names the work. Each file's `title:` becomes its own section's. [The markdown mapping](../reference/markdown.md) has the loop.
 
-**`Stylesheets`.** Parsing, font loading and compiling are three calls rather than one because they have different lifetimes: sheets parse once and style many books, and font loading is the single step that reaches outside the engine. `Stylesheets::parse` always puts the built-in user-agent sheet first, so author CSS is a cascade over defaults rather than a replacement for them.
-
-**`layout_book`.** Style tree in, `LayoutOutput` out: pages of draw items, the font table those items index, and every warning the run collected.
-
-**`pdf::write`.** A painter over the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs, so the embedded subset holds the outlines the shaper actually used.
+A host whose source is already structured, such as a CMS or a docx converter, can skip the frontend and hand the engine a `Book` directly. [The content tree](../reference/content-tree.md) is that schema.
 
 ## Styling without an author sheet
 
-`Stylesheets::parse(&[])` compiles the built-in sheet alone, which is a trade paperback: 5.5×8.5 inches, EB Garamond at 11 points, justified, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
+`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 5.5×8.5 inches, EB Garamond at 11 points, justified, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
 
-Everything the built-in sheet can be overridden with is in [the CSS subset](../css-subset.mdx).
+[The CSS subset](../css-subset.mdx) is everything you can override it with.
 
 ## Laying out again
 
-`layout_book` rebuilds every stage on every call, which is what a program that renders one book and exits wants. A program that lays the same book out over and over, such as a preview beside an editor, wants a [session](sessions.md) instead. It remembers what each stage produced and re-runs only the ones an edit invalidates, so a change to the page margins costs fragmentation instead of another pass over every line.
+`layout_book` rebuilds every stage on every call, which is what a program that renders one book and exits wants. A program that lays the same book out over and over, such as a preview beside an editor, wants a [session](sessions.md) instead. A session remembers what each stage produced and re-runs only the ones an edit invalidates, so changing the page margins costs fragmentation instead of another pass over every line.
 
-## Where things go wrong
+## When things go wrong
 
-Nothing above panics on bad input. Unsupported CSS, an unresolvable font, and a stack that matches nothing are all warnings, and the run finishes. [Diagnostics](diagnostics.md) covers what warns and what fails.
+Nothing above panics on bad input. Unsupported CSS, an unresolvable font and a stack that matches nothing are all warnings, and the run finishes. [Diagnostics](diagnostics.md) covers what warns and what fails.
