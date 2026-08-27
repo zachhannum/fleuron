@@ -15,11 +15,12 @@ use selectors::parser::{ParseRelative, SelectorParseErrorKind};
 
 use crate::Warning;
 use crate::fonts::GenericFamily;
+use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     Break, Content, CounterStyle, Declaration, Edge, Family, FontStyle, Hyphens, Length,
-    LineHeight, MarginBox, StringPiece, StringSet, TextAlign,
+    LineHeight, MarginBox, StringPiece, StringSet, TextAlign, TextJustify,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -514,7 +515,9 @@ fn property<'i>(
         "font-weight" => one(Declaration::FontWeight(keyword_or(input, weight, bad)?)),
         "line-height" => one(Declaration::LineHeight(keyword_or(input, line_height, bad)?)),
         "text-align" => one(Declaration::TextAlign(keyword_or(input, text_align, bad)?)),
+        "text-justify" => one(Declaration::TextJustify(keyword_or(input, text_justify, bad)?)),
         "text-indent" => one(Declaration::TextIndent(keyword_or(input, length, bad)?)),
+        "hanging-punctuation" => one(Declaration::HangingPunctuation(keyword_or(input, hanging, bad)?)),
         "hyphens" => one(Declaration::Hyphens(keyword_or(input, hyphens, bad)?)),
         "orphans" => one(Declaration::Orphans(keyword_or(input, count, bad)?)),
         "widows" => one(Declaration::Widows(keyword_or(input, count, bad)?)),
@@ -570,6 +573,35 @@ fn text_align(input: &mut Parser<'_, '_>) -> Option<TextAlign> {
         "justify" => Some(TextAlign::Justify),
         _ => None,
     }
+}
+
+fn text_justify(input: &mut Parser<'_, '_>) -> Option<TextJustify> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "auto" | "inter-word" => Some(TextJustify::InterWord),
+        "inter-character" | "distribute" => Some(TextJustify::InterCharacter),
+        _ => None,
+    }
+}
+
+/// `hanging-punctuation: none | [ first || [ force-end | allow-end ]
+/// || last ]`. Written as a set, so the keywords are read until the
+/// declaration runs out.
+fn hanging(input: &mut Parser<'_, '_>) -> Option<HangingPunctuation> {
+    let mut hanging = HangingPunctuation::NONE;
+    let mut seen = false;
+    while let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        seen = true;
+        match_ignore_ascii_case! { &keyword,
+            "none" if hanging == HangingPunctuation::NONE => {},
+            "first" => hanging.first = true,
+            "force-end" => hanging.end = HangEnd::Force,
+            "allow-end" => hanging.end = HangEnd::Allow,
+            "last" => hanging.last = true,
+            _ => return None,
+        }
+    }
+    seen.then_some(hanging)
 }
 
 fn hyphens(input: &mut Parser<'_, '_>) -> Option<Hyphens> {

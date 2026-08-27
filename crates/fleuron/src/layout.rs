@@ -28,7 +28,7 @@ use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
     Align, Band, Break, ComputedStyle, Content, Hyphens, MarginBox, MarginBoxStyle, PageQuery,
-    PageStyle, Situation, StringPiece, StyleTree, TextAlign,
+    PageStyle, Situation, StringPiece, StyleTree, TextAlign, TextJustify,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -412,6 +412,8 @@ impl<'a> Paginator<'a> {
         };
         Some(Line {
             width: run.advance,
+            overhang: 0.0,
+            protrusion: 0.0,
             box_: self.lines.line_box(std::slice::from_ref(&run), style),
             runs: vec![run],
         })
@@ -426,13 +428,17 @@ impl<'a> Paginator<'a> {
             .unwrap_or(1000.0)
     }
 
-    /// A line's width in points. Runs of different sizes each convert
-    /// against their own face: font units do not commute across sizes.
+    /// A line's width in points, as the measure sees it. Runs of
+    /// different sizes each convert against their own face: font
+    /// units do not commute across sizes. What hangs into a margin
+    /// is not part of the width, which is the point of hanging it.
     fn line_width(&self, line: &Line) -> f32 {
         line.runs
             .iter()
             .map(|run| run.advance as f32 / self.upem(run.font_id) * run.size)
-            .sum()
+            .sum::<f32>()
+            - line.overhang
+            - line.protrusion
     }
 
     /// Records one diagnostic, once. A book that hits the same
@@ -655,6 +661,9 @@ impl Builder<'_, '_> {
         let style = computed.paragraph();
         let options = LineBreakOptions {
             hyphenate: computed.hyphens == Hyphens::Auto,
+            justify: computed.text_align == TextAlign::Justify,
+            inter_character: computed.text_justify == TextJustify::InterCharacter,
+            hanging: computed.hanging_punctuation,
         };
         let cap = self.paginator.drop_cap(id, &computed, inlines);
         let spec = match &cap {
@@ -726,6 +735,7 @@ impl Builder<'_, '_> {
                 BreakPoint::Allowed
             };
             let height = line.box_.height;
+            let protrusion = line.protrusion;
             let piece = Piece::Line {
                 line,
                 cap: (index == 0).then(|| cap.take()).flatten(),
@@ -733,7 +743,7 @@ impl Builder<'_, '_> {
             self.emit(
                 &mut first,
                 inner,
-                x + (measure - available) + offset,
+                x + (measure - available) + offset - protrusion,
                 height,
                 piece,
             );

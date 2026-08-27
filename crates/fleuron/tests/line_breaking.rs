@@ -35,6 +35,21 @@ fn inlines_of(text: &str) -> Vec<Inline> {
     }]
 }
 
+/// Justification on, everything else at its default.
+fn justified() -> LineBreakOptions {
+    LineBreakOptions {
+        justify: true,
+        ..Default::default()
+    }
+}
+
+/// A line with no space glyph on it is a single word: the one thing
+/// layout may set wider than the measure rather than drop.
+fn is_single_word(line: &Line) -> bool {
+    let space = registry().char_glyph(0, ' ').unwrap();
+    line.runs.len() == 1 && line.runs[0].glyphs.iter().all(|g| g.id != space)
+}
+
 fn width_pt(line: &Line) -> f32 {
     let upem = registry().metrics(0).unwrap().units_per_em;
     line.width as f32 / upem as f32 * body().size
@@ -56,13 +71,10 @@ proptest! {
             measure,
             LineBreakOptions::default(),
         );
-        let space_glyph = registry().char_glyph(0, ' ').unwrap();
         for (i, line) in lines.iter().enumerate() {
             let width = width_pt(line);
-            let is_single_word = line.runs.len() == 1
-                && line.runs[0].glyphs.iter().all(|g| g.id != space_glyph);
             prop_assert!(
-                width <= measure || is_single_word,
+                width <= measure || is_single_word(line),
                 "line {i} is {width}pt, measure {measure}pt"
             );
         }
@@ -124,6 +136,59 @@ proptest! {
         );
     }
 
+    /// No justified line exceeds the measure either. Justification
+    /// shrinks the glue as well as stretching it, so this is the
+    /// property that says the shrink is bounded.
+    #[test]
+    fn no_justified_line_exceeds_the_measure(text in text_strategy(), measure in 20.0f32..300.0) {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(&inlines_of(&text), body(), measure, justified());
+        for (i, line) in lines.iter().enumerate() {
+            let width = width_pt(line);
+            prop_assert!(
+                width <= measure + 0.01 || is_single_word(line),
+                "line {i} is {width}pt, measure {measure}pt"
+            );
+        }
+    }
+
+    /// Justified lines other than the last measure the measure
+    /// exactly, to within 0.01pt: the adjustment is spread over
+    /// integer font units, so a line can miss by half a unit, which
+    /// at 11pt over 1000 units to the em is 0.006pt.
+    ///
+    /// A line with nothing to stretch is exempt: a single word has no
+    /// glue, and the measure is not something it can be made to fill.
+    #[test]
+    fn justified_lines_hit_the_measure(text in text_strategy(), measure in 60.0f32..300.0) {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(&inlines_of(&text), body(), measure, justified());
+        if lines.len() < 2 {
+            return Ok(());
+        }
+        for (i, line) in lines[..lines.len() - 1].iter().enumerate() {
+            if is_single_word(line) {
+                continue;
+            }
+            let width = width_pt(line);
+            prop_assert!(
+                (width - measure).abs() < 0.01,
+                "justified line {i} is {width}pt, measure {measure}pt"
+            );
+        }
+    }
+
+    /// Justified layout is deterministic too: the adjustment is a
+    /// function of the line, not of anything the pass carries between
+    /// runs.
+    #[test]
+    fn justified_layout_is_deterministic(text in text_strategy(), measure in 20.0f32..300.0) {
+        let layout = LineLayout::new(registry());
+        let first = layout.layout(&inlines_of(&text), body(), measure, justified());
+        let second = layout.layout(&inlines_of(&text), body(), measure, justified());
+        prop_assert_eq!(first, second);
+    }
+
     /// Hyphenated layout fits the measure wherever a hyphenation
     /// point exists: a hyphenated break must charge for its hyphen.
     /// A word with no syllable break wider than the measure still
@@ -136,15 +201,15 @@ proptest! {
             &inlines_of(&text),
             body(),
             measure,
-            LineBreakOptions { hyphenate: true },
+            LineBreakOptions {
+                hyphenate: true,
+                ..Default::default()
+            },
         );
-        let space_glyph = registry().char_glyph(0, ' ').unwrap();
         for line in &lines {
             let width = width_pt(line);
-            let is_single_word = line.runs.len() == 1
-                && line.runs[0].glyphs.iter().all(|g| g.id != space_glyph);
             prop_assert!(
-                width <= measure || is_single_word,
+                width <= measure || is_single_word(line),
                 "hyphenated line is {width}pt over measure {measure}pt"
             );
         }

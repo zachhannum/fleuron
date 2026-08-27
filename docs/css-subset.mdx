@@ -35,8 +35,10 @@ Text, inherited:
 | `font-weight` | `normal`, `bold`, `1`–`1000` |
 | `line-height` | `normal`, `<number>`, `<length>`, `<percentage>` |
 | `text-align` | `left`, `right`, `center`, `justify`, `start`, `end` |
+| `text-justify` | `auto`, `inter-word`, `inter-character`, `distribute` |
 | `text-indent` | `<length>` |
 | `hyphens` | `none`, `manual`, `auto` |
+| `hanging-punctuation` | `none`, or any of `first`, `force-end`, `allow-end`, `last` |
 | `orphans`, `widows` | `<integer>` |
 | `page` | a page name, or `auto` |
 
@@ -55,6 +57,22 @@ Block box, not inherited:
 `recto` and `verso` are the book's names for `right` and `left`.
 
 Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`, and everything computes to points. `em` in `font-size` is a multiple of the parent's size and elsewhere of the element's own. `rem` is always a multiple of the root's.
+
+### Setting the measure
+
+Lines break by total fit over the whole paragraph: every set of breaks is costed by how far each line is from the measure, cubed, and the cheapest set wins. A word pulled up to fill one line at the cost of a hole in the next is not a bargain the paragraph takes.
+
+`text-align: justify` opens the space between words to reach the measure exactly, on every line but the last. `text-justify: inter-character` lets the space between letters give a little as well; by default it does not. Left, right and centred text break the same way and sit where the alignment puts them.
+
+`hyphens: auto` adds syllable boundaries to the breaks a line may take, each charged for the hyphen it leaves and for coming after another one. No more than two lines in a row end hyphenated.
+
+### Hanging punctuation
+
+`hanging-punctuation` lets a mark sit outside the measure so the edge of the text block reads straight: a full stop or a comma leaves a hole in the margin the eye sees as a ragged edge, and hanging it closes the hole.
+
+`first` hangs an opening quotation mark or bracket back into the margin the line starts at. `force-end` hangs a closing mark past the measure on every line; `allow-end` hangs one only where that is what makes the line fit. `last` hangs the mark a paragraph ends on.
+
+How far a mark hangs depends on the mark: most of a full stop or a comma, less of a colon, and none of a letter.
 
 ### Breaking
 

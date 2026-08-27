@@ -8,6 +8,7 @@
 use serde::Serialize;
 
 use crate::fonts::GenericFamily;
+use crate::lines::HangingPunctuation;
 use crate::pages::Side;
 
 /// A CSS length, before it knows what it is relative to.
@@ -69,6 +70,18 @@ pub enum TextAlign {
     Center,
     /// `justify`
     Justify,
+}
+
+/// What justification opens up to fill the measure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextJustify {
+    /// `auto`, and `inter-word` with it: the space between words is
+    /// the only thing that gives.
+    InterWord,
+    /// `inter-character`: the space between letters gives too, a
+    /// little.
+    InterCharacter,
 }
 
 /// Whether words may be broken at syllable boundaries.
@@ -447,7 +460,9 @@ pub enum Declaration {
     FontWeight(u16),
     LineHeight(LineHeight),
     TextAlign(TextAlign),
+    TextJustify(TextJustify),
     TextIndent(Length),
+    HangingPunctuation(HangingPunctuation),
     Hyphens(Hyphens),
     Orphans(u16),
     Widows(u16),
@@ -514,6 +529,10 @@ pub struct ComputedStyle {
     pub line_height: f32,
     /// How lines fill the measure.
     pub text_align: TextAlign,
+    /// What justification opens up to fill it.
+    pub text_justify: TextJustify,
+    /// Which marks may hang past the measure.
+    pub hanging_punctuation: HangingPunctuation,
     /// First-line indent in points.
     pub text_indent: f32,
     /// Whether words may break at syllable boundaries.
@@ -561,6 +580,8 @@ impl ComputedStyle {
             font_weight: 400,
             line_height: NORMAL_LINE_HEIGHT,
             text_align: TextAlign::Left,
+            text_justify: TextJustify::InterWord,
+            hanging_punctuation: HangingPunctuation::NONE,
             text_indent: 0.0,
             hyphens: Hyphens::None,
             orphans: 2,
@@ -608,6 +629,8 @@ impl ComputedStyle {
                 self.line_height = line_height.to_multiple(self.font_size, root_size)
             }
             Declaration::TextAlign(align) => self.text_align = *align,
+            Declaration::TextJustify(justify) => self.text_justify = *justify,
+            Declaration::HangingPunctuation(hanging) => self.hanging_punctuation = *hanging,
             Declaration::TextIndent(length) => {
                 self.text_indent = length.to_points(self.font_size, root_size)
             }

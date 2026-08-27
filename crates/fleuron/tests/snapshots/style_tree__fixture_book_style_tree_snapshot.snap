@@ -16,6 +16,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -45,6 +51,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -76,6 +88,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -113,6 +131,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -142,6 +166,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -171,6 +201,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -200,6 +236,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "center",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -231,6 +273,12 @@ expression: tree
       "font_weight": 400,
       "line_height": 1.4,
       "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
       "text_indent": 0.0,
       "hyphens": "none",
       "orphans": 2,
@@ -636,6 +684,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -691,6 +745,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -746,6 +806,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -801,6 +867,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -854,6 +926,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -907,6 +985,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -960,6 +1044,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -1015,6 +1105,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -1070,6 +1166,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,
@@ -1123,6 +1225,12 @@ expression: tree
               "font_weight": 400,
               "line_height": 1.4,
               "text_align": "left",
+              "text_justify": "inter_word",
+              "hanging_punctuation": {
+                "first": false,
+                "end": "none",
+                "last": false
+              },
               "text_indent": 0.0,
               "hyphens": "none",
               "orphans": 2,

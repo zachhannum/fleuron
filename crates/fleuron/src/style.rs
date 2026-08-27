@@ -34,6 +34,7 @@ use crate::pages::Side;
 pub use properties::{
     Align, Band, Break, ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle,
     Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet, TextAlign,
+    TextJustify,
 };
 pub use sheet::{Origin, Source};
 
@@ -777,6 +778,7 @@ mod tests {
     use super::*;
     use crate::content::{Block, HeadingLevel, Inline, Metadata, Section};
     use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
+    use crate::lines::{HangEnd, HangingPunctuation};
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -984,6 +986,7 @@ mod tests {
             "@media print { p { font-size: 30pt } }\n\
              p:hover { font-size: 40pt }\n\
              p { text-align: sideways }\n\
+             p { hanging-punctuation: sideways }\n\
              p { font-size: 15pt }\n",
         );
         let messages: Vec<&str> = tree
@@ -1001,6 +1004,10 @@ mod tests {
         );
         assert!(
             messages.contains(&"unsupported value for `text-align`"),
+            "{messages:?}"
+        );
+        assert!(
+            messages.contains(&"unsupported value for `hanging-punctuation`"),
             "{messages:?}"
         );
         assert!(
@@ -1259,6 +1266,34 @@ mod tests {
         assert_eq!(paragraph.hyphens, Hyphens::Auto);
         assert_eq!(paragraph.margin.left, 0.0);
         assert_eq!(first(&tree, "section").margin.left, 20.0);
+    }
+
+    /// `text-justify` and `hanging-punctuation` read as CSS writes
+    /// them: the first a keyword, the second a set of them in any
+    /// order.
+    #[test]
+    fn justification_and_hanging_marks_read_as_css_writes_them() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "book { text-justify: inter-character;\
+                    hanging-punctuation: last first allow-end }",
+        );
+        let paragraph = first(&tree, "p");
+        assert_eq!(paragraph.text_justify, TextJustify::InterCharacter);
+        assert_eq!(
+            paragraph.hanging_punctuation,
+            HangingPunctuation {
+                first: true,
+                end: HangEnd::Allow,
+                last: true,
+            },
+        );
+        let plain = compile(&book, "book { hanging-punctuation: none }");
+        assert_eq!(
+            first(&plain, "p").hanging_punctuation,
+            HangingPunctuation::NONE,
+        );
     }
 
     /// Generic families resolve through the registry's bindings, and
