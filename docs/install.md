@@ -1,11 +1,11 @@
 ---
 title: Install
-description: The three ways into fleuron, and what each one needs.
+description: How to install fleuron as a Rust library, a command-line binary, or an npm package.
 ---
 
-fleuron is not on crates.io yet, so every route below points at the repository. When it publishes, the git dependency becomes a version and nothing else here changes.
+fleuron is not on crates.io yet, so the Rust routes below point at the repository. When it publishes, the git dependency becomes a version and nothing else changes.
 
-Rust 1.85 or newer — the workspace is on the 2024 edition.
+You need Rust 1.85 or newer. The workspace is on the 2024 edition.
 
 ## As a Rust library
 
@@ -16,11 +16,11 @@ fleuron = { git = "https://github.com/zachhannum/fleuron" }
 fleuron-markdown = { git = "https://github.com/zachhannum/fleuron" }
 ```
 
-`fleuron-markdown` is the frontend: markdown in, sections out. Leave it out if your source is already structured and you build a `Book` yourself.
+`fleuron-markdown` reads markdown into sections. Leave it out if your source is already structured and you build a `Book` yourself.
 
-Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O of its own, and pulls in no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
+Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O, and links no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
 
-Go on to the [library quickstart](library/quickstart.md).
+Next: the [library quickstart](library/quickstart.md).
 
 ## As a command-line binary
 
@@ -28,27 +28,29 @@ Go on to the [library quickstart](library/quickstart.md).
 cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
 ```
 
-That puts a `fleuron` binary on your path. It reads markdown and writes a PDF; author stylesheets are supplied with repeatable `-c` flags.
+That puts a `fleuron` binary on your path. It reads markdown and writes a PDF. Author stylesheets go in through repeatable `-c` flags.
 
 ```sh
 fleuron manuscript.md -o book.pdf -c book.css
 ```
 
-Go on to the [CLI quickstart](cli/quickstart.mdx).
+Next: the [CLI quickstart](cli/quickstart.mdx).
 
-## As a WebAssembly module
+## As an npm package
 
 ```sh
 npm install @fleuron/wasm
 ```
 
-The module, a worker, a client, a reader for the display list and an SVG painter over it. Layout runs off the main thread and nothing in the package touches the DOM.
+You get the module, a worker, a client, a display-list reader and an SVG painter. Layout runs off the main thread and nothing in the package touches the DOM.
 
 ```sh
 npm install @fleuron/react
 ```
 
-The same preview as a React component, and nothing else. Go on to the [wasm quickstart](wasm/quickstart.md), or to [the demos](https://zachhannum.github.io/fleuron/demos/), which run this package in your browser.
+That is the same preview as a React component, and nothing else.
+
+Next: the [wasm quickstart](wasm/quickstart.md), or [the demos](https://zachhannum.github.io/fleuron/demos/), which run this package in your browser.
 
 ## Working on fleuron itself
 
@@ -58,7 +60,7 @@ cd fleuron
 cargo test --workspace
 ```
 
-The end-to-end test is fixture book in, valid PDF out, through the CLI. It wants `qpdf` and `pdftotext` (from poppler) on the path to validate the result; without them it skips the validation instead of failing.
+The end-to-end test runs the fixture book through the CLI and checks the PDF. It wants `qpdf` and `pdftotext` (from poppler) on the path. Without them it skips the validation instead of failing.
 
 The perf harness is a separate binary, and it reports against absolute ceilings rather than a stored baseline:
 

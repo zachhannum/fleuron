@@ -4,10 +4,10 @@ Paged-media layout in a worker: markdown and CSS in, a display list or
 PDF bytes out.
 
 [fleuron](https://zachhannum.github.io/fleuron/) is a layout engine for
-book-shaped documents (shaping, line breaking, hyphenation,
-fragmentation, page assembly) compiled to WebAssembly. It touches no
-DOM, opens no files and reads no clock. The preview and the export are
-painted from the same numbers, so they cannot disagree.
+book-shaped documents, compiled to WebAssembly. It shapes text, breaks
+and hyphenates lines, fragments the result into pages, and paints the
+preview and the PDF from the same numbers. It touches no DOM and opens
+no files.
 
 ```sh
 npm install @fleuron/wasm
@@ -29,8 +29,7 @@ preview.zoom = 1.5;
 `Preview` starts the worker, loads the module into it, keeps the
 session, fetches the fonts the book was set in, and paints a page as
 SVG. You never handle the encoded buffer, the worker messages or the
-display list yourself, though all three stay exported for a host that
-wants to assemble the same thing from the pieces.
+display list yourself, though all three stay exported.
 
 `@fleuron/react` is the same thing as a component, and holds no engine
 logic of its own.
@@ -66,10 +65,9 @@ if (output !== null) {
 }
 ```
 
-A `null` means the render was overtaken by a later one and there is
-nothing to paint. Every render raises a generation, the worker echoes
-it back, and a reply that arrives behind the current one is dropped
-rather than painted.
+`null` means a later render overtook this one, so there is nothing to
+paint. Every render raises a generation, the worker echoes it back, and
+a reply that arrives behind the current one is dropped.
 
 The package ships the worker in the shape above, so a host that wants
 no worker file of its own can point at `@fleuron/wasm/worker`.
@@ -90,8 +88,7 @@ A stylesheet that only moves the page box re-fragments over lines that
 are already broken. A keystroke in one chapter reparses that file and
 leaves every other section's lines alone. Font bytes cross once and
 stay registered. `client.stages` reports how many times each stage has
-run, which is how a host sees a cache serve where a clock would only
-see a fast machine.
+run, which shows when a cache served.
 
 ## Batch
 
@@ -113,24 +110,22 @@ for selection and copy-and-paste.
 `paintPage` draws one of them as SVG. Each run becomes one `<text>`
 carrying an x for every character in it, so the browser places the
 glyphs where the engine put them instead of working out positions of
-its own. `exportPdf` writes the same pages as PDF, which is why the
-two cannot come out different.
+its own. `exportPdf` writes the same pages as PDF.
 
 The bytes underneath are postcard with a version in front of them.
-`decodeDisplayList` is what the client reads them with, exported for a
-host that moves them around itself; nothing about using the package
-requires touching them.
+`decodeDisplayList` reads them, exported for a host that moves them
+around itself. Nothing about using the package requires touching them.
 
 ## What the host owns
 
-**Fonts.** The engine reads no paths. Fetch the bytes, send them once.
-`client.fontBytes(id)` hands back the file a face was registered from,
-which is how a painter draws with the bundled one.
+Fonts, because the engine reads no paths. Fetch the bytes and send them
+once. `client.fontBytes(id)` hands back the file a face was registered
+from, which is how a painter draws with the bundled one.
 
-**Images.** Layout never decodes an image; it places one from the size
-the host gives it, and the host draws the pixels.
+Images, because layout never decodes one. It places an image from the
+size the host gives it, and the host draws the pixels.
 
-**The thread.** A book-scale manuscript is hundreds of milliseconds of
-work, which is not time the main thread has.
+The thread, because a book-scale manuscript is hundreds of milliseconds
+of work.
 
 MIT or Apache-2.0.

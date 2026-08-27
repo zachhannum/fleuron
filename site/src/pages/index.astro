@@ -81,8 +81,9 @@ const description =
           <p class="eyebrow">CSS paged media, in Rust</p>
           <h1>A typesetting engine<br />for novels.</h1>
           <p class="lede">
-            fleuron takes a manuscript and produces a typeset book for beautiful, print-ready PDFs. 
-            It is built for markdown writing tools. Configure styling with CSS.
+            fleuron turns a manuscript into a typeset book and writes it out
+            as a print-ready PDF. Styling is CSS. It is built for markdown
+            writing tools.
           </p>
           <div class="cta">
             <a class="button primary" href={`${base}/install/`}>Get started</a>
@@ -90,8 +91,8 @@ const description =
           </div>
           <p class="claim">
             <em>Pride and Prejudice</em>, 333 pages, becomes a PDF in
-            287&nbsp;ms, and the book below is being set by the same engine,
-            here, rather than pictured.
+            287&nbsp;ms. The book below is being set by that same engine, in
+            this browser, right now.
           </p>
         </div>
       </section>
@@ -101,10 +102,10 @@ const description =
           <Playground demo="playground" />
           <p class="stage-note">
             <span class="f-mark" aria-hidden="true">&#10086;</span>
-            Chapter 1 of <em>Pride and Prejudice</em>, typeset in this browser
-            by the engine itself. Change the manuscript or the stylesheet and
-            the book is laid out again. The preview and the PDF are painted
-            from the same display list.
+            Chapter 1 of <em>Pride and Prejudice</em>. Change the manuscript
+            or the stylesheet and the book is laid out again. The preview and
+            the PDF are painted from the same display list, so they cannot
+            come out different.
           </p>
         </div>
       </section>
@@ -114,10 +115,10 @@ const description =
           <div>
             <h2>Paged media</h2>
             <p>
-              Styling is plain CSS. A built-in stylesheet sets the defaults,
-              and your stylesheet overrides whatever you want to change.
-              fleuron supports a <a
-                href={`${base}/css-subset/`}>subset of CSS</a>.
+              A built-in stylesheet sets the defaults and yours overrides
+              whatever you want to change. fleuron understands a <a
+                href={`${base}/css-subset/`}>subset of CSS</a>, and reports
+              what it does not.
             </p>
           </div>
           <div class="page-css">
@@ -175,12 +176,11 @@ const description =
           <!-- Inline tags stay mid-line: a newline touching one is dropped
                rather than collapsed to a space, which runs the words together. -->
           <p class="section-lede">
-            Markdown is the way in: <code>fleuron-markdown</code> reads a
-            manuscript into the content tree the engine lays out.
-            <code>fleuron</code> is the core library, pure Rust with no I/O.
-            <code>fleuron-cli</code> reads a manuscript and stylesheets and writes
-            a PDF. <code>fleuron-wasm</code> runs the same pipeline in a worker,
-            which is what the book above is set by.
+            <code>fleuron</code> is the engine, pure Rust with no I/O.
+            <code>fleuron-markdown</code> reads a manuscript into the content
+            tree it lays out. <code>fleuron-cli</code> takes a manuscript and
+            stylesheets and writes a PDF. <code>fleuron-wasm</code> runs the
+            same pipeline in a worker, and is what set the book above.
           </p>
           <Consumers />
         </div>

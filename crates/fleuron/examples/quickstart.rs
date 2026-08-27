@@ -10,7 +10,7 @@ use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::Options;
 
 /// Resolves `@font-face` urls against one directory. The engine reads
-/// no paths of its own; this is the host half of that contract.
+/// no paths of its own, so the host supplies this half.
 struct Files(PathBuf);
 
 impl FontLoader for Files {
@@ -20,17 +20,17 @@ impl FontLoader for Files {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Content enters as markdown. The frontend reads one source into
-    // sections; assembly composes the sources into a book and numbers
-    // it in document order, which is what diagnostics point at.
+    // The frontend reads one source into sections. Assembly composes
+    // sources into a book and numbers the tree in document order,
+    // which is what diagnostics point at.
     let source = "gulliver-excerpt.md";
     let markdown = std::fs::read_to_string(Path::new("fixtures").join(source))?;
     let (sections, complaints) =
         fleuron_markdown::to_sections(&markdown, source, &Options::default());
     let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections);
 
-    // Styling enters as CSS. The built-in sheet is always first;
-    // author sheets cascade over it in the order given.
+    // The built-in sheet is always first. Author sheets cascade over
+    // it in the order given.
     let css = std::fs::read_to_string("fixtures/styled.css")?;
     let mut registry = bundled_registry()?;
     let mut sheets = Stylesheets::parse(&[Source::author("styled.css", &css)]);
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // The PDF is painted from the display list, not laid out again.
+    // The PDF is painted from the display list. Nothing lays out twice.
     let bytes = fleuron::pdf::write(&output, &registry, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());

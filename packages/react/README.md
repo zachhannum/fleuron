@@ -20,9 +20,9 @@ render the reader has already typed past paints nothing.
 `onMount` hands back the preview itself, for the page count, the
 warnings and the PDF export.
 
-There is no engine logic in here. Everything this package does is hand
-`@fleuron/wasm`'s `Preview` an element and pass props along to it.
-React stays out of the binding package, and deleting this one leaves a
-preview a plain page can still mount.
+There is no engine logic in here. This package hands `@fleuron/wasm`'s
+`Preview` an element and passes props along to it. React stays out of
+the binding package, and deleting this one leaves a preview a plain
+page can still mount.
 
 MIT or Apache-2.0.

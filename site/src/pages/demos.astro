@@ -14,27 +14,26 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
   }}
 >
   <p>
-    fleuron makes two claims: that a book paginates in hundreds of
-    milliseconds, and that the preview is exactly the export. Both are
-    checkable on your own machine, so they are checked here rather than
-    quoted from someone else's laptop.
+    fleuron claims a book paginates in hundreds of milliseconds, and that
+    the preview matches the export. You can check both on your own machine,
+    so check them here.
   </p>
 
   <p>
     Everything below runs the real engine, compiled to WebAssembly, in a
-    worker. The worker holds the module and has never seen an element; the
-    page holds the DOM and has never seen the engine. What crosses between
-    them is a display list, and the SVG on screen is painted from it.
+    worker. The worker holds the module and never touches an element. The
+    page holds the DOM and never sees the engine. What crosses between them
+    is a display list, and the SVG on screen is painted from it.
   </p>
 
   <h2>The playground</h2>
 
   <p>
     A chapter of <em>Pride and Prejudice</em> and the stylesheet that sets it.
-    Change either and the book is laid out again, a fifth of a second after you
-    stop typing. The stylesheet editor can be closed from the settings; what
-    you end up with is in the URL, so a question about the CSS subset can be a
-    link.
+    Change either and the book is laid out again, a fifth of a second after
+    you stop typing. You can close the stylesheet editor from the settings.
+    What you end up with is in the URL, so a question about the CSS subset
+    can be a link.
   </p>
 
   <div class="demo-frame">
@@ -45,9 +44,9 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
 
   <p>
     <em>Pride and Prejudice</em> entire, fetched and laid out here. Each row
-    says which stages the engine ran for it, taken from its own counters, so a
-    row that reused a stage cannot pass itself off as a row that ran one. The
-    machine is named because a number without one is marketing.
+    says which stages the engine ran for it, taken from the engine's own
+    counters, so you can tell a reused stage from one that ran. The machine
+    is named, because a timing without one tells you nothing.
   </p>
 
   <div class="demo-frame">
@@ -70,12 +69,12 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
   <h2>What this costs</h2>
 
   <p>
-    The module weighs about 3.7&nbsp;MB over the wire, because it carries its
-    own text face, its own hyphenation patterns and its own segmentation data:
+    The module weighs about 3.7&nbsp;MB over the wire. It carries its own text
+    face, its own hyphenation patterns and its own segmentation data, since
     the engine reads no files and asks its host for nothing. Nothing on this
-    page fetches it until a demo scrolls into view, no other page on this site
-    fetches it at all, and a browser that says the connection is metered is
-    asked before anything is spent.
+    page fetches it until a demo scrolls into view, and no other page on this
+    site fetches it at all. If the browser reports a metered connection, you
+    are asked first.
   </p>
 </StarlightPage>
 

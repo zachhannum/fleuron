@@ -24,16 +24,15 @@ const shell = `cargo install --git https://github.com/zachhannum/fleuron fleuron
 fleuron manuscript.md -o book.pdf -c book.css
 # fleuron: manuscript.md → book.pdf: 333 pages`;
 
-const ts = `// Not shipped yet: the bindings land with the WASM milestone.
-const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), {
-  type: 'module',
-});
+const ts = `import { Preview } from '@fleuron/wasm';
 
-worker.postMessage({ book, css, fonts }, [book.buffer]);
-worker.onmessage = ({ data }) => {
-  // One transferable ArrayBuffer: the postcard display list.
-  paint(decodeDisplayList(data));
-};`;
+// Starts the worker, loads the module, keeps the session.
+const preview = await Preview.mount(document.querySelector('#book'));
+await preview.setStyle(css);
+await preview.setMarkdown(markdown);
+
+preview.page = 12;
+const pdf = await preview.exportPdf();`;
 
 const codeTheme = 'github-dark-default';
 ---
