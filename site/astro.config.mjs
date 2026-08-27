@@ -72,6 +72,7 @@ export default defineConfig({
           label: 'WebAssembly',
           items: [
             { label: 'Quickstart', link: '/wasm/quickstart/' },
+            { label: 'The preview', link: '/wasm/preview/' },
             { label: 'The wire', link: '/wasm/wire/' },
           ],
         },

@@ -13,21 +13,45 @@ painted from the same numbers, so they cannot disagree.
 npm install @fleuron/wasm
 ```
 
+## On screen
+
+```js
+import { Preview } from '@fleuron/wasm';
+
+const preview = await Preview.mount(document.querySelector('#book'));
+await preview.setStyle(css);
+await preview.setMarkdown(markdown);
+
+preview.page = 12;
+preview.zoom = 1.5;
+```
+
+`Preview` opens the worker, loads the module, keeps the session behind
+it, loads the faces the run drew with, and paints a page as SVG. The
+buffer, the protocol and the display list are what it is built out of
+rather than what it asks a caller to hold — all of them stay exported
+for a host that wants the pieces.
+
+`@fleuron/react` is the same thing as a component, and holds no engine
+logic of its own.
+
 ## In a worker
 
 ```js
 // fleuron.worker.js
 import { createEngine } from '@fleuron/wasm';
 
-const engine = await createEngine();
+const engine = createEngine();
 self.onmessage = ({ data }) => {
-  engine.submit(data, (response, transfer) => self.postMessage(response, transfer));
+  void engine.then((ready) =>
+    ready.submit(data, (response, transfer) => self.postMessage(response, transfer)),
+  );
 };
 ```
 
 ```js
 // the host
-import { Client } from '@fleuron/wasm';
+import { Client, paintPage } from '@fleuron/wasm';
 
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), { type: 'module' });
 const client = new Client({ post: (request, transfer) => worker.postMessage(request, transfer) });
@@ -38,8 +62,7 @@ const output = await client.preview([
   { op: 'style', css },
 ]);
 if (output !== null) {
-  // your painter: the package has none yet
-  draw(output.pages);
+  element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts });
 }
 ```
 
@@ -87,9 +110,10 @@ points, origin top left. Each text run carries the string it was shaped
 from and each glyph a byte range into it, which is what a painter needs
 for selection and copy-and-paste.
 
-Drawing those pages is a painter's job, and this package ships no
-preview painter yet. `exportPdf` returns PDF bytes from the same stages
-the preview used, which is the one painter there is.
+`paintPage` draws one of them as SVG: one `<text>` per run with an x
+for every character, so the browser positions rather than shapes.
+`exportPdf` returns PDF bytes from the same stages, which is why the
+two cannot disagree.
 
 The bytes underneath are postcard with a version in front of them.
 `decodeDisplayList` is what the client reads them with, exported for a
@@ -99,6 +123,8 @@ requires touching them.
 ## What the host owns
 
 **Fonts.** The engine reads no paths. Fetch the bytes, send them once.
+`client.fontBytes(id)` hands back the file a face was registered from,
+which is how a painter draws with the bundled one.
 
 **Images.** Layout never decodes an image; it places one from the size
 the host gives it, and the host draws the pixels.
