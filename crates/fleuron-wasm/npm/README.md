@@ -38,7 +38,8 @@ const output = await client.preview([
   { op: 'style', css },
 ]);
 if (output !== null) {
-  paint(output.pages);
+  // your painter: the package has none yet
+  draw(output.pages);
 }
 ```
 
@@ -72,21 +73,28 @@ see a fast machine.
 ## Batch
 
 ```js
-import { initWasm, render } from '@fleuron/wasm';
+import { decodeDisplayList, initWasm, render, renderPdf } from '@fleuron/wasm';
 
 await initWasm();
 const output = decodeDisplayList(render(markdown, css));
+const pdf = renderPdf(markdown, css);
 ```
 
 ## The display list
 
-`decodeDisplayList` reads what the engine wrote: pages of text runs,
-rules and images, in points, origin top left. Each text run carries the
-string it was shaped from and each glyph a byte range into it, which is
-what a painter needs for selection and copy-and-paste. A version leads
-every buffer and a mismatch is refused rather than read.
+`client.preview` hands back pages of text runs, rules and images, in
+points, origin top left. Each text run carries the string it was shaped
+from and each glyph a byte range into it, which is what a painter needs
+for selection and copy-and-paste.
 
-`exportPdf` returns PDF bytes from the same stages the preview used.
+Drawing those pages is a painter's job, and this package ships no
+preview painter yet. `exportPdf` returns PDF bytes from the same stages
+the preview used, which is the one painter there is.
+
+The bytes underneath are postcard with a version in front of them.
+`decodeDisplayList` is what the client reads them with, exported for a
+host that moves them around itself; nothing about using the package
+requires touching them.
 
 ## What the host owns
 

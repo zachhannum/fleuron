@@ -43,7 +43,8 @@ const output = await client.preview([
   { op: 'style', css },
 ]);
 if (output !== null) {
-  paint(output.pages);
+  // your painter: the package has none yet
+  draw(output.pages);
 }
 ```
 
@@ -75,22 +76,11 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `dialect` | `commonmark`, `gfm` or `obsidian` |
 | `split` | the heading level a section begins at, or `0` for one section per file |
 
-## Painting
+## What comes back
 
-`client.preview` hands back a decoded display list: pages of text runs, rules and images in points, origin top left. [The display-list reference](../reference/display-list.md) is the structure, and it is the same one the PDF writer paints from.
+`client.preview` hands back a display list: pages of text runs, rules and images, in points, origin top left. [The display-list reference](../reference/display-list.md) is the structure. The postcard encoding underneath it is the client's business rather than a caller's, and [the wire](wire.md) is where it is written down.
 
-```js
-for (const item of page.items) {
-  if (item.kind === 'text') {
-    const face = output.fonts[item.fontId];
-    for (const glyph of item.glyphs) {
-      drawGlyph(face, glyph.id, glyph.x, item.y, item.size);
-    }
-  }
-}
-```
-
-Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
+Turning those pages into pixels is a painter's job, and the package ships no preview painter yet. The one painter that exists is the PDF writer, on `exportPdf` below. A screen preview means walking the pages and drawing them for now.
 
 ## Exporting
 
