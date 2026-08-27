@@ -62,7 +62,8 @@ CSS ───────────────────────┘    
 - **`fleuron-cli`** — `fleuron` binary: markdown in, PDF out.
   Batch-friendly.
 - **`fleuron-wasm`** — WASM bindings: layout in a worker, display list and
-  PDF bytes out, zero DOM access.
+  PDF bytes out, zero DOM access. Ships as `@fleuron/wasm`, with the
+  worker protocol and the display-list reader in TypeScript beside it.
 
 The content tree stays public for a host with a structured source of
 its own, such as a CMS or a docx converter, but markdown is the way in.
