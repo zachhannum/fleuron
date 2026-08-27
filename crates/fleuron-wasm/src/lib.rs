@@ -166,6 +166,23 @@ impl Session {
             .set_style(Stylesheets::parse(&[Source::author("author.css", css)]));
     }
 
+    /// The file a face was registered from, for a painter that has
+    /// to draw with the bytes the engine shaped with.
+    ///
+    /// The bundled face is the case that needs this: it is inside
+    /// the module and there is no URL a host could fetch it from.
+    /// A variable file answers for every cut it named, so the same
+    /// bytes come back for each of them, and the face's variations
+    /// on the display list say which instance to draw.
+    #[wasm_bindgen(js_name = fontBytes)]
+    pub fn font_bytes(&self, font_id: u16) -> Result<Vec<u8>, JsError> {
+        self.engine
+            .fonts()
+            .bytes(font_id)
+            .map(|bytes| bytes.to_vec())
+            .ok_or_else(|| JsError::new(&format!("no face is registered as font {font_id}")))
+    }
+
     /// The display list, postcard-encoded, version first.
     pub fn preview(&mut self) -> Result<Vec<u8>, JsError> {
         wire::encode(self.engine.preview()).map_err(js_error)

@@ -364,6 +364,15 @@ impl<'a> Session<'a> {
         &self.styles
     }
 
+    /// The faces this session lays out against.
+    ///
+    /// A painter that has to draw with the same file the shaper used
+    /// reaches the bytes through here; the display list carries ids,
+    /// and the registry is what they index.
+    pub fn fonts(&self) -> &FontRegistry {
+        self.registry.get()
+    }
+
     /// How many times each stage has run.
     pub fn stages(&self) -> Stages {
         self.stages

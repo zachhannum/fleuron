@@ -90,12 +90,32 @@ impl FaceAttributes {
 /// A face at its family's default location carries none — there is
 /// nothing to pin, and an instanced subset of the default is just
 /// the default.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AxisSetting {
     /// The four-byte OpenType axis tag, e.g. `wght`.
+    #[serde(with = "tag")]
     pub tag: [u8; 4],
     /// The coordinate in the axis's own units.
     pub value: f32,
+}
+
+/// An axis tag as the four characters it is written as, rather than
+/// the four numbers it is stored as. A painter passes it straight to
+/// `font-variation-settings`.
+mod tag {
+    use serde::de::{Error, Unexpected};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(tag: &[u8; 4], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&String::from_utf8_lossy(tag))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 4], D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.as_bytes()
+            .try_into()
+            .map_err(|_| D::Error::invalid_value(Unexpected::Str(&text), &"four bytes"))
+    }
 }
 
 /// The face a request for a family, slope and weight resolved to,
@@ -170,6 +190,12 @@ pub struct FontRefEntry {
     pub style: String,
     /// The slope and weight this face answers for.
     pub attributes: FaceAttributes,
+    /// Where on its file's axes this face sits, in user space. Empty
+    /// for a static face and for a variable one at its default
+    /// location. A painter that instances the file itself pins these
+    /// axes, and draws the cut the run was shaped at rather than the
+    /// file's default.
+    pub variations: Vec<AxisSetting>,
 }
 
 /// Font metrics in font units.
@@ -204,11 +230,9 @@ struct Face {
     /// Decoded once, at registration; the shaper reads through this.
     shaper_data: Arc<ShaperData>,
     /// Where on the file's axes this face sits, normalized. Default
-    /// for a static file.
+    /// for a static file. The same location in user space travels on
+    /// the identity, for painters that instance the file themselves.
     location: Location,
-    /// The same location in user space, for painters that instance
-    /// the file themselves. Empty at the default location.
-    variations: Vec<AxisSetting>,
     /// The shaper's view of `location`; `None` at the default, where
     /// there is nothing to vary.
     instance: Option<ShaperInstance>,
@@ -263,11 +287,11 @@ impl FontRegistry {
                     name: cut.name,
                     style: cut.style,
                     attributes: cut.attributes,
+                    variations: cut.variations,
                 },
                 metrics: read_metrics(&font, &cut.location),
                 shaper_data: shaper_data.clone(),
                 location: cut.location,
-                variations: cut.variations,
                 instance,
             });
             ids.push(id);
@@ -358,7 +382,7 @@ impl FontRegistry {
     pub fn variations(&self, id: u16) -> Option<&[AxisSetting]> {
         self.faces
             .get(id as usize)
-            .map(|face| face.variations.as_slice())
+            .map(|face| face.identity.variations.as_slice())
     }
 
     /// Advance width of one glyph, in font units.

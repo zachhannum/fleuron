@@ -20,7 +20,7 @@ use crate::LayoutOutput;
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 /// Why a buffer could not be read as a display list.
 #[derive(Debug, thiserror::Error)]
@@ -61,7 +61,7 @@ pub fn version(bytes: &[u8]) -> Result<u16, WireError> {
 mod tests {
     use super::*;
     use crate::Warning;
-    use crate::fonts::{FaceAttributes, FontRefEntry};
+    use crate::fonts::{AxisSetting, FaceAttributes, FontRefEntry};
     use crate::pages::{DrawItem, Glyph, Page, Side};
 
     fn output() -> LayoutOutput {
@@ -104,6 +104,10 @@ mod tests {
                 name: "EB Garamond Regular".into(),
                 style: "Regular".into(),
                 attributes: FaceAttributes::REGULAR,
+                variations: vec![AxisSetting {
+                    tag: *b"wght",
+                    value: 400.0,
+                }],
             }],
             warnings: vec![Warning {
                 message: "a table became prose".into(),
