@@ -128,7 +128,7 @@ A page the flow put nothing on paints no margin boxes at all, so a blank leaf is
 }
 ```
 
-`src` urls mean whatever the host says they mean. The engine hands each one to the loader it was given and reads no path of its own. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
+The engine never resolves a `src` url. It hands each one to the loader it was given, exactly as the sheet wrote it, and reads no path of its own. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
 
 `font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. Nothing is synthesised. [Fonts](library/fonts.md) has the whole of the matching rules and what variable files do.
 

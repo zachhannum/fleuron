@@ -7,8 +7,9 @@
 //! file is held as it arrived and decoded by nothing until a painter
 //! asks for the pixels.
 //!
-//! The engine opens nothing itself, as with fonts: a url means
-//! whatever the host says it means.
+//! The engine opens nothing itself, as with fonts. It never parses
+//! an image url or resolves it against anything: the url is a key it
+//! matches on, and turning that key into bytes is the host's.
 
 use std::collections::BTreeSet;
 

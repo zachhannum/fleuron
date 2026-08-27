@@ -47,9 +47,10 @@ pub const USER_AGENT_CSS: &str = include_str!("style/ua.css");
 
 /// Resolves `@font-face` sources to font bytes.
 ///
-/// The engine reads no paths of its own: a url means whatever the
-/// host says it means, and a host that resolves nothing is a host
-/// with no author fonts.
+/// The engine reads no paths of its own. It never parses a `src` url
+/// or resolves it against anything: the url is handed over as
+/// written, and a host that resolves nothing is a host with no author
+/// fonts.
 pub trait FontLoader {
     /// The bytes behind one `src` url, or `None` when the host cannot
     /// resolve it.

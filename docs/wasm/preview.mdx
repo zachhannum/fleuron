@@ -25,9 +25,9 @@ preview.zoom = 1.5;
 `![a map](images/lilliput.jpg)` in a manuscript is a url and nothing else. Nothing in the package will go and fetch it, so fetch it yourself and hand over what comes back:
 
 ```js
-// A manuscript's urls mean whatever the host says they mean. This
-// one serves them from a directory; another might read a database,
-// or an editor's unsaved buffer.
+// The engine never resolves a url; it matches the string the
+// manuscript wrote. This host reads them from a directory, another
+// might read a database or an editor's unsaved buffer.
 async function load(url) {
   const file = await fetch(`/manuscript/${url}`);
   return new Uint8Array(await file.arrayBuffer());
