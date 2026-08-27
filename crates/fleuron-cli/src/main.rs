@@ -20,11 +20,16 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
   -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
+  -m, --metadata <path> the book's title and author, for a book that is
+                       several files and so has no one file to read them
+                       from
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 
-Markdown files compose in the order given. A single .json file is read
-as a content tree instead, which is the same document one stage later.";
+Markdown files compose in the order given. One markdown file is a whole
+book, so its frontmatter is the book's; several are chapters, and each
+file's frontmatter is its own. A single .json file is read as a content
+tree instead, which is the same document one stage later.";
 
 fn main() -> ExitCode {
     dispatch(std::env::args().skip(1)).code()
@@ -58,6 +63,9 @@ enum Command {
         inputs: Vec<PathBuf>,
         output: PathBuf,
         css: Vec<PathBuf>,
+        /// Where the book's own metadata comes from, when no single
+        /// input file speaks for the whole book.
+        metadata: Option<PathBuf>,
         /// How the markdown frontend reads each file.
         reading: Options,
     },
@@ -79,8 +87,9 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
             inputs,
             output,
             css,
+            metadata,
             reading,
-        }) => match render(&inputs, &output, &css, &reading) {
+        }) => match render(&inputs, &output, &css, metadata.as_deref(), &reading) {
             Ok(summary) => summary.report(&inputs, &output),
             Err(e) => {
                 eprintln!("fleuron: {e:#}");
@@ -98,6 +107,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     let mut inputs: Vec<PathBuf> = Vec::new();
     let mut output: Option<PathBuf> = None;
     let mut css: Vec<PathBuf> = Vec::new();
+    let mut metadata: Option<PathBuf> = None;
     let mut reading = Options::default();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -107,6 +117,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
             "-h" | "--help" => return Ok(Command::Help),
             "-o" | "--output" => output = Some(PathBuf::from(value()?)),
             "-c" | "--css" => css.push(PathBuf::from(value()?)),
+            "-m" | "--metadata" => metadata = Some(PathBuf::from(value()?)),
             "-s" | "--split" => reading.sections = split(&value()?)?,
             "-d" | "--dialect" => reading.dialect = dialect(&value()?)?,
             flag if flag.starts_with('-') && flag.len() > 1 => bail!("unknown option {flag}"),
@@ -125,6 +136,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
         inputs,
         output: output.ok_or_else(|| anyhow!("no output path"))?,
         css,
+        metadata,
         reading,
     })
 }
@@ -211,10 +223,11 @@ fn render(
     inputs: &[PathBuf],
     output: &Path,
     css: &[PathBuf],
+    metadata: Option<&Path>,
     reading: &Options,
 ) -> Result<Summary> {
     let mut registry = fleuron::fonts::bundled_registry().context("bundled font failed to load")?;
-    let (book, mut warnings) = read_book(inputs, reading)?;
+    let (book, mut warnings) = read_book(inputs, metadata, reading)?;
 
     let sheets = read_sheets(css)?;
     let sources: Vec<Source> = sheets
@@ -294,30 +307,49 @@ impl ImageLoader for Files {
 
 /// Reads the inputs into one book, with whatever the reading had to
 /// complain about.
-fn read_book(inputs: &[PathBuf], reading: &Options) -> Result<(Book, Vec<Warning>)> {
+///
+/// Book metadata is the file `--metadata` names. Without one, a lone
+/// markdown input is the whole book and its frontmatter is the book's.
+/// Several inputs are chapters: each file's frontmatter belongs to the
+/// section it became, and the book is left unnamed rather than named
+/// after whichever chapter happened to come first.
+fn read_book(
+    inputs: &[PathBuf],
+    metadata: Option<&Path>,
+    reading: &Options,
+) -> Result<(Book, Vec<Warning>)> {
     if let [tree] = inputs
         && kind(tree) == Some(Input::Tree)
     {
         return Ok((read_tree(tree)?, Vec::new()));
     }
 
-    let mut metadata = Metadata::default();
-    let mut sections = Vec::new();
-    let mut warnings = Vec::new();
+    let mut sources = Vec::with_capacity(inputs.len());
     for input in inputs {
         if kind(input) != Some(Input::Markdown) {
             bail!("{}: not markdown or a content tree", input.display());
         }
-        let source = input.display().to_string();
         let text =
             std::fs::read_to_string(input).with_context(|| format!("{}", input.display()))?;
-        fleuron_markdown::merge_metadata(
-            &mut metadata,
-            fleuron_markdown::frontmatter(&text),
-            &source,
-            &mut warnings,
-        );
-        let (read, complaints) = fleuron_markdown::to_sections(&text, &source, reading);
+        sources.push((input.display().to_string(), text));
+    }
+
+    let metadata = match metadata {
+        Some(path) => {
+            let text =
+                std::fs::read_to_string(path).with_context(|| format!("{}", path.display()))?;
+            fleuron_markdown::metadata(&text)
+        }
+        None => match sources.as_slice() {
+            [(_, text)] => fleuron_markdown::frontmatter(text),
+            _ => Metadata::default(),
+        },
+    };
+
+    let mut sections = Vec::new();
+    let mut warnings = Vec::new();
+    for (source, text) in &sources {
+        let (read, complaints) = fleuron_markdown::to_sections(text, source, reading);
         sections.extend(read);
         warnings.extend(complaints);
     }
@@ -356,6 +388,7 @@ mod tests {
                 inputs: vec![PathBuf::from("manuscript.md")],
                 output: PathBuf::from("out.pdf"),
                 css: Vec::new(),
+                metadata: None,
                 reading: Options::default(),
             },
         );
@@ -365,6 +398,7 @@ mod tests {
                 inputs: vec![PathBuf::from("book.json")],
                 output: PathBuf::from("out.pdf"),
                 css: Vec::new(),
+                metadata: None,
                 reading: Options::default(),
             },
         );
@@ -375,6 +409,7 @@ mod tests {
                 inputs: vec![PathBuf::from("a.md")],
                 output: PathBuf::from("out.pdf"),
                 css: vec![PathBuf::from("a.css"), PathBuf::from("b.css")],
+                metadata: None,
                 reading: Options::default(),
             },
         );
@@ -431,6 +466,54 @@ mod tests {
         }
     }
 
+    /// One file is a book and speaks for itself; several are chapters
+    /// and do not.
+    #[test]
+    fn book_metadata_comes_from_one_file_or_from_the_flag() {
+        let dir = std::env::temp_dir().join("fleuron-cli-metadata");
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let chapter = |name: &str, title: &str| {
+            let path = dir.join(name);
+            std::fs::write(
+                &path,
+                format!("---\ntitle: {title}\n---\n\n{title} opens here.\n"),
+            )
+            .expect("the chapter is writable");
+            path
+        };
+        let one = chapter("meta-ch01.md", "The Ambassador");
+        let two = chapter("meta-ch02.md", "A Cold Reception");
+        let whole = Options {
+            sections: Sections::Whole,
+            ..Options::default()
+        };
+
+        // One file: its frontmatter is the book's.
+        let (book, _) = read_book(std::slice::from_ref(&one), None, &whole).unwrap();
+        assert_eq!(book.metadata.title.as_deref(), Some("The Ambassador"));
+
+        // Several: the book is unnamed, and each chapter keeps its own
+        // title rather than lending it to the work.
+        let (book, _) = read_book(&[one.clone(), two.clone()], None, &whole).unwrap();
+        assert_eq!(book.metadata.title, None);
+        let chapters: Vec<Option<&str>> = book
+            .sections
+            .iter()
+            .map(|section| section.title.as_deref())
+            .collect();
+        assert_eq!(chapters, [Some("The Ambassador"), Some("A Cold Reception")]);
+
+        // Named explicitly, the work has a title and the chapters keep
+        // theirs.
+        let book_file = dir.join("meta-book.yaml");
+        std::fs::write(&book_file, "title: The Levant Papers\nauthor: E. Marsh\n")
+            .expect("the book file is writable");
+        let (book, _) = read_book(&[one, two], Some(&book_file), &whole).unwrap();
+        assert_eq!(book.metadata.title.as_deref(), Some("The Levant Papers"));
+        assert_eq!(book.metadata.author.as_deref(), Some("E. Marsh"));
+        assert_eq!(book.sections[0].title.as_deref(), Some("The Ambassador"));
+    }
+
     #[test]
     fn version_and_help_are_commands_of_their_own() {
         for flag in ["-V", "--version"] {
@@ -447,7 +530,7 @@ mod tests {
     #[test]
     fn a_missing_file_is_an_error_not_a_panic() {
         let missing = [PathBuf::from("no/such/book.md")];
-        let e = read_book(&missing, &Options::default()).unwrap_err();
+        let e = read_book(&missing, None, &Options::default()).unwrap_err();
         assert!(format!("{e:#}").contains("no/such/book.md"), "{e:#}");
     }
 
@@ -456,7 +539,7 @@ mod tests {
         let e = parse_tree("{ not a content tree", Path::new("book.json")).unwrap_err();
         assert!(format!("{e:#}").contains("book.json"), "{e:#}");
         assert!(parse_tree("[]", Path::new("book.json")).is_err());
-        let e = read_book(&[PathBuf::from("notes.txt")], &Options::default()).unwrap_err();
+        let e = read_book(&[PathBuf::from("notes.txt")], None, &Options::default()).unwrap_err();
         assert!(format!("{e:#}").contains("notes.txt"), "{e:#}");
     }
 

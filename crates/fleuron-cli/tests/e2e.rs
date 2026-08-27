@@ -447,7 +447,7 @@ fn a_markdown_manuscript_renders_without_a_json_step() {
 fn several_markdown_files_compose_in_argument_order() {
     let first = write_source(
         "compose-one",
-        "---\ntitle: A Composed Book\n---\n\n# Chapter One\n\nThe first chapter.\n",
+        "---\ntitle: The Ambassador\n---\n\n# Chapter One\n\nThe first chapter.\n",
     );
     let second = write_source(
         "compose-two",
@@ -485,6 +485,47 @@ fn several_markdown_files_compose_in_argument_order() {
     );
 }
 
+/// A chapter's frontmatter is the chapter's. The book is named by the
+/// file `-m` points at, not by whichever chapter came first.
+#[test]
+fn a_multi_file_book_takes_its_metadata_from_the_book_file() {
+    let first = write_source(
+        "meta-one",
+        "---\ntitle: The Ambassador\nstatus: draft\n---\n\nHe arrived on a Tuesday.\n",
+    );
+    let second = write_source(
+        "meta-two",
+        "---\ntitle: A Cold Reception\nstatus: revised\n---\n\nNobody met him at the gate.\n",
+    );
+
+    // No book file: nothing is promoted to the book, and nothing warns
+    // about two chapters disagreeing over a title neither was claiming.
+    let (pdf, stderr) = run_with("unnamed", &[&first, &second], &[], &["-s", "none"]);
+    assert!(!stderr.contains("warning"), "{stderr}");
+    if let Some(info) = pdf_info(&pdf) {
+        assert!(
+            !info.contains("The Ambassador"),
+            "a chapter named the book:\n{info}",
+        );
+    }
+
+    let book = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("meta-book.yaml");
+    std::fs::write(&book, "title: The Levant Papers\nauthor: E. Marsh\n")
+        .expect("the book file is writable");
+    let (pdf, stderr) = run_with(
+        "named",
+        &[&first, &second],
+        &[],
+        &["-s", "none", "-m", book.to_str().expect("a utf-8 path")],
+    );
+    assert!(!stderr.contains("warning"), "{stderr}");
+    let Some(info) = pdf_info(&pdf) else {
+        return;
+    };
+    assert!(info.contains("The Levant Papers"), "no title:\n{info}");
+    assert!(info.contains("E. Marsh"), "no author:\n{info}");
+}
+
 /// A source for the CLI to read, beside the PDFs.
 fn write_source(name: &str, markdown: &str) -> PathBuf {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.md"));
@@ -505,9 +546,14 @@ fn render(name: &str, css: &[&Path]) -> (PathBuf, String) {
 
 /// The CLI, on whatever inputs and sheets the caller names.
 fn run(name: &str, inputs: &[&Path], css: &[&Path]) -> (PathBuf, String) {
+    run_with(name, inputs, css, &[])
+}
+
+/// The same, with further flags after the inputs.
+fn run_with(name: &str, inputs: &[&Path], css: &[&Path], flags: &[&str]) -> (PathBuf, String) {
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.pdf"));
     let mut command = Command::new(env!("CARGO_BIN_EXE_fleuron"));
-    command.args(inputs).arg("-o").arg(&output);
+    command.args(inputs).arg("-o").arg(&output).args(flags);
     for sheet in css {
         command.arg("-c").arg(sheet);
     }

@@ -13,6 +13,9 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
   -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
+  -m, --metadata <path> the book's title and author, for a book that is
+                       several files and so has no one file to read them
+                       from
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 ```
@@ -24,6 +27,8 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 **`-s`, `--split`** — where a markdown file's sections begin. A level 1 to 6 opens a section at every heading of that level or shallower; `none` opens none, so the file is one section. Default 1.
 
 **`-d`, `--dialect`** — which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.md).
+
+**`-m`, `--metadata`** — a file holding the book's `title`, `author` and any other fields, either bare or in a `---` block. Without it, a lone markdown input is the whole book and its frontmatter is the book's; several inputs are chapters, and each file's frontmatter stays with the section it became.
 
 **`-o`, `--output`** — where the PDF goes. Required. The path is written whole; nothing is created alongside it.
 

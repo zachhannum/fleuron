@@ -32,7 +32,7 @@ mod convert;
 mod frontmatter;
 
 pub use cache::{Cache, SourceKey};
-pub use frontmatter::frontmatter;
+pub use frontmatter::{frontmatter, metadata};
 
 use fleuron::Warning;
 use fleuron::content::{Book, HeadingLevel, Metadata, Section};
@@ -151,47 +151,6 @@ pub fn assemble(metadata: Metadata, sections: Vec<Section>) -> Book {
     book
 }
 
-/// Folds one source's frontmatter into a book's metadata.
-///
-/// What an earlier source set stands, so composition order decides.
-/// A later source that disagrees says so rather than losing quietly.
-pub fn merge_metadata(
-    into: &mut Metadata,
-    from: Metadata,
-    source: &str,
-    warnings: &mut Vec<Warning>,
-) {
-    let mut fields: Vec<(&str, Option<String>, &mut Option<String>)> = vec![
-        ("title", from.title, &mut into.title),
-        ("author", from.author, &mut into.author),
-    ];
-    for (name, incoming, held) in &mut fields {
-        let Some(incoming) = incoming.take() else {
-            continue;
-        };
-        match held.as_deref() {
-            None => **held = Some(incoming),
-            Some(standing) if standing == incoming => {}
-            Some(standing) => warnings.push(Warning {
-                message: format!("{name} is already `{standing}`; `{incoming}` is ignored"),
-                origin: Some(source.to_string()),
-            }),
-        }
-    }
-    for (key, value) in from.extra {
-        match into.extra.get(&key) {
-            None => {
-                into.extra.insert(key, value);
-            }
-            Some(standing) if *standing == value => {}
-            Some(standing) => warnings.push(Warning {
-                message: format!("{key} is already `{standing}`; `{value}` is ignored"),
-                origin: Some(source.to_string()),
-            }),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,36 +179,40 @@ mod tests {
         assert!(ids[0] > 0 && ids[1] > ids[0], "{ids:?}");
     }
 
+    /// A chapter file's frontmatter is the chapter's. Book metadata
+    /// is handed to assembly, so nothing here has to guess which of
+    /// sixty files was describing the work.
     #[test]
-    fn the_first_source_to_set_a_field_keeps_it() {
-        let mut metadata = Metadata::default();
-        let mut warnings = Vec::new();
-        merge_metadata(
-            &mut metadata,
-            Metadata {
-                title: Some("A Book".into()),
-                extra: [("year".to_string(), "1900".to_string())]
-                    .into_iter()
-                    .collect(),
-                ..Metadata::default()
-            },
-            "one.md",
-            &mut warnings,
+    fn assembly_takes_the_metadata_it_is_given() {
+        let per_file = Options {
+            sections: Sections::Whole,
+            ..Options::default()
+        };
+        let mut sections = Vec::new();
+        for (name, markdown) in [
+            (
+                "ch01.md",
+                "---\ntitle: The Ambassador\n---\n\nHe arrived.\n",
+            ),
+            (
+                "ch02.md",
+                "---\ntitle: A Cold Reception\n---\n\nNobody met him.\n",
+            ),
+        ] {
+            sections.extend(to_sections(markdown, name, &per_file).0);
+        }
+        let book = assemble(
+            metadata("title: The Levant Papers\nauthor: E. Marsh\n"),
+            sections,
         );
-        merge_metadata(
-            &mut metadata,
-            Metadata {
-                title: Some("Another Book".into()),
-                author: Some("Someone".into()),
-                ..Metadata::default()
-            },
-            "two.md",
-            &mut warnings,
-        );
-        assert_eq!(metadata.title.as_deref(), Some("A Book"));
-        assert_eq!(metadata.author.as_deref(), Some("Someone"));
-        assert_eq!(metadata.extra.get("year").map(String::as_str), Some("1900"));
-        assert_eq!(warnings.len(), 1, "{warnings:?}");
-        assert_eq!(warnings[0].origin.as_deref(), Some("two.md"));
+
+        assert_eq!(book.metadata.title.as_deref(), Some("The Levant Papers"));
+        assert_eq!(book.metadata.author.as_deref(), Some("E. Marsh"));
+        let chapters: Vec<Option<&str>> = book
+            .sections
+            .iter()
+            .map(|section| section.title.as_deref())
+            .collect();
+        assert_eq!(chapters, [Some("The Ambassador"), Some("A Cold Reception")]);
     }
 }

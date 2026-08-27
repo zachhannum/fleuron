@@ -27,6 +27,8 @@ The two arrangements are the same book. A single file split at its chapter headi
 
 ## Metadata
 
+A source's frontmatter belongs to that source, and what it means depends on whether the source is the book or a chapter of one.
+
 `frontmatter` reads the `---` block at the top of a source. `title` and `author` are the named fields; every other scalar joins `extra`, which the engine carries and style may read. Values are scalars: a line that is not `key: value` is not metadata.
 
 ```markdown
@@ -37,7 +39,18 @@ year: 1813
 ---
 ```
 
-Nothing else is metadata. A book with none lays out.
+A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out today; it is carried through the tree for whatever does.
+
+That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows, and `metadata` reads a file that is nothing but fields:
+
+```yaml
+title: The Levant Papers
+author: E. Marsh
+```
+
+Sixty chapter files have sixty frontmatter blocks and none of them describes the work. Reading the book's title out of whichever file came first is how a chapter ends up naming the book, so the frontend does not do it.
+
+A book with no metadata lays out.
 
 ## Blocks
 
@@ -65,7 +78,7 @@ A line wrapped in the source is a space in the tree; the shaper never sees the m
 
 ## What warns
 
-The vocabulary is a book's, and markdown is wider. Anything outside it degrades to prose and says so through the diagnostics channel, naming the file, line and column it was written at. Prose is never dropped, because a manuscript that quietly loses a paragraph is worse than one that warns about a table.
+These constructs have no counterpart in the content tree. The frontend sets them as prose and says where through the diagnostics channel, naming the file, line and column. Prose is never dropped, because a manuscript that quietly loses a paragraph is worse than one that warns about a table.
 
 | construct | becomes |
 |---|---|

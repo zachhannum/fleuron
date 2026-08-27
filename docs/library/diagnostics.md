@@ -31,8 +31,6 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 
 **A construct the content vocabulary has no room for.** A list, a table, a code block: the frontend sets them as prose and names the line and column they were written at. Prose is never dropped, so a warning here says the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.md) is the full list.
 
-**Metadata two sources disagree about.** The first file to set a field keeps it; a later one that sets it differently warns and is ignored.
-
 **Unsupported CSS.** Every declaration outside [the subset](../css-subset.md) warns, one warning per declaration, at the line and column it was written at. That is what writing the subset down buys: `color: red` is reported, not silently dropped.
 
 **A font that would not load.** An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a font this build can read. Text falls back to the next family in the list.

@@ -6,7 +6,7 @@ use fleuron::content::{
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
-use crate::Options;
+use crate::{Options, Sections};
 
 /// Reads one source into sections and diagnostics.
 pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Warning>) {
@@ -14,7 +14,17 @@ pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Wa
     for (event, range) in Parser::new_ext(text, parser_options(options)).into_offset_iter() {
         converter.event(event, range.start);
     }
-    converter.finish()
+    let (mut sections, warnings) = converter.finish();
+    // A source read whole is one chapter, so its frontmatter is that
+    // chapter's and `title:` names it. A source cut at headings is
+    // many, and the headings name them.
+    if options.sections == Sections::Whole
+        && options.dialect.frontmatter
+        && let [section] = sections.as_mut_slice()
+    {
+        section.title = crate::frontmatter(text).title;
+    }
+    (sections, warnings)
 }
 
 /// The dialect, as the parser wants it.
@@ -429,7 +439,7 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Dialect, Sections, to_sections};
+    use crate::{Dialect, to_sections};
 
     fn read(markdown: &str) -> Vec<Section> {
         to_sections(markdown, "test.md", &Options::default()).0
@@ -454,17 +464,32 @@ mod tests {
 
     #[test]
     fn a_whole_source_is_one_section() {
-        let (sections, _) = to_sections(
-            "# One\n\nA.\n\n# Two\n\nB.\n",
-            "chapter-01.md",
-            &Options {
-                sections: Sections::Whole,
-                ..Options::default()
-            },
-        );
+        let (sections, _) = to_sections("# One\n\nA.\n\n# Two\n\nB.\n", "chapter-01.md", &whole());
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].blocks.len(), 4);
         assert_eq!(sections[0].position, Some(SourcePos { line: 1, column: 1 }));
+        assert_eq!(sections[0].title, None);
+    }
+
+    /// A chapter file's frontmatter is the chapter's, so its `title:`
+    /// names the section rather than the book the file is one of.
+    #[test]
+    fn a_whole_source_takes_its_title_from_its_frontmatter() {
+        let markdown =
+            "---\ntitle: The Ambassador\nstatus: draft\n---\n\nHe arrived on a Tuesday.\n";
+        let (sections, _) = to_sections(markdown, "ch01.md", &whole());
+        assert_eq!(sections[0].title.as_deref(), Some("The Ambassador"));
+
+        // Cut at headings, the headings do the naming instead.
+        let (sections, _) = to_sections(markdown, "ch01.md", &Options::default());
+        assert_eq!(sections[0].title, None);
+    }
+
+    fn whole() -> Options {
+        Options {
+            sections: Sections::Whole,
+            ..Options::default()
+        }
     }
 
     #[test]

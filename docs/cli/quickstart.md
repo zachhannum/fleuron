@@ -32,7 +32,20 @@ Markdown files compose in the order the command line gives them:
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 ```
 
-Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in rather than at the run. Metadata is read from each file's frontmatter, and the first file to set a field keeps it. A later one that disagrees says so and is ignored.
+Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in rather than at the run.
+
+One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed rather than named after whichever file came first. `-m` is where the work's own title and author come from:
+
+```sh
+fleuron ch01.md ch02.md ch03.md -o book.pdf -m book.yaml
+```
+
+```yaml
+title: The Levant Papers
+author: E. Marsh
+```
+
+The file may be bare fields like that, or a markdown file with a `---` block; either reads the same.
 
 ## Where sections begin
 
