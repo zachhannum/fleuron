@@ -109,7 +109,15 @@ function open(): { client: Client; worker: Worker } {
 }
 
 const markdown = readFileSync(fixture, 'utf8');
-const book: Op[] = [{ op: 'markdown', name: 'gulliver-excerpt.md', text: markdown }];
+/** The plates the fixture book refers to, as the CLI resolves them. */
+const plates: [string, Uint8Array][] = ['images/plate.jpg', 'images/fleuron.png'].map((url) => [
+  url,
+  new Uint8Array(readFileSync(join(root, 'fixtures', url))),
+]);
+const book: Op[] = [
+  ...plates.map(([url, bytes]): Op => ({ op: 'image', url, bytes })),
+  { op: 'markdown', name: 'gulliver-excerpt.md', text: markdown },
+];
 
 console.log('fleuron wasm harness: the fixture book through a worker\n');
 const cli = reference();
@@ -144,6 +152,16 @@ check(
 check(
   'the display list names the face it set',
   preview.fonts.some((font) => font.family === 'eb garamond'),
+);
+check(
+  'the asset table names the images the host handed over',
+  preview.assets.map((asset) => asset.url).join(', ') === plates.map(([url]) => url).join(', '),
+  preview.assets.map((asset) => `${asset.url} ${asset.intrinsic.width}px`).join(', '),
+);
+check(
+  'and the pages place them',
+  preview.pages.flatMap((page) => page.items).filter((item) => item.kind === 'image').length ===
+    plates.length,
 );
 
 // The painter. Every page is painted, and every glyph the display
@@ -273,7 +291,16 @@ if (extracted === null || wanted === null) {
 // used.
 await client.preview([]);
 const broken = client.stages.lines;
-const warm = await client.preview([{ op: 'style', css: '@page { margin-bottom: 84pt }' }]);
+// Mirrored margins swap sides. The measure is what breaking depends
+// on and it does not move, so every line already broken is used
+// where the new geometry puts it.
+const warm = await client.preview([
+  {
+    op: 'style',
+    css: '@page :left { margin-left: 54pt; margin-right: 42pt }\n' +
+      '@page :right { margin-left: 42pt; margin-right: 54pt }\n',
+  },
+]);
 check(
   'a style-only re-render re-fragments over lines it does not break again',
   client.stages.lines === broken && client.stages.flow > 0,

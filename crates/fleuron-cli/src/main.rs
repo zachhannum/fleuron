@@ -274,7 +274,7 @@ fn render(
 
     let assets = Assets::probe(&book, &files);
     let laid_out = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
-    let bytes = fleuron::pdf::write(&laid_out, &registry, &book.metadata)
+    let bytes = fleuron::pdf::write_with_assets(&laid_out, &registry, &assets, &book.metadata)
         .with_context(|| format!("{}", inputs[0].display()))?;
     std::fs::write(output, bytes).with_context(|| format!("{}", output.display()))?;
     warnings.extend(laid_out.warnings);

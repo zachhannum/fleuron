@@ -7,6 +7,7 @@
 //! through: encode, decode, encode again, and the second buffer is
 //! the first one.
 
+use fleuron::images::{Asset, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Page, Side};
 use fleuron::wire;
 use fleuron::{LayoutOutput, Warning};
@@ -77,6 +78,25 @@ fn page() -> impl Strategy<Value = Page> {
         })
 }
 
+fn asset() -> impl Strategy<Value = Asset> {
+    (
+        "[a-z]{1,8}\\.(png|jpg)",
+        1u32..4000,
+        1u32..4000,
+        1.0f32..600.0,
+        1.0f32..600.0,
+    )
+        .prop_map(|(url, width, height, dpi_x, dpi_y)| Asset {
+            url,
+            intrinsic: Intrinsic {
+                width,
+                height,
+                dpi_x,
+                dpi_y,
+            },
+        })
+}
+
 fn warning() -> impl Strategy<Value = Warning> {
     (".{0,40}", proptest::option::of(".{0,20}"))
         .prop_map(|(message, origin)| Warning { message, origin })
@@ -85,11 +105,13 @@ fn warning() -> impl Strategy<Value = Warning> {
 fn output() -> impl Strategy<Value = LayoutOutput> {
     (
         proptest::collection::vec(page(), 0..6),
+        proptest::collection::vec(asset(), 0..3),
         proptest::collection::vec(warning(), 0..3),
     )
-        .prop_map(|(pages, warnings)| LayoutOutput {
+        .prop_map(|(pages, assets, warnings)| LayoutOutput {
             pages,
             fonts: Vec::new(),
+            assets,
             warnings,
         })
 }

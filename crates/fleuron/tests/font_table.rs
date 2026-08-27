@@ -13,6 +13,7 @@ fn layout_output_font_table_snapshot() {
     let output = LayoutOutput {
         pages: vec![],
         fonts,
+        assets: vec![],
         warnings: vec![],
     };
     let generics: Vec<_> = [

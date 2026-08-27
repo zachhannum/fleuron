@@ -4,20 +4,23 @@
 //! it by decoding would put a pixel buffer in the layout pass. So the
 //! engine reads the header: PNG's `IHDR` and `pHYs`, JPEG's `SOFn` and
 //! JFIF density, GIF's screen descriptor, WebP's chunk headers. The
-//! pixels stay on disk until a painter asks for them.
+//! file is held as it arrived and decoded by nothing until a painter
+//! asks for the pixels.
 //!
 //! The engine opens nothing itself, as with fonts: a url means
 //! whatever the host says it means.
 
-use serde::Serialize;
+use std::collections::BTreeSet;
+
+use serde::{Deserialize, Serialize};
 
 use crate::Warning;
 use crate::content::{Block, Book};
 
 /// Resolves image urls to bytes.
 ///
-/// Only the head of the file is read, so a host that can stream is
-/// free to hand back a prefix.
+/// The whole file, not a prefix: the header sizes the box and the
+/// same bytes are what a painter embeds.
 pub trait ImageLoader {
     /// The bytes behind one url, or `None` when the host cannot
     /// resolve it.
@@ -39,7 +42,7 @@ pub const CSS_DPI: f32 = 96.0;
 
 /// An image's own idea of its size: pixels, and the resolution they
 /// are meant to be shown at.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Intrinsic {
     /// Width in pixels.
     pub width: u32,
@@ -62,7 +65,11 @@ impl Intrinsic {
 }
 
 /// One image the book refers to, sized from its header.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+///
+/// What `DrawItem::Image.asset` indexes, and all the display list
+/// says about an image: painters take the url back to their own
+/// pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Asset {
     /// The url the content tree named it by.
     pub url: String,
@@ -77,6 +84,14 @@ pub struct Asset {
 #[derive(Debug, Default)]
 pub struct Assets {
     assets: Vec<Asset>,
+    /// The file each asset was probed from, in the same order.
+    /// Layout read the header out of these; the PDF writer embeds
+    /// them.
+    files: Vec<Vec<u8>>,
+    /// Urls that were offered and could not be sized, so that a url
+    /// nothing has ever answered for can be told apart from one
+    /// already complained about.
+    refused: BTreeSet<String>,
     warnings: Vec<Warning>,
 }
 
@@ -97,6 +112,34 @@ impl Assets {
         assets
     }
 
+    /// Registers one image the host handed over, and the index it
+    /// answers to. `None` for bytes no probe recognises, which is a
+    /// diagnostic and no asset.
+    ///
+    /// This is the door for a host that pushes: a worker has no
+    /// loader to reach back through, so images cross the wall the
+    /// way font files do.
+    pub fn add(&mut self, url: &str, bytes: Vec<u8>) -> Option<u32> {
+        if let Some((index, _)) = self.lookup(url) {
+            return Some(index);
+        }
+        match probe(&bytes) {
+            Some(intrinsic) => {
+                self.refused.remove(url);
+                self.assets.push(Asset {
+                    url: url.to_string(),
+                    intrinsic,
+                });
+                self.files.push(bytes);
+                Some(self.assets.len() as u32 - 1)
+            }
+            None => {
+                self.refuse(url, None);
+                None
+            }
+        }
+    }
+
     /// The asset registered for a url, and its index.
     pub fn lookup(&self, url: &str) -> Option<(u32, Intrinsic)> {
         self.assets
@@ -105,9 +148,22 @@ impl Assets {
             .map(|index| (index as u32, self.assets[index].intrinsic))
     }
 
+    /// Whether this table has an answer for a url: an asset, or a
+    /// complaint about why there is none. A url it has never been
+    /// offered is neither, and is what layout reports.
+    pub fn knows(&self, url: &str) -> bool {
+        self.refused.contains(url) || self.lookup(url).is_some()
+    }
+
     /// Every asset, in the order `DrawItem::Image.asset` indexes them.
     pub fn assets(&self) -> &[Asset] {
         &self.assets
+    }
+
+    /// The file one asset was probed from: the bytes a painter
+    /// embeds, as the host handed them over.
+    pub fn bytes(&self, index: u32) -> Option<&[u8]> {
+        self.files.get(index as usize).map(Vec::as_slice)
     }
 
     /// What probing had to complain about.
@@ -115,23 +171,35 @@ impl Assets {
         &self.warnings
     }
 
+    fn refuse(&mut self, url: &str, origin: Option<String>) {
+        if self.refused.insert(url.to_string()) {
+            self.warnings.push(Warning {
+                message: format!("image {url}: no size could be read; it is skipped"),
+                origin,
+            });
+        }
+    }
+
     fn walk(&mut self, blocks: &[Block], loader: &dyn ImageLoader) {
         for block in blocks {
             match block {
                 Block::Image { url, position, .. } => {
-                    if self.lookup(url).is_some() {
+                    if self.knows(url) {
                         continue;
                     }
                     let origin = Some(crate::content::origin(None, *position));
-                    match loader.load(url).as_deref().and_then(probe) {
-                        Some(intrinsic) => self.assets.push(Asset {
-                            url: url.clone(),
-                            intrinsic,
-                        }),
-                        None => self.warnings.push(Warning {
-                            message: format!("image {url}: no size could be read; it is skipped"),
-                            origin,
-                        }),
+                    match loader.load(url) {
+                        Some(bytes) => match probe(&bytes) {
+                            Some(intrinsic) => {
+                                self.assets.push(Asset {
+                                    url: url.clone(),
+                                    intrinsic,
+                                });
+                                self.files.push(bytes);
+                            }
+                            None => self.refuse(url, origin),
+                        },
+                        None => self.refuse(url, origin),
                     }
                 }
                 Block::Blockquote { blocks, .. } => self.walk(blocks, loader),
@@ -411,6 +479,31 @@ mod tests {
         for cut in 0..jpeg.len() {
             let _ = probe(&jpeg[..cut]);
         }
+    }
+
+    /// A host that pushes gets the same table a loader would have
+    /// filled: the header sizes the image, the file is kept for the
+    /// painter, and bytes no probe knows are one complaint and no
+    /// asset.
+    #[test]
+    fn pushed_images_are_probed_and_kept() {
+        let mut assets = Assets::none();
+        let png = png_bytes(96, 48, None);
+        assert_eq!(assets.add("a.png", png.clone()), Some(0));
+        assert_eq!(assets.add("b.jpg", jpeg_bytes(200, 100, None)), Some(1));
+        // The same url twice is the same asset, not a second copy.
+        assert_eq!(assets.add("a.png", png.clone()), Some(0));
+        assert_eq!(assets.bytes(0), Some(png.as_slice()));
+        assert_eq!(assets.lookup("a.png").map(|(index, _)| index), Some(0));
+
+        assert_eq!(assets.add("c.txt", b"not an image".to_vec()), None);
+        assert!(assets.knows("c.txt"), "a refusal is an answer");
+        assert!(!assets.knows("d.png"), "a url nobody offered is not");
+        assert_eq!(assets.warnings().len(), 1);
+        assert!(assets.warnings()[0].message.contains("c.txt"));
+        // Offered twice, complained about once.
+        assert_eq!(assets.add("c.txt", b"still not".to_vec()), None);
+        assert_eq!(assets.warnings().len(), 1);
     }
 
     /// The book's images are probed once each, in document order,

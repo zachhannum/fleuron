@@ -24,6 +24,12 @@ export interface PreviewProps extends PreviewOptions {
   page?: number;
   /** Points to CSS pixels. */
   zoom?: number;
+  /**
+   * The images the manuscript refers to, by the url it names them
+   * by. A url that arrives after the book does is registered when it
+   * arrives, and the pages are laid out again around it.
+   */
+  images?: Record<string, Uint8Array>;
   /** Passed to the element the preview mounts into. */
   className?: string;
   /** The same. */
@@ -38,7 +44,7 @@ export interface PreviewProps extends PreviewOptions {
  * that changed.
  */
 export function Preview(props: PreviewProps): React.ReactElement {
-  const { markdown, css, name, page, zoom, className, style, onMount, ...options } = props;
+  const { markdown, css, name, page, zoom, images, className, style, onMount, ...options } = props;
   const element = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<Mounted | null>(null);
 
@@ -85,6 +91,17 @@ export function Preview(props: PreviewProps): React.ReactElement {
       preview.zoom = zoom;
     }
   }, [preview, zoom]);
+
+  // Images are registered rather than passed at mount, so a plate
+  // that arrives after the manuscript still reaches the page. A url
+  // the session already holds costs no layout.
+  useEffect(() => {
+    if (preview !== null && images !== undefined) {
+      for (const [url, bytes] of Object.entries(images)) {
+        void preview.addImage(url, bytes);
+      }
+    }
+  }, [preview, images]);
 
   return <div ref={element} className={className} style={style} />;
 }

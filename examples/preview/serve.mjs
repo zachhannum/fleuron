@@ -17,9 +17,11 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const types = {
   '.css': 'text/css',
   '.html': 'text/html',
+  '.jpg': 'image/jpeg',
   '.js': 'text/javascript',
   '.json': 'application/json',
   '.md': 'text/markdown',
+  '.png': 'image/png',
   '.pdf': 'application/pdf',
   '.svg': 'image/svg+xml',
   '.ttf': 'font/ttf',

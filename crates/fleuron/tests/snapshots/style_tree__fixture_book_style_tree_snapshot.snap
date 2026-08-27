@@ -330,113 +330,118 @@ expression: tree
     },
     {
       "id": 9,
+      "element": "img",
+      "style": 4
+    },
+    {
+      "id": 10,
       "element": "p",
       "style": 4
     },
     {
-      "id": 11,
+      "id": 12,
       "element": "p",
       "style": 4
     },
     {
-      "id": 13,
+      "id": 14,
       "element": "p",
       "style": 4
     },
     {
-      "id": 15,
+      "id": 16,
       "element": "p",
       "style": 4
     },
     {
-      "id": 17,
+      "id": 18,
       "element": "p",
       "style": 4
     },
     {
-      "id": 19,
+      "id": 20,
       "element": "em",
       "style": 5
     },
     {
-      "id": 22,
+      "id": 23,
       "element": "em",
       "style": 5
     },
     {
-      "id": 25,
+      "id": 26,
       "element": "em",
       "style": 5
     },
     {
-      "id": 28,
+      "id": 29,
       "element": "em",
       "style": 5
     },
     {
-      "id": 31,
+      "id": 32,
       "element": "em",
       "style": 5
     },
     {
-      "id": 34,
+      "id": 35,
       "element": "em",
       "style": 5
     },
     {
-      "id": 37,
+      "id": 38,
       "element": "em",
       "style": 5
     },
     {
-      "id": 40,
+      "id": 41,
       "element": "em",
       "style": 5
     },
     {
-      "id": 43,
+      "id": 44,
       "element": "em",
       "style": 5
     },
     {
-      "id": 46,
+      "id": 47,
       "element": "hr",
       "style": 6
     },
     {
-      "id": 47,
+      "id": 48,
       "element": "p",
       "style": 4
     },
     {
-      "id": 49,
+      "id": 50,
       "element": "p",
       "style": 4
     },
     {
-      "id": 51,
+      "id": 52,
       "element": "p",
       "style": 4
     },
     {
-      "id": 53,
+      "id": 54,
       "element": "p",
       "style": 4
     },
     {
-      "id": 55,
+      "id": 56,
       "element": "p",
       "style": 4
     },
     {
-      "id": 57,
-      "element": "h3",
-      "style": 3
+      "id": 58,
+      "element": "img",
+      "style": 4
     },
     {
       "id": 59,
-      "element": "p",
-      "style": 4
+      "element": "h3",
+      "style": 3
     },
     {
       "id": 61,
@@ -470,38 +475,38 @@ expression: tree
     },
     {
       "id": 73,
+      "element": "p",
+      "style": 4
+    },
+    {
+      "id": 75,
       "element": "em",
       "style": 5
     },
     {
-      "id": 76,
+      "id": 78,
       "element": "blockquote",
       "style": 7
     },
     {
-      "id": 77,
-      "element": "p",
-      "style": 4
-    },
-    {
       "id": 79,
-      "element": "em",
-      "style": 5
-    },
-    {
-      "id": 82,
-      "element": "em",
-      "style": 5
-    },
-    {
-      "id": 85,
-      "element": "em",
-      "style": 5
-    },
-    {
-      "id": 88,
       "element": "p",
       "style": 4
+    },
+    {
+      "id": 81,
+      "element": "em",
+      "style": 5
+    },
+    {
+      "id": 84,
+      "element": "em",
+      "style": 5
+    },
+    {
+      "id": 87,
+      "element": "em",
+      "style": 5
     },
     {
       "id": 90,
@@ -525,23 +530,23 @@ expression: tree
     },
     {
       "id": 98,
+      "element": "p",
+      "style": 4
+    },
+    {
+      "id": 100,
       "element": "h3",
       "style": 3
     },
     {
-      "id": 100,
+      "id": 102,
       "element": "p",
       "style": 4
-    },
-    {
-      "id": 101,
-      "element": "em",
-      "style": 5
     },
     {
       "id": 103,
-      "element": "p",
-      "style": 4
+      "element": "em",
+      "style": 5
     },
     {
       "id": 105,
@@ -580,23 +585,23 @@ expression: tree
     },
     {
       "id": 119,
-      "element": "em",
-      "style": 5
-    },
-    {
-      "id": 122,
       "element": "p",
       "style": 4
+    },
+    {
+      "id": 121,
+      "element": "em",
+      "style": 5
     },
     {
       "id": 124,
-      "element": "em",
-      "style": 5
-    },
-    {
-      "id": 127,
       "element": "p",
       "style": 4
+    },
+    {
+      "id": 126,
+      "element": "em",
+      "style": 5
     },
     {
       "id": 129,
@@ -645,6 +650,11 @@ expression: tree
     },
     {
       "id": 147,
+      "element": "p",
+      "style": 4
+    },
+    {
+      "id": 149,
       "element": "p",
       "style": 4
     }

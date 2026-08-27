@@ -38,6 +38,10 @@ pub struct LayoutOutput {
     /// The fonts this run used, indexed by `font_id`: both painters
     /// and the PDF writer resolve ids through this table.
     pub fonts: Vec<fonts::FontRefEntry>,
+    /// The images this run placed, indexed by `DrawItem::Image.asset`.
+    /// Layout sized them from their headers and decoded nothing; a
+    /// painter takes the url back to its own pixels.
+    pub assets: Vec<images::Asset>,
     /// Everything the run had to complain about.
     pub warnings: Vec<Warning>,
 }

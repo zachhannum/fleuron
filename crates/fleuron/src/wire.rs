@@ -20,7 +20,7 @@ use crate::LayoutOutput;
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 
 /// Why a buffer could not be read as a display list.
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +62,7 @@ mod tests {
     use super::*;
     use crate::Warning;
     use crate::fonts::{AxisSetting, FaceAttributes, FontRefEntry};
+    use crate::images::{Asset, Intrinsic};
     use crate::pages::{DrawItem, Glyph, Page, Side};
 
     fn output() -> LayoutOutput {
@@ -108,6 +109,15 @@ mod tests {
                     tag: *b"wght",
                     value: 400.0,
                 }],
+            }],
+            assets: vec![Asset {
+                url: "plate.jpg".into(),
+                intrinsic: Intrinsic {
+                    width: 480,
+                    height: 320,
+                    dpi_x: 300.0,
+                    dpi_y: 300.0,
+                },
             }],
             warnings: vec![Warning {
                 message: "a table became prose".into(),

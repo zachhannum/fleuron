@@ -14,8 +14,9 @@
  */
 
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
-import { DEMOS, demo } from '../src/demos/catalogue.mjs';
+import { DEMOS, demo, image } from '../src/demos/catalogue.mjs';
 
 const root = new URL('../../', import.meta.url);
 const site = new URL('../', import.meta.url);
@@ -50,10 +51,16 @@ mkdirSync(posters, { recursive: true });
 
 let wrong = 0;
 for (const id of Object.keys(DEMOS)) {
-  const { name, markdown, css, page, dialect } = demo(id);
+  const { name, markdown, css, page, dialect, images } = demo(id);
   const session = new Session();
   if (dialect !== undefined) {
     session.setDialect(dialect);
+  }
+  // The plates cross the wall before the manuscript, so the first
+  // layout already knows how much room each one takes.
+  const held = new Map(images.map((url) => [url, image(url)]));
+  for (const [url, bytes] of held) {
+    session.addImage(url, bytes);
   }
   session.setMarkdown(name, markdown);
   session.setStyle(css);
@@ -64,7 +71,15 @@ for (const id of Object.keys(DEMOS)) {
   if (sheet === undefined) {
     throw new Error(`demo ${id} set no pages`);
   }
-  const svg = paintPage(sheet, { fonts: output.fonts, paper: null, ink: 'currentColor' });
+  const svg = paintPage(sheet, {
+    fonts: output.fonts,
+    assets: output.assets,
+    paper: null,
+    ink: 'currentColor',
+    // A poster is markup in a document rather than a page fetching
+    // its own files, so a plate travels inside it.
+    asset: (asset) => inline(held.get(asset.url)),
+  });
   writeFileSync(new URL(`${id}.svg`, posters), `${lighter(svg)}\n`);
 
   const misplaced = displaced(sheet, svg) ?? displaced(sheet, lighter(svg), 0.051);
@@ -87,12 +102,27 @@ cpSync(
   new URL('fixtures/corpus/pride-and-prejudice.md', root),
   new URL('public/fixtures/pride-and-prejudice.md', site),
 );
+// The plates the demos hand the engine are fetched by the island,
+// the way a host fetches its own images.
+for (const url of new Set(Object.keys(DEMOS).flatMap((id) => demo(id).images))) {
+  mkdirSync(new URL(`public/fixtures/${dirname(url)}/`, site), { recursive: true });
+  cpSync(new URL(`fixtures/${url}`, root), new URL(`public/fixtures/${url}`, site));
+}
 
 if (wrong > 0) {
   console.error(`${wrong} poster(s) disagree with the display list they were painted from`);
   process.exit(1);
 }
 console.log('demos prepared: the module, the bench corpus, and a poster each');
+
+/** One image as a data url, for a poster that carries its own. */
+function inline(bytes) {
+  if (bytes === undefined) {
+    return null;
+  }
+  const type = bytes[0] === 0x89 ? 'image/png' : bytes[0] === 0xff ? 'image/jpeg' : 'image/webp';
+  return `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+}
 
 /**
  * The same page, in half the bytes.

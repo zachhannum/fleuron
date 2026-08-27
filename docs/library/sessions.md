@@ -82,3 +82,9 @@ Every stage stays live at once: the lines of every section, beside the display l
 A session over a borrowed registry lays out against the faces that registry holds, and a computed style can only resolve to one of them. A sheet that brings its own `@font-face` needs the host to register it before the session is made.
 
 `Session::owning` takes the registry instead of borrowing it, and then `add_font` works. Faces arrive through the session, which re-runs what a new face can change: the cascade resolves a family it did not have before, so the styling is compiled again and the lines are broken again. A worker needs this, since the module is the only place a registry could live. See [fonts](fonts.md).
+
+## Images
+
+The asset table works the same way. `Session::with_assets` borrows a table the host probed with an `ImageLoader`; `Session::owning` keeps one of its own and `add_image` fills it, which is how images cross into a worker that has nothing to open.
+
+An image that arrives is a box that was not reserved before it, so the sections are broken again. A url the session already holds costs nothing. A url the manuscript names and nobody supplies is a warning and a gap on the page.

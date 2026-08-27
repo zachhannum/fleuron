@@ -781,6 +781,15 @@ impl Builder<'_, '_> {
     /// down when that does not fit the page.
     fn image(&mut self, style: &ComputedStyle, url: &str, origin: String, x: f32, measure: f32) {
         let Some((asset, intrinsic)) = self.paginator.assets.lookup(url) else {
+            // A url the table has already complained about has been
+            // complained about; one it has never been offered is a
+            // host that supplied no image for it at all.
+            if !self.paginator.assets.knows(url) {
+                self.paginator.warn(
+                    format!("image {url}: no image was supplied for it; it is skipped"),
+                    (!origin.is_empty()).then_some(origin),
+                );
+            }
             return;
         };
         let measure = measure - style.margin.left - style.margin.right;

@@ -9,6 +9,11 @@
 //! trim, mirrored margins, a head and a folio on the opening page —
 //! and the PDF that comes back is checked for all of it.
 //!
+//! The book carries a plate and an ornament, so the same run covers
+//! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
+//! transparency kept as a soft mask, and `qpdf --check` clean over
+//! both.
+//!
 //! Structure and text need `qpdf` and `pdftotext`. Where a tool is
 //! missing its check is skipped; setting `FLEURON_E2E_REQUIRE_TOOLS`
 //! makes the absence a failure, which is how CI keeps the checks from
@@ -18,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use fleuron::content::{Block, Book, Inline};
+use fleuron::images::{Assets, ImageLoader};
 use fleuron_markdown::Options;
 
 /// The fixture is checked in and layout is deterministic, so the page
@@ -38,10 +44,18 @@ const ORNAMENT: &str = "\u{2766}";
 /// The head that sheet paints in the opening page's top margin box.
 const STYLED_HEAD: &str = "STYLED BY FLEURON";
 
-/// SHA-256 of the fixture book's PDF under the built-in sheet alone.
-/// Layout is deterministic, so these bytes are a fact about the
-/// pipeline: a digest that moves is a change someone meant to make.
-const DEFAULT_PDF: &str = "29d799bb9448822b7be8e04ff0bd22b10fc68ae2ce9bda8db6ddbb3b0b30c9ac";
+/// SHA-256 of the fixture book's display list under the built-in
+/// sheet alone. Layout is deterministic, so these bytes are a fact
+/// about the pipeline: a digest that moves is a change someone meant
+/// to make.
+///
+/// The display list rather than the PDF, because a PDF's object
+/// numbering is the writer's own. krilla orders its font objects by
+/// a hash that carries the build's dependency graph in it, so one
+/// book comes out under two numberings on two build configurations,
+/// and what the engine decided is the same under both.
+const DEFAULT_DISPLAY_LIST: &str =
+    "94c99dd7d7b06d87617048e711ab560c1cc52a2c9b92d53e57cdd1e23e9773de";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -58,15 +72,27 @@ fn the_fixture_book_renders_a_pdf() {
     );
 }
 
-/// The built-in sheet writes the bytes it is checked in as writing.
+/// The built-in sheet lays the book out to the display list it is
+/// checked in as laying it out to.
 #[test]
-fn the_default_sheet_writes_the_checked_in_bytes() {
-    let (pdf, _) = render("identical", &[]);
-    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+fn the_default_sheet_lays_out_the_checked_in_display_list() {
     assert_eq!(
-        sha256(&bytes),
-        DEFAULT_PDF,
-        "the fixture book's PDF is not the one checked in",
+        sha256(&fixture_display_list()),
+        DEFAULT_DISPLAY_LIST,
+        "the fixture book's display list is not the one checked in",
+    );
+}
+
+/// The CLI run twice writes one file: nothing between the manuscript
+/// and the bytes reads a clock or a hash of an address.
+#[test]
+fn two_runs_of_the_cli_write_the_same_pdf() {
+    let (first, _) = render("twice-one", &[]);
+    let (second, _) = render("twice-two", &[]);
+    assert_eq!(
+        std::fs::read(&first).expect("the CLI wrote its output"),
+        std::fs::read(&second).expect("the CLI wrote its output"),
+        "two runs over one book wrote two files",
     );
 }
 
@@ -78,8 +104,8 @@ fn author_css_reaches_the_pdf() {
     let (pdf, stderr) = render("styled", &[sheet.as_path()]);
     let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
     assert_ne!(
-        sha256(&bytes),
-        DEFAULT_PDF,
+        bytes,
+        default_pdf("larger-body"),
         "a larger body size changed nothing",
     );
     let pages: usize = stderr
@@ -105,8 +131,8 @@ fn unsupported_css_is_reported_and_the_run_continues() {
     );
     assert!(stderr.contains(":2:3"), "no source position: {stderr}");
     assert_eq!(
-        sha256(&std::fs::read(&pdf).expect("the CLI wrote its output")),
-        DEFAULT_PDF,
+        std::fs::read(&pdf).expect("the CLI wrote its output"),
+        default_pdf("ignored-sheet"),
         "a sheet the engine ignored changed the output",
     );
 }
@@ -316,8 +342,8 @@ fn font_faces_resolve_through_the_host_and_say_when_they_cannot() {
         "an unresolved face should say so: {stderr}",
     );
     assert_eq!(
-        sha256(&std::fs::read(&pdf).expect("the CLI wrote its output")),
-        DEFAULT_PDF,
+        std::fs::read(&pdf).expect("the CLI wrote its output"),
+        default_pdf("face-missing"),
         "falling back to the bundled face should lay the book out unchanged",
     );
 }
@@ -342,6 +368,57 @@ fn emphasis_embeds_a_second_face_and_keeps_every_word() {
         squeeze(&laid_out_text(&fixture_book())),
         "the italic passages did not survive the round trip",
     );
+}
+
+/// The plate is embedded as the file it came in as. PDF's
+/// `DCTDecode` is the JPEG stream itself, so the bytes in the file
+/// are the bytes on disk, verbatim, and a writer that re-encoded
+/// one would spend the quality for nothing.
+#[test]
+fn the_fixture_jpeg_embeds_byte_for_byte() {
+    let (pdf, _) = render("images", &[]);
+    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+    let plate = std::fs::read(fixture_path().with_file_name("images/plate.jpg"))
+        .expect("the plate is checked in");
+    assert!(
+        bytes.windows(plate.len()).any(|window| window == plate),
+        "the plate's {} bytes are not in the PDF as they went in",
+        plate.len(),
+    );
+    let readable: String = bytes.iter().map(|b| *b as char).collect();
+    assert!(readable.contains("/DCTDecode"), "the plate was re-encoded");
+    // The ornament's ground is transparent, and stays that way.
+    assert!(readable.contains("/SMask"), "the ornament lost its alpha");
+}
+
+/// The document information dictionary names the book: the
+/// frontmatter's title and author, the engine as producer, and the
+/// book's own date rather than the hour the run started.
+#[test]
+fn the_document_info_names_the_fixture_book() {
+    let (pdf, _) = render("info", &[]);
+    let bytes = std::fs::read(&pdf).expect("the CLI wrote its output");
+    let readable: String = bytes.iter().map(|b| *b as char).collect();
+    // Read off the bytes rather than through a reader: 1726 is
+    // before the epoch a viewer converts dates through, and more
+    // than one of them prints the wrong century for it.
+    assert!(
+        readable.contains("/CreationDate (D:17261028"),
+        "the creation date is not the book's own",
+    );
+    let Some(info) = pdf_info(&pdf) else {
+        return;
+    };
+    let field = |name: &str| {
+        info.lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}:")))
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert_eq!(field("Title"), "Gulliver's Travels");
+    assert_eq!(field("Author"), "Jonathan Swift");
+    assert_eq!(field("Producer"), "fleuron");
 }
 
 #[test]
@@ -583,6 +660,35 @@ fn write_sheet(name: &str, css: &str) -> PathBuf {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.css"));
     std::fs::write(&path, css).expect("the sheet is writable");
     path
+}
+
+/// The fixture book's PDF under the built-in sheet alone: the
+/// baseline for a test that asserts some input changed nothing.
+fn default_pdf(name: &str) -> Vec<u8> {
+    let (pdf, _) = render(&format!("{name}-baseline"), &[]);
+    std::fs::read(&pdf).expect("the CLI wrote its output")
+}
+
+/// The fixture book's display list, built the way the CLI builds it:
+/// the built-in sheet alone, and the images resolved against the
+/// manuscript's own directory.
+fn fixture_display_list() -> Vec<u8> {
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let book = fixture_book();
+    let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
+    let assets = Assets::probe(&book, &Beside);
+    let output = fleuron::layout::layout_book_with_assets(&book, &styles, &registry, &assets);
+    fleuron::wire::encode(&output).expect("a display list encodes")
+}
+
+/// Image urls, as the CLI resolves them: against the directory the
+/// manuscript was read from.
+struct Beside;
+
+impl ImageLoader for Beside {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        std::fs::read(fixture_path().with_file_name(url)).ok()
+    }
 }
 
 /// The digest the fixture PDF is held to, lowercase hex.

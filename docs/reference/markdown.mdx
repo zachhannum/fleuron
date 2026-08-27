@@ -91,7 +91,9 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
 
-An image is a block in the vocabulary and inline in markdown, so one written inside a paragraph becomes a block directly after it, alt text and all. That is a move, so it warns.
+An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph that held it, alt text and all, which is a move, so it warns.
+
+The url means whatever the host says it means: the engine opens nothing. A host supplies the bytes, the engine reads the header for the intrinsic size, and a url nobody supplies is a warning and a gap.
 
 ## Inlines
 
@@ -127,7 +129,7 @@ These constructs have no counterpart in the content tree. The frontend sets them
 | a footnote | prose where the definition was written |
 | strikethrough, superscript, subscript | plain text |
 | math | plain text |
-| an inline image | a block of its own |
+| an image among prose | a block after the paragraph |
 | html, a footnote reference, a task marker | nothing; they carry no prose |
 
 ## Dialects

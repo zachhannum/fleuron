@@ -10,8 +10,8 @@ import { decodeDisplayList, type LayoutOutput } from './wire.js';
 export interface Transport {
   /**
    * Sends one request. `transfer` holds the buffers that should move
-   * rather than be copied: font bytes, which the host has no reason
-   * to keep a second copy of.
+   * rather than be copied: font and image bytes, which the host has
+   * no reason to keep a second copy of.
    */
   post(request: Request, transfer: ArrayBuffer[]): void;
 }
@@ -134,7 +134,7 @@ export class Client {
       ...(what.font === undefined ? {} : { font: what.font }),
     };
     const transfer = request.ops
-      .filter((op) => op.op === 'font')
+      .filter((op) => op.op === 'font' || op.op === 'image')
       .map((op) => op.bytes.buffer as ArrayBuffer);
     return new Promise<Response>((resolve, reject) => {
       this.waiting.set(request.id, (response) => {

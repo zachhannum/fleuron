@@ -31,7 +31,7 @@ Glyphs carry their text. Each text run holds the string it was shaped from, and 
 
 Layout is deterministic and the wire is positional, so the display list a worker produces is the one a native run produces, byte for byte. The perf gate encodes the gate book on both targets and CI compares the digests.
 
-PDF bytes are not identical across targets, though the PDF is the same book, of the same length, with the same pages and the same text. The writer orders its font objects by a hash whose width follows the target's, so a 32-bit build numbers two font objects the other way round from a 64-bit one. Within one target the bytes are reproducible, which is what the checked-in digest in the end-to-end test holds the CLI to.
+PDF bytes are not identical across builds, though the PDF is the same book, of the same length, with the same pages and the same text. The writer orders its font objects by a hash that carries the build in it: the target's pointer width, and the identity of the crates it was compiled against. So two builds can number the same two font objects the other way round. One build renders one book to one file every time, which is what the end-to-end test's two runs check, and the digest it holds the pipeline to is of the display list, where nothing about the build reaches the bytes.
 
 ## The protocol
 
@@ -63,7 +63,7 @@ A warning is different. A book that laid out anyway reports through the display 
 
 Own the fonts. Fetch them, cache them, decide when a face has changed. The engine registers what it is handed and warns about what it is not.
 
-Own the images. Probe headers for intrinsic size, orientation and DPI, pass those in, decode pixels when you paint.
+Own the images. Fetch each file and hand the bytes over; the engine reads the header for the intrinsic size and decodes nothing. Decode the pixels when you paint.
 
 Own the thread. Layout runs in a worker.
 

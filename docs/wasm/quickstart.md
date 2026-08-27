@@ -107,6 +107,7 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `content` | a content tree as JSON, for a host with a structured source of its own |
 | `style` | the author stylesheet, as CSS text |
 | `font` | font bytes, registered for the session's life |
+| `image` | one image's bytes, by the url the manuscript names it by |
 | `dialect` | `commonmark`, `gfm` or `obsidian` |
 | `split` | the heading level a section begins at, or `0` for one section per file |
 
@@ -155,6 +156,6 @@ cd crates/fleuron-wasm/npm && npm ci && npm run build
 
 Fonts, because the engine reads no paths. Fetch the files, cache them, send the bytes once. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine, since it has no URL to fetch from.
 
-Images, because layout never decodes one. Probe the header for intrinsic size and draw the pixels on your own side of the wall.
+Images, because the engine opens nothing and layout never decodes one. Fetch the file, send the bytes with the `image` op, and the engine reads the header to size the box. Drawing the pixels stays on your side of the wall, and `Preview` does it for you from the same bytes.
 
 The thread, because layout runs in a worker.

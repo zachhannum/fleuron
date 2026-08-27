@@ -132,15 +132,12 @@ impl<'a> Converter<'a> {
             Event::Start(Tag::Heading { level, .. }) => {
                 self.push_inlines(InlineFor::Heading(heading_level(level)), at)
             }
-            Event::Start(Tag::Image { dest_url, .. }) => {
-                self.degrades("an inline image", "a block of its own", at);
-                self.push_inlines(
-                    InlineFor::Image {
-                        url: dest_url.into_string(),
-                    },
-                    at,
-                )
-            }
+            Event::Start(Tag::Image { dest_url, .. }) => self.push_inlines(
+                InlineFor::Image {
+                    url: dest_url.into_string(),
+                },
+                at,
+            ),
             Event::Start(Tag::Emphasis) => self.push_inlines(InlineFor::Emphasis, at),
             Event::Start(Tag::Strong) => self.push_inlines(InlineFor::Strong, at),
             Event::Start(Tag::Link { dest_url, .. }) => self.push_inlines(
@@ -310,6 +307,7 @@ impl<'a> Converter<'a> {
                 position: Some(at),
             }),
             InlineFor::Heading(level) => {
+                self.displaced(&children);
                 if self.options.sections.opens(level) {
                     self.open_section(at);
                 }
@@ -322,6 +320,7 @@ impl<'a> Converter<'a> {
                 self.flush_deferred();
             }
             InlineFor::Paragraph => {
+                self.displaced(&children);
                 if !children.is_empty() {
                     self.push_block(Block::Paragraph {
                         id: Default::default(),
@@ -331,6 +330,31 @@ impl<'a> Converter<'a> {
                 }
                 self.flush_deferred();
             }
+        }
+    }
+
+    /// Reports the images a block is about to be broken around.
+    ///
+    /// An image is a block in the vocabulary and inline in markdown,
+    /// so one written among prose is set after the prose that held
+    /// it, which is a move worth reporting. An image written on a
+    /// line of its own, the way a manuscript writes a plate,
+    /// displaces nothing, and reporting every picture in the book
+    /// would be noise.
+    fn displaced(&mut self, siblings: &[Inline]) {
+        if siblings.is_empty() {
+            return;
+        }
+        let moved: Vec<SourcePos> = self
+            .deferred
+            .iter()
+            .filter_map(|block| match block {
+                Block::Image { position, .. } => *position,
+                _ => None,
+            })
+            .collect();
+        for at in moved {
+            self.degrades("an inline image", "a block of its own", at);
         }
     }
 
@@ -452,6 +476,31 @@ mod tests {
             }
             other => panic!("expected text, got {other:?}"),
         }
+    }
+
+    /// A plate written on its own line displaces no prose, and says
+    /// nothing. One written among prose is set after the paragraph
+    /// that held it, and says so.
+    #[test]
+    fn only_an_image_among_prose_reports_the_move() {
+        let (alone, quiet) = to_sections("![a plate](plate.jpg)\n", "test.md", &Options::default());
+        assert!(quiet.is_empty(), "{quiet:?}");
+        assert!(matches!(
+            alone[0].blocks.as_slice(),
+            [Block::Image { url, alt, .. }] if url == "plate.jpg" && alt == "a plate",
+        ));
+
+        let (among, loud) = to_sections(
+            "Before ![a plate](plate.jpg) after.\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert_eq!(loud.len(), 1, "{loud:?}");
+        assert!(loud[0].message.contains("an inline image"));
+        assert!(matches!(
+            among[0].blocks.as_slice(),
+            [Block::Paragraph { .. }, Block::Image { .. }],
+        ));
     }
 
     #[test]
