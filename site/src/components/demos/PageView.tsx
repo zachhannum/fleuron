@@ -27,8 +27,10 @@ export interface PageViewProps {
   name?: string;
   /** The page to show, counting from 1. */
   page?: number;
-  /** A page the engine painted at build time, as SVG markup. */
-  poster: string;
+  /** A page the engine painted at build time. */
+  poster?: React.ReactNode;
+  /** The same, when it arrives as the island's slot. */
+  children?: React.ReactNode;
   /** What the prose is pointing at. */
   highlight?: string;
   /** What the page is, in one line, under it. */
@@ -36,7 +38,8 @@ export interface PageViewProps {
 }
 
 export function PageView(props: PageViewProps): React.ReactElement {
-  const { id, markdown, css, name, page = 1, poster, highlight, caption } = props;
+  const { id, markdown, css, name, page = 1, highlight, caption } = props;
+  const poster = props.poster ?? props.children;
   const { sheet, status, hydrated, error, output, start } = usePreview({
     id,
     markdown,

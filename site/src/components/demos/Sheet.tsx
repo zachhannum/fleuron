@@ -14,8 +14,15 @@ import type { Status } from '../../demos/usePreview';
 export interface SheetProps {
   /** The element the preview paints into. */
   sheet: React.RefObject<HTMLDivElement | null>;
-  /** A page the engine painted at build time, as SVG markup. */
-  poster: string;
+  /**
+   * A page the engine painted at build time.
+   *
+   * Handed down as markup the server rendered rather than as a
+   * string in the island's props: a prop is serialised into the page
+   * next to the DOM it produced, and a page carrying a poster twice
+   * pays for it twice.
+   */
+  poster: React.ReactNode;
   status: Status;
   /** Whether the island is running yet. */
   hydrated: boolean;
@@ -31,11 +38,9 @@ export function Sheet(props: SheetProps): React.ReactElement {
   const { sheet, poster, status, hydrated, onStart, error, weight = '3.7 MB' } = props;
   return (
     <div className="d-sheet" data-status={status}>
-      <div
-        className="d-paper d-poster"
-        aria-hidden={status === 'live'}
-        dangerouslySetInnerHTML={{ __html: poster }}
-      />
+      <div className="d-paper d-poster" aria-hidden={status === 'live'}>
+        {poster}
+      </div>
       <div className="d-paper d-live" ref={sheet} />
       {hydrated && status === 'held' && (
         <div className="d-veil">

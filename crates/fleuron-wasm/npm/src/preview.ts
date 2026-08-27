@@ -38,6 +38,22 @@ export interface PreviewOptions {
   zoom?: number;
   /** The page to show, counting from 1. */
   page?: number;
+  /**
+   * Where the faces on screen come from.
+   *
+   * `module` asks the session for the file it shaped with and
+   * registers that, which is the only way to be certain the page on
+   * screen is set in the face the export will use.
+   *
+   * `host` registers nothing and leaves the painter's family stack
+   * to resolve against whatever the document already has. A host
+   * that already serves the same file, or a subset of it with the
+   * same metrics, uses this rather than fetch a second copy: the
+   * glyphs land where the display list put them either way, and
+   * parsing a book face is main-thread work a page paying for it
+   * twice can see.
+   */
+  faces?: 'module' | 'host';
   /** What the page is printed on; `null` leaves it transparent. */
   paper?: string | null;
   /** What it is printed in. */
@@ -260,9 +276,12 @@ export class Preview {
    * network: it is inside the module, and there is no URL to fetch
    * it from. A face whose bytes do not come back is left out, and
    * the painter's fallback stack is what the reader sees instead of
-   * a blank page.
+   * a blank page. `faces: 'host'` is that stack on purpose.
    */
   private async load(output: LayoutOutput): Promise<void> {
+    if (this.options.faces === 'host') {
+      return;
+    }
     const used = new Set<number>();
     for (const page of output.pages) {
       for (const item of page.items) {

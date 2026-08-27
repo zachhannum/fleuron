@@ -87,6 +87,41 @@ function recorded(id: string, output: LayoutOutput): void {
   }
 }
 
+/**
+ * Runs once the page has finished loading and the browser has
+ * nothing better to do.
+ *
+ * The module is megabytes. A fetch that starts while the page is
+ * still painting takes the bandwidth the page is painting with, and
+ * the reader waits for a book they have not asked to see yet.
+ */
+function whenIdle(run: () => void): () => void {
+  let cancelled = false;
+  const soon = (): void => {
+    if (cancelled) {
+      return;
+    }
+    const go = (): void => {
+      if (!cancelled) {
+        run();
+      }
+    };
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(go, { timeout: 2000 });
+    } else {
+      setTimeout(go, 200);
+    }
+  };
+  if (document.readyState === 'complete') {
+    soon();
+  } else {
+    addEventListener('load', soon, { once: true });
+  }
+  return () => {
+    cancelled = true;
+  };
+}
+
 /** Whether the reader has asked their browser to spend less. */
 function metered(): boolean {
   const connection = (
@@ -127,35 +162,49 @@ export function usePreview(inputs: Inputs): Running {
     }
     let live = true;
     let opened: Preview | null = null;
-    const worker = spawn();
-    void Preview.mount(sheet.current as Element, {
-      worker,
-      paper: null,
-      ink: 'currentColor',
-      onRender: (rendered) => {
-        recorded(id, rendered);
-        setOutput(rendered);
-        setStatus('live');
-      },
-    })
-      .then((mounted) => {
-        opened = mounted;
-        if (!live) {
-          mounted.destroy();
-          return;
-        }
-        register(id, mounted);
-        setPreview(mounted);
+    let worker: Worker | null = null;
+    const cancel = whenIdle(() => {
+      worker = spawn();
+      open(worker);
+    });
+
+    const open = (opening: Worker): void => {
+      void Preview.mount(sheet.current as Element, {
+        worker: opening,
+        // The site already serves the face the engine shaped with,
+        // subset from the same file, so the painter's stack resolves
+        // to it and no book face crosses back over the wall.
+        faces: 'host',
+        paper: null,
+        ink: 'currentColor',
+        onRender: (rendered) => {
+          recorded(id, rendered);
+          setOutput(rendered);
+          setStatus('live');
+        },
       })
-      .catch((thrown: unknown) => {
-        if (live) {
-          setError(String(thrown));
-          setStatus('broken');
-        }
-      });
+        .then((mounted) => {
+          opened = mounted;
+          if (!live) {
+            mounted.destroy();
+            return;
+          }
+          register(id, mounted);
+          setPreview(mounted);
+        })
+        .catch((thrown: unknown) => {
+          if (live) {
+            setError(String(thrown));
+            setStatus('broken');
+          }
+        });
+    };
+
     return () => {
       live = false;
+      cancel();
       opened?.destroy();
+      worker?.terminate();
       globalThis.fleuron?.delete(id);
     };
   }, [wanted, id]);

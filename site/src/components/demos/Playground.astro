@@ -32,7 +32,8 @@ const inputs = demo(id);
   markdown={inputs.markdown}
   css={inputs.css}
   name={inputs.name}
-  poster={poster(id)}
   stylesheet={stylesheet}
   held={held}
-/>
+>
+  <Fragment set:html={poster(id)} />
+</Playground>

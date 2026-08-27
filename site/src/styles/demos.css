@@ -6,6 +6,27 @@
    never on it: a blurred surface under a page that repaints on every
    keystroke costs a composite the scroll cannot afford. */
 
+/* The face the engine set the page in, under the name the display
+   list gives it, so the painter's family stack resolves to the file
+   the site is already serving rather than to a second copy of the
+   book face fetched out of the module. Subset from the same bytes,
+   so every glyph lands on the x the display list gave it. */
+@font-face {
+  font-family: 'eb garamond';
+  src: url('../assets/fonts/ebgaramond-subset.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'eb garamond';
+  src: url('../assets/fonts/ebgaramond-italic-subset.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* The landing page does not load a CSS reset, so the padded boxes
    below say what their widths mean. A content-box textarea at 100%
    is a textarea one padding wider than its column, and the end of
@@ -30,6 +51,12 @@
 @media (min-width: 62rem) {
   .d-split {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  /* Two columns: the editor takes whatever height the page beside
+     it does. */
+  .d-split .d-area {
+    height: auto;
   }
 }
 
@@ -131,9 +158,13 @@
   text-underline-offset: 0.2em;
 }
 
+/* The editor scrolls; it does not grow to the length of the book.
+   In one column there is nothing else to bound it, and a textarea
+   left to its content is a manuscript printed down the page. */
 .d-area {
   flex: 1;
-  min-height: 22rem;
+  min-height: 0;
+  height: 24rem;
   width: 100%;
   padding: 1rem 1.1rem;
   border: 0;
@@ -181,12 +212,6 @@
    would shift the rest of the line onto the wrong ones. */
 .d-paper text {
   white-space: pre;
-}
-
-.d-poster {
-  font-family: 'EB Garamond Subset', Garamond, 'Times New Roman', serif;
-  font-kerning: none;
-  font-variant-ligatures: none;
 }
 
 .d-sheet[data-status='live'] .d-poster {
@@ -450,7 +475,7 @@
 }
 
 .d-diagnostics .d-area {
-  min-height: 16rem;
+  height: 18rem;
   background: var(--f-glass-solid);
 }
 

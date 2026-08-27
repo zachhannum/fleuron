@@ -54,6 +54,11 @@ function demoComponents() {
 
 export default defineConfig({
   site: 'https://zachhannum.github.io',
+  // A stylesheet in the document is a stylesheet the reader is not
+  // waiting a round trip for. The site's sheets are small enough
+  // that carrying them costs less than fetching them.
+  build: { inlineStylesheets: 'always' },
+
   base: '/fleuron',
   trailingSlash: 'always',
   // Starlight turns prefetching on for every page, and a page here
@@ -77,7 +82,7 @@ export default defineConfig({
       title: 'fleuron',
       description:
         'A paged-media layout engine for book-shaped documents, in Rust.',
-      customCss: ['./src/styles/theme.css'],
+      customCss: ['./src/styles/tailwind.css', './src/styles/theme.css'],
       social: [
         {
           icon: 'github',

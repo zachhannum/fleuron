@@ -39,17 +39,6 @@ if (missing) {
 
 const { Session, decodeDisplayList, initWasm, paintPage } = await import('@fleuron/wasm');
 
-/**
- * The face a poster is drawn in.
- *
- * A poster is painted before any engine face exists on the page, so
- * the painter's stack has to fall through to something. The site's
- * display face is subset from the file the engine shapes with, so it
- * is the one thing on the page whose metrics are the ones the
- * display list was measured against.
- */
-const POSTER_FACE = 'EB Garamond Subset';
-
 // The module, and one session per demo: a session holds the whole
 // pipeline, and two demos with different stylesheets have nothing to
 // share.
@@ -72,11 +61,10 @@ for (const id of Object.keys(DEMOS)) {
   if (sheet === undefined) {
     throw new Error(`demo ${id} set no pages`);
   }
-  const fonts = output.fonts.map((font) => ({ ...font, family: POSTER_FACE }));
-  const svg = paintPage(sheet, { fonts, paper: null, ink: 'currentColor' });
-  writeFileSync(new URL(`${id}.svg`, posters), `${svg}\n`);
+  const svg = paintPage(sheet, { fonts: output.fonts, paper: null, ink: 'currentColor' });
+  writeFileSync(new URL(`${id}.svg`, posters), `${lighter(svg)}\n`);
 
-  const misplaced = displaced(sheet, svg);
+  const misplaced = displaced(sheet, svg) ?? displaced(sheet, lighter(svg), 0.051);
   if (misplaced !== null) {
     console.error(`  FAIL  ${id}: ${misplaced}`);
     wrong += 1;
@@ -103,8 +91,52 @@ if (wrong > 0) {
 }
 console.log('demos prepared: the module, the bench corpus, and a poster each');
 
+/**
+ * The same page, in half the bytes.
+ *
+ * A poster is markup in every document that shows one, and the
+ * painter writes every position to the last digit a 32-bit float
+ * has, because a preview is checked against the display list to that
+ * digit. A picture is not: a tenth of a point is a seven-thousandth
+ * of an inch, and the attributes every run repeats are the same
+ * attributes on all of them.
+ */
+function lighter(svg) {
+  const shared = {};
+  const runs = [...svg.matchAll(/<text\b([^>]*)>/g)].map((run) => attributes(run[1]));
+  for (const name of ['font-family', 'font-weight', 'font-style', 'style', 'xml:space']) {
+    const first = runs[0]?.[name];
+    if (first !== undefined && runs.every((run) => run[name] === first)) {
+      shared[name] = first;
+    }
+  }
+  const hoisted = Object.entries(shared)
+    .map(([name, value]) => ` ${name}="${value}"`)
+    .join('');
+  return svg
+    .replace(/<svg\b([^>]*)>/, (_, rest) => `<svg${rest}${hoisted}>`)
+    .replace(/<text\b([^>]*)>/g, (whole, rest) => {
+      let out = rest;
+      for (const name of Object.keys(shared)) {
+        out = out.replace(new RegExp(`\\s${name.replace(':', '\\:')}="[^"]*"`), '');
+      }
+      return `<text${out}>`;
+    })
+    .replace(/\b(x|y)="([^"]*)"/g, (_, name, value) => `${name}="${value
+      .split(' ')
+      .map((number) => String(Math.round(Number(number) * 10) / 10))
+      .join(' ')}"`);
+}
+
+/** One element's attributes, by name. */
+function attributes(text) {
+  return Object.fromEntries(
+    [...text.matchAll(/([\w:-]+)="([^"]*)"/g)].map((found) => [found[1], found[2]]),
+  );
+}
+
 /** Every glyph of a page, held against the x the painter wrote. */
-function displaced(page, svg) {
+function displaced(page, svg, slack = 0) {
   const painted = [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map((element) => ({
     x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
     content: unescape_(element[2] ?? ''),
@@ -121,7 +153,9 @@ function displaced(page, svg) {
     for (const glyph of run.glyphs) {
       const index = characterAt(run.text, glyph.range[0]);
       const written = element.x[index];
-      if (written === undefined || Math.fround(Number(written)) !== glyph.x) {
+      const apart =
+        written === undefined ? Infinity : Math.abs(Math.fround(Number(written)) - glyph.x);
+      if (!(apart <= slack)) {
         return `run ${at} puts character ${index} at ${written}, not ${glyph.x}`;
       }
     }

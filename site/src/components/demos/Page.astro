@@ -34,8 +34,9 @@ const inputs = demo(id);
     css={inputs.css}
     name={inputs.name}
     page={page ?? inputs.page}
-    poster={poster(id)}
     highlight={highlight}
     caption={caption}
-  />
+  >
+    <Fragment set:html={poster(id)} />
+  </PageView>
 </div>

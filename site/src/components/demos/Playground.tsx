@@ -25,8 +25,10 @@ export interface PlaygroundProps {
   css: string;
   /** What the manuscript is called. */
   name?: string;
-  /** A page the engine painted at build time, as SVG markup. */
-  poster: string;
+  /** A page the engine painted at build time. */
+  poster?: React.ReactNode;
+  /** The same, when it arrives as the island's slot. */
+  children?: React.ReactNode;
   /** Whether the stylesheet editor is open to begin with. */
   stylesheet?: boolean;
   /** Whether to wait for a press before fetching the module. */
@@ -37,7 +39,8 @@ export interface PlaygroundProps {
 const SETTLE = 200;
 
 export function Playground(props: PlaygroundProps): React.ReactElement {
-  const { id = 'playground', markdown: seed, css: sheet, name, poster, held } = props;
+  const { id = 'playground', markdown: seed, css: sheet, name, held } = props;
+  const poster = props.poster ?? props.children;
 
   const [draft, setDraft] = useState(seed);
   const [style, setStyle] = useState(sheet);

@@ -1,9 +1,3 @@
-@layer base, starlight, theme, components, utilities;
-
-@import '@astrojs/starlight-tailwind';
-@import 'tailwindcss/theme.css' layer(theme);
-@import 'tailwindcss/utilities.css' layer(utilities);
-
 /* The face the engine ships, subset from the same bytes in
    crates/fleuron/fonts/. Display type only: chrome is a system
    grotesque, which costs nothing to load. */

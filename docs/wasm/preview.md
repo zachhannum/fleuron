@@ -147,6 +147,8 @@ One file can answer for several faces. The bundled EB Garamond is a variable fon
 
 A face that never arrives does not blank the run. The painter's `font-family` list ends in `serif`, so the text appears in whatever the reader has: the wrong font, but on the page and readable rather than missing.
 
+That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` registers nothing and leaves the painter's list to resolve against whatever the document already has, under the family the display list names. A host already serving the same file, or a subset of it with the same metrics, uses this rather than fetch a second copy: the glyphs land on the x the display list gave them either way, and parsing a book face is main-thread work a page paying for it twice can feel. The default is `'module'`, which is the only way to be certain the page on screen is set in the face the export will use.
+
 ## The harness
 
 `examples/preview/` is a page that opens the fixture book, pages through it, and puts the browser's own PDF viewer beside the preview, showing the same page of the same run.
