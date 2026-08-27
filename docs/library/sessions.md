@@ -29,7 +29,8 @@ let bytes = session.export()?;       // the same run, as PDF
 | margin box content, the face a folio is set in | the page boxes | the furniture |
 | `@page` geometry, counters, named pages | the lines | fragmentation, then the furniture |
 | face, size, measure, leading | the style tree | line breaking, and everything under it |
-| content | nothing | all of it |
+| one file's content | every other section's lines | that file's sections, then fragmentation |
+| the whole book | nothing | all of it |
 
 The middle rows are where the saving is. On a 333-page manuscript, line breaking takes around 130 ms and fragmentation around 5 ms, so a sheet that only moves the page box costs the second number instead of the first.
 
@@ -38,6 +39,23 @@ The middle rows are where the saving is. On a 333-page manuscript, line breaking
 ## Editing content
 
 `set_content` replaces the book. `replace_source(name, sections)` replaces every section that came from one file, which is the unit a host names: one markdown file may split into several sections, and all of them go together. A name the book does not already have appends instead, which is how a new file arrives.
+
+That is the shape the [markdown frontend](../reference/markdown.md) reads in, so a keystroke costs one file:
+
+```rust
+use fleuron_markdown::{Options, to_sections};
+
+let reading = Options::default();
+let text = std::fs::read_to_string("ch03.md")?;
+let (sections, warnings) = to_sections(&text, "ch03.md", &reading);
+
+session.replace_source("ch03.md", sections);
+let output = session.preview();
+```
+
+The name passed to `replace_source` is the name the sections were read under, since that is what each one carries as its `source`. Pass one and not the other and the sections append as a new file rather than replacing the old one.
+
+Nothing re-reads the files that did not change. `fleuron_markdown::Cache` holds each source's sections against its name and a hash of its bytes, which is the same question `replace_source` is answering one layer down.
 
 Node ids belong to the engine. The tree is renumbered on the way in, so sections built by hand need no ids of their own, and nothing downstream is keyed on an id that renumbering will move.
 

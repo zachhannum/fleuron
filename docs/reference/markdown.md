@@ -47,6 +47,42 @@ Sixty chapter files have sixty frontmatter blocks and none of them describes the
 
 A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is carried for whoever wants it.
 
+## Several sources
+
+Each file is read on its own, under its own name, and the sections concatenate in whatever order the caller composes them. Metadata is decided once, by the caller, and handed to assembly:
+
+```rust
+use fleuron::content::Metadata;
+use fleuron_markdown::{Options, Sections, assemble, to_sections};
+
+// A file per chapter, so nothing is cut at a heading.
+let reading = Options {
+    sections: Sections::Whole,
+    ..Options::default()
+};
+
+let mut sections = Vec::new();
+let mut warnings = Vec::new();
+for (name, text) in chapters {
+    let (read, complaints) = to_sections(&text, &name, &reading);
+    sections.extend(read);
+    warnings.extend(complaints);
+}
+
+let book = assemble(
+    Metadata {
+        title: Some("The Levant Papers".into()),
+        author: Some("E. Marsh".into()),
+        ..Metadata::default()
+    },
+    sections,
+);
+```
+
+`assemble` numbers the whole tree, so it runs once over every section rather than once per file. Node ids are document-order over the book, and a file read on its own has no idea where in the book it will sit.
+
+Warnings accumulate the same way, and each one already names the file it came from.
+
 ## Blocks
 
 | markdown | content tree |

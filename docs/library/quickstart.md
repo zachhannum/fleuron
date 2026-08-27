@@ -69,6 +69,10 @@ Against the manuscript that ships with the repository, that prints `34 pages` an
 
 **`to_sections` and `assemble`.** `fleuron-markdown` is the frontend: one source in, that source's sections and its diagnostics out. [The markdown mapping](../reference/markdown.md) is what it does with each construct, and `Options` is where the section policy and the dialect are named. Assembly is a step of its own because composing sources is the caller's decision, not the parser's: you order them and you decide the metadata. It also numbers the tree, in document order, which is what diagnostics point at.
 
+**`frontmatter`.** The `---` block at the top of a source. This manuscript is one file, so the block describes the book and goes straight to assembly. A host composing a chapter per file passes its own `Metadata` instead, because sixty chapter files have sixty frontmatter blocks and none of them names the work; each file's own `title:` becomes its section's. [The markdown mapping](../reference/markdown.md) has the rest of it.
+
+**`frontmatter`.** The `---` block at the top of a source. This manuscript is one file, so the block describes the book and goes straight to assembly. A host composing a chapter per file builds its own `Metadata` and passes that instead, because sixty chapter files have sixty frontmatter blocks and none of them names the work; each file's own `title:` becomes its section's. [Several sources](../reference/markdown.md) is that loop.
+
 A host with a tree of its own, such as a CMS or a docx converter, can skip the frontend and hand the engine a `Book` directly; [the content tree reference](../reference/content-tree.md) is that schema.
 
 **`FontRegistry`.** `bundled_registry()` gives you EB Garamond, upright and italic, registered as the default serif. Everything else a stylesheet asks for arrives through `@font-face`. See [fonts](fonts.md).

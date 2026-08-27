@@ -145,6 +145,42 @@ pub fn to_sections(text: &str, source: &str, options: &Options) -> (Vec<Section>
 
 /// Composes ordered sections into a book under the metadata the
 /// caller decided on, and numbers the tree.
+///
+/// The metadata is an argument because a book of many files has no
+/// one file to read it from. Each chapter's frontmatter stays with
+/// the chapter; the work is named here.
+///
+/// ```
+/// use fleuron::content::Metadata;
+/// use fleuron_markdown::{Options, Sections, assemble, to_sections};
+///
+/// // A file per chapter, so nothing is cut at a heading.
+/// let reading = Options {
+///     sections: Sections::Whole,
+///     ..Options::default()
+/// };
+/// let chapters = [
+///     ("ch01.md", "---\ntitle: The Ambassador\n---\n\nHe arrived.\n"),
+///     ("ch02.md", "---\ntitle: A Cold Reception\n---\n\nNobody met him.\n"),
+/// ];
+///
+/// let mut sections = Vec::new();
+/// for (name, text) in chapters {
+///     sections.extend(to_sections(text, name, &reading).0);
+/// }
+///
+/// let book = assemble(
+///     Metadata {
+///         title: Some("The Levant Papers".into()),
+///         ..Metadata::default()
+///     },
+///     sections,
+/// );
+///
+/// assert_eq!(book.metadata.title.as_deref(), Some("The Levant Papers"));
+/// assert_eq!(book.sections[0].title.as_deref(), Some("The Ambassador"));
+/// assert_eq!(book.sections[1].title.as_deref(), Some("A Cold Reception"));
+/// ```
 pub fn assemble(metadata: Metadata, sections: Vec<Section>) -> Book {
     let mut book = Book { metadata, sections };
     book.assign_node_ids();
