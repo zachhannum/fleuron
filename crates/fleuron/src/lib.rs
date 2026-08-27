@@ -18,10 +18,11 @@ pub mod pages;
 pub mod pdf;
 pub mod session;
 pub mod style;
+pub mod wire;
 
 /// Non-fatal problems surfaced during style compilation, layout, or
 /// fragmentation: unsupported CSS, missing fonts, low effective DPI…
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Warning {
     /// What went wrong, in one line.
     pub message: String,
@@ -30,7 +31,7 @@ pub struct Warning {
 }
 
 /// Everything the engine produces for one run: pages plus diagnostics.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LayoutOutput {
     /// The typeset pages, in reading order.
     pub pages: Vec<pages::Page>,

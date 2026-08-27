@@ -55,6 +55,8 @@ let output = session.preview();
 
 The name passed to `replace_source` is the name the sections were read under, since that is what each one carries as its `source`. Pass one and not the other and the sections append as a new file rather than replacing the old one.
 
+`set_source_warnings` carries a frontend's complaints into the run's diagnostics, so what the markdown reader had to say about a table comes back on the display list beside what the styling and the layout had to say. Which of them still apply after an edit is the caller's to decide; the session replaces the lot.
+
 Nothing re-reads the files that did not change. `fleuron_markdown::Cache` holds each source's sections against its name and a hash of its bytes, which is the same question `replace_source` is answering one layer down.
 
 Node ids belong to the engine. The tree is renumbered on the way in, so sections built by hand need no ids of their own, and nothing downstream is keyed on an id that renumbering will move.
@@ -79,4 +81,6 @@ Every stage stays live at once: the lines of every section, beside the display l
 
 ## Fonts
 
-The registry is fixed for the session's life. A computed style can only resolve to a face already in the registry, so a sheet that brings its own `@font-face` needs the host to register it before the session is made. See [fonts](fonts.md).
+A session over a borrowed registry lays out against the faces that registry holds, and a computed style can only resolve to one of them, so a sheet that brings its own `@font-face` needs the host to register it before the session is made.
+
+`Session::owning` takes the registry instead of borrowing it, and then `add_font` works: the faces arrive through the session, which re-runs what a new face can change. The cascade resolves a family it did not have before, so the styling is compiled again and the lines are broken again. That is the shape a worker needs, where the module is the only place a registry could live. See [fonts](fonts.md).

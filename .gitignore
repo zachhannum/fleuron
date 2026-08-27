@@ -1,3 +1,11 @@
 /target
 /book.pdf
 /cli.pdf
+
+# The wasm package: the module wasm-pack builds, what tsc makes of the
+# TypeScript beside it, and what npm packs from the two.
+/crates/fleuron-wasm/npm/node_modules
+/crates/fleuron-wasm/npm/wasm
+/crates/fleuron-wasm/npm/dist
+/crates/fleuron-wasm/npm/build
+/crates/fleuron-wasm/npm/*.tgz

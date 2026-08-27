@@ -14,4 +14,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fleuron = { path = "../fleuron" }
+fleuron-markdown = { path = "../fleuron-markdown" }
 wasm-bindgen = "0.2"
+serde_json = "1"

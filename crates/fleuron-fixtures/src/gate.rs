@@ -20,6 +20,7 @@ use fleuron::layout::{Fragment, Paginator, Piece};
 use fleuron::pdf;
 use fleuron::session::Session;
 use fleuron::style::{Source, Stylesheets};
+use fleuron::wire;
 
 use crate::corpus::Corpus;
 
@@ -39,9 +40,11 @@ pub mod budget {
     /// would otherwise hide inside a pipeline that had not.
     pub const PARSE: Duration = Duration::from_millis(20);
 
-    /// The same book laid out in the worker, where the budget is a
-    /// span of a reader's patience rather than a build step, and
-    /// where export is a separate act the reader asked for.
+    /// The same book laid out in the worker and encoded for the wire,
+    /// where the budget is a span of a reader's patience rather than
+    /// a build step, and where export is a separate act the reader
+    /// asked for. Serialization is inside it because a display list
+    /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
     /// Bytes a book-scale layout may hold at its peak, over what the
@@ -91,7 +94,7 @@ impl Target {
     pub fn time_budget(self) -> (&'static str, Duration) {
         match self {
             Target::Native => ("end to end", budget::NATIVE_END_TO_END),
-            Target::Wasm => ("layout", budget::WASM_LAYOUT),
+            Target::Wasm => ("layout + wire", budget::WASM_LAYOUT),
         }
     }
 
@@ -123,6 +126,15 @@ pub struct Report {
     pub fragment: Duration,
     /// Both of the above, as one call — what a caller pays.
     pub layout: Duration,
+    /// Display list to the bytes that cross to the host.
+    pub serialize: Duration,
+    /// Size of the encoded display list.
+    pub wire_bytes: usize,
+    /// What those bytes hash to. Layout is deterministic and the wire
+    /// is positional, so this number is the same on every target that
+    /// agrees about the book, which is how a run under wasm and a
+    /// run natively are held to producing the same page.
+    pub wire_digest: u64,
     /// Display list to PDF bytes.
     pub pdf: Duration,
     /// Size of the PDF the run wrote.
@@ -149,7 +161,7 @@ impl Report {
         let (label, ceiling) = target.time_budget();
         let measured = match target {
             Target::Native => self.end_to_end(),
-            Target::Wasm => self.layout,
+            Target::Wasm => self.layout + self.serialize,
         };
         vec![
             Check {
@@ -250,6 +262,9 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
     let mut fragment = Duration::MAX;
     let mut layout = Duration::MAX;
     let mut pdf_time = Duration::MAX;
+    let mut serialize = Duration::MAX;
+    let mut wire_bytes = 0;
+    let mut wire_digest = 0;
     let mut lines = 0;
     let mut pages = 0;
     let mut pdf_bytes = 0;
@@ -294,6 +309,12 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         pages = output.pages.len();
 
         let start = Instant::now();
+        let encoded = black_box(wire::encode(&output).expect("a display list encodes"));
+        serialize = serialize.min(start.elapsed());
+        wire_bytes = encoded.len();
+        wire_digest = digest(&encoded);
+
+        let start = Instant::now();
         let bytes = black_box(
             pdf::write(&output, registry, &book.metadata).expect("fixture book writes PDF"),
         );
@@ -336,12 +357,26 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         line_layout,
         fragment,
         layout,
+        serialize,
+        wire_bytes,
+        wire_digest,
         pdf: pdf_time,
         pdf_bytes,
         layout_peak,
         style_rerender,
         session_peak,
     }
+}
+
+/// FNV-1a over the encoded display list: a number two runs can be
+/// compared on without a hash crate in the harness.
+fn digest(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 impl fmt::Display for Report {
@@ -360,6 +395,7 @@ impl fmt::Display for Report {
             ("line layout", self.line_layout),
             ("fragment", self.fragment),
             ("layout", self.layout),
+            ("serialize", self.serialize),
             ("pdf", self.pdf),
             ("end to end", self.end_to_end()),
             ("re-render", self.style_rerender),
@@ -371,6 +407,13 @@ impl fmt::Display for Report {
                 duration.as_secs_f64() * 1000.0
             )?;
         }
+        writeln!(
+            f,
+            "  {:<14} {:>9} KiB  digest {:016x}",
+            "display list",
+            self.wire_bytes / 1024,
+            self.wire_digest,
+        )?;
         for (what, bytes) in [("layout", self.layout_peak), ("session", self.session_peak)] {
             writeln!(
                 f,
@@ -416,9 +459,9 @@ mod tests {
     }
 
     /// The two targets are timed on different things: a build step
-    /// waits for PDF bytes, a reader waits for layout. A run that
+    /// waits for PDF bytes, a reader waits for a page. A run that
     /// clears the native budget end to end can still blow the
-    /// worker's on layout alone.
+    /// worker's on layout and the wire alone.
     #[test]
     fn each_target_is_timed_on_what_it_waits_for() {
         let report = Report {
@@ -430,6 +473,9 @@ mod tests {
             line_layout: Duration::from_millis(600),
             fragment: Duration::from_millis(20),
             layout: Duration::from_millis(700),
+            serialize: Duration::from_millis(40),
+            wire_bytes: 0,
+            wire_digest: 0,
             pdf: Duration::from_millis(100),
             pdf_bytes: 0,
             layout_peak: 1024 * 1024,
@@ -444,11 +490,11 @@ mod tests {
         assert!(native[1].passed());
 
         let wasm = report.checks(Target::Wasm);
-        assert_eq!(wasm[1].label, "layout");
-        assert_eq!(wasm[1].measured, 700.0);
+        assert_eq!(wasm[1].label, "layout + wire");
+        assert_eq!(wasm[1].measured, 740.0);
         assert!(
             !wasm[1].passed(),
-            "700 ms of layout blows the worker budget"
+            "700 ms of layout and 40 of encoding blows the worker budget"
         );
 
         // Parse and the memory ceiling do not move with the target.

@@ -1,0 +1,45 @@
+{
+  "name": "@fleuron/wasm",
+  "version": "0.0.1",
+  "description": "Paged-media layout in a worker: markdown and CSS in, a display list or PDF bytes out",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zachhannum/fleuron.git",
+    "directory": "crates/fleuron-wasm/npm"
+  },
+  "homepage": "https://zachhannum.github.io/fleuron/",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "default": "./dist/worker.js"
+    },
+    "./fleuron_bg.wasm": "./wasm/fleuron_bg.wasm"
+  },
+  "files": [
+    "dist",
+    "wasm"
+  ],
+  "scripts": {
+    "build": "node scripts/prepare.mjs && tsc -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build:test && node build/harness.js",
+    "size": "npm run build:test && node build/size.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
