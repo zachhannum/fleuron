@@ -1,15 +1,17 @@
 ---
 title: Content tree
-description: The JSON input contract — the semantic document the engine lays out.
+description: The input contract — the semantic document the engine lays out.
 ---
 
 The content tree is a semantic document, not markup. It is the engine's input contract: everything downstream consumes these types, and nothing widens the vocabulary without a fixture and a test.
 
-Most callers never build one. [Markdown](markdown.md) is the way in, and the frontend produces this. The schema is here for a host whose source is already structured, such as a CMS or a docx converter, and for reading back what the frontend did with a manuscript.
+Most callers never build one. [Markdown](markdown.md) is the way in, and the frontend produces this. The types are here for a host whose source is already structured, such as a CMS or a docx converter: it constructs a `Book` in Rust, typed and checked by the compiler, with no schema document to keep in step.
 
-It crosses as JSON, internally tagged, so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast).
+The tree serializes, internally tagged so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast), and that is an output: `fleuron manuscript.md --dump-tree` is how to read what the frontend did. Nothing parses one back into a `Book`.
 
 ## Shape
+
+The dump, abridged:
 
 ```json
 {
@@ -92,9 +94,9 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 ## Node identity
 
-Every node has an id, and the engine assigns it: input cannot collide ids or forge a diagnostic origin. Ids never travel on the wire — the tree is authoritative — so fresh off the wire every node is unassigned, and `Book::assign_node_ids` numbers them from 1 in document order. Pre-order: a node before its children, sections in reading order.
+Every node has an id, and the engine assigns it: input cannot collide ids or forge a diagnostic origin. Ids are never serialized, so a tree built by hand holds unassigned ids until `Book::assign_node_ids` numbers them from 1 in document order. Pre-order: a node before its children, sections in reading order.
 
-Call it once, after deserializing. Calling it again renumbers. A [session](../library/sessions.md) numbers what it is handed, so content set through one arrives numbered whatever the host did.
+Call it once, after building the tree. Calling it again renumbers. A [session](../library/sessions.md) numbers what it is handed, so content set through one arrives numbered whatever the host did.
 
 ## Source positions
 

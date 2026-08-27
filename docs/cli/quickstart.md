@@ -91,15 +91,15 @@ h1, h2, h3 { font-size: 20pt; }
 
 A face that resolves nowhere warns and the text falls back. See [fonts](../library/fonts.md).
 
-## A content tree instead
+## Reading the tree back
 
-A single `.json` argument is read as a [content tree](../reference/content-tree.md): the same document one stage later, for a host that builds one itself.
+To see what the frontend made of a manuscript (which heading opened a section, where a construct degraded) dump the [content tree](../reference/content-tree.md) instead of laying it out:
 
 ```sh
-fleuron book.json -o book.pdf
+fleuron manuscript.md --dump-tree
 ```
 
-It is also how to look at what the frontend did with a manuscript: dump the tree, read it, feed it back.
+It goes to stdout, and the same manuscript dumps the same bytes every time.
 
 ## What it tells you
 

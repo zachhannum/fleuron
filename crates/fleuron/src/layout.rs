@@ -1808,24 +1808,6 @@ mod tests {
         assert!(paginate(vec![section(vec![])]).is_empty());
     }
 
-    /// The fixture book carries folios: the e2e path exercises page
-    /// furniture, not just content flow.
-    #[test]
-    fn fixture_book_carries_folios() {
-        let output = layout_fixture();
-        let with_folios = output.pages.iter().filter(|p| folio(p).is_some()).count();
-        assert!(
-            with_folios >= output.pages.len() - 2,
-            "only {with_folios} of {} fixture pages carry folios",
-            output.pages.len()
-        );
-        for page in &output.pages {
-            if let Some((_, digits)) = folio(page) {
-                assert_eq!(digits, page.number.to_string());
-            }
-        }
-    }
-
     /// Prose whose paragraphs are each set in a token of their own,
     /// so a page's lines can be traced back to the paragraph they
     /// were broken from. Lengths vary so page breaks land in every
@@ -2315,15 +2297,6 @@ mod tests {
         }
     }
 
-    /// The fixture book, laid out under the built-in sheet.
-    fn layout_fixture() -> LayoutOutput {
-        let mut book: Book =
-            serde_json::from_str(include_str!("../../../fixtures/book.json")).unwrap();
-        book.assign_node_ids();
-        let styles = crate::style::defaults(&book, registry());
-        layout_book(&book, &styles, registry())
-    }
-
     /// Pagination is line layout then flow, and splitting it that way
     /// changes nothing: the harness times the two halves separately,
     /// which is only worth doing while their composition is the whole.
@@ -2351,14 +2324,5 @@ mod tests {
             assert_eq!(staged.side, whole.side);
             assert_eq!(format!("{:?}", staged.items), format!("{:?}", whole.items));
         }
-    }
-
-    /// The fixture book paginates, and its font table is the
-    /// registry's — every cut, indexed by the id a run carries.
-    #[test]
-    fn fixture_book_paginates() {
-        let output = layout_fixture();
-        assert!(!output.pages.is_empty());
-        assert_eq!(output.fonts.len(), registry().len());
     }
 }

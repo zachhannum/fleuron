@@ -1,30 +1,31 @@
 //! The content tree: semantic input.
 //!
-//! Markdown frontends (Orca's remark/rehype pipeline) produce this; the
-//! element vocabulary is bounded by what those frontends emit —
-//! book/section, heading, paragraph, blockquote, thematic break,
-//! emphasis/strong/code, image, link.
+//! The markdown frontend produces this; the element vocabulary is
+//! bounded by what a book needs — book/section, heading, paragraph,
+//! blockquote, thematic break, emphasis/strong/code, image, link.
 //!
 //! This module is the **input contract**: everything downstream (style,
 //! box construction, layout) consumes these types, and nothing widens
-//! the vocabulary without a fixture and a test.
+//! the vocabulary without a fixture and a test. It is a Rust type, and
+//! that is the seam a frontend of its own builds against: a docx or CMS
+//! reader constructs a `Book` directly, with the compiler checking the
+//! shape.
 //!
-//! # Wire format
+//! # Reading a tree back
 //!
-//! The content tree crosses every boundary as JSON, internally tagged
-//! (`{"type": "paragraph", ...}`) so the shape maps one-to-one onto
-//! mdast; a frontend serializes its tree with a field rename, not a
-//! conversion pass. Postcard is the output wire (display list to the
-//! WASM host), not this one.
+//! The tree serializes, internally tagged (`{"type": "paragraph", …}`)
+//! so the shape maps one-to-one onto mdast, and that is an output: it
+//! is how to see what a frontend made of a manuscript. Nothing parses
+//! one back into a `Book`.
 //!
 //! # Node identity
 //!
 //! `NodeId` is engine-assigned, never frontend-supplied: input can't
 //! collide ids or forge diagnostic origins. Every node's `id` field is
-//! `#[serde(skip)]` — ids never travel on the wire; the tree is
-//! authoritative. Fresh off the wire every id is `NodeId::UNASSIGNED`;
-//! `Book::assign_node_ids` assigns dense ids from 1 in document order
-//! (pre-order: a node before its children, sections in reading order).
+//! `#[serde(skip)]`, so a serialized tree carries none. A tree built by
+//! hand holds `NodeId::UNASSIGNED` until `Book::assign_node_ids`
+//! assigns dense ids from 1 in document order (pre-order: a node before
+//! its children, sections in reading order).
 //!
 //! # Source positions
 //!
@@ -35,17 +36,17 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Identity of one node in the content tree, for diagnostics and
 /// incremental relayout.
 ///
 /// Assigned in document order, starting at 1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
 pub struct NodeId(u32);
 
 impl NodeId {
-    /// What every node holds fresh off the wire, before assignment.
+    /// What every node holds before assignment.
     pub const UNASSIGNED: NodeId = NodeId(0);
 
     /// The raw id. Monotonic in document order within one book.
@@ -58,7 +59,7 @@ impl NodeId {
 ///
 /// Line and column are as the markdown parser reported them. This is
 /// diagnostic data, never layout input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct SourcePos {
     /// 1-based line in the source markdown.
     pub line: u32,
@@ -79,125 +80,119 @@ pub fn origin(source: Option<&str>, position: Option<SourcePos>) -> String {
 }
 
 /// Book metadata: everything about the work that isn't content.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Metadata {
     /// Title, for the half-title and running heads.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Author, for the title page.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     /// Frontend-defined extensions (language, ISBN, subtitle…) keyed
     /// by name. Opaque to the engine; style reads them, layout
     /// doesn't.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, String>,
 }
 
 /// The root of the content tree: one book.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Book {
     /// The work's title, author and frontend extensions.
     pub metadata: Metadata,
     /// The chapters/files, in reading order.
-    #[serde(default)]
     pub sections: Vec<Section>,
 }
 
 /// A chapter or file: the unit of markdown input and of source
 /// attribution for diagnostics.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Section {
-    /// Engine-assigned identity, for diagnostics; never on the wire.
+    /// Engine-assigned identity, for diagnostics; never serialized.
     #[serde(skip)]
     pub id: NodeId,
     /// File the frontend read (e.g. `chapter-01.md`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// Section title supplied outside the body (frontmatter
     /// `title:`); implies heading level 1.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// The section's blocks, in reading order.
-    #[serde(default)]
     pub blocks: Vec<Block>,
     /// Where the frontend read this from.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<SourcePos>,
 }
 
 /// A block-level element: the unit of fragmentation input.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Block {
     /// `#` through `######`; levels outside 1–6 are rejected at parse.
     Heading {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// `#` count, 1-6.
         level: HeadingLevel,
         /// The heading's text, in reading order.
-        #[serde(default)]
         inlines: Vec<Inline>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A run of prose: the unit line layout breaks.
     Paragraph {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The paragraph's text, in reading order.
-        #[serde(default)]
         inlines: Vec<Inline>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A quotation set off by `>`; contents are blocks, not inlines —
     /// blockquotes nest.
     Blockquote {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The quoted blocks, in reading order.
-        #[serde(default)]
         blocks: Vec<Block>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// `---`: a scene break, rendered as space or an ornament (❦).
     ThematicBreak {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A block-level image.
     Image {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// Where the image lives; the host resolves it, not the engine.
         url: String,
         /// Alt text: not laid out, but part of the accessibility
         /// contract.
-        #[serde(default)]
         alt: String,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
 }
 
 /// A heading level, 1–6, as markdown defines them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(into = "u8", try_from = "u8")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(into = "u8")]
 pub enum HeadingLevel {
     /// `#`
     H1,
@@ -248,68 +243,65 @@ impl TryFrom<u8> for HeadingLevel {
 pub struct InvalidHeadingLevel(pub u8);
 
 /// An inline element: participates in line layout.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Inline {
     /// A run of text. The frontend has already decoded entities; the
     /// engine sees plain Unicode.
     Text {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The characters themselves, entities already decoded.
         value: String,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// `*emphasis*`: italic, in the default sheet.
     Emphasis {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The emphasised inlines.
-        #[serde(default)]
         children: Vec<Inline>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// `**strong**`: bold, in the default sheet.
     Strong {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The strengthened inlines.
-        #[serde(default)]
         children: Vec<Inline>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// `` `code` ``: monospace, and never hyphenated.
     Code {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The literal code text; no markup inside.
         value: String,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
     /// A hyperlink. The text lays out; the url is for painters that can carry one.
     Link {
-        /// Engine-assigned identity, for diagnostics; never on the wire.
+        /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
         /// The link target.
         url: String,
         /// The linked inlines.
-        #[serde(default)]
         children: Vec<Inline>,
         /// Where the frontend read this from.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
 }
@@ -507,51 +499,77 @@ mod tests {
         ids
     }
 
-    /// The tree survives a JSON round-trip unchanged.
+    /// Two serializations of one tree are the same bytes: a dump is
+    /// something to diff.
     #[test]
-    fn json_round_trip() {
-        let book = sample_book();
-        let json = serde_json::to_string_pretty(&book).unwrap();
-        let back: Book = serde_json::from_str(&json).unwrap();
-        assert_eq!(book, back);
+    fn serialization_is_stable() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let once = serde_json::to_string_pretty(&book).unwrap();
+        assert_eq!(once, serde_json::to_string_pretty(&book).unwrap());
     }
 
-    /// A serialized tree carries no ids; a deserialized one comes back
-    /// unassigned.
+    /// A serialized tree carries no ids: the tree is authoritative,
+    /// and identity is the engine's to hand out.
     #[test]
-    fn ids_never_travel_on_the_wire() {
+    fn ids_are_never_serialized() {
         let mut book = sample_book();
         book.assign_node_ids();
         let json = serde_json::to_string(&book).unwrap();
         assert!(!json.contains("\"id\""));
-        let back: Book = serde_json::from_str(&json).unwrap();
-        assert!(
-            collect_ids(&back)
-                .iter()
-                .all(|id| *id == NodeId::UNASSIGNED)
+    }
+
+    /// Tags are `type`, text runs are plain strings, and the shape
+    /// maps onto mdast.
+    #[test]
+    fn a_serialized_tree_is_internally_tagged() {
+        let block = Block::Paragraph {
+            id: NodeId::UNASSIGNED,
+            inlines: vec![
+                Inline::Text {
+                    id: NodeId::UNASSIGNED,
+                    value: "plain ".into(),
+                    position: None,
+                },
+                Inline::Strong {
+                    id: NodeId::UNASSIGNED,
+                    children: vec![Inline::Text {
+                        id: NodeId::UNASSIGNED,
+                        value: "bold".into(),
+                        position: None,
+                    }],
+                    position: None,
+                },
+            ],
+            position: Some(SourcePos { line: 4, column: 1 }),
+        };
+        assert_eq!(
+            serde_json::to_value(&block).unwrap(),
+            serde_json::json!({
+                "type": "paragraph",
+                "inlines": [
+                    {"type": "text", "value": "plain "},
+                    {"type": "strong", "children": [{"type": "text", "value": "bold"}]},
+                ],
+                "position": {"line": 4, "column": 1},
+            }),
         );
     }
 
-    /// The checked-in fixture is valid against this schema.
+    /// A heading level is 1-6, and a level outside that is rejected
+    /// rather than clamped.
     #[test]
-    fn fixture_deserializes() {
-        let text = include_str!("../../../fixtures/book.json");
-        let book: Book = serde_json::from_str(text).expect("fixture book.json parses");
-        assert_eq!(book.metadata.title.as_deref(), Some("Gulliver's Travels"));
-        assert_eq!(book.sections.len(), 1);
-        let blocks: Vec<&Block> = book.sections.iter().flat_map(|s| s.blocks.iter()).collect();
-        assert!(blocks.iter().any(|b| matches!(b, Block::Heading { .. })));
-        let quote = blocks
-            .iter()
-            .find_map(|b| match b {
-                Block::Blockquote { blocks, .. } => Some(blocks.len()),
-                _ => None,
-            })
-            .expect("fixture has a blockquote");
-        assert!(quote >= 2, "fixture blockquote has multiple paragraphs");
-        // Chapter argument paragraphs open with an emphasis run.
-        let italic_lead = blocks.iter().any(|b| matches!(b, Block::Paragraph { inlines, .. } if matches!(inlines.first(), Some(Inline::Emphasis { .. }))));
-        assert!(italic_lead);
+    fn heading_levels_run_one_to_six() {
+        for level in 1..=6u8 {
+            let heading = HeadingLevel::try_from(level).expect("1-6 is a heading level");
+            assert_eq!(u8::from(heading), level);
+        }
+        for outside in [0u8, 7, 255] {
+            assert_eq!(
+                HeadingLevel::try_from(outside),
+                Err(InvalidHeadingLevel(outside)),
+            );
+        }
     }
 
     /// Ids are dense (exactly `1..=n`), assigned pre-order, and the
@@ -605,52 +623,6 @@ mod tests {
         let first = collect_ids(&book);
         book.assign_node_ids();
         assert_eq!(first, collect_ids(&book));
-    }
-
-    /// Tags are `type`, text runs are plain strings.
-    #[test]
-    fn internally_tagged_json_parses() {
-        let json = r#"{
-            "type": "paragraph",
-            "inlines": [
-                {"type": "text", "value": "plain "},
-                {"type": "strong", "children": [{"type": "text", "value": "bold"}]},
-                {"type": "code", "value": "code"}
-            ],
-            "position": {"line": 4, "column": 1}
-        }"#;
-        let block: Block = serde_json::from_str(json).unwrap();
-        let Block::Paragraph {
-            inlines, position, ..
-        } = &block
-        else {
-            panic!("expected paragraph");
-        };
-        assert_eq!(inlines.len(), 3);
-        assert_eq!(*position, Some(SourcePos { line: 4, column: 1 }));
-    }
-
-    /// Levels outside 1–6 fail at parse rather than clamping.
-    #[test]
-    fn heading_level_out_of_range_fails() {
-        let json = r#"{"type": "heading", "level": 7, "inlines": []}"#;
-        let err = serde_json::from_str::<Block>(json).unwrap_err();
-        assert!(err.to_string().contains("1-6"), "got: {err}");
-    }
-
-    /// Every optional field can be omitted.
-    #[test]
-    fn missing_fields_default() {
-        let json = r#"{"type": "paragraph"}"#;
-        let block: Block = serde_json::from_str(json).unwrap();
-        let Block::Paragraph {
-            inlines, position, ..
-        } = &block
-        else {
-            panic!("expected paragraph");
-        };
-        assert!(inlines.is_empty());
-        assert!(position.is_none());
     }
 
     /// File + position in all four presence combinations.

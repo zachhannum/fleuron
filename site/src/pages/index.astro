@@ -162,12 +162,12 @@ const description =
           <!-- Inline tags stay mid-line: a newline touching one is dropped
                rather than collapsed to a space, which runs the words together. -->
           <p class="section-lede">
-            fleuron does not read markdown files directly. It takes the
-            document as JSON, in the same shape as mdast, the syntax tree
-            that markdown tools already produce. <code>fleuron</code> is the
-            core library, pure Rust with no I/O. <code>fleuron-cli</code> reads
-            a document and stylesheets and writes a PDF. <code>fleuron-wasm</code> will run
-            layout in the browser, but it has no exports yet and is not usable.
+            Markdown is the way in: <code>fleuron-markdown</code> reads a
+            manuscript into the content tree the engine lays out.
+            <code>fleuron</code> is the core library, pure Rust with no I/O.
+            <code>fleuron-cli</code> reads a manuscript and stylesheets and writes
+            a PDF. <code>fleuron-wasm</code> will run layout in the browser, but it
+            has no exports yet and is not usable.
           </p>
           <Consumers />
         </div>

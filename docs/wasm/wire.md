@@ -9,7 +9,7 @@ The display-list types derive `Serialize` and not `Deserialize`, and `postcard` 
 
 ## Why postcard
 
-The wire is not the input contract. [The content tree](../reference/content-tree.md) crosses as JSON because it maps one-to-one onto mdast and a frontend should be able to serialize its own tree with a field rename. The display list crosses as [postcard](https://postcard.jamesmunns.com/) because it is machine output: a book's worth of per-glyph positions, produced once per keystroke, decoded on the main thread, and never written by hand.
+The wire is not the input contract. [The content tree](../reference/content-tree.md) is a Rust type a frontend constructs, and it serializes to JSON only to be read. The display list crosses as [postcard](https://postcard.jamesmunns.com/) because it is machine output: a book's worth of per-glyph positions, produced once per keystroke, decoded on the main thread, and never written by hand.
 
 Postcard is a non-self-describing, varint-packed format. Field names do not travel, small integers cost one byte, and there is no parse step that allocates a tree of maps before you can read the first page.
 
