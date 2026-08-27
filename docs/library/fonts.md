@@ -24,7 +24,7 @@ That is EB Garamond, upright and italic, registered as the generic `serif` and a
 }
 ```
 
-The engine never resolves a `src` url. It hands each one to the `FontLoader` it was given, exactly as the sheet wrote it, and whether that string is a path, a key or a URL is the loader's business:
+Whatever string you write in `url()` is handed to your `FontLoader` as it is. It never has to be a real URL:
 
 ```rust
 struct Files(PathBuf);

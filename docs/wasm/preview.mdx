@@ -22,12 +22,11 @@ preview.zoom = 1.5;
 
 ## Images
 
-`![a map](images/lilliput.jpg)` in a manuscript is a url and nothing else. Nothing in the package will go and fetch it, so fetch it yourself and hand over what comes back:
+Nothing in the package fetches a url. Fetch the file yourself and hand over what comes back, under the same string the manuscript wrote:
 
 ```js
-// The engine never resolves a url; it matches the string the
-// manuscript wrote. This host reads them from a directory, another
-// might read a database or an editor's unsaved buffer.
+// This host reads them from a directory, another might read a
+// database or an editor's unsaved buffer.
 async function load(url) {
   const file = await fetch(`/manuscript/${url}`);
   return new Uint8Array(await file.arrayBuffer());
@@ -41,7 +40,9 @@ const preview = await Preview.mount(element, {
 await preview.addImage('images/colophon.png', await load('images/colophon.png'));
 ```
 
-The key is the url the manuscript writes, and the value is the bytes of the file it stands for. The url appears twice on purpose: the engine matches the one in the markdown, and the path you fetched it from never reaches it. The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
+Whatever string the manuscript writes is the name the image is matched under, so the key has to be that string and never has to be a real URL. Where you fetched the file from is your own business and never reaches the engine, which is why the url shows up twice above.
+
+The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
 
 An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to name your own urls, and the preview hands the display list's asset to it rather than resolving a blob of its own.
 

@@ -72,7 +72,7 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `paragraph` | `inlines`. The unit line layout breaks. |
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
-| `image` | `url` and `alt`. The engine never resolves the url and never decodes the image; both are the host's, and the url is matched as written. `alt` is not laid out, is carried through for painters and for accessibility, and is not optional. |
+| `image` | `url` and `alt`. Whatever string you write is the name the image is matched under, and it never has to be a real URL: the engine neither resolves it nor decodes the image. `alt` is not laid out, is carried through for painters and for accessibility, and is not optional. |
 
 ## Inlines
 

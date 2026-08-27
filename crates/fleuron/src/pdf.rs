@@ -99,8 +99,8 @@ fn write_with(
 /// indexes them.
 ///
 /// The format is read off the bytes rather than off the url, since a
-/// url the host resolves need not name a format at all: `/asset/8412`
-/// is a perfectly good one. PDF's `DCTDecode` is the JPEG stream
+/// url never has to name one: `/asset/8412` is a perfectly good
+/// one. PDF's `DCTDecode` is the JPEG stream
 /// itself, so a JPEG travels into the file as it arrived; the raster
 /// formats are decoded once, alpha channel and all.
 fn embed_images(assets: &Assets) -> Result<Vec<Image>, PdfError> {

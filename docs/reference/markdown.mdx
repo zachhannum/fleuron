@@ -93,7 +93,7 @@ Warnings accumulate the same way, and each one already names the file it came fr
 
 An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph that held it, alt text and all, which is a move, so it warns.
 
-The engine never opens the url or resolves it against anything; it matches on the string as written. The host supplies the bytes for it, the engine reads the header for the intrinsic size, and a url nobody supplies is a warning and a gap.
+Whatever string you write in `![](…)` is the name the image is matched under. It never has to be a real URL: the host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nobody supplies is a warning and a gap.
 
 ## Inlines
 
