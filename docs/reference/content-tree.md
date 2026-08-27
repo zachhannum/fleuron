@@ -5,7 +5,9 @@ description: The JSON input contract — the semantic document the engine lays o
 
 The content tree is a semantic document, not markup. It is the engine's input contract: everything downstream consumes these types, and nothing widens the vocabulary without a fixture and a test.
 
-It crosses as JSON, internally tagged, so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast). A markdown frontend serializes its own tree with a field rename rather than a conversion pass.
+Most callers never build one. [Markdown](markdown.md) is the way in, and the frontend produces this. The schema is here for a host whose source is already structured, such as a CMS or a docx converter, and for reading back what the frontend did with a manuscript.
+
+It crosses as JSON, internally tagged, so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast).
 
 ## Shape
 

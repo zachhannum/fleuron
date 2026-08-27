@@ -58,6 +58,42 @@ fn section(source: &str, tag: &str, paragraphs: usize) -> Section {
     }
 }
 
+/// Replacing one file re-breaks that file and nothing else.
+///
+/// The property tests prove a session's output is right. This proves
+/// what it did not do to get there, which a clock cannot show: the
+/// nine sections the edit did not touch keep the lines they already
+/// had, and the book is fragmented once over the result.
+#[test]
+fn replacing_one_source_re_breaks_only_that_source() {
+    let shape: Vec<(String, String, usize)> = (0..10)
+        .map(|index| (format!("ch{index:02}.md"), format!("tag{index}"), 6))
+        .collect();
+    let borrowed: Vec<(&str, &str, usize)> = shape
+        .iter()
+        .map(|(name, tag, paragraphs)| (name.as_str(), tag.as_str(), *paragraphs))
+        .collect();
+
+    let mut session = Session::new(registry());
+    session.set_content(book(&borrowed));
+    session.set_style(Stylesheets::parse(&[]));
+    session.preview();
+    let first = session.stages();
+    assert_eq!(first.lines, 10, "the first preview breaks every section");
+
+    session.replace_source("ch05.md", vec![section("ch05.md", "edited", 6)]);
+    session.preview();
+    let edited = session.stages();
+
+    assert_eq!(
+        edited.lines - first.lines,
+        1,
+        "an edit to one file re-broke {} sections",
+        edited.lines - first.lines,
+    );
+    assert_eq!(edited.flow - first.flow, 1, "the book flows once per edit");
+}
+
 fn book(shape: &[(&str, &str, usize)]) -> Book {
     Book {
         metadata: Metadata {

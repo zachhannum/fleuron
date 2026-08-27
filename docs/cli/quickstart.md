@@ -1,16 +1,16 @@
 ---
 title: CLI quickstart
-description: Fixture book in, PDF out, in one command.
+description: Markdown in, PDF out, in one command.
 ---
 
 ```sh
 git clone https://github.com/zachhannum/fleuron
 cd fleuron
-cargo run --release -p fleuron-cli -- fixtures/book.json -o book.pdf -c fixtures/styled.css
+cargo run --release -p fleuron-cli -- fixtures/gulliver-excerpt.md -o book.pdf -c fixtures/styled.css
 ```
 
 ```text
-fleuron: fixtures/book.json → book.pdf: 31 pages
+fleuron: fixtures/gulliver-excerpt.md → book.pdf: 34 pages
 ```
 
 That is an excerpt of *Gulliver's Travels* — dialogue, em-dashes, hyphenation-prone words — laid out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
@@ -19,17 +19,48 @@ That is an excerpt of *Gulliver's Travels* — dialogue, em-dashes, hyphenation-
 
 ```sh
 cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
-fleuron book.json -o book.pdf
+fleuron manuscript.md -o book.pdf
 ```
 
 With no `-c`, the built-in stylesheet is the whole of the styling: a trade paperback, justified, chapters opening recto. It is a finished design, and a book that never overrides it still comes out looking like a book.
+
+## Several files
+
+Markdown files compose in the order the command line gives them:
+
+```sh
+fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
+```
+
+Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in rather than at the run.
+
+One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed rather than named after whichever file came first. That leaves the work's own title and author to the command line:
+
+```sh
+fleuron ch01.md ch02.md ch03.md -o book.pdf \
+  --title "The Levant Papers" --author "E. Marsh"
+```
+
+A flag outranks frontmatter where the two overlap, so a single file can be retitled without editing it.
+
+## Where sections begin
+
+A section is what the fragmenter opens a page on, so where they begin decides the page count before any styling does. `--split` names the rule:
+
+```sh
+fleuron manuscript.md -o book.pdf --split 2
+```
+
+A heading at level 2 or shallower opens a section, which is the shape of a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, which is what a vault of one chapter per file wants: the file is the section.
+
+`--dialect` says which markdown is being read: `commonmark`, `gfm` or `obsidian`. [The markdown mapping](../reference/markdown.md) is what each construct becomes, and which of them warn.
 
 ## Adding your own styling
 
 Stylesheets cascade in the order the command line gives them, over the built-in sheet rather than instead of it:
 
 ```sh
-fleuron book.json -o book.pdf -c house.css -c series.css
+fleuron manuscript.md -o book.pdf -c house.css -c series.css
 ```
 
 So `house.css` sets the press's defaults and `series.css` overrides the handful of things this series does differently. Author CSS outranks the built-in sheet whatever the specificity of the built-in rule, so you never have to out-specify a default you are trying to replace.
@@ -60,10 +91,16 @@ h1, h2, h3 { font-size: 20pt; }
 
 A face that resolves nowhere warns and the text falls back. See [fonts](../library/fonts.md).
 
-## Where the input comes from
+## A content tree instead
 
-`book.json` is a content tree: a semantic document, not markup. [The content tree reference](../reference/content-tree.md) is the schema. Markdown frontends produce it from remark or rehype with a field rename rather than a conversion pass, because the shape maps one-to-one onto mdast.
+A single `.json` argument is read as a [content tree](../reference/content-tree.md): the same document one stage later, for a host that builds one itself.
+
+```sh
+fleuron book.json -o book.pdf
+```
+
+It is also how to look at what the frontend did with a manuscript: dump the tree, read it, feed it back.
 
 ## What it tells you
 
-The summary line goes to stderr, so `fleuron book.json -o /dev/stdout` is still a PDF on stdout. Warnings follow it, one per line, and then a count. Exit codes are in [the reference](reference.md).
+The summary line goes to stderr, so `fleuron manuscript.md -o /dev/stdout` is still a PDF on stdout. Warnings follow it, one per line, and then a count. Exit codes are in [the reference](reference.md).

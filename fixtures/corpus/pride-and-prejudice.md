@@ -1,10 +1,8 @@
-# Title: Pride and Prejudice
-
-## Author: Jane Austen
-
-## Year: 1813
-
--------
+---
+title: Pride and Prejudice
+author: Jane Austen
+year: 1813
+---
 
 ## Chapter 1
 

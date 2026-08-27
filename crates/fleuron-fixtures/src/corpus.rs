@@ -19,9 +19,8 @@
 //! measurement that depends on a working directory is a measurement
 //! that reports differently depending on where it was started.
 
-use fleuron::content::Book;
-
-use crate::markdown;
+use fleuron::content::{Book, HeadingLevel};
+use fleuron_markdown::{Options, Sections};
 
 /// One book in the fixture corpus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,10 +69,30 @@ impl Corpus {
         }
     }
 
-    /// The book as a content tree, node ids assigned — the same thing
-    /// a markdown frontend would hand the engine.
+    /// How the frontend reads this corpus: both books are one file
+    /// with a heading per chapter, and Monte Cristo opens its volumes
+    /// a level shallower than that.
+    pub fn options() -> Options {
+        Options {
+            sections: Sections::AtHeading(HeadingLevel::H2),
+            ..Options::default()
+        }
+    }
+
+    /// The book as a content tree, node ids assigned. It goes through
+    /// the frontend that ships, so the measured path is the shipped
+    /// path.
     pub fn book(self) -> Book {
-        markdown::to_book(self.markdown(), self.source())
+        self.parse(self.markdown())
+    }
+
+    /// The same, over markdown the caller holds. The bench and the
+    /// gate both time this, so what they time is one call rather than
+    /// a stage reached through a private method.
+    pub fn parse(self, markdown: &str) -> Book {
+        let (sections, _) =
+            fleuron_markdown::to_sections(markdown, self.source(), &Self::options());
+        fleuron_markdown::assemble(fleuron_markdown::frontmatter(markdown), sections)
     }
 }
 
@@ -83,8 +102,8 @@ mod tests {
     use fleuron::content::Block;
 
     /// Both books parse into content trees with the structure the
-    /// harness measures against: metadata off the markdown preamble,
-    /// a section per chapter, and prose in every one of them.
+    /// harness measures against: metadata off the frontmatter, a
+    /// section per chapter, and prose in every one of them.
     #[test]
     fn corpus_books_parse_into_content_trees() {
         for corpus in Corpus::ALL {

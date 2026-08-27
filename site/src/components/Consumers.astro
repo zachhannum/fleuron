@@ -4,9 +4,10 @@ import { Code } from 'astro:components';
 // Tabs without JavaScript: a radio group, and the panels are chosen by
 // :checked. Native radios carry the keyboard and screen-reader
 // behaviour a hand-rolled tablist would have to reimplement.
-const rust = `let json = std::fs::read_to_string("book.json")?;
-let mut book: Book = serde_json::from_str(&json)?;
-book.assign_node_ids();
+const rust = `let markdown = std::fs::read_to_string("manuscript.md")?;
+let (sections, warnings) =
+    to_sections(&markdown, "manuscript.md", &Options::default());
+let book = assemble(frontmatter(&markdown), sections);
 
 let css = std::fs::read_to_string("book.css")?;
 let mut registry = bundled_registry()?;
@@ -20,8 +21,8 @@ std::fs::write("book.pdf", bytes)?;`;
 
 const shell = `cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
 
-fleuron book.json -o book.pdf -c book.css
-# fleuron: book.json → book.pdf: 333 pages`;
+fleuron manuscript.md -o book.pdf -c book.css
+# fleuron: manuscript.md → book.pdf: 333 pages`;
 
 const ts = `// Not shipped yet: the bindings land with the WASM milestone.
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), {

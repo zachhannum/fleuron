@@ -6,12 +6,20 @@ wins and the quick fix waits for its own PR.
 
 ## Project shape
 
-- Workspace: `crates/fleuron` (engine), `crates/fleuron-cli` (binary),
-  `crates/fleuron-wasm` (bindings), `crates/fleuron-fixtures` (corpus
-  and perf harness, never published).
-- Pipeline is one-way: content tree + style tree → box tree → line
-  layout → fragmentation → pages → display list / PDF. Downstream never
-  reaches back upstream.
+- Workspace: `crates/fleuron` (engine), `crates/fleuron-markdown`
+  (frontend), `crates/fleuron-cli` (binary), `crates/fleuron-wasm`
+  (bindings), `crates/fleuron-fixtures` (corpus and perf harness, never
+  published).
+- Pipeline is one-way: markdown → content tree + style tree → box tree →
+  line layout → fragmentation → pages → display list / PDF. Downstream
+  never reaches back upstream.
+- Markdown is the way in. The content tree stays public for a host with
+  a structured source of its own, but the docs lead with markdown and it
+  is not advertised as a peer.
+- The mapping from markdown to content tree lives in
+  `docs/reference/markdown.md` and is implemented once. A construct the
+  vocabulary cannot hold warns with line and column; prose is never
+  dropped.
 - The three invariants (see README): styling enters as CSS; the engine
   never touches the DOM; layout never decodes images.
 - Work is tracked in GitHub issues, grouped by the v0.1 epic (#13). An
@@ -35,12 +43,14 @@ wins and the quick fix waits for its own PR.
 
 ## E2E testing
 
-There is exactly one e2e definition in this repo: **fixture book JSON
-in → valid PDF out**, invoked through the CLI, living in
+There is exactly one e2e definition in this repo: **manuscript in →
+valid PDF out**, invoked through the CLI, living in
 `crates/fleuron-cli/tests/`.
 
-- Input: `fixtures/book.json` (checked in, realistic prose — dialogue,
-  em-dashes, hyphenation-prone words; never lorem).
+- Input: `fixtures/gulliver-excerpt.md` (checked in, realistic prose:
+  dialogue, em-dashes, hyphenation-prone words; never lorem), and
+  `fixtures/book.json`, the same excerpt as a content tree, for the
+  path a host with its own tree takes.
 - CI validates the output three ways: `qpdf --check` (structure),
   `pdftotext` round-trip (word count preserved, hyphenation off for the
   test config), page-count assertions.
@@ -54,11 +64,12 @@ in → valid PDF out**, invoked through the CLI, living in
 ## Perf harness
 
 - The corpus is two public-domain books in `fixtures/corpus/`, checked
-  in as markdown and read into content trees by the fixtures crate.
-  Pride and Prejudice is the gate: ~330 pages, the book scale the
-  budgets are written against. The Count of Monte Cristo is four times
-  that, and exists to expose superlinearity. No generated prose — it is
-  uniform, and uniform text hides the tail cases that make layout slow.
+  in as markdown and read into content trees through the shipped
+  frontend, so the measured path is the shipped path. Pride and
+  Prejudice is the gate: ~330 pages, the book scale the budgets are
+  written against. The Count of Monte Cristo is four times that, and
+  exists to expose superlinearity. No generated prose — it is uniform,
+  and uniform text hides the tail cases that make layout slow.
 - Budgets live in `fleuron_fixtures::gate::budget` as absolute
   ceilings, not comparisons against a stored baseline.
   `cargo run --release -p fleuron-fixtures --bin perf-gate` checks

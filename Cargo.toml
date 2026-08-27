@@ -4,6 +4,7 @@ members = [
     "crates/fleuron",
     "crates/fleuron-cli",
     "crates/fleuron-fixtures",
+    "crates/fleuron-markdown",
     "crates/fleuron-wasm",
 ]
 

@@ -23,11 +23,13 @@ for warning in &output.warnings {
 }
 ```
 
-`origin` is a source location when one exists. For CSS that is the sheet's name with a line and column, the name being whatever you passed to `Source::author`, so pass something a reader will recognise. For content it is the frontend's own file and position, `chapter-01.md:12:3`, carried on the node from the markdown it was parsed out of. A node with no position degrades to the bare file name, and the warning is not dropped.
+`origin` is a source location when one exists. For CSS that is the sheet's name with a line and column, the name being whatever you passed to `Source::author`, so pass something a reader will recognise. For content it is the source file and position, `chapter-01.md:12:3`, carried on the node from the markdown it was read out of. A node with no position degrades to the bare file name, and the warning is not dropped.
 
 Style compilation collects its own warnings before layout runs, and `Stylesheets::warnings()` has them as soon as parsing and font loading are done. `LayoutOutput::warnings` is the whole run's, compilation included, so reading it once at the end is enough.
 
 ## What warns
+
+**A construct the content vocabulary has no room for.** A list, a table, a code block: the frontend sets them as prose and names the line and column they were written at. Prose is never dropped, so a warning here says the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.md) is the full list.
 
 **Unsupported CSS.** Every declaration outside [the subset](../css-subset.md) warns, one warning per declaration, at the line and column it was written at. That is what writing the subset down buys: `color: red` is reported, not silently dropped.
 
@@ -39,7 +41,7 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 
 ## What fails
 
-**Input that is not a content tree.** JSON that does not deserialize. This is the frontend's error, not the book's.
+**Input that is neither markdown nor a content tree.** A file the CLI cannot place by extension, or JSON that does not deserialize. This is the caller's error, not the book's.
 
 **A face that could not be embedded.** `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer refuses.
 
@@ -58,3 +60,5 @@ Warnings are non-fatal so that a mistake in a stylesheet never stops a manuscrip
 A font warning changes what the book looks like. Text that fell back is set in the wrong face on every page it appears on.
 
 A CSS warning means a rule you wrote had no effect, and nothing downstream will mention it again.
+
+A frontend warning is the third candidate, and the one to weigh: a table set as one paragraph per cell is a page that no longer says what the manuscript meant.

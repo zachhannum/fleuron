@@ -4,23 +4,25 @@ description: A paged-media layout engine for book-shaped documents, in Rust.
 slug: overview
 ---
 
-fleuron takes structured content plus CSS, performs inline layout — shaping, line breaking, hyphenation — fragments the result into pages, and emits a display list for preview and a PDF for export. It compiles to native and WebAssembly from the same core.
+fleuron takes markdown plus CSS, performs inline layout — shaping, line breaking, hyphenation — fragments the result into pages, and emits a display list for preview and a PDF for export. It compiles to native and WebAssembly from the same core.
 
 A *fleuron* is the printer's flower ❦, the ornament set into a page to mark a pause. This is one, in Rust.
 
 ## The pipeline
 
-One way through. Content enters as a semantic tree, styling enters as CSS, and everything downstream consumes a single resolved representation. Nothing reaches back upstream.
+One way through. Content enters as markdown and becomes a semantic tree, styling enters as CSS, and everything downstream consumes a single resolved representation. Nothing reaches back upstream.
 
 ```text
-content tree ──┐
-               ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
-CSS ───────────┘                                                               │
-                                                                               ├─► display list (preview)
-                                                                               └─► PDF (export)
+markdown ─► content tree ──┐
+                           ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
+CSS ───────────────────────┘                                                               │
+                                                                                           ├─► display list (preview)
+                                                                                           └─► PDF (export)
 ```
 
-Break decisions fall out of the layout pass itself, which is most of why a 333-page book reaches PDF bytes in 283 ms.
+Break decisions fall out of the layout pass itself, which is most of why a 333-page book reaches PDF bytes in 287 ms.
+
+[The markdown mapping](reference/markdown.md) is what each construct becomes. The [content tree](reference/content-tree.md) stays public for a host with a structured source of its own, but markdown is the way in.
 
 ## Three invariants
 
@@ -32,9 +34,9 @@ Break decisions fall out of the layout pass itself, which is most of why a 333-p
 
 ## Three ways in
 
-**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. One call lays a book out, and a [session](library/sessions.md) makes a preview re-run only the stages an edit changed. Start at the [library quickstart](library/quickstart.md).
+**A Rust library.** `fleuron` is the engine: style compilation, box construction, inline layout, fragmentation, page assembly. Pure library, no I/O. `fleuron-markdown` is the frontend in front of it. One call lays a book out, and a [session](library/sessions.md) makes a preview re-run only the stages an edit changed. Start at the [library quickstart](library/quickstart.md).
 
-**A command-line binary.** `fleuron` reads a content tree and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
+**A command-line binary.** `fleuron` reads markdown and writes a PDF, taking author stylesheets on the command line. Batch-friendly, and the fastest way to see output. Start at the [CLI quickstart](cli/quickstart.md).
 
 **A WebAssembly module.** `fleuron-wasm` runs layout in a worker and returns one transferable buffer: the display list, or PDF bytes. Zero DOM access. The [wasm section](wasm/quickstart.md) states the contract; the bindings have not landed.
 

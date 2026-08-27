@@ -1,10 +1,8 @@
-# Title: The Count of Monte Cristo
-
-## Author: Alexandre Dumas
-
-## Year: 1844
-
--------
+---
+title: The Count of Monte Cristo
+author: Alexandre Dumas
+year: 1844
+---
 
 # VOLUME ONE
 

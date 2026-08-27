@@ -395,6 +395,7 @@ dependencies = [
  "criterion",
  "cssparser",
  "fleuron-fixtures",
+ "fleuron-markdown",
  "harfrust",
  "hypher",
  "icu_segmenter",
@@ -417,6 +418,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "fleuron",
+ "fleuron-markdown",
  "serde_json",
  "sha2",
 ]
@@ -426,7 +428,17 @@ name = "fleuron-fixtures"
 version = "0.0.1"
 dependencies = [
  "fleuron",
+ "fleuron-markdown",
+]
+
+[[package]]
+name = "fleuron-markdown"
+version = "0.0.1"
+dependencies = [
+ "fleuron",
+ "proptest",
  "pulldown-cmark",
+ "serde_json",
 ]
 
 [[package]]

@@ -79,6 +79,7 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'CSS subset', link: '/css-subset/' },
+            { label: 'Markdown mapping', link: '/reference/markdown/' },
             { label: 'Content tree', link: '/reference/content-tree/' },
             { label: 'Display list', link: '/reference/display-list/' },
             { label: 'API (rustdoc)', link: '/fleuron/api/fleuron/', attrs: { target: '_blank' } },

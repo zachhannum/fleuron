@@ -1,0 +1,18 @@
+[package]
+name = "fleuron-markdown"
+description = "Markdown frontend for fleuron: source text in, content tree out, with the constructs the vocabulary cannot hold reported rather than dropped"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+
+[dependencies]
+fleuron = { path = "../fleuron" }
+pulldown-cmark.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde_json = "1"

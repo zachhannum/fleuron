@@ -1,9 +1,9 @@
 //! Fixtures and measurement: the harness the engine is held to.
 //!
 //! Two real books, checked in as markdown and read into content trees
-//! here; criterion benches that time one pipeline stage at a time; and
-//! a gate binary that runs a whole book against absolute budgets, the
-//! same way natively and under wasm.
+//! through the shipped frontend; criterion benches that time one
+//! pipeline stage at a time; and a gate binary that runs a whole book
+//! against absolute budgets, the same way natively and under wasm.
 //!
 //! Nothing here ships. The crate exists so that a perf claim about
 //! fleuron is a number somebody can reproduce.
@@ -13,7 +13,6 @@
 pub mod alloc;
 pub mod corpus;
 pub mod gate;
-pub mod markdown;
 
 pub use corpus::Corpus;
 
@@ -40,7 +39,7 @@ pub fn shaped_texts(book: &fleuron::content::Book) -> Vec<String> {
         for block in blocks {
             match block {
                 Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
-                    let text = markdown::flatten(inlines);
+                    let text = fleuron::content::text(inlines);
                     if !text.is_empty() {
                         out.push(text);
                     }
