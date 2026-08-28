@@ -20,6 +20,32 @@ preview.zoom = 1.5;
 
 `Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display list yourself, though all three stay exported if you want them.
 
+## Images
+
+Nothing in the package fetches a url. Fetch the file yourself and hand over what comes back, under the same string the manuscript wrote:
+
+```js
+// This host reads them from a directory, another might read a
+// database or an editor's unsaved buffer.
+async function load(url) {
+  const file = await fetch(`/manuscript/${url}`);
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+const preview = await Preview.mount(element, {
+  images: { 'images/lilliput.jpg': await load('images/lilliput.jpg') },
+});
+
+// One that turns up after the book has already been set.
+await preview.addImage('images/colophon.png', await load('images/colophon.png'));
+```
+
+Whatever string the manuscript writes is the name the image is matched under, so the key has to be that string and never has to be a real URL. Where you fetched the file from is your own business and never reaches the engine, which is why the url shows up twice above.
+
+The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
+
+An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to name your own urls, and the preview hands the display list's asset to it rather than resolving a blob of its own.
+
 <Playground
   caption="A mounted Preview: setStyle and edit on one side, the page it painted on the other."
 />
@@ -35,6 +61,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `setMetadata({ title, author, extra })` | what names the book |
 | `setStyle(css)` | the author stylesheet |
 | `addFont(bytes)` | a face, registered for the session's life |
+| `addImage(url, bytes)` | one image, by the url the manuscript names it by |
 | `render(ops?)` | lay out again, or apply anything the methods above do not reach |
 
 | | |
@@ -95,7 +122,7 @@ import { Preview } from '@fleuron/react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `onMount` gives you the underlying preview, for the page count and the PDF export.
+The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` gives you the underlying preview, for the page count and the PDF export.
 
 React is not a dependency of `@fleuron/wasm`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
@@ -120,11 +147,10 @@ The second argument is all optional:
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
 | `ink` | `'#000000'` | The fill for text and rules. The display list carries no colour of its own yet, so this is the whole page's. |
-| `asset` | none | `(index) => url`, for images. |
+| `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
+| `asset` | none | `(asset, index) => url`, for images. |
 
-Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into a table of assets the host supplied. `asset` is where you turn that index back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` if you cannot supply it. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
-
-There is no op for handing assets to the module yet, so a display list from `@fleuron/wasm` never carries an image. `asset` matters only to a painter given pages from somewhere else.
+Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into `output.assets`. `asset` is where you turn that entry back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` if you cannot supply it. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
 
 ## Why the preview matches the export
 

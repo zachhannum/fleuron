@@ -37,6 +37,11 @@ export function fixture(path) {
   return readFileSync(join(root, 'fixtures', path), 'utf8');
 }
 
+/** A fixture image, as the bytes a host hands the engine. */
+export function image(url) {
+  return new Uint8Array(readFileSync(join(root, 'fixtures', url)));
+}
+
 /**
  * One chapter of a corpus book, without the frontmatter.
  *
@@ -184,6 +189,10 @@ that afternoon.
 /**
  * Every demo the site mounts, and the poster each one is drawn on
  * top of until it does.
+ *
+ * `images` names the files a demo's manuscript refers to, relative
+ * to `fixtures/`. The build copies them where the island can fetch
+ * them and reads them itself for the poster.
  */
 export const DEMOS = {
   /** The landing page's split view, and the docs' playground. */
@@ -212,6 +221,9 @@ export const DEMOS = {
     name: 'gulliver-excerpt.md',
     markdown: fixture('gulliver-excerpt.md'),
     css: fixture('styled.css'),
+    // Nothing fetches a url for the demo, so the images the
+    // manuscript names are handed over as urls it fetches itself.
+    images: ['images/plate.jpg', 'images/fleuron.png'],
     page: 1,
   }),
   /** Every construct the mapping names, including the ones that warn. */
@@ -244,5 +256,5 @@ export function demo(id) {
   if (build === undefined) {
     throw new Error(`no demo called ${id}`);
   }
-  return build();
+  return { images: [], ...build() };
 }

@@ -23,7 +23,7 @@ The stylesheet below has two declarations the engine has no room for. Both are r
 Warnings come back on the output:
 
 ```rust
-let output = fleuron::layout::layout_book(&book, &styles, &registry);
+let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
 for warning in &output.warnings {
     match &warning.origin {
         Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
@@ -45,6 +45,8 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 | a font that would not load | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a font this build can read. Text falls back to the next family in the list. |
 | a family that resolved nothing | The whole `font-family` stack came up empty and the first registered face answered. Usually a spelling mistake, or a loader rooted in the wrong directory. |
 | a missing cut | An italic or a weight the family does not have. Nothing is synthesised, so the text sets in the nearest cut and the warning says which one was wanted. |
+| an image nobody supplied | A url the manuscript names that the host handed no bytes for, or bytes no header probe recognises. The image is skipped and the page closes over the space it would have taken. |
+| an image taller than the page | The image is scaled down to the content box, and the warning says so. |
 
 ## What fails
 
@@ -52,6 +54,7 @@ Style compilation collects its own warnings before layout runs, and `Stylesheets
 |---|---|
 | input that is not markdown | A file the CLI cannot place by extension. |
 | a face that could not be embedded | `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer refuses. |
+| an image that could not be embedded | `PdfError::Image`, naming the url. The header probe and the writer read the same file, so this is a format one knows and the other does not. |
 | geometry a PDF cannot express | `PdfError::Geometry`, naming the folio and the kind of item. A non-finite coordinate reaching the writer is the usual cause, and that is a bug in the engine rather than a problem with the document. |
 | serialization | `PdfError::Serialize`, with whatever the writer said. |
 

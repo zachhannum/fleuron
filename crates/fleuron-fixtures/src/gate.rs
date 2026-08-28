@@ -16,6 +16,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use fleuron::fonts::FontRegistry;
+use fleuron::images::Assets;
 use fleuron::layout::{Fragment, Paginator, Piece};
 use fleuron::pdf;
 use fleuron::session::Session;
@@ -301,7 +302,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
 
         let (output, peak) = crate::alloc::measure(|| {
             let start = Instant::now();
-            let output = fleuron::layout::layout_book(&book, &styles, registry);
+            let output = fleuron::layout::layout_book(&book, &styles, registry, &Assets::none());
             layout = layout.min(start.elapsed());
             output
         });
@@ -316,7 +317,8 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
 
         let start = Instant::now();
         let bytes = black_box(
-            pdf::write(&output, registry, &book.metadata).expect("fixture book writes PDF"),
+            pdf::write(&output, registry, &Assets::none(), &book.metadata)
+                .expect("fixture book writes PDF"),
         );
         pdf_time = pdf_time.min(start.elapsed());
         pdf_bytes = bytes.len();

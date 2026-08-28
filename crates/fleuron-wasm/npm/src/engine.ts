@@ -138,6 +138,9 @@ export class Engine {
       case 'font':
         this.session.addFont(op.bytes);
         break;
+      case 'image':
+        this.session.addImage(op.url, op.bytes);
+        break;
       case 'dialect':
         this.session.setDialect(op.dialect);
         break;

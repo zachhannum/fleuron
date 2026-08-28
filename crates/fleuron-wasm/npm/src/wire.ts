@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader understands. */
-export const WIRE_VERSION = 2;
+export const WIRE_VERSION = 3;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -59,6 +59,32 @@ export interface RectItem {
   h: number;
 }
 
+/** An image's own idea of its size, from its header. */
+export interface Intrinsic {
+  /** Width in pixels. */
+  width: number;
+  /** Height in pixels. */
+  height: number;
+  /** Horizontal resolution in pixels per inch. */
+  dpiX: number;
+  /** Vertical resolution in pixels per inch. */
+  dpiY: number;
+}
+
+/**
+ * One image the book placed, as {@link ImageItem.asset} indexes it.
+ *
+ * All the display list says about an image: layout read the header
+ * and decoded nothing, so a painter takes the url back to its own
+ * pixels.
+ */
+export interface Asset {
+  /** The url the content tree named it by. */
+  url: string;
+  /** What the header says it is. */
+  intrinsic: Intrinsic;
+}
+
 /** A placed image. Layout never decoded it; the painter does. */
 export interface ImageItem {
   kind: 'image';
@@ -70,7 +96,7 @@ export interface ImageItem {
   w: number;
   /** Height in points. */
   h: number;
-  /** Index into the host's asset table. */
+  /** Index into {@link LayoutOutput.assets}. */
   asset: number;
 }
 
@@ -140,6 +166,8 @@ export interface LayoutOutput {
   pages: Page[];
   /** The fonts this run used, indexed by `fontId`. */
   fonts: FontRefEntry[];
+  /** The images this run placed, indexed by `ImageItem.asset`. */
+  assets: Asset[];
   /** Everything the run had to complain about. */
   warnings: Warning[];
 }
@@ -279,6 +307,13 @@ function font(r: Reader): FontRefEntry {
   };
 }
 
+function asset(r: Reader): Asset {
+  return {
+    url: r.string(),
+    intrinsic: { width: r.varint(), height: r.varint(), dpiX: r.f32(), dpiY: r.f32() },
+  };
+}
+
 function warning(r: Reader): Warning {
   return { message: r.string(), origin: r.option(() => r.string()) };
 }
@@ -303,6 +338,7 @@ export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
   const output: LayoutOutput = {
     pages: r.seq(() => page(r)),
     fonts: r.seq(() => font(r)),
+    assets: r.seq(() => asset(r)),
     warnings: r.seq(() => warning(r)),
   };
   if (!r.done()) {

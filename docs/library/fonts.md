@@ -24,7 +24,7 @@ That is EB Garamond, upright and italic, registered as the generic `serif` and a
 }
 ```
 
-`src` urls mean whatever the host says they mean. The engine hands each one to the `FontLoader` it was given:
+Whatever string you write in `url()` is handed to your `FontLoader` as it is. It never has to be a real URL:
 
 ```rust
 struct Files(PathBuf);

@@ -42,6 +42,12 @@ export interface Inputs {
   page?: number;
   /** Which markdown the manuscript is written in. */
   dialect?: 'commonmark' | 'gfm' | 'obsidian';
+  /**
+   * The images the manuscript refers to, by the url it names them
+   * by. Nothing fetches a url for the island, so it fetches each one
+   * from where the site serves it and hands over the bytes.
+   */
+  images?: string[];
 }
 
 /** A demo, mounted. */
@@ -135,7 +141,7 @@ function metered(): boolean {
 }
 
 export function usePreview(inputs: Inputs): Running {
-  const { id, markdown, css, name, page, dialect } = inputs;
+  const { id, markdown, css, name, page, dialect, images } = inputs;
   const sheet = useRef<HTMLDivElement | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [wanted, setWanted] = useState(true);
@@ -183,10 +189,22 @@ export function usePreview(inputs: Inputs): Running {
           setStatus('live');
         },
       })
-        .then((mounted) => {
+        .then(async (mounted) => {
           opened = mounted;
           if (!live) {
             mounted.destroy();
+            return;
+          }
+          // The images cross before the manuscript, so the first
+          // page painted already has room reserved for them.
+          for (const url of images ?? []) {
+            const file = await fetch(`${import.meta.env.BASE_URL}fixtures/${url}`);
+            if (!live) {
+              return;
+            }
+            await mounted.addImage(url, new Uint8Array(await file.arrayBuffer()));
+          }
+          if (!live) {
             return;
           }
           register(id, mounted);

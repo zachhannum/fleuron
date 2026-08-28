@@ -224,6 +224,20 @@ impl Session {
             .set_style(Stylesheets::parse(&[Source::author("author.css", css)]));
     }
 
+    /// Registers one image by the url the content tree names it by,
+    /// and returns the index `DrawItem::Image.asset` will carry.
+    /// `undefined` for bytes no probe recognises, which is a
+    /// diagnostic on the next display list and no image.
+    ///
+    /// The engine opens nothing, and a worker has nothing to open:
+    /// the host fetches the file and hands the bytes over, as it does
+    /// with a face. The bytes stay in the module, so an image crosses
+    /// once rather than once per render.
+    #[wasm_bindgen(js_name = addImage)]
+    pub fn add_image(&mut self, url: &str, bytes: &[u8]) -> Result<Option<u32>, JsError> {
+        self.engine.add_image(url, bytes.to_vec()).map_err(js_error)
+    }
+
     /// The file a face was registered from, for a painter that has
     /// to draw with the bytes the engine shaped with.
     ///

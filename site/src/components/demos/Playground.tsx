@@ -43,6 +43,8 @@ export interface PlaygroundProps {
   page?: number;
   /** Which markdown the manuscript is written in. */
   dialect?: 'commonmark' | 'gfm' | 'obsidian';
+  /** The images the manuscript refers to, for the island to fetch. */
+  images?: string[];
   /** What the display list is drawn as over the page it made. */
   highlight?: string;
   /** Whether the warnings are open to begin with. */
@@ -61,6 +63,7 @@ export function Playground(props: PlaygroundProps): React.ReactElement {
     css: sheet,
     name,
     dialect,
+    images,
     highlight,
     caption,
   } = props;
@@ -90,6 +93,7 @@ export function Playground(props: PlaygroundProps): React.ReactElement {
     name,
     page,
     dialect,
+    images,
   });
   const pages = output?.pages.length ?? 0;
   const warnings = output?.warnings ?? [];

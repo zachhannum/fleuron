@@ -73,29 +73,29 @@ enum Stale {
     Break,
 }
 
-/// The faces a session lays out against: a caller's registry, or
-/// one of its own.
+/// A table a session lays out against: a caller's, or one of its
+/// own.
 ///
-/// A host with a registry to lend keeps lending it. A worker has
-/// nowhere to keep one, since the module is all there is, so it
-/// hands the registry over and adds faces through the session.
-enum Held<'a> {
-    Borrowed(&'a FontRegistry),
-    Owned(Box<FontRegistry>),
+/// A host with faces and images to lend keeps lending them. A worker
+/// has nowhere to keep either, since the module is all there is, so
+/// it hands them over once and adds to them through the session.
+enum Held<'a, T> {
+    Borrowed(&'a T),
+    Owned(Box<T>),
 }
 
-impl Held<'_> {
-    fn get(&self) -> &FontRegistry {
+impl<T> Held<'_, T> {
+    fn get(&self) -> &T {
         match self {
-            Held::Borrowed(registry) => registry,
-            Held::Owned(registry) => registry,
+            Held::Borrowed(held) => held,
+            Held::Owned(held) => held,
         }
     }
 
-    fn get_mut(&mut self) -> Option<&mut FontRegistry> {
+    fn get_mut(&mut self) -> Option<&mut T> {
         match self {
             Held::Borrowed(_) => None,
-            Held::Owned(registry) => Some(registry),
+            Held::Owned(held) => Some(held),
         }
     }
 }
@@ -110,6 +110,15 @@ pub enum AddFontError {
     /// The bytes are not a face this build can read.
     #[error(transparent)]
     Font(#[from] FontError),
+}
+
+/// Why an image did not reach a session's asset table.
+#[derive(Debug, thiserror::Error)]
+pub enum AddImageError {
+    /// The session lays out against an asset table it borrowed, and
+    /// the caller who owns it is the one who can add to it.
+    #[error("the session borrows its asset table")]
+    Borrowed,
 }
 
 /// One section's lines, and what building them had to complain about.
@@ -138,8 +147,8 @@ struct Cached {
 /// that brings its own `@font-face` needs the host to register that
 /// face before the sheet is set.
 pub struct Session<'a> {
-    registry: Held<'a>,
-    assets: &'a Assets,
+    registry: Held<'a, FontRegistry>,
+    assets: Held<'a, Assets>,
     book: Cow<'a, Book>,
     /// The sheets the tree was compiled from. `None` on the one-shot
     /// path, where the caller compiled the tree itself and nothing
@@ -178,10 +187,10 @@ impl<'a> Session<'a> {
 
     /// The same, over images the host has already probed.
     pub fn with_assets(registry: &'a FontRegistry, assets: &'a Assets) -> Session<'a> {
-        Session::over(Held::Borrowed(registry), assets)
+        Session::over(Held::Borrowed(registry), Held::Borrowed(assets))
     }
 
-    fn over(registry: Held<'a>, assets: &'a Assets) -> Session<'a> {
+    fn over(registry: Held<'a, FontRegistry>, assets: Held<'a, Assets>) -> Session<'a> {
         let book = Book::default();
         let sheets = Stylesheets::parse(&[]);
         let styles = sheets.compile(&book, registry.get());
@@ -215,7 +224,10 @@ impl<'a> Session<'a> {
     /// boundary once, the module holds them, and no caller on the
     /// other side of the wall has a registry to lend.
     pub fn owning(registry: FontRegistry) -> Session<'static> {
-        Session::over(Held::Owned(Box::new(registry)), no_assets())
+        Session::over(
+            Held::Owned(Box::new(registry)),
+            Held::Owned(Box::new(Assets::none())),
+        )
     }
 
     /// The single run `layout_book` makes, over inputs the caller
@@ -229,7 +241,7 @@ impl<'a> Session<'a> {
     ) -> Session<'a> {
         Session {
             registry: Held::Borrowed(registry),
-            assets,
+            assets: Held::Borrowed(assets),
             book: Cow::Borrowed(book),
             sheets: None,
             styles: Cow::Borrowed(styles),
@@ -334,6 +346,32 @@ impl<'a> Session<'a> {
         Ok(ids)
     }
 
+    /// Registers one image, and the index `DrawItem::Image.asset`
+    /// will carry for it. `None` for bytes no probe recognises,
+    /// which is a diagnostic on the next display list and no asset.
+    ///
+    /// The header decides how much room the image takes, so the
+    /// lines are broken again. Only a session that owns its asset
+    /// table has one to add to; one that borrowed it says so
+    /// instead.
+    pub fn add_image(&mut self, url: &str, bytes: Vec<u8>) -> Result<Option<u32>, AddImageError> {
+        if let Some((index, _)) = self.assets.get().lookup(url) {
+            // A url already registered is the image the pages were
+            // laid out around, and re-registering it costs nothing.
+            return Ok(Some(index));
+        }
+        let index = self
+            .assets
+            .get_mut()
+            .ok_or(AddImageError::Borrowed)?
+            .add(url, bytes);
+        // The table is built with the output and never patched, so
+        // the output goes rather than outlive the indexes it names.
+        self.output = None;
+        self.stale = Stale::Break;
+        Ok(index)
+    }
+
     /// The display list, brought up to date.
     pub fn preview(&mut self) -> &LayoutOutput {
         self.update();
@@ -345,7 +383,12 @@ impl<'a> Session<'a> {
     pub fn export(&mut self) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
-        pdf::write(output, self.registry.get(), &self.book.metadata)
+        pdf::write(
+            output,
+            self.registry.get(),
+            self.assets.get(),
+            &self.book.metadata,
+        )
     }
 
     /// The display list by value, consuming the session.
@@ -433,6 +476,10 @@ impl<'a> Session<'a> {
     /// and keeps the rest as they stand.
     fn rebreak(&mut self) {
         let against = Against::of(&self.styles, self.images);
+        // An image that arrives is a box that was not reserved
+        // before it, so the sections are broken again around it. The
+        // table only grows, so a count that moved is an image.
+        let supplied = self.images.then(|| self.assets.get().assets().len());
         let mut previous: Vec<Option<Cached>> = std::mem::take(&mut self.lines)
             .into_iter()
             .map(Some)
@@ -446,7 +493,7 @@ impl<'a> Session<'a> {
         }
         let mut fresh = Vec::with_capacity(self.book.sections.len());
         for section in &self.book.sections {
-            let key = section_key(section, &self.styles, against);
+            let key = section_key(section, &self.styles, against, supplied);
             let kept = spare
                 .get_mut(&key)
                 .and_then(|slots| slots.pop())
@@ -456,8 +503,11 @@ impl<'a> Session<'a> {
                 None => {
                     // One paginator per section, so the warnings it
                     // collects are the ones this section raised.
-                    let paginator =
-                        Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
+                    let paginator = Paginator::with_assets(
+                        self.registry.get(),
+                        &self.styles,
+                        self.assets.get(),
+                    );
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -486,7 +536,9 @@ impl<'a> Session<'a> {
     /// Flows the cached lines into pages. Nothing here measures.
     fn reflow(&mut self) {
         let registry = self.registry.get();
-        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
+        let assets = self.assets.get();
+        let paginator =
+            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
         let paged = paginator.fragment(
             &self.book,
             self.lines.iter().map(|cached| cached.fragments.as_slice()),
@@ -494,13 +546,14 @@ impl<'a> Session<'a> {
         self.stages.flow += 1;
         self.infos = paged.infos;
         self.output
-            .get_or_insert_with(|| blank_output(registry))
+            .get_or_insert_with(|| blank_output(registry, assets))
             .pages = paged.pages;
     }
 
     /// Repaints the furniture over pages the flow already settled.
     fn repaint(&mut self) {
-        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
+        let paginator =
+            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
         if let Some(output) = &mut self.output {
             paginator.paint(&mut output.pages, &self.infos);
             self.stages.paint += 1;
@@ -510,14 +563,16 @@ impl<'a> Session<'a> {
     /// The whole pipeline, one section's lines alive at a time.
     fn run_once(&mut self) {
         let registry = self.registry.get();
-        let paginator = Paginator::with_assets(self.registry.get(), &self.styles, self.assets);
+        let assets = self.assets.get();
+        let paginator =
+            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
         let pages = paginator.paginate(&self.book);
         self.stages.lines += self.book.sections.len() as u32;
         self.stages.flow += 1;
         self.stages.paint += 1;
         self.flow_warnings = paginator.warnings();
         self.output
-            .get_or_insert_with(|| blank_output(registry))
+            .get_or_insert_with(|| blank_output(registry, assets))
             .pages = pages;
     }
 
@@ -526,7 +581,7 @@ impl<'a> Session<'a> {
     fn collect_warnings(&mut self) {
         let mut warnings = self.source_warnings.clone();
         warnings.extend(self.styles.warnings().iter().cloned());
-        warnings.extend(self.assets.warnings().iter().cloned());
+        warnings.extend(self.assets.get().warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
         if let Some(output) = &mut self.output {
             output.warnings = warnings;
@@ -534,11 +589,13 @@ impl<'a> Session<'a> {
     }
 }
 
-/// An output with the font table filled in and nothing painted yet.
-fn blank_output(registry: &FontRegistry) -> LayoutOutput {
+/// An output with the font and asset tables filled in and nothing
+/// painted yet.
+fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOutput {
     LayoutOutput {
         pages: Vec::new(),
         fonts: font_table(registry),
+        assets: assets.assets().to_vec(),
         warnings: Vec::new(),
     }
 }
@@ -675,10 +732,16 @@ fn paginated_prose(styles: &[ComputedStyle]) -> bool {
 /// are deliberately absent, because they renumber globally on every
 /// edit and a chapter nothing touched would then miss its own
 /// cache.
-fn section_key(section: &Section, styles: &StyleTree, against: Against) -> u64 {
+fn section_key(
+    section: &Section,
+    styles: &StyleTree,
+    against: Against,
+    assets: Option<usize>,
+) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
     against.hash_into(h);
+    assets.hash(h);
     (&section.source, &section.title, section.position).hash(h);
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);
@@ -872,6 +935,67 @@ mod tests {
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
         REGISTRY.get_or_init(|| crate::fonts::bundled_registry().expect("bundled font parses"))
+    }
+
+    /// The fixture map: a JPEG the layout pass sizes from its header.
+    const MAP: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
+
+    /// An image the host pushes reaches the display list: the box is
+    /// placed, the asset table names the url, and the pages are
+    /// broken again around the room it takes.
+    #[test]
+    fn an_image_pushed_after_the_book_is_placed_and_indexed() {
+        let mut book = Book {
+            sections: vec![Section {
+                blocks: vec![Block::Image {
+                    id: NodeId::UNASSIGNED,
+                    url: "plate.jpg".into(),
+                    alt: "a map".into(),
+                    position: None,
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        book.assign_node_ids();
+        let mut session =
+            Session::owning(crate::fonts::bundled_registry().expect("bundled font parses"));
+        session.set_content(book);
+        assert!(
+            session.preview().assets.is_empty(),
+            "a book whose images nobody supplied has no assets",
+        );
+
+        assert_eq!(
+            session.add_image("plate.jpg", MAP.to_vec()).unwrap(),
+            Some(0),
+        );
+        let output = session.preview();
+        assert_eq!(output.assets.len(), 1);
+        assert_eq!(output.assets[0].url, "plate.jpg");
+        let placed: Vec<&DrawItem> = output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .filter(|item| matches!(item, DrawItem::Image { .. }))
+            .collect();
+        assert_eq!(placed.len(), 1, "the map was not placed");
+        assert!(
+            output.warnings.is_empty(),
+            "a supplied image still complains: {:?}",
+            output.warnings,
+        );
+    }
+
+    /// A session that borrowed its asset table says so rather than
+    /// adding to somebody else's.
+    #[test]
+    fn a_borrowed_asset_table_refuses_an_image() {
+        let mut session = Session::new(registry());
+        assert!(matches!(
+            session.add_image("plate.jpg", MAP.to_vec()),
+            Err(AddImageError::Borrowed),
+        ));
     }
 
     fn text(value: &str) -> Inline {

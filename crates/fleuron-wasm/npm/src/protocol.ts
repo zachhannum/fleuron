@@ -31,6 +31,12 @@ export interface Metadata {
 export type Op =
   /** Font bytes, registered once and kept for the session's life. */
   | { op: 'font'; bytes: Uint8Array }
+  /**
+   * One image, by the url the manuscript names it by, kept for the
+   * session's life. The engine opens nothing, so the host fetches
+   * the file and the bytes cross once rather than once per render.
+   */
+  | { op: 'image'; url: string; bytes: Uint8Array }
   /** Which markdown the sources are written in. */
   | { op: 'dialect'; dialect: 'commonmark' | 'gfm' | 'obsidian' }
   /** Where a source's sections begin: a heading level, or 0 for a file per section. */

@@ -27,6 +27,14 @@ const opening = {
   css: await (await fetch('/fixtures/styled.css')).text(),
 };
 
+// Nothing in the package fetches a url, so the images are fetched
+// here and the bytes handed over. The same file sizes the box and
+// fills it.
+for (const url of ['images/plate.jpg', 'images/fleuron.png']) {
+  const file = await fetch(`/fixtures/${url}`);
+  await preview.addImage(url, new Uint8Array(await file.arrayBuffer()));
+}
+
 await preview.setStyle(opening.css);
 await preview.setMarkdown(opening.markdown, 'gulliver-excerpt.md');
 

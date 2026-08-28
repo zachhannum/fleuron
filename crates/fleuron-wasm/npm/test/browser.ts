@@ -44,6 +44,15 @@ const CENTRE = 1;
 const GRID = 16;
 /** Points to pixels for both sides of the comparison. */
 const ZOOM = 2;
+/**
+ * The page the two rasters are held against, which is one of running
+ * text.
+ *
+ * The two sides resample an image differently, so a page whose ink is
+ * mostly one tonal block measures the resampling rather than where
+ * the glyphs are.
+ */
+const COMPARED = 2;
 
 let failures = 0;
 
@@ -123,9 +132,23 @@ check('a missing face falls back visibly rather than painting nothing', fallback
 // The export of the same run, rastered by something that is not a
 // browser, held against a screenshot of the page on screen. Both are
 // made at the same zoom, so a pixel is a pixel on either side.
-await page.evaluate((zoom: number) => {
+// The images the harness handed over are on the page, drawn from the
+// same files the engine sized them by.
+const drawn = await page.evaluate((count: number) => {
+  const preview = globalThis.preview;
+  let drawn = 0;
+  for (let number = 1; number <= count; number += 1) {
+    preview.page = number;
+    drawn += document.querySelectorAll('#preview svg image').length;
+  }
+  preview.page = 1;
+  return drawn;
+}, pages);
+check('the images the host handed over are painted, not outlined', drawn === 2, `${drawn} drawn`);
+
+await page.evaluate(([zoom, number]: [number, number]) => {
   globalThis.preview.zoom = zoom;
-  globalThis.preview.page = 1;
+  globalThis.preview.page = number;
   // The harness's own chrome puts the sheet at a fractional pixel,
   // and a screenshot of a fractional box is every glyph blurred
   // half a pixel sideways. The page under it is untouched.
@@ -136,7 +159,10 @@ await page.evaluate((zoom: number) => {
   document.querySelector('main')?.setAttribute('style', 'padding: 0');
   document.querySelector('.sheet')?.setAttribute('style', 'line-height: 0');
   scrollTo(0, 0);
-}, ZOOM);
+}, [ZOOM, COMPARED] as [number, number]);
+const pictures = await page.evaluate(
+  () => document.querySelectorAll('#preview svg image').length,
+);
 const pdf = await page.evaluate(async () => {
   const bytes = await globalThis.preview.exportPdf();
   return bytes === null ? null : [...bytes];
@@ -153,7 +179,18 @@ if (shot === undefined) {
 }
 const rastered = spawnSync(
   'pdftoppm',
-  ['-f', '1', '-l', '1', '-singlefile', '-r', String(72 * ZOOM), '-png', join(work, 'book.pdf'), join(work, 'page')],
+  [
+    '-f',
+    String(COMPARED),
+    '-l',
+    String(COMPARED),
+    '-singlefile',
+    '-r',
+    String(72 * ZOOM),
+    '-png',
+    join(work, 'book.pdf'),
+    join(work, 'page'),
+  ],
   { encoding: 'buffer' },
 );
 if (rastered.status !== 0) {
@@ -162,6 +199,11 @@ if (rastered.status !== 0) {
     failures += 1;
   }
 } else {
+  check(
+    'the page the two rasters are held against carries no image',
+    pictures === 0,
+    `${pictures} on page ${COMPARED}`,
+  );
   const reference = readFileSync(join(work, 'page.png'));
   const difference = await page.evaluate(
     async ([left, right, grid]: [string, string, number]) => {

@@ -15,16 +15,29 @@ cargo run --example quickstart -p fleuron
 use std::path::{Path, PathBuf};
 
 use fleuron::fonts::bundled_registry;
+use fleuron::images::{Assets, ImageLoader};
 use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::Options;
 
-/// Resolves `@font-face` urls against one directory. The engine reads
-/// no paths of its own, so the host supplies this half.
+/// Resolves `@font-face` and image urls against one directory. The
+/// engine reads no paths of its own, so the host supplies this half.
 struct Files(PathBuf);
+
+impl Files {
+    fn read(&self, url: &str) -> Option<Vec<u8>> {
+        std::fs::read(self.0.join(url)).ok()
+    }
+}
 
 impl FontLoader for Files {
     fn load(&self, url: &str) -> Option<Vec<u8>> {
-        std::fs::read(self.0.join(url)).ok()
+        self.read(url)
+    }
+}
+
+impl ImageLoader for Files {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        self.read(url)
     }
 }
 
@@ -41,13 +54,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The built-in sheet is always first. Author sheets cascade over
     // it in the order given.
     let css = std::fs::read_to_string("fixtures/styled.css")?;
+    let files = Files(PathBuf::from("fixtures"));
     let mut registry = bundled_registry()?;
     let mut sheets = Stylesheets::parse(&[Source::author("styled.css", &css)]);
-    sheets.load_fonts(&mut registry, &Files(PathBuf::from("fixtures")));
+    sheets.load_fonts(&mut registry, &files);
     let styles = sheets.compile(&book, &registry);
 
+    // Every image the book refers to, sized from its header. Nothing
+    // decodes a pixel until the PDF is written.
+    let assets = Assets::probe(&book, &files);
+
     // One call from styled tree to pages of draw items.
-    let output = fleuron::layout::layout_book(&book, &styles, &registry);
+    let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     for warning in complaints.iter().chain(&output.warnings) {
         match &warning.origin {
             Some(origin) => eprintln!("warning: {origin}: {}", warning.message),
@@ -56,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // The PDF is painted from the display list. Nothing lays out twice.
-    let bytes = fleuron::pdf::write(&output, &registry, &book.metadata)?;
+    let bytes = fleuron::pdf::write(&output, &registry, &assets, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());
     Ok(())
@@ -74,10 +92,11 @@ Against the manuscript in the repository, that prints `34 pages` and writes `boo
 | `assemble` | Composes sections into a book and numbers the tree in document order. |
 | `bundled_registry` | EB Garamond, upright and italic, registered as the default serif. Everything else arrives through `@font-face`. See [fonts](fonts.md). |
 | `Stylesheets::parse` | Parses author sheets. The built-in user-agent sheet always goes first, so author CSS cascades over the defaults instead of replacing them. |
-| `load_fonts` | Hands each `@font-face` url to your `FontLoader`. This is the only step that reaches outside the engine. |
+| `load_fonts` | Hands each `@font-face` url to your `FontLoader`. |
 | `compile` | Resolves the cascade against the book. |
-| `layout_book` | Style tree in, `LayoutOutput` out: pages of draw items, the font table those items index, and every warning the run collected. |
-| `pdf::write` | Paints the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs, so the embedded subset holds the outlines the shaper used. |
+| `Assets::probe` | Hands each image url to your `ImageLoader` and reads the header for the intrinsic size. With `load_fonts`, these are the only steps that reach outside the engine. |
+| `layout_book` | Style tree in, `LayoutOutput` out: pages of draw items, the font and asset tables those items index, and every warning the run collected. A book with no images passes `Assets::none()`. |
+| `pdf::write` | Paints the display list. It re-derives no layout, and it resolves font ids through the same registry that shaped the runs and image indexes through the same table that sized them, so the embedded subset holds the outlines the shaper used and the embedded image is the file the header came from. |
 
 Parsing, font loading and compiling are three calls rather than one because they have different lifetimes. Sheets parse once and style many books.
 

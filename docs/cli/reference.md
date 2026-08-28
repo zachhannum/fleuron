@@ -71,6 +71,8 @@ fleuron: 2 warnings; the PDF was written anyway
 
 The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
 
-## Fonts on the command line
+## Fonts and images on the command line
 
-`@font-face` urls are treated as file paths. Each is tried against the directory of every stylesheet given with `-c`, in order, and then against the working directory. The engine itself opens nothing: this resolution belongs to the binary, and a library embedding fleuron makes its own.
+`@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine itself opens nothing: this resolution belongs to the binary, and a library embedding fleuron makes its own.
+
+An image the binary cannot open, or opens and cannot read a header from, is a warning naming the url, and the book sets without it.

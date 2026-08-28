@@ -14,20 +14,31 @@
  * height the element is given, and moves nothing inside it.
  */
 
-import type { DrawItem, FontRefEntry, ImageItem, Page, RectItem, TextItem } from './wire.js';
+import type { Asset, DrawItem, FontRefEntry, ImageItem, Page, RectItem, TextItem } from './wire.js';
 
 /** How a page is painted. */
 export interface PaintOptions {
   /** The run's font table: `LayoutOutput.fonts`. */
   fonts?: FontRefEntry[];
+  /** The run's asset table: `LayoutOutput.assets`. */
+  assets?: Asset[];
   /** Points to CSS pixels. 1 draws the page at its trim size. */
   zoom?: number;
   /** What the page is printed on; `null` leaves it transparent. */
   paper?: string | null;
   /** What it is printed in. */
   ink?: string;
-  /** Where an image's pixels come from. */
-  asset?: (index: number) => string | null | undefined;
+  /**
+   * Where an image's pixels come from: any url an `<img>` would
+   * take, including a `blob:` or `data:` one, or nothing when the
+   * host cannot supply them.
+   *
+   * Called with the asset the display list placed, so a host keyed
+   * on urls needs no index of its own. It is only ever called when
+   * {@link PaintOptions.assets} is given, since the index means
+   * nothing without the table it indexes.
+   */
+  asset?: (asset: Asset, index: number) => string | null | undefined;
 }
 
 /**
@@ -109,7 +120,8 @@ function image(item: ImageItem, options: PaintOptions): string {
   const box =
     `x="${num(item.x)}" y="${num(item.y)}"` +
     ` width="${num(item.w)}" height="${num(item.h)}"`;
-  const href = options.asset?.(item.asset);
+  const asset = options.assets?.[item.asset];
+  const href = asset === undefined ? undefined : options.asset?.(asset, item.asset);
   return href === null || href === undefined
     ? `<rect ${box} fill="none" stroke="currentColor" stroke-dasharray="3 3" data-missing-asset="${item.asset}"/>`
     : `<image ${box} href="${escape(href)}" preserveAspectRatio="none"/>`;

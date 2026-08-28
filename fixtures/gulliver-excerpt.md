@@ -2,7 +2,7 @@
 title: Gulliver's Travels
 author: Jonathan Swift
 language: en
-year: 1726
+date: 1726-10-28
 source: Project Gutenberg via classic-books-markdown
 ---
 
@@ -11,6 +11,8 @@ source: Project Gutenberg via classic-books-markdown
 ### CHAPTER I.
 
 _The author gives some account of himself and family.  His first inducements to travel.  He is shipwrecked, and swims for his life.  Gets safe on shore in the country of Lilliput; is made a prisoner, and carried up the country._
+
+![Plate I: a map placing Lilliput and Blefuscu between Sumatra and Van Diemen's Land.](images/plate.jpg)
 
 My father had a small estate in Nottinghamshire: I was the third of five sons.  He sent me to Emanuel College in Cambridge at fourteen years old, where I resided three years, and applied myself close to my studies; but the charge of maintaining me, although I had a very scanty allowance, being too great for a narrow fortune, I was bound apprentice to Mr. James Bates, an eminent surgeon in London, with whom I continued four years.  My father now and then sending me small sums of money, I laid them out in learning navigation, and other parts of the mathematics, useful to those who intend to travel, as I always believed it would be, some time or other, my fortune to do.  When I left Mr. Bates, I went down to my father: where, by the assistance of him and my uncle John, and some other relations, I got forty pounds, and a promise of thirty pounds a year to maintain me at Leyden: there I studied physic two years and seven months, knowing it would be useful in long voyages.
 
@@ -34,6 +36,8 @@ About four hours after we began our journey, I awaked by a very ridiculous accid
 
 At the place where the carriage stopped there stood an ancient temple, esteemed to be the largest in the whole kingdom; which, having been polluted some years before by an unnatural murder, was, according to the zeal of those people, looked upon as profane, and therefore had been applied to common use, and all the ornaments and furniture carried away.  In this edifice it was determined I should lodge.  The great gate fronting to the north was about four feet high, and almost two feet wide, through which I could easily creep.  On each side of the gate was a small window, not above six inches from the ground: into that on the left side, the king's smith conveyed fourscore and eleven chains, like those that hang to a lady's watch in Europe, and almost as large, which were locked to my left leg with six-and-thirty padlocks.  Over against this temple, on the other side of the great highway, at twenty feet distance, there was a turret at least five feet high.  Here the emperor ascended, with many principal lords of his court, to have an opportunity of viewing me, as I was told, for I could not see them.  It was reckoned that above a hundred thousand inhabitants came out of the town upon the same errand; and, in spite of my guards, I believe there could not be fewer than ten thousand at several times, who mounted my body by the help of ladders.  But a proclamation was soon issued, to forbid it upon pain of death.  When the workmen found it was impossible for me to break loose, they cut all the strings that bound me; whereupon I rose up, with as melancholy a disposition as ever I had in my life.  But the noise and astonishment of the people, at seeing me rise and walk, are not to be expressed.  The chains that held my left leg were about two yards long, and gave me not only the liberty of walking backwards and forwards in a semicircle, but, being fixed within four inches of the gate, allowed me to creep in, and lie at my full length in the temple.
 
+
+![A printer's ornament.](images/fleuron.png)
 
 ### CHAPTER II.
 

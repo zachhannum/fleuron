@@ -20,7 +20,7 @@
 import { Client, type Transport } from './client.js';
 import type { Metadata, Op, Response, Source } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
-import type { LayoutOutput, Warning } from './wire.js';
+import type { Asset, LayoutOutput, Warning } from './wire.js';
 
 /** How a preview is set up. */
 export interface PreviewOptions {
@@ -58,8 +58,22 @@ export interface PreviewOptions {
   paper?: string | null;
   /** What it is printed in. */
   ink?: string;
-  /** Where an image's pixels come from. */
-  asset?: (index: number) => string | null | undefined;
+  /**
+   * The images the manuscript refers to, by the url it names them
+   * by. Nothing here fetches a url, so a host that wants an image on
+   * the page fetches the file itself and hands over the bytes.
+   *
+   * The same bytes both size the box and fill it: the module reads
+   * the header, and the painter draws from a blob url over the file
+   * that header came from.
+   */
+  images?: Record<string, Uint8Array>;
+  /**
+   * Where an image's pixels come from, for a host that would rather
+   * name its own urls than hand over bytes. This outranks whatever
+   * {@link PreviewOptions.images} supplied.
+   */
+  asset?: (asset: Asset, index: number) => string | null | undefined;
   /** Called after every render that reached the screen. */
   onRender?: (output: LayoutOutput) => void;
 }
@@ -78,6 +92,8 @@ export class Preview {
   private readonly client: Client;
   private readonly options: PreviewOptions;
   private readonly faces = new Map<number, FontFace>();
+  /** A blob url per image the host handed over, by its own url. */
+  private readonly pixels = new Map<string, string>();
   private output: LayoutOutput | null = null;
   private showing: number;
   private scale: number;
@@ -115,6 +131,9 @@ export class Preview {
     }
     if (options.split !== undefined) {
       setup.push({ op: 'split', level: options.split });
+    }
+    for (const [url, bytes] of Object.entries(options.images ?? {})) {
+      setup.push(preview.hold(url, bytes));
     }
     if (setup.length > 0) {
       await preview.client.apply(setup);
@@ -173,6 +192,17 @@ export class Preview {
   /** Registers a face for the session's life. */
   async addFont(bytes: Uint8Array): Promise<void> {
     await this.render([{ op: 'font', bytes }]);
+  }
+
+  /**
+   * Registers one image, by the url the manuscript names it by, and
+   * lays the book out again around the room it takes.
+   *
+   * A url the manuscript names and nobody supplies is a diagnostic
+   * and a page with nothing where the image was.
+   */
+  async addImage(url: string, bytes: Uint8Array): Promise<void> {
+    await this.render([this.hold(url, bytes)]);
   }
 
   /** Lays the book out again and repaints. */
@@ -250,8 +280,29 @@ export class Preview {
       this.element.ownerDocument.fonts.delete(face);
     }
     this.faces.clear();
+    for (const url of this.pixels.values()) {
+      URL.revokeObjectURL(url);
+    }
+    this.pixels.clear();
     this.element.replaceChildren();
     this.worker.terminate();
+  }
+
+  /**
+   * Keeps a blob url over an image's bytes and hands the same bytes
+   * to the engine.
+   *
+   * The blob is made before the op is sent, because the bytes move
+   * across the wall rather than being copied and the buffer is empty
+   * on this side afterwards.
+   */
+  private hold(url: string, bytes: Uint8Array): Op {
+    const held = this.pixels.get(url);
+    if (held !== undefined) {
+      URL.revokeObjectURL(held);
+    }
+    this.pixels.set(url, URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })));
+    return { op: 'image', url, bytes };
   }
 
   private paint(): void {
@@ -261,10 +312,11 @@ export class Preview {
   private painting() {
     return {
       fonts: this.output?.fonts ?? [],
+      assets: this.output?.assets ?? [],
       zoom: this.scale,
       ...(this.options.paper === undefined ? {} : { paper: this.options.paper }),
       ...(this.options.ink === undefined ? {} : { ink: this.options.ink }),
-      ...(this.options.asset === undefined ? {} : { asset: this.options.asset }),
+      asset: this.options.asset ?? ((asset: Asset) => this.pixels.get(asset.url)),
     };
   }
 
@@ -313,4 +365,29 @@ export class Preview {
       // from, which is visible on the page and needs no throw here.
     }
   }
+}
+
+/**
+ * What an image is, read off its own first bytes.
+ *
+ * A blob with no type is sniffed by the browser in some places and
+ * refused in others, and the file already says what it is in the
+ * same signature the engine probed it by.
+ */
+function mediaType(bytes: Uint8Array): string {
+  const starts = (...signature: number[]): boolean =>
+    signature.every((byte, at) => bytes[at] === byte);
+  if (starts(0x89, 0x50, 0x4e, 0x47)) {
+    return 'image/png';
+  }
+  if (starts(0xff, 0xd8)) {
+    return 'image/jpeg';
+  }
+  if (starts(0x47, 0x49, 0x46, 0x38)) {
+    return 'image/gif';
+  }
+  if (starts(0x52, 0x49, 0x46, 0x46)) {
+    return 'image/webp';
+  }
+  return 'application/octet-stream';
 }
