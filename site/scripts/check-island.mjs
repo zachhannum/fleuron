@@ -30,6 +30,7 @@ const types = {
   '.json': 'application/json',
   '.md': 'text/markdown',
   '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
   '.wasm': 'application/wasm',
   '.woff2': 'font/woff2',
 };

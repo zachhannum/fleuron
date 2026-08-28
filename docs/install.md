@@ -3,7 +3,7 @@ title: Install
 description: How to install fleuron as a Rust library, a command-line binary, or an npm package.
 ---
 
-fleuron is not on crates.io yet, so the Rust routes below point at the repository. When it publishes, the git dependency becomes a version and nothing else changes.
+fleuron is not on crates.io yet, so the Rust routes below point at the repository.
 
 You need Rust 1.85 or newer. The workspace is on the 2024 edition.
 
@@ -16,9 +16,7 @@ fleuron = { git = "https://github.com/zachhannum/fleuron" }
 fleuron-markdown = { git = "https://github.com/zachhannum/fleuron" }
 ```
 
-`fleuron-markdown` reads markdown into sections. Leave it out if your source is already structured and you build a `Book` yourself.
-
-Nothing else is required. The engine bundles EB Garamond as its default text face, does no I/O, and links no platform libraries, so it builds for `wasm32-unknown-unknown` unchanged.
+`fleuron-markdown` reads markdown into a structured content tree and is optional if you use the [content tree](reference/content-tree.md) directly.
 
 Next: the [library quickstart](library/quickstart.md).
 
@@ -42,7 +40,7 @@ Next: the [CLI quickstart](cli/quickstart.mdx).
 npm install @fleuron/wasm
 ```
 
-You get the module, a worker, a client, a display-list reader and an SVG painter. Layout runs off the main thread and nothing in the package touches the DOM.
+You get the module, a worker, a client, a display-list reader and an SVG painter.
 
 ```sh
 npm install @fleuron/react
@@ -62,7 +60,7 @@ cargo test --workspace
 
 The end-to-end test runs the fixture book through the CLI and checks the PDF. It wants `qpdf` and `pdftotext` (from poppler) on the path. Without them it skips the validation instead of failing.
 
-The perf harness is a separate binary, and it reports against absolute ceilings rather than a stored baseline:
+The perf harness is a separate binary, and it reports against absolute performance ceilings:
 
 ```sh
 cargo run --release -p fleuron-fixtures --bin perf-gate

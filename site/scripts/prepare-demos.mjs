@@ -16,7 +16,7 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { DEMOS, demo, image } from '../src/demos/catalogue.mjs';
+import { DEMOS, bytes, demo } from '../src/demos/catalogue.mjs';
 
 const root = new URL('../../', import.meta.url);
 const site = new URL('../', import.meta.url);
@@ -51,21 +51,45 @@ mkdirSync(posters, { recursive: true });
 
 let wrong = 0;
 for (const id of Object.keys(DEMOS)) {
-  const { name, markdown, css, page, dialect, images } = demo(id);
+  const { name, markdown, css, page, dialect, images, fonts } = demo(id);
   const session = new Session();
   if (dialect !== undefined) {
     session.setDialect(dialect);
   }
+  // A face the stylesheet names has to be registered before the
+  // cascade asks for it, or the heads it styles are set in the
+  // bundled one and the poster disagrees with the island.
+  const registered = new Map();
+  for (const face of fonts) {
+    for (const at of session.addFont(bytes(face.url))) {
+      registered.set(at, face);
+    }
+  }
   // The images cross the wall before the manuscript, so the first
   // layout already knows how much room each one takes.
-  const held = new Map(images.map((url) => [url, image(url)]));
-  for (const [url, bytes] of held) {
-    session.addImage(url, bytes);
+  const held = new Map(images.map((url) => [url, bytes(url)]));
+  for (const [url, pixels] of held) {
+    session.addImage(url, pixels);
   }
   session.setMarkdown(name, markdown);
   session.setStyle(css);
   const output = decodeDisplayList(session.preview());
   session.free();
+
+  // The site serves these faces under the family the catalogue
+  // declares. A file whose name table says something else is served
+  // as a family no run resolves to, and the page shows a fallback
+  // while the engine measures the real thing.
+  for (const [at, face] of registered) {
+    const read = output.fonts[at];
+    if (read.family !== face.family || read.attributes.weight !== face.weight) {
+      console.error(
+        `  FAIL  ${id}: ${face.url} is ${read.family} ${read.attributes.weight}, ` +
+          `and the catalogue calls it ${face.family} ${face.weight}`,
+      );
+      wrong += 1;
+    }
+  }
 
   const sheet = output.pages[Math.min(page, output.pages.length) - 1];
   if (sheet === undefined) {
@@ -103,7 +127,9 @@ cpSync(
   new URL('public/fixtures/pride-and-prejudice.md', site),
 );
 // The images the demos hand the engine are fetched by the island,
-// the way a host fetches its own.
+// the way a host fetches its own. The faces are not here: the site
+// already serves those to the painter, and the island fetches the
+// copy the page has rather than a second one.
 for (const url of new Set(Object.keys(DEMOS).flatMap((id) => demo(id).images))) {
   mkdirSync(new URL(`public/fixtures/${dirname(url)}/`, site), { recursive: true });
   cpSync(new URL(`fixtures/${url}`, root), new URL(`public/fixtures/${url}`, site));
@@ -116,12 +142,13 @@ if (wrong > 0) {
 console.log('demos prepared: the module, the bench corpus, and a poster each');
 
 /** One image as a data url, for a poster that carries its own. */
-function inline(bytes) {
-  if (bytes === undefined) {
+function inline(pixels) {
+  if (pixels === undefined) {
     return null;
   }
-  const type = bytes[0] === 0x89 ? 'image/png' : bytes[0] === 0xff ? 'image/jpeg' : 'image/webp';
-  return `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+  const type =
+    pixels[0] === 0x89 ? 'image/png' : pixels[0] === 0xff ? 'image/jpeg' : 'image/webp';
+  return `data:${type};base64,${Buffer.from(pixels).toString('base64')}`;
 }
 
 /**

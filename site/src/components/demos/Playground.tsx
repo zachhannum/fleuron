@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { read, write } from '../../demos/link';
-import { usePreview } from '../../demos/usePreview';
+import { type Face, usePreview } from '../../demos/usePreview';
 import { Marks } from './Marks';
 import { Sheet } from './Sheet';
 
@@ -45,6 +45,8 @@ export interface PlaygroundProps {
   dialect?: 'commonmark' | 'gfm' | 'obsidian';
   /** The images the manuscript refers to, for the island to fetch. */
   images?: string[];
+  /** The faces the stylesheet names, for the island to fetch. */
+  fonts?: Face[];
   /** What the display list is drawn as over the page it made. */
   highlight?: string;
   /** Whether the warnings are open to begin with. */
@@ -64,6 +66,7 @@ export function Playground(props: PlaygroundProps): React.ReactElement {
     name,
     dialect,
     images,
+    fonts,
     highlight,
     caption,
   } = props;
@@ -94,6 +97,7 @@ export function Playground(props: PlaygroundProps): React.ReactElement {
     page,
     dialect,
     images,
+    fonts,
   });
   const pages = output?.pages.length ?? 0;
   const warnings = output?.warnings ?? [];

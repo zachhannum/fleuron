@@ -83,17 +83,12 @@ const description =
           <p class="lede">
             fleuron turns a manuscript into a typeset book and writes it out
             as a print-ready PDF. Styling is CSS. It is built for markdown
-            writing tools.
+            writing tools. Test it out in the playground below.
           </p>
           <div class="cta">
             <a class="button primary" href={`${base}/install/`}>Get started</a>
             <a class="button" href={repo}>Read the source</a>
           </div>
-          <p class="claim">
-            <em>Pride and Prejudice</em>, 333 pages, becomes a PDF in
-            287&nbsp;ms. The book below is being set by that same engine, in
-            this browser, right now.
-          </p>
         </div>
       </section>
 
@@ -102,10 +97,8 @@ const description =
           <Playground demo="playground" />
           <p class="stage-note">
             <span class="f-mark" aria-hidden="true">&#10086;</span>
-            Chapter 1 of <em>Pride and Prejudice</em>. Change the manuscript
-            or the stylesheet and the book is laid out again. The preview and
-            the PDF are painted from the same display list, so they cannot
-            come out different.
+            Fleuron playground. Change the manuscript
+            or the stylesheet and watch the book update in real time.
           </p>
         </div>
       </section>
@@ -118,7 +111,9 @@ const description =
               A built-in stylesheet sets the defaults and yours overrides
               whatever you want to change. fleuron understands a <a
                 href={`${base}/css-subset/`}>subset of CSS</a>, and reports
-              what it does not.
+              what it does not. Use CSS to configure all the furnishings of
+              a professionally typeset novel: trim size, drop caps, page numbers,
+              running heads, and much more.
             </p>
           </div>
           <div class="page-css">
@@ -131,7 +126,7 @@ const description =
         <div class="wrap">
           <h2>Performance</h2>
           <p class="section-lede">
-            Two complete novels, measured from markdown to PDF.
+            fleron is built for speed. Two complete novels, measured from markdown to PDF.
           </p>
           <div class="speed f-glass">
             <table>
@@ -163,9 +158,7 @@ const description =
             </table>
           </div>
           <p class="speed-note">
-            Apple M-series. <a href={`${base}/demos/`}>Run it on yours</a>: the
-            same two books, laid out in your browser, with the machine named
-            beside the numbers.
+            Apple M-series. <a href={`${base}/demos/`}>Run it on yours</a>.
           </p>
         </div>
       </section>
@@ -176,11 +169,11 @@ const description =
           <!-- Inline tags stay mid-line: a newline touching one is dropped
                rather than collapsed to a space, which runs the words together. -->
           <p class="section-lede">
-            <code>fleuron</code> is the engine, pure Rust with no I/O.
+            <code>fleuron</code> is the typesetting engine, pure Rust with no I/O.
             <code>fleuron-markdown</code> reads a manuscript into the content
-            tree it lays out. <code>fleuron-cli</code> takes a manuscript and
+            tree. <code>fleuron-cli</code> takes a manuscript and
             stylesheets and writes a PDF. <code>fleuron-wasm</code> runs the
-            same pipeline in a worker, and is what set the book above.
+            same pipeline in a worker.
           </p>
           <Consumers />
         </div>

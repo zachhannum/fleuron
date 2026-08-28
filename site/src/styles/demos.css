@@ -27,6 +27,17 @@
   font-display: swap;
 }
 
+/* The display face a demo sets its heads in. The painter resolves
+   each run against the document, so this is the file the island
+   hands the engine and not a copy of it: same outlines, and every
+   glyph lands where the engine measured it. */
+@font-face {
+  font-family: 'im fell english sc';
+  src: url('../../../fixtures/fonts/IMFellEnglishSC-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
 /* The landing page does not load a CSS reset, so the padded boxes
    below say what their widths mean. A content-box textarea at 100%
    is a textarea one padding wider than its column, and the end of

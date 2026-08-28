@@ -27,6 +27,9 @@ wins and the quick fix waits for its own PR.
   dropped.
 - The three invariants (see README): styling enters as CSS; the engine
   never touches the DOM; layout never decodes images.
+- "Not in the subset" in `docs/css-subset.mdx` says what the engine
+  does not support yet, not what it refuses. A property listed there
+  is a candidate for an issue, not a closed door.
 - Work is tracked in GitHub issues, grouped by the v0.1 epic (#13). An
   issue's acceptance checkboxes are its definition of done.
 
