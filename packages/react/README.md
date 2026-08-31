@@ -1,6 +1,6 @@
 # @fleuron/react
 
-The [fleuron](https://zachhannum.github.io/fleuron/) preview, as a
+The [fleuron](https://fleuron.typeworks.dev/) preview, as a
 React component.
 
 ```sh

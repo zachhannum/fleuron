@@ -3,7 +3,7 @@
 Paged-media layout in a worker: markdown and CSS in, a display list or
 PDF bytes out.
 
-[fleuron](https://zachhannum.github.io/fleuron/) is a layout engine for
+[fleuron](https://fleuron.typeworks.dev/) is a layout engine for
 book-shaped documents, compiled to WebAssembly. It shapes text, breaks
 and hyphenates lines, fragments the result into pages, and paints the
 preview and the PDF from the same numbers. It touches no DOM and opens

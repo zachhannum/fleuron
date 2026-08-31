@@ -50,7 +50,7 @@ npm install @fleuron/react
 
 That is the same preview as a React component, and nothing else.
 
-Next: the [wasm quickstart](wasm/quickstart.md), or [the demos](https://zachhannum.github.io/fleuron/demos/), which run this package in your browser.
+Next: the [wasm quickstart](wasm/quickstart.md), or [the demos](https://fleuron.typeworks.dev/demos/), which run this package in your browser.
 
 ## Working on fleuron itself
 

@@ -2,7 +2,7 @@
 
 A paged-media layout engine for book-shaped documents, in Rust.
 
-[Documentation](https://zachhannum.github.io/fleuron/) · [Demos](https://zachhannum.github.io/fleuron/demos/) · [API](https://zachhannum.github.io/fleuron/api/fleuron/)
+[Documentation](https://fleuron.typeworks.dev/) · [Demos](https://fleuron.typeworks.dev/demos/) · [API](https://fleuron.typeworks.dev/api/fleuron/)
 
 fleuron takes markdown and CSS and gives back a typeset book. It shapes
 the text, breaks and hyphenates the lines, fragments the result into
@@ -91,7 +91,7 @@ Prejudice* with a sheet that moves the page box costs 6 ms, against the
 128 ms of line breaking it skips.
 
 Apple M-series, release build, best of three. The
-[demos](https://zachhannum.github.io/fleuron/demos/) run the same two
+[demos](https://fleuron.typeworks.dev/demos/) run the same two
 books in your browser and name the machine they ran on.
 
 The budgets: a book-scale manuscript reaches PDF bytes in under a second

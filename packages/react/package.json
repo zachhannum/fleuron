@@ -8,7 +8,7 @@
     "url": "git+https://github.com/zachhannum/fleuron.git",
     "directory": "packages/react"
   },
-  "homepage": "https://zachhannum.github.io/fleuron/",
+  "homepage": "https://fleuron.typeworks.dev/",
   "type": "module",
   "sideEffects": false,
   "exports": {
