@@ -22,7 +22,6 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
-const BASE = '/fleuron';
 
 const types = {
   '.css': 'text/css',
@@ -46,7 +45,7 @@ function check(what, passed, detail = '') {
 
 const server = createServer(async (request, response) => {
   const asked = new URL(request.url ?? '/', 'http://x').pathname;
-  const path = join(dist, normalize(decodeURIComponent(asked.replace(BASE, ''))));
+  const path = join(dist, normalize(decodeURIComponent(asked)));
   if (!path.startsWith(dist)) {
     response.writeHead(403).end();
     return;
@@ -67,7 +66,7 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const { port } = server.address();
-const at = `http://127.0.0.1:${port}${BASE}/`;
+const at = `http://127.0.0.1:${port}/`;
 
 console.log('fleuron island run: the landing demo, driven\n');
 
