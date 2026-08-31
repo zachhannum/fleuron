@@ -16,7 +16,7 @@ Write Rust, and `fleuron` is the engine and `fleuron-markdown` the frontend in f
 
 Work from a shell, and the `fleuron` binary reads markdown and writes a PDF, taking author stylesheets as flags. It is the quickest way to see output. Start at the [CLI quickstart](cli/quickstart.mdx).
 
-Build for the browser, and `fleuron-wasm` runs layout in a worker and hands back one transferable buffer holding either the display list or PDF bytes. It never touches the DOM. Start at the [wasm quickstart](wasm/quickstart.md), or open [the demos](https://zachhannum.github.io/fleuron/demos/) and edit a book in your browser.
+Build for the browser, and `fleuron-wasm` runs layout in a worker and hands back one transferable buffer holding either the display list or PDF bytes. It never touches the DOM. Start at the [wasm quickstart](wasm/quickstart.md), or open [the demos](https://fleuron.typeworks.dev/demos/) and edit a book in your browser.
 
 ## The pipeline
 

@@ -35,7 +35,7 @@ function moduleServedFromPublic() {
   };
 }
 
-const docLinks = [remarkDocLinks, { root: docsRoot, base: '/fleuron' }];
+const docLinks = [remarkDocLinks, { root: docsRoot, base: '/' }];
 
 /**
  * Puts the demo components in scope for every prose page.
@@ -53,13 +53,12 @@ function demoComponents() {
 }
 
 export default defineConfig({
-  site: 'https://zachhannum.github.io',
+  site: 'https://fleuron.typeworks.dev',
   // A stylesheet in the document is a stylesheet the reader is not
   // waiting a round trip for. The site's sheets are small enough
   // that carrying them costs less than fetching them.
   build: { inlineStylesheets: 'always' },
 
-  base: '/fleuron',
   trailingSlash: 'always',
   // Starlight turns prefetching on for every page, and a page here
   // ships either nothing or a demo it was asked for.
@@ -131,7 +130,7 @@ export default defineConfig({
             { label: 'Markdown mapping', link: '/reference/markdown/' },
             { label: 'Content tree', link: '/reference/content-tree/' },
             { label: 'Display list', link: '/reference/display-list/' },
-            { label: 'API (rustdoc)', link: '/fleuron/api/fleuron/', attrs: { target: '_blank' } },
+            { label: 'API (rustdoc)', link: '/api/fleuron/', attrs: { target: '_blank' } },
           ],
         },
         { label: 'Demos', link: '/demos/' },
@@ -147,14 +146,14 @@ export default defineConfig({
           // against the files themselves, which is the check that
           // matters for a reader on GitHub anyway.
           exclude: [
-            '/fleuron/api/**',
-            '/fleuron/css-subset/',
-            '/fleuron/cli/quickstart/',
-            '/fleuron/library/diagnostics/',
-            '/fleuron/reference/display-list/',
-            '/fleuron/reference/markdown/',
-            '/fleuron/wasm/preview/',
-            '/fleuron/wasm/preview/**',
+            '/api/**',
+            '/css-subset/',
+            '/cli/quickstart/',
+            '/library/diagnostics/',
+            '/reference/display-list/',
+            '/reference/markdown/',
+            '/wasm/preview/',
+            '/wasm/preview/**',
           ],
         }),
       ],

@@ -13,8 +13,8 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/zachhannum/fleuron"
-homepage = "https://zachhannum.github.io/fleuron/"
-documentation = "https://zachhannum.github.io/fleuron/api/fleuron/"
+homepage = "https://fleuron.typeworks.dev/"
+documentation = "https://fleuron.typeworks.dev/api/fleuron/"
 authors = ["Zach Hannum"]
 
 [workspace.dependencies]
