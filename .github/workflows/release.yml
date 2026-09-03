@@ -1,0 +1,58 @@
+# A tag is the only thing that publishes. The checks are the ones a
+# pull request runs, with the tag held against every version the
+# repository carries, and the module and the built package come out of
+# that run rather than being built a second time here.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  checks:
+    uses: ./.github/workflows/wasm.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: .
+      - name: The tarballs the release carries
+        run: |
+          mkdir -p release
+          npm pack --pack-destination "$GITHUB_WORKSPACE/release" \
+            ./crates/fleuron-wasm/npm ./packages/react
+          cp crates/fleuron-wasm/npm/wasm/fleuron_bg.wasm release/
+          ls -l release
+      # `--provenance` signs the tarball with the run and the commit it
+      # was built from, which is what lets a host check that what it
+      # installed came out of this repository.
+      - name: The bindings, on the registry
+        working-directory: crates/fleuron-wasm/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance
+      - name: The wrapper, on the registry
+        working-directory: packages/react
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance
+      - name: On the tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --verify-tag --generate-notes

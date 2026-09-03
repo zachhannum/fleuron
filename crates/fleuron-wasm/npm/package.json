@@ -1,6 +1,6 @@
 {
   "name": "@fleuron/wasm",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Paged-media layout in a worker: markdown and CSS in, a display structure or PDF bytes out",
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -31,7 +31,8 @@
     "build:test": "tsc -p tsconfig.test.json",
     "test": "npm run build:test && node build/harness.js",
     "size": "npm run build:test && node build/size.js",
-    "test:browser": "npm run build:test && node build/browser.js"
+    "test:browser": "npm run build:test && node build/browser.js",
+    "test:package": "npm run build && npm run build:test && node build/consumer.js"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

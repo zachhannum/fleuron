@@ -28,6 +28,7 @@ export {
   type Want,
 } from './protocol.js';
 export { Preview, type PreviewOptions } from './preview.js';
+export { VERSION } from './version.js';
 export { faceFamily, paintPage, type PaintOptions } from './svg.js';
 export {
   WIRE_VERSION,

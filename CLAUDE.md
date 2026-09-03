@@ -129,6 +129,18 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 7. perf job: book-scale invariants in release, then `perf-gate` against
    the budgets natively and under wasmtime, reported to the run summary
 
+## Releases
+
+`.github/workflows/release.yml` runs on a `v*` tag: the wasm workflow
+again, with the tag held against every version the repository carries,
+then `npm publish --provenance` for both packages and a GitHub release
+carrying the two tarballs and the module. Nothing else publishes.
+
+`scripts/version.mjs` is where a version is read and where it is
+bumped (`node scripts/version.mjs --set 0.2.0`), because the number
+lives in the workspace, both packages, the peer range between them and
+the constant the package reports itself by.
+
 ## Documentation rules
 
 Applies to code comments and all documentation — internal (CLAUDE.md,

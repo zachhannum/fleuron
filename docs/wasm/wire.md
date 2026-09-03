@@ -11,6 +11,8 @@ Inputs are a different contract. [The content tree](../reference/content-tree.md
 
 A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks fields in the order they were written and cannot detect a change to that order. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` rejects an unknown version, and `wireVersion()` is what the module writes.
 
+`WIRE_VERSION` is the shape of the display structure. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest; the two move independently.
+
 ## What crosses
 
 In: whatever changed. Markdown source, CSS text, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
