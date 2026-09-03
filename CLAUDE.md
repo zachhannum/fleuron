@@ -131,15 +131,22 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 
 ## Releases
 
-`.github/workflows/release.yml` runs on a `v*` tag: the wasm workflow
-again, with the tag held against every version the repository carries,
-then `npm publish --provenance` for both packages and a GitHub release
-carrying the two tarballs and the module. Nothing else publishes.
+`.github/workflows/release.yml` is the only thing that publishes. A
+`v*` tag runs it, and so does a manual dispatch, which raises the
+version, cuts the tag and carries on with it. Either way it runs the
+wasm workflow again with the tag held against every version the
+repository carries, then puts both tarballs and the module on a GitHub
+release and both packages on the registry.
+
+npm authenticates the workflow over OIDC, so there is no token in the
+repository's secrets. Trusted publishing is configured per package on
+npmjs.com against `release.yml`, which is why the publish steps stay in
+that file rather than moving into the workflow it calls.
 
 `scripts/version.mjs` is where a version is read and where it is
-bumped (`node scripts/version.mjs --set 0.2.0`), because the number
-lives in the workspace, both packages, the peer range between them and
-the constant the package reports itself by.
+bumped, because the number lives in the workspace, both packages, the
+peer range between them, the constant the package reports itself by and
+the lockfiles that mirror all of it.
 
 ## Documentation rules
 

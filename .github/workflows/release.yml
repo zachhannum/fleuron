@@ -1,31 +1,82 @@
-# A tag is the only thing that publishes. The checks are the ones a
-# pull request runs, with the tag held against every version the
-# repository carries, and the module and the built package come out of
-# that run rather than being built a second time here.
+# The one workflow that publishes. A tag runs the wasm workflow again,
+# with the tag held against every version the repository carries, and
+# the module and the built package come out of that run rather than
+# being built a second time here.
 name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to raise"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+  # The release's own assets, signed back to the commit and the run that
+  # built them. npm attests the tarballs it takes on its own.
+  attestations: write
+  # npm authenticates the workflow over OIDC, so publishing needs no
+  # token in the repository's secrets.
+  id-token: write
 
 jobs:
+  # A tag pushed with `GITHUB_TOKEN` starts no workflow run of its own, so
+  # a dispatched release cannot hand off to the push trigger. It cuts the
+  # tag here and the jobs below carry on with it.
+  #
+  # Separate from them so that re-running the failed half of a dispatched
+  # release does not raise the version a second time.
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version=$(node scripts/version.mjs --bump "$BUMP")
+          git commit -am "Release v$version"
+          git tag -a "v$version" -m "v$version"
+          git push --follow-tags
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+  # The module built the way a host consumes it, the fixture book through
+  # a worker and a browser, and the tarball installed into a directory
+  # that has never seen this repository. A failure here is a release that
+  # does not happen.
   checks:
+    needs: tag
+    # `tag` is skipped for a tag push, which is not a failure.
+    if: ${{ !cancelled() && !failure() }}
     uses: ./.github/workflows/wasm.yml
     with:
-      tag: ${{ github.ref_name }}
+      ref: ${{ needs.tag.outputs.tag || github.ref_name }}
+      tag: ${{ needs.tag.outputs.tag || github.ref_name }}
 
   publish:
-    needs: checks
+    needs: [tag, checks]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
+    env:
+      TAG: ${{ needs.tag.outputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          ref: ${{ needs.tag.outputs.tag || github.ref_name }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
       - uses: actions/download-artifact@v4
         with:
           name: package
@@ -37,22 +88,24 @@ jobs:
             ./crates/fleuron-wasm/npm ./packages/react
           cp crates/fleuron-wasm/npm/wasm/fleuron_bg.wasm release/
           ls -l release
-      # `--provenance` signs the tarball with the run and the commit it
-      # was built from, which is what lets a host check that what it
-      # installed came out of this repository.
-      - name: The bindings, on the registry
-        working-directory: crates/fleuron-wasm/npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance
-      - name: The wrapper, on the registry
-        working-directory: packages/react
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release/*
+      # For a host that pins a file rather than the registry: both
+      # tarballs and the module beside them.
       - name: On the tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/* \
-            --verify-tag --generate-notes
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" release/* --clobber
+      # Last of the two channels, because a release can be edited
+      # afterwards and a published version cannot. Trusted publishing
+      # signs each tarball with provenance without being asked.
+      - name: The bindings, on the registry
+        working-directory: crates/fleuron-wasm/npm
+        run: npm publish
+      - name: The wrapper, on the registry
+        working-directory: packages/react
+        run: npm publish
