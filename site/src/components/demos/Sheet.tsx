@@ -5,7 +5,7 @@
  * engine painted at build time and is what the server sends, so a
  * reader whose JavaScript never runs still sees a typeset page. The
  * live layer is what the worker paints into, and it takes over the
- * moment the first display list arrives.
+ * moment the first display structure arrives.
  */
 
 import type { Status } from '../../demos/usePreview';
@@ -30,7 +30,7 @@ export interface SheetProps {
   onStart: () => void;
   /** What broke, when something did. */
   error?: string | null;
-  /** The display list, drawn over the page it made. */
+  /** The display structure, drawn over the page it made. */
   marks?: React.ReactNode;
   /** The size of the module, for a reader deciding whether to spend it. */
   weight?: string;

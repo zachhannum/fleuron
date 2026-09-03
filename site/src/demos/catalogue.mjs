@@ -37,8 +37,8 @@ export function fixture(path) {
   return readFileSync(join(root, 'fixtures', path), 'utf8');
 }
 
-/** A fixture image, as the bytes a host hands the engine. */
-export function image(url) {
+/** A fixture image or font file, as the bytes a host hands the engine. */
+export function bytes(url) {
   return new Uint8Array(readFileSync(join(root, 'fixtures', url)));
 }
 
@@ -57,6 +57,19 @@ export function chapter(path, number) {
     throw new Error(`${path} has no chapter ${number}`);
   }
   return text.slice(from.index, to?.index).trimEnd();
+}
+
+/**
+ * A chapter with whatever stands above it: the frontmatter the
+ * frontend reads a title from, and the image a book opens on.
+ */
+export function opening(path, number) {
+  const text = fixture(path);
+  const heads = [...text.matchAll(/^## .*$/gm)];
+  if (heads[number - 1]?.index === undefined) {
+    throw new Error(`${path} has no chapter ${number}`);
+  }
+  return text.slice(0, heads[number]?.index).trimEnd();
 }
 
 /**
@@ -132,6 +145,105 @@ h2 + p::first-letter {
 }
 `;
 
+/**
+ * The same paperback, opened on a book with a frontispiece: the
+ * chapter heads are set in the demo face, and the image the chapter
+ * opens on is centred with air around it.
+ */
+export const BOOK_LANDING_CSS = `@page {
+  size: 5.5in 8.5in;
+  margin: 0.7in 0.6in 0.8in 0.7in;
+
+  @bottom-center {
+    content: counter(page);
+    font-size: 10pt;
+  }
+}
+
+/* The wider margin is the spine on both sides of the spread. */
+@page :left {
+  margin-left: 0.6in;
+  margin-right: 0.7in;
+
+  @top-center {
+    content: "The King of Elfland's Daughter";
+    font-size: 10pt;
+  }
+}
+
+@page :right {
+  @top-center {
+    content: string(chapter);
+    font-size: 8pt;
+  }
+}
+
+/* Don't show the page counter at the beginning of chapters */
+@page :first {
+  @bottom-center {
+    content: ""
+  }
+}
+
+/* A chapter's opening page carries no head. */
+@page :first {
+  @top-center { content: none; }
+}
+
+book {
+  font-size: 12pt;
+  line-height: 1.4;
+  text-align: justify;
+  hyphens: auto;
+}
+
+section {
+  break-before: recto;
+}
+
+h2 {
+  string-set: chapter content();
+  font-family: 'im fell english sc';
+  font-size: 12pt;
+  font-weight: 400;
+  text-align: center;
+}
+
+h3 {
+  font-family: 'im fell english sc';
+  font-size: 16pt;
+  text-align: center;
+  margin-bottom: 14pt;
+}
+
+/* The display face has no italic, and a head is the wrong place to
+   ask a browser to slant one for it. */
+h3 em {
+  font-style: normal;
+}
+
+p {
+  margin: 0;
+  text-indent: 1.15em;
+  orphans: 2;
+  widows: 2;
+}
+
+h2 + p {
+  text-indent: 0;
+}
+
+img {
+  text-align: center;
+  margin-top: .25in;
+  margin-bottom: .25in;
+}
+h3 + p::first-letter {
+  font-family: 'im fell english sc';
+  initial-letter: 3;
+}
+`;
+
 /** The same book with nothing said about it: the built-in sheet alone. */
 export const BARE_CSS = `@page {
   size: 5.5in 8.5in;
@@ -190,16 +302,30 @@ that afternoon.
  * Every demo the site mounts, and the poster each one is drawn on
  * top of until it does.
  *
- * `images` names the files a demo's manuscript refers to, relative
- * to `fixtures/`. The build copies them where the island can fetch
- * them and reads them itself for the poster.
+ * `images` names the files a demo's manuscript refers to and
+ * `fonts` the faces its stylesheet names beyond the bundled one,
+ * both relative to `fixtures/`. The build reads them for the poster;
+ * the island fetches the images from where the build puts them, and
+ * the faces from where the site's own CSS serves them.
+ *
+ * A face carries the family and weight the engine reads out of its
+ * name table, which is what a stylesheet selects it by and what the
+ * site serves it as. The poster build holds the file to that.
  */
 export const DEMOS = {
   /** The landing page's split view, and the docs' playground. */
   playground: () => ({
-    name: 'pride-and-prejudice.md',
-    markdown: chapter('corpus/pride-and-prejudice.md', 1),
-    css: BOOK_CSS,
+    name: 'the-king-of-elflands-daughter.md',
+    markdown: opening('corpus/the-king-of-elflands-daughter.md', 1),
+    css: BOOK_LANDING_CSS,
+    images: ['images/lord.png'],
+    fonts: [
+      {
+        url: 'fonts/IMFellEnglishSC-Regular.ttf',
+        family: 'im fell english sc',
+        weight: 400,
+      },
+    ],
     page: 1,
   }),
   /** What the styled sheet does to a chapter opening. */
@@ -210,7 +336,7 @@ export const DEMOS = {
     page: 1,
   }),
   /** A page of running text, for pointing at one box on. */
-  'display-list': () => ({
+  'display-structure': () => ({
     name: 'pride-and-prejudice.md',
     markdown: chapter('corpus/pride-and-prejudice.md', 1),
     css: BOOK_CSS,
@@ -218,8 +344,8 @@ export const DEMOS = {
   }),
   /** What the CLI quickstart writes, from the manuscript it writes it from. */
   quickstart: () => ({
-    name: 'gulliver-excerpt.md',
-    markdown: fixture('gulliver-excerpt.md'),
+    name: 'pride-and-prejudice.md',
+    markdown: chapter('corpus/pride-and-prejudice.md', 1),
     css: fixture('styled.css'),
     // Nothing fetches a url for the demo, so the images the
     // manuscript names are handed over as urls it fetches itself.
@@ -256,5 +382,5 @@ export function demo(id) {
   if (build === undefined) {
     throw new Error(`no demo called ${id}`);
   }
-  return { images: [], ...build() };
+  return { images: [], fonts: [], ...build() };
 }

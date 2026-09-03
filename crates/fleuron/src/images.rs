@@ -68,7 +68,7 @@ impl Intrinsic {
 
 /// One image the book refers to, sized from its header.
 ///
-/// What `DrawItem::Image.asset` indexes, and all the display list
+/// What `DrawItem::Image.asset` indexes, and all the display structure
 /// says about an image: painters take the url back to their own
 /// pixels.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

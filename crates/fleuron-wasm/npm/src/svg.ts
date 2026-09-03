@@ -1,5 +1,5 @@
 /**
- * The preview painter: one page of the display list, as SVG.
+ * The preview painter: one page of the display structure, as SVG.
  *
  * The engine has already shaped and broken the text, so the browser
  * is given no room to do either. Every run is one `<text>` carrying
@@ -9,7 +9,7 @@
  * export about where a glyph sits therefore has a bug here, and
  * nowhere else.
  *
- * The coordinate system is the display list's: points, origin top
+ * The coordinate system is the display structure's: points, origin top
  * left, on a `viewBox` the size of the trim. Zoom is the width and
  * height the element is given, and moves nothing inside it.
  */
@@ -33,7 +33,7 @@ export interface PaintOptions {
    * take, including a `blob:` or `data:` one, or nothing when the
    * host cannot supply them.
    *
-   * Called with the asset the display list placed, so a host keyed
+   * Called with the asset the display structure placed, so a host keyed
    * on urls needs no index of its own. It is only ever called when
    * {@link PaintOptions.assets} is given, since the index means
    * nothing without the table it indexes.
@@ -156,7 +156,7 @@ function style(entry: FontRefEntry | undefined): string {
  * An x for each character of a run, from the glyph the shaper placed
  * there.
  *
- * SVG positions characters, and the display list positions glyphs,
+ * SVG positions characters, and the display structure positions glyphs,
  * so the run's text is the join between them: each glyph carries the
  * byte range it stands for, and its x lands on the character that
  * range starts at. A character inside a ligature's range has no
@@ -231,7 +231,7 @@ function fill(xs: (number | undefined)[], left: number): number[] {
 /**
  * The shortest decimal that reads back as the same 32-bit float.
  *
- * The display list is `f32`, and printing one as the double it
+ * The display structure is `f32`, and printing one as the double it
  * widened to writes seventeen digits of a number that only has
  * seven. Both are the same position; only one of them is worth
  * sending a page's worth of.

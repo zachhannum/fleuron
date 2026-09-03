@@ -1,7 +1,7 @@
 //! Property tests for the wire: what the engine writes, a host reads
 //! back unchanged.
 //!
-//! The display list crosses the boundary once per keystroke and is
+//! The display structure crosses the boundary once per keystroke and is
 //! decoded by someone else's code. So the property that matters is
 //! not that the bytes parse but that nothing is lost on the way
 //! through: encode, decode, encode again, and the second buffer is
@@ -14,7 +14,7 @@ use fleuron::{LayoutOutput, Warning};
 use proptest::prelude::*;
 
 /// Points on a page, and sizes in them. Finite: a page whose height
-/// is NaN is not a display list the engine can produce.
+/// is NaN is not a display structure the engine can produce.
 fn coordinate() -> impl Strategy<Value = f32> {
     -2000.0f32..2000.0
 }
@@ -120,11 +120,11 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
     /// Encode, decode, encode: the second buffer is the first one,
-    /// byte for byte, and the display list in between is the one that
+    /// byte for byte, and the display structure in between is the one that
     /// went in.
     #[test]
     fn the_wire_round_trips(output in output()) {
-        let bytes = wire::encode(&output).expect("a display list encodes");
+        let bytes = wire::encode(&output).expect("a display structure encodes");
         let read = wire::decode(&bytes).expect("what the engine wrote, the engine reads");
         prop_assert_eq!(&read, &output);
         prop_assert_eq!(wire::encode(&read).expect("and encodes again"), bytes);
@@ -134,7 +134,7 @@ proptest! {
     /// does not know without decoding a page of it.
     #[test]
     fn the_version_leads_every_buffer(output in output()) {
-        let bytes = wire::encode(&output).expect("a display list encodes");
+        let bytes = wire::encode(&output).expect("a display structure encodes");
         prop_assert_eq!(wire::version(&bytes).expect("the version reads"), wire::VERSION);
     }
 }

@@ -2,7 +2,7 @@
  * The browser run: the example harness, driven.
  *
  * The headless harness beside this one proves the numbers: the SVG
- * puts every glyph at the x the display list gave it. What it cannot
+ * puts every glyph at the x the display structure gave it. What it cannot
  * prove is that those numbers reach a screen, so this opens the
  * harness in a real browser, pages the fixture book through it, and
  * holds one page against a raster of the PDF the same run exported.
@@ -52,7 +52,7 @@ const ZOOM = 2;
  * mostly one tonal block measures the resampling rather than where
  * the glyphs are.
  */
-const COMPARED = 2;
+const COMPARED = 3;
 
 let failures = 0;
 
@@ -89,7 +89,7 @@ console.log(`  the harness sets the fixture book in ${pages} pages\n`);
 check('the fixture book reaches the browser', pages > 0);
 
 // Every page, painted and on screen: the page is turned to each in
-// turn and the element that lands is the one the display list asked
+// turn and the element that lands is the one the display structure asked
 // for, with text on it.
 const painted = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
@@ -296,7 +296,7 @@ if (rastered.status !== 0) {
     measured,
   );
   check(
-    'and put it at the same x, which is the one the display list gave',
+    'and put it at the same x, which is the one the display structure gave',
     Math.abs(difference.centre) <= CENTRE,
     measured,
   );

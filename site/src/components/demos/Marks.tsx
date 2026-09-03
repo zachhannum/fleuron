@@ -1,12 +1,12 @@
 /**
- * What the display list says, drawn over the page it made.
+ * What the display structure says, drawn over the page it made.
  *
  * `baselines` puts a rule on every run's `y`, and `glyphs:N` ticks
  * the Nth run at each `x` the shaper gave it. Prose about a field
  * points at the page that field placed.
  */
 
-/** A page of the display list, and what to draw over it. */
+/** A page of the display structure, and what to draw over it. */
 export interface MarksProps {
   /** The page the marks are taken from. */
   page: { width: number; height: number; items: { kind: string }[] };

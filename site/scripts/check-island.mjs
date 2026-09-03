@@ -2,7 +2,7 @@
  * The demos, driven: the same mechanical check the painter's own
  * suite makes, run against an island in a real browser.
  *
- * What is held against what: the display list the worker sent the
+ * What is held against what: the display structure the worker sent the
  * page, read off the mounted demo, and the SVG that demo put in the
  * DOM. Every glyph the engine placed has to be at that x in the
  * markup a reader is actually looking at. A painter that drifts, or
@@ -30,6 +30,7 @@ const types = {
   '.json': 'application/json',
   '.md': 'text/markdown',
   '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
   '.wasm': 'application/wasm',
   '.woff2': 'font/woff2',
 };
@@ -178,7 +179,7 @@ const misplaced = await page.evaluate(async () => {
   return wrong;
 });
 check(
-  'every glyph on every page sits at the x the display list gave it',
+  'every glyph on every page sits at the x the display structure gave it',
   misplaced.length === 0,
   misplaced.slice(0, 3).join('; '),
 );

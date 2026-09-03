@@ -309,7 +309,7 @@ proptest! {
     }
 }
 
-/// Snapshot of the assembled display list for a two-chapter book:
+/// Snapshot of the assembled display structure for a two-chapter book:
 /// the wire-format shape of page assembly and page furniture — sides,
 /// numbering, the first text baselines, and the folio each page does
 /// or does not carry.

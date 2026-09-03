@@ -1,7 +1,7 @@
 //! fleuron-wasm: layout in a worker, bytes out.
 //!
 //! The door between the engine and a host: markdown or a content
-//! tree and CSS text in, one buffer out: the postcard display list,
+//! tree and CSS text in, one buffer out: the postcard display structure,
 //! or PDF bytes on the export path. The engine never touches the
 //! DOM, opens nothing, and reads no clock.
 //!
@@ -32,7 +32,7 @@ use fleuron::wire;
 use fleuron_markdown::{Dialect, Options, Sections};
 use wasm_bindgen::prelude::*;
 
-/// The version the display list is encoded at. A host reads the same
+/// The version the display structure is encoded at. A host reads the same
 /// number off the front of every buffer and refuses one it does not
 /// know.
 #[wasm_bindgen(js_name = wireVersion)]
@@ -227,7 +227,7 @@ impl Session {
     /// Registers one image by the url the content tree names it by,
     /// and returns the index `DrawItem::Image.asset` will carry.
     /// `undefined` for bytes no probe recognises, which is a
-    /// diagnostic on the next display list and no image.
+    /// diagnostic on the next display structure and no image.
     ///
     /// The engine opens nothing, and a worker has nothing to open:
     /// the host fetches the file and hands the bytes over, as it does
@@ -245,7 +245,7 @@ impl Session {
     /// the module and there is no URL a host could fetch it from.
     /// A variable file answers for every cut it named, so the same
     /// bytes come back for each of them, and the face's variations
-    /// on the display list say which instance to draw.
+    /// on the display structure say which instance to draw.
     #[wasm_bindgen(js_name = fontBytes)]
     pub fn font_bytes(&self, font_id: u16) -> Result<Vec<u8>, JsError> {
         self.engine
@@ -255,7 +255,7 @@ impl Session {
             .ok_or_else(|| JsError::new(&format!("no face is registered as font {font_id}")))
     }
 
-    /// The display list, postcard-encoded, version first.
+    /// The display structure, postcard-encoded, version first.
     pub fn preview(&mut self) -> Result<Vec<u8>, JsError> {
         wire::encode(self.engine.preview()).map_err(js_error)
     }
@@ -282,7 +282,7 @@ impl Session {
 
 impl Session {
     /// Files one source's complaints and hands the engine the lot,
-    /// so that what the frontend said comes back on the display list
+    /// so that what the frontend said comes back on the display structure
     /// beside what the styling and the layout said.
     fn complain(&mut self, name: &str, complaints: Vec<Warning>) {
         self.complaints.insert(name.to_string(), complaints);

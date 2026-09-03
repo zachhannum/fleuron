@@ -4,7 +4,7 @@
  *
  * Everything about the engine lives in the worker. This holds a
  * `Preview` from `@fleuron/wasm`, hands it whatever prop changed,
- * and reports what came back. It knows the shape of a display list
+ * and reports what came back. It knows the shape of a display structure
  * and nothing about how one is made.
  *
  * The module is not fetched until a demo is on screen, so a visitor
@@ -28,6 +28,32 @@ export type Status =
   /** Something threw, and `error` says what. */
   | 'broken';
 
+/**
+ * The faces the site serves, under the path the catalogue names.
+ * The painter resolves a run against the document, so the file is
+ * already on the page and the island fetches that copy rather than
+ * a second one.
+ */
+const served: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob('../../../fixtures/fonts/*.ttf', {
+      query: '?url',
+      import: 'default',
+      eager: true,
+    }),
+  ).map(([path, url]) => [path.replace('../../../fixtures/', ''), url as string]),
+);
+
+/** One face a demo's stylesheet names, and where its file is. */
+export interface Face {
+  /** The file, relative to `fixtures/`. */
+  url: string;
+  /** The family the engine reads out of it, which CSS selects by. */
+  family: string;
+  /** The weight it registers at. */
+  weight: number;
+}
+
 /** What a demo runs. */
 export interface Inputs {
   /** What this demo is called on the console registry. */
@@ -48,6 +74,11 @@ export interface Inputs {
    * from where the site serves it and hands over the bytes.
    */
   images?: string[];
+  /**
+   * The faces the stylesheet names beyond the bundled one, fetched
+   * the same way and registered for the session's life.
+   */
+  fonts?: Face[];
 }
 
 /** A demo, mounted. */
@@ -74,7 +105,7 @@ export interface Running {
 
 /**
  * Every mounted demo, by id, for a console and for the browser check
- * that holds an island's SVG against the display list behind it.
+ * that holds an island's SVG against the display structure behind it.
  */
 declare global {
   // eslint-disable-next-line no-var
@@ -141,7 +172,7 @@ function metered(): boolean {
 }
 
 export function usePreview(inputs: Inputs): Running {
-  const { id, markdown, css, name, page, dialect, images } = inputs;
+  const { id, markdown, css, name, page, dialect, images, fonts } = inputs;
   const sheet = useRef<HTMLDivElement | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [wanted, setWanted] = useState(true);
@@ -195,8 +226,17 @@ export function usePreview(inputs: Inputs): Running {
             mounted.destroy();
             return;
           }
-          // The images cross before the manuscript, so the first
-          // page painted already has room reserved for them.
+          // The faces cross before the stylesheet that names them,
+          // and the images before the manuscript, so the first page
+          // painted is set in the right face with room for them.
+          for (const face of fonts ?? []) {
+            const at = served[face.url] ?? `${import.meta.env.BASE_URL}fixtures/${face.url}`;
+            const file = await fetch(at);
+            if (!live) {
+              return;
+            }
+            await mounted.addFont(new Uint8Array(await file.arrayBuffer()));
+          }
           for (const url of images ?? []) {
             const file = await fetch(`${import.meta.env.BASE_URL}fixtures/${url}`);
             if (!live) {

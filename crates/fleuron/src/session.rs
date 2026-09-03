@@ -6,7 +6,7 @@
 //! wants that. A live preview does not, because the common event
 //! there is a small change to one input while the others stand. A
 //! session retains the output of each stage and works out the deepest
-//! stage an edit reaches: a colour serves the display list back, page
+//! stage an edit reaches: a colour serves the display structure back, page
 //! furniture repaints, `@page` geometry re-fragments over cached
 //! lines, and only the measure or the text itself breaks lines
 //! again.
@@ -63,7 +63,7 @@ pub struct Stages {
 /// stage under it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Stale {
-    /// Everything stands; the display list is served as it is.
+    /// Everything stands; the display structure is served as it is.
     Nothing,
     /// Numbering and margin boxes.
     Paint,
@@ -348,7 +348,7 @@ impl<'a> Session<'a> {
 
     /// Registers one image, and the index `DrawItem::Image.asset`
     /// will carry for it. `None` for bytes no probe recognises,
-    /// which is a diagnostic on the next display list and no asset.
+    /// which is a diagnostic on the next display structure and no asset.
     ///
     /// The header decides how much room the image takes, so the
     /// lines are broken again. Only a session that owns its asset
@@ -372,7 +372,7 @@ impl<'a> Session<'a> {
         Ok(index)
     }
 
-    /// The display list, brought up to date.
+    /// The display structure, brought up to date.
     pub fn preview(&mut self) -> &LayoutOutput {
         self.update();
         self.output.as_ref().expect("an update leaves an output")
@@ -391,7 +391,7 @@ impl<'a> Session<'a> {
         )
     }
 
-    /// The display list by value, consuming the session.
+    /// The display structure by value, consuming the session.
     pub fn into_output(mut self) -> LayoutOutput {
         self.update();
         self.output.take().expect("an update leaves an output")
@@ -420,7 +420,7 @@ impl<'a> Session<'a> {
     /// The faces this session lays out against.
     ///
     /// A painter that has to draw with the same file the shaper used
-    /// reaches the bytes through here; the display list carries ids,
+    /// reaches the bytes through here; the display structure carries ids,
     /// and the registry is what they index.
     pub fn fonts(&self) -> &FontRegistry {
         self.registry.get()
@@ -940,7 +940,7 @@ mod tests {
     /// The fixture map: a JPEG the layout pass sizes from its header.
     const MAP: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
 
-    /// An image the host pushes reaches the display list: the box is
+    /// An image the host pushes reaches the display structure: the box is
     /// placed, the asset table names the url, and the pages are
     /// broken again around the room it takes.
     #[test]
@@ -1164,7 +1164,7 @@ mod tests {
     }
 
     /// A change the engine models nothing of costs nothing. The
-    /// display list is served back as it stands, and only the
+    /// display structure is served back as it stands, and only the
     /// diagnostics move.
     #[test]
     fn a_colour_only_change_runs_no_stage() {
@@ -1185,7 +1185,7 @@ mod tests {
         };
         let after = session.stages();
 
-        assert_eq!(repainted, painted, "the display list changed");
+        assert_eq!(repainted, painted, "the display structure changed");
         assert!(complained, "the unsupported property went unreported");
         assert_eq!(after.lines, before.lines, "the lines were broken again");
         assert_eq!(after.flow, before.flow, "the pages were fragmented again");

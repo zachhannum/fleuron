@@ -1,7 +1,7 @@
-//! The wire: a display list as bytes, with a version in front of it.
+//! The wire: a display structure as bytes, with a version in front of it.
 //!
 //! JSON is what the content tree serializes to, because a person
-//! reads it. The display list is machine output: every glyph of
+//! reads it. The display structure is machine output: every glyph of
 //! every page, produced once per keystroke and decoded on someone's
 //! main thread. So it crosses as [postcard], which packs varints,
 //! sends no field names, and needs no tree of maps built before the
@@ -10,7 +10,7 @@
 //! The encoding is positional, which is the price of that: a host's
 //! decoder reads fields in declaration order and has no way to notice
 //! that the order changed. So a version leads the bytes, [`VERSION`]
-//! moves whenever the display list's shape does, and a host that
+//! moves whenever the display structure's shape does, and a host that
 //! reads a number it does not know refuses at the first byte instead
 //! of painting nonsense.
 //!
@@ -22,27 +22,27 @@ use crate::LayoutOutput;
 /// else, and a mismatch is a refusal rather than a best effort.
 pub const VERSION: u16 = 3;
 
-/// Why a buffer could not be read as a display list.
+/// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
 pub enum WireError {
     /// The bytes were written by a build that disagrees about the
-    /// shape of the display list.
+    /// shape of the display structure.
     #[error("wire version {found}, expected {VERSION}")]
     Version {
         /// The version the buffer leads with.
         found: u16,
     },
-    /// The bytes are not a display list at all, or are truncated.
+    /// The bytes are not a display structure at all, or are truncated.
     #[error("the wire could not be read: {0}")]
     Malformed(#[from] postcard::Error),
 }
 
-/// Encodes a display list, version first.
+/// Encodes a display structure, version first.
 pub fn encode(output: &LayoutOutput) -> Result<Vec<u8>, WireError> {
     Ok(postcard::to_stdvec(&(VERSION, output))?)
 }
 
-/// Reads a display list back, refusing a version this build does not
+/// Reads a display structure back, refusing a version this build does not
 /// write.
 pub fn decode(bytes: &[u8]) -> Result<LayoutOutput, WireError> {
     let (found, rest) = postcard::take_from_bytes::<u16>(bytes)?;

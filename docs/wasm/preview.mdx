@@ -1,11 +1,11 @@
 ---
 title: The preview
-description: Painting the display list as SVG, mounting it in an element, and the harness that pages a book through it.
+description: Painting the display structure as SVG, mounting it in an element, and the harness that pages a book through it.
 ---
 
-The engine's output is a display list: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG, with one `<text>` element per run of text and an explicit x for every character in it.
+The engine's output is a display structure: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG, with one `<text>` element per run of text and an explicit x for every character in it.
 
-## Mounting one
+## Mounting
 
 ```js
 import { Preview } from '@fleuron/wasm';
@@ -18,11 +18,11 @@ preview.page = 12;
 preview.zoom = 1.5;
 ```
 
-`Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display list yourself, though all three stay exported if you want them.
+`Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element it was given. The encoded buffer, the worker messages and the display structure are handled internally, and all three stay exported.
 
 ## Images
 
-Nothing in the package fetches a url. Fetch the file yourself and hand over what comes back, under the same string the manuscript wrote:
+Nothing in the package fetches a url. The host fetches the file and hands over the bytes, under the same string the manuscript wrote:
 
 ```js
 // This host reads them from a directory, another might read a
@@ -40,11 +40,11 @@ const preview = await Preview.mount(element, {
 await preview.addImage('images/colophon.png', await load('images/colophon.png'));
 ```
 
-Whatever string the manuscript writes is the name the image is matched under, so the key has to be that string and never has to be a real URL. Where you fetched the file from is your own business and never reaches the engine, which is why the url shows up twice above.
+The string the manuscript writes is the name the image is matched under, so the key has to be that string, and it does not have to be a real URL. Where the file was fetched from never reaches the engine, which is why the url appears twice above.
 
 The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
 
-An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to name your own urls, and the preview hands the display list's asset to it rather than resolving a blob of its own.
+An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to supply the urls directly, and the preview hands the display structure's asset to it rather than resolving a blob of its own.
 
 <Playground
   caption="A mounted Preview: setStyle and edit on one side, the page it painted on the other."
@@ -66,11 +66,11 @@ Everything in the first table changes an input and repaints. Everything in the s
 
 | | |
 |---|---|
-| `pages` | how many pages the book set to |
+| `pages` | how many pages the book laid out to |
 | `page` | the page on screen, counting from 1; assigning to it turns the page |
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
-| `warnings` | [what the run had to complain about](../library/diagnostics.mdx) |
+| `warnings` | [what the run warned about](../library/diagnostics.mdx) |
 | `svg(page?)` | the markup for a page, painted but not mounted |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |
@@ -90,7 +90,7 @@ await preview.setBook([
 
 After that, `edit(name, text)` is the keystroke path: it reads that one file again and every other file keeps the lines it already has. A name the book has not seen is appended, so `edit` is also how a file arrives mid-session. `remove(name)` is how one leaves.
 
-A book of one file takes its title and author from that file's frontmatter. A book of several has no frontmatter of its own, so it is left unnamed and you name it yourself:
+A book of one file takes its title and author from that file's frontmatter. A book of several has no frontmatter of its own, so it is left unnamed until `setMetadata` names it:
 
 ```js
 await preview.setMetadata({
@@ -104,13 +104,13 @@ Only the PDF writer reads metadata, so naming a book costs no layout. The pages 
 
 ## When it renders
 
-Every method that changes an input renders. There is no timer anywhere.
+Every method that changes an input renders. There is no timer.
 
-The worker lets everything the host has already posted arrive before it renders anything, so a burst of edits fired without awaiting them collapses into one render. Twenty of them cost one paint. Every edit is still applied, in order, and the render that survives produces exactly what it would have produced had nobody typed. The ones it overtook resolve to nothing rather than painting a stale page.
+The worker lets everything the host has already posted arrive before it renders anything, so a burst of edits fired without awaiting them collapses into one render. Every edit is still applied, in order, and the render that survives is the same as if nobody had typed. The ones it overtook resolve to nothing rather than painting a stale page.
 
-Nothing is interrupted to make that happen. A render occupies the worker from start to finish, so the collapsing happens in the gap before one begins. Change something while a render is running and it finishes, its output is dropped as stale, and yours renders next. A superseded render is one that never started, not one abandoned half-way, which is what keeps the session's caches sound.
+Nothing is interrupted to make that happen. A render occupies the worker from start to finish, so the collapsing happens in the gap before one begins. A render already running finishes, its output is dropped as stale, and the next one runs. A superseded render is one that never started, not one abandoned half-way, which is what keeps the session's caches sound.
 
-The effect is a debounce whose delay is the last render's duration. A long book waits behind its own slow render, a short one repaints at once, and neither pays a fixed delay it did not need. A host that wants a fixed one puts it in front of these calls.
+The effect is a debounce whose delay is the last render's duration: a long book waits behind its own slow render, and a short one repaints at once. A host that wants a fixed delay puts it in front of these calls.
 
 ## In React
 
@@ -122,13 +122,13 @@ import { Preview } from '@fleuron/react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` gives you the underlying preview, for the page count and the PDF export.
+The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` hands back the underlying preview, for the page count and the PDF export.
 
 React is not a dependency of `@fleuron/wasm`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
 ## Painting a page yourself
 
-If you want the pages but not the mounting, because you are drawing to a canvas, running your own scroll container, or rendering where there is no DOM, call the painter directly:
+Call the painter directly for the pages without the mounting, when drawing to a canvas, running a scroll container of your own, or rendering where there is no DOM:
 
 ```js
 import { decodeDisplayList, paintPage } from '@fleuron/wasm';
@@ -137,7 +137,7 @@ const output = decodeDisplayList(bytes);
 element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts, zoom: 2 });
 ```
 
-`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the trim size in points with the origin at the top left, which is the display list's own coordinate system, so nothing is rescaled on the way out.
+`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the trim size in points with the origin at the top left, which is the display structure's own coordinate system, so nothing is rescaled on the way out.
 
 The second argument is all optional:
 
@@ -146,25 +146,25 @@ The second argument is all optional:
 | `fonts` | none | The font table, `output.fonts`. Leave it out and the painter cannot name the faces, so every run falls back to a generic serif. |
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
-| `ink` | `'#000000'` | The fill for text and rules. The display list carries no colour of its own yet, so this is the whole page's. |
+| `ink` | `'#000000'` | The fill for text and rules. The display structure carries no colour of its own yet, so this is the whole page's. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 
-Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into `output.assets`. `asset` is where you turn that entry back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` if you cannot supply it. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
+Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into `output.assets`. `asset` turns that entry back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` when there is nothing to supply. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
 
 ## Why the preview matches the export
 
-Hand a browser a string and a font and it does its own typesetting: it chooses glyphs, applies kerning and ligatures, and works out where each one goes. fleuron has already done that work, and if the browser did it again the two answers would differ a little over a different shaper version, a rounded advance or a substituted font.
+A browser handed a string and a font does its own typesetting: it chooses glyphs, applies kerning and ligatures, and works out where each one goes. fleuron has already done that work, and if the browser did it again the two answers would differ a little over a different shaper version, a rounded advance or a substituted font.
 
 So the painter leaves the browser nothing to work out. Each `<text>` carries an x for every character it holds, taken from the glyph the engine placed there.
 
-The PDF writer reads the same display list, so the two painters draw the same numbers. The test suite checks it both ways: every glyph of every page of the fixture book against the x the painter wrote for it, and a screenshot of the preview against a raster of the PDF from the same run.
+The PDF writer reads the same display structure, so the two painters draw the same numbers, glyph for glyph.
 
 ## Fonts
 
-A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display list carries a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
+A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display structure carries a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
 
-Those files have to reach the browser as `FontFace`s. For a face you registered yourself you already hold the bytes. For the face built into the engine you do not, and there is no URL to fetch it from, so ask the module:
+Those files have to reach the browser as `FontFace`s. The host already holds the bytes for a face it registered. The face built into the engine has no URL to fetch it from, so the module hands it back:
 
 ```js
 import { faceFamily } from '@fleuron/wasm';
@@ -177,9 +177,9 @@ document.fonts.add(new FontFace(faceFamily(fontId), bytes.buffer));
 
 One file can answer for several faces. The bundled EB Garamond is a variable font whose Regular, Medium, Bold and the rest are one file read at different points on a `wght` axis, and each of those is its own `fontId`. The font table records the point and the painter writes it out as `font-variation-settings`. A painter that ignored it would draw every weight at the file's default.
 
-A face that never arrives does not blank the run. The painter's `font-family` list ends in `serif`, so the text appears in whatever the reader has: the wrong font, but readable.
+A face that never arrives does not blank the run. The painter's `font-family` list ends in `serif`, so the text appears in whatever font the reader has.
 
-That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` registers nothing and leaves the painter's list to resolve against whatever the document already has, under the family the display list names. Use it when you already serve the same file, or a subset of it with the same metrics: the glyphs land on the x the display list gave them either way, and parsing a book face twice is main-thread work a page can feel. The default is `'module'`, which is the only way to be certain the page on screen is set in the face the export will use.
+That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` registers nothing and leaves the painter's list to resolve against whatever the document already has, under the family the display structure names. Use it when the host already serves the same file, or a subset of it with the same metrics: the glyphs land on the x the display structure gave them either way, and parsing a book face twice is main-thread work. The default is `'module'`, which is the only way to be certain the page on screen is set in the face the export will use.
 
 ## The harness
 
@@ -189,4 +189,4 @@ That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` reg
 node examples/preview/serve.mjs
 ```
 
-It is written the way a consumer writes one, naming no buffer, no worker and no display list, which is why the browser test drives that page rather than one of its own.
+It is written the way a consumer writes one, naming no buffer, no worker and no display structure.

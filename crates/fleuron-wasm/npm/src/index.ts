@@ -1,5 +1,5 @@
 /**
- * fleuron in a worker: markdown and CSS in, a display list or PDF
+ * fleuron in a worker: markdown and CSS in, a display structure or PDF
  * bytes out.
  *
  * The host keeps a {@link Client}, the worker keeps an

@@ -967,7 +967,7 @@ pub(crate) struct Paged {
 /// The flow: fragments in, pages out.
 ///
 /// The page being built is held as placed fragments rather than as a
-/// finished display list, because a fragment that does not fit can
+/// finished structure, because a fragment that does not fit can
 /// push the ones above it onto the next page — moving what is already
 /// painted, never measuring it again.
 struct Flow<'a, 'p> {

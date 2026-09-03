@@ -1,4 +1,4 @@
-//! Pagination: a content tree in, a numbered display list out.
+//! Pagination: a content tree in, a numbered structure out.
 //!
 //! The composed stage — line layout and fragmentation together, as a
 //! caller pays for them. Its own number matters less than the gap

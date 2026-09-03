@@ -1,9 +1,9 @@
 ---
-title: Display list
+title: Display structure
 description: The engine's only product, and the contract every painter shares.
 ---
 
-The display list is what the engine produces. Painters consume it and never re-derive layout, which is why a preview and an export cannot disagree: they are two renderings of the same numbers.
+The display structure is what the engine produces. Painters consume it and never re-derive layout, so a preview and an export cannot disagree.
 
 Coordinates are points, with the origin at the top left of the trimmed page.
 
@@ -18,9 +18,9 @@ pub struct LayoutOutput {
 }
 ```
 
-`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named cuts are one file at several locations, and the location is what tells them apart.
+`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
 
-`assets` is the table `Image.asset` indexes. An entry is the url the content tree named the image by and what its header said it was: pixel dimensions and resolution. That is all layout ever read, and it is enough for a painter to take the index back to its own pixels.
+`assets` is the table `Image.asset` indexes. An entry is the url the content tree named the image by and what its header reported: pixel dimensions and resolution. That is all layout read.
 
 `warnings` holds the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
@@ -60,13 +60,13 @@ Text {
 One run of shaped glyphs sharing a font, a size and a baseline. `y` is the baseline, not the top of the line box.
 
 <Playground
-  demo="display-list"
+  demo="display-structure"
   editors="markdown"
   highlight="baselines"
-  caption="Every text run of a page, with a rule drawn on the y the display list gave it. The rules sit on the letters rather than above them, which is what a baseline is. Edit the manuscript and the rules move with the runs."
+  caption="Every text run of a page, with a rule drawn on the y the display structure gave it. The rules sit on the letters rather than above them, which is what a baseline is. Edit the manuscript and the rules move with the runs."
 />
 
-`text` is the string the glyphs were shaped from. It travels with the run because only the shaper knew which glyph came from which character, and a painter that wants text extraction, selection or copy-and-paste needs that correspondence back. A painter that only draws can ignore it.
+`text` is the string the glyphs were shaped from. It travels with the run because only the shaper knew which glyph came from which character, and a painter that supports text extraction or selection needs that correspondence back. A painter that only draws can ignore it.
 
 ### `Glyph`
 
@@ -96,7 +96,7 @@ A filled rectangle: rules, borders, backgrounds.
 Image { x: f32, y: f32, w: f32, h: f32, asset: u32 }
 ```
 
-A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter is the first thing in the pipeline to see the image itself.
+A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter decodes the file.
 
 `w` and `h` are what layout decided, which is the intrinsic size at the header's own resolution unless the page had no room for it. A painter scales the image into that box; it does not read the header again.
 
@@ -106,6 +106,6 @@ For each page, set up a coordinate system in points with the origin top-left, th
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
 
-For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply is a box worth outlining: the space is still on the page.
+For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
 
-The SVG painter in `@fleuron/wasm` is one worked example. See [the preview](../wasm/preview.mdx).
+The SVG painter in `@fleuron/wasm` is a worked example. See [the preview](../wasm/preview.mdx).

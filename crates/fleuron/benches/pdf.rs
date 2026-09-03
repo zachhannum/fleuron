@@ -1,4 +1,4 @@
-//! PDF writing: display list in, bytes out.
+//! PDF writing: display structure in, bytes out.
 //!
 //! Laid out once, up front: this stage's cost is font subsetting and
 //! content-stream serialization, and none of that is layout.
