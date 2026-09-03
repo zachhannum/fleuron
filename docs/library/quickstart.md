@@ -167,8 +167,8 @@ book.assign_node_ids();
 
 ## Styling without an author sheet
 
-`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 5.5×8.5 inches, 
-EB Garamond at 11 points, justified, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
+`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 6×9 inches, 
+EB Garamond at 11 points, prose indented, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
 
 ```rust
 let registry = fleuron::fonts::bundled_registry()?;
