@@ -3,10 +3,10 @@ title: WebAssembly quickstart
 description: Installing the package, running layout in a worker, and painting what comes back.
 ---
 
-The engine compiles to WebAssembly and ships as `@fleuron/wasm`. The package holds the module, a worker, a client, a display-structure reader and an SVG painter.
+The engine compiles to WebAssembly and ships as `fleuron`. The package holds the module, a worker, a client, a display-structure reader and an SVG painter.
 
 ```sh
-npm install @fleuron/wasm
+npm install fleuron
 ```
 
 ## Preview
@@ -14,7 +14,7 @@ npm install @fleuron/wasm
 `Preview` starts the worker, loads the module into it, keeps the session, fetches the fonts and paints pages into an element the host gives it.
 
 ```js
-import { Preview } from '@fleuron/wasm';
+import { Preview } from 'fleuron';
 
 const preview = await Preview.mount(document.querySelector('#book'));
 await preview.setStyle(css);
@@ -33,13 +33,13 @@ The same thing is available in pieces: a worker, a client that talks to it, a re
 
 Layout belongs off the main thread. A book-scale manuscript is hundreds of milliseconds of work, and that much time on the main thread drops interactions.
 
-The package ships a worker at the `@fleuron/wasm/worker` export, which is what `Preview` starts. A host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
+The package ships a worker at the `fleuron/worker` export, which is what `Preview` starts. A host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
 
 A worker of your own is worth writing when it has to hold something else, or when the bundler needs to hand the module its bytes rather than let it fetch them:
 
 ```js
 // fleuron.worker.js
-import { createEngine } from '@fleuron/wasm';
+import { createEngine } from 'fleuron';
 
 const engine = createEngine();
 
@@ -58,7 +58,7 @@ The host side keeps a `Client`, which pairs replies with calls and decides which
 
 ```js
 // the host
-import { Client, paintPage } from '@fleuron/wasm';
+import { Client, paintPage } from 'fleuron';
 
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), {
   type: 'module',
@@ -132,7 +132,7 @@ The export draws from the same laid-out pages the preview drew, rather than layi
 Nothing about the module needs a worker. For a build step, or a test:
 
 ```js
-import { decodeDisplayList, initWasm, render, renderPdf } from '@fleuron/wasm';
+import { decodeDisplayList, initWasm, render, renderPdf } from 'fleuron';
 
 await initWasm();
 const output = decodeDisplayList(render(markdown, css));

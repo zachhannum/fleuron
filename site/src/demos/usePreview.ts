@@ -3,7 +3,7 @@
  * on screen.
  *
  * Everything about the engine lives in the worker. This holds a
- * `Preview` from `@fleuron/wasm`, hands it whatever prop changed,
+ * `Preview` from `fleuron`, hands it whatever prop changed,
  * and reports what came back. It knows the shape of a display structure
  * and nothing about how one is made.
  *
@@ -12,7 +12,7 @@
  * browser says the connection is metered is asked first.
  */
 
-import { Preview, type LayoutOutput } from '@fleuron/wasm';
+import { Preview, type LayoutOutput } from 'fleuron';
 import { useEffect, useRef, useState } from 'react';
 
 import { spawn } from './spawn';

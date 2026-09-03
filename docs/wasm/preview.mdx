@@ -8,7 +8,7 @@ The engine's output is a display structure: a book's worth of glyph positions, r
 ## Mounting
 
 ```js
-import { Preview } from '@fleuron/wasm';
+import { Preview } from 'fleuron';
 
 const preview = await Preview.mount(document.querySelector('#book'));
 await preview.setStyle(css);
@@ -114,24 +114,24 @@ The effect is a debounce whose delay is the last render's duration: a long book 
 
 ## In React
 
-`@fleuron/react` is the same thing as a component:
+`fleuron-react` is the same thing as a component:
 
 ```jsx
-import { Preview } from '@fleuron/react';
+import { Preview } from 'fleuron-react';
 
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
 The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` hands back the underlying preview, for the page count and the PDF export.
 
-React is not a dependency of `@fleuron/wasm`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
+React is not a dependency of `fleuron`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
 ## Painting a page yourself
 
 Call the painter directly for the pages without the mounting, when drawing to a canvas, running a scroll container of your own, or rendering where there is no DOM:
 
 ```js
-import { decodeDisplayList, paintPage } from '@fleuron/wasm';
+import { decodeDisplayList, paintPage } from 'fleuron';
 
 const output = decodeDisplayList(bytes);
 element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts, zoom: 2 });
@@ -167,7 +167,7 @@ A page is usually set in several faces at once: body text, an italic aside, a bo
 Those files have to reach the browser as `FontFace`s. The host already holds the bytes for a face it registered. The face built into the engine has no URL to fetch it from, so the module hands it back:
 
 ```js
-import { faceFamily } from '@fleuron/wasm';
+import { faceFamily } from 'fleuron';
 
 const bytes = await client.fontBytes(fontId);
 document.fonts.add(new FontFace(faceFamily(fontId), bytes.buffer));

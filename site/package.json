@@ -18,7 +18,7 @@
     "@astrojs/react": "^6.0.4",
     "@astrojs/starlight": "^0.41.9",
     "@astrojs/starlight-tailwind": "^5.0.0",
-    "@fleuron/wasm": "file:../crates/fleuron-wasm/npm",
+    "fleuron": "file:../crates/fleuron-wasm/npm",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

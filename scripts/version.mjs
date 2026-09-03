@@ -33,10 +33,10 @@ const places = [
   json('crates/fleuron-wasm/npm/package-lock.json', ['packages', '', 'version']),
   text('crates/fleuron-wasm/npm/src/version.ts', 'VERSION', /(VERSION = ')([^']+)(')/),
   json('packages/react/package.json', ['version']),
-  json('packages/react/package.json', ['peerDependencies', '@fleuron/wasm']),
+  json('packages/react/package.json', ['peerDependencies', 'fleuron']),
   json('packages/react/package-lock.json', ['version']),
   json('packages/react/package-lock.json', ['packages', '', 'version']),
-  json('packages/react/package-lock.json', ['packages', '', 'peerDependencies', '@fleuron/wasm']),
+  json('packages/react/package-lock.json', ['packages', '', 'peerDependencies', 'fleuron']),
   json('packages/react/package-lock.json', ['packages', '../../crates/fleuron-wasm/npm', 'version']),
   json('site/package-lock.json', ['packages', '../crates/fleuron-wasm/npm', 'version']),
 ];

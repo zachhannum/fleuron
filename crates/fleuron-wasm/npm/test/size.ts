@@ -41,7 +41,7 @@ const total = module_ + glue + client;
 const mib = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
 const kib = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KiB`;
 
-console.log('### @fleuron/wasm size\n');
+console.log('### fleuron size\n');
 console.log('| part | raw | gzipped |');
 console.log('|---|---|---|');
 console.log(`| \`fleuron_bg.wasm\` | ${mib(statSync(wasm).size)} | ${mib(module_)} |`);

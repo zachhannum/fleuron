@@ -1,5 +1,5 @@
 {
-  "name": "@fleuron/wasm",
+  "name": "fleuron",
   "version": "0.1.0",
   "description": "Paged-media layout in a worker: markdown and CSS in, a display structure or PDF bytes out",
   "license": "MIT OR Apache-2.0",
@@ -38,9 +38,6 @@
     "@types/node": "^22.15.3",
     "playwright": "1.56.1",
     "typescript": "^5.9.2"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "engines": {
     "node": ">=20"

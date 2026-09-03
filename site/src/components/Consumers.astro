@@ -24,7 +24,7 @@ const shell = `cargo install --git https://github.com/zachhannum/fleuron fleuron
 fleuron manuscript.md -o book.pdf -c book.css
 # fleuron: manuscript.md → book.pdf: 333 pages`;
 
-const ts = `import { Preview } from '@fleuron/wasm';
+const ts = `import { Preview } from 'fleuron';
 
 // Starts the worker, loads the module, keeps the session.
 const preview = await Preview.mount(document.querySelector('#book'));

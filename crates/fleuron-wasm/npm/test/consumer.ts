@@ -30,10 +30,10 @@ function check(what: string, passed: boolean, detail = ''): void {
 /** What a host writes, and all it is given to write it with. */
 const consumer = `import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { Session, VERSION, decodeDisplayList, initWasm } from '@fleuron/wasm';
+import { Session, VERSION, decodeDisplayList, initWasm } from 'fleuron';
 
 const require = createRequire(import.meta.url);
-await initWasm({ module_or_path: readFileSync(require.resolve('@fleuron/wasm/fleuron_bg.wasm')) });
+await initWasm({ module_or_path: readFileSync(require.resolve('fleuron/fleuron_bg.wasm')) });
 
 const session = new Session();
 for (const url of ['images/plate.jpg', 'images/fleuron.png']) {
@@ -58,7 +58,7 @@ console.log(JSON.stringify({
 }));
 `;
 
-console.log('@fleuron/wasm: the fixture book out of an installed package\n');
+console.log('fleuron: the fixture book out of an installed package\n');
 
 const where = mkdtempSync(join(tmpdir(), 'fleuron-consumer-'));
 const packed = JSON.parse(

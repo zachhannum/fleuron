@@ -1,4 +1,4 @@
-# @fleuron/wasm
+# fleuron
 
 Paged-media layout in a worker: markdown and CSS in, a display
 structure or PDF bytes out.
@@ -10,13 +10,13 @@ preview and the PDF from the same numbers. It touches no DOM and opens
 no files.
 
 ```sh
-npm install @fleuron/wasm
+npm install fleuron
 ```
 
 ## On screen
 
 ```js
-import { Preview } from '@fleuron/wasm';
+import { Preview } from 'fleuron';
 
 const preview = await Preview.mount(document.querySelector('#book'));
 await preview.setStyle(css);
@@ -31,14 +31,14 @@ session, fetches the fonts the book was set in, and paints a page as
 SVG. The encoded buffer, the worker messages and the display structure
 are handled internally, and all three stay exported.
 
-`@fleuron/react` is the same thing as a component, and holds no engine
+`fleuron-react` is the same thing as a component, and holds no engine
 logic of its own.
 
 ## In a worker
 
 ```js
 // fleuron.worker.js
-import { createEngine } from '@fleuron/wasm';
+import { createEngine } from 'fleuron';
 
 const engine = createEngine();
 self.onmessage = ({ data }) => {
@@ -50,7 +50,7 @@ self.onmessage = ({ data }) => {
 
 ```js
 // the host
-import { Client, paintPage } from '@fleuron/wasm';
+import { Client, paintPage } from 'fleuron';
 
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), { type: 'module' });
 const client = new Client({ post: (request, transfer) => worker.postMessage(request, transfer) });
@@ -70,7 +70,7 @@ paint. Every render raises a generation, the worker echoes it back, and
 a reply that arrives behind the current one is dropped.
 
 The package ships the worker in the shape above, so a host that wants
-no worker file of its own can point at `@fleuron/wasm/worker`.
+no worker file of its own can point at `fleuron/worker`.
 
 ## Sending what changed
 
@@ -93,7 +93,7 @@ run, which shows when a cache served.
 ## Batch
 
 ```js
-import { decodeDisplayList, initWasm, render, renderPdf } from '@fleuron/wasm';
+import { decodeDisplayList, initWasm, render, renderPdf } from 'fleuron';
 
 await initWasm();
 const output = decodeDisplayList(render(markdown, css));
