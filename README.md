@@ -6,7 +6,7 @@ A paged-media layout engine for book-shaped documents, in Rust.
 
 fleuron takes markdown and CSS and gives back a typeset book. It shapes
 the text, breaks and hyphenates the lines, fragments the result into
-pages, and emits a display list for preview and a PDF for export. The
+pages, and emits structured output for preview and a PDF for export. The
 same source compiles to native and to WebAssembly.
 
 A fleuron is the printer's flower ❦, the ornament set into a page to
@@ -21,7 +21,7 @@ It owns the whole pipeline: [harfrust] shaping, Unicode line breaking
 and segmentation, Knuth-Plass justification, and CSS Fragmentation over
 a box tree it builds itself. Break decisions come out of the layout
 pass, so a 333-page novel reaches PDF bytes in 287 ms. The preview and
-the PDF are painted from the same display list, so they cannot come out
+the PDF are painted from the same structured output, so they cannot come out
 different. The engine does no I/O and links no platform library, so it
 builds for any target Rust does.
 
@@ -42,7 +42,7 @@ anyway.
 markdown ─► content tree ──┐
                            ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
 CSS ───────────────────────┘                                                               │
-                                                                                           ├─► display list (preview)
+                                                                                           ├─► structured output (preview)
                                                                                            └─► PDF (export)
 ```
 
@@ -68,7 +68,7 @@ that already has structured content, such as a CMS or a docx converter.
    reads the resolved style tree. [`docs/css-subset.mdx`](docs/css-subset.mdx)
    lists what the engine understands.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG,
-   canvas and PDF are interchangeable painters over the display list.
+   canvas and PDF are interchangeable painters over the structured output.
 3. **Layout never decodes images.** A header probe gives intrinsic size,
    orientation and DPI. Painters decode the pixels themselves.
 

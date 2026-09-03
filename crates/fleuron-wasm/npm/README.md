@@ -1,6 +1,6 @@
 # @fleuron/wasm
 
-Paged-media layout in a worker: markdown and CSS in, a display list or
+Paged-media layout in a worker: markdown and CSS in, a display structure or
 PDF bytes out.
 
 [fleuron](https://fleuron.typeworks.dev/) is a layout engine for
@@ -29,7 +29,7 @@ preview.zoom = 1.5;
 `Preview` starts the worker, loads the module into it, keeps the
 session, fetches the fonts the book was set in, and paints a page as
 SVG. You never handle the encoded buffer, the worker messages or the
-display list yourself, though all three stay exported.
+display structure yourself, though all three stay exported.
 
 `@fleuron/react` is the same thing as a component, and holds no engine
 logic of its own.
@@ -100,7 +100,7 @@ const output = decodeDisplayList(render(markdown, css));
 const pdf = renderPdf(markdown, css);
 ```
 
-## The display list
+## The display structure
 
 `client.preview` hands back pages of text runs, rules and images, in
 points, origin top left. Each text run carries the string it was shaped

@@ -3,7 +3,7 @@
  * the PDF of the same run beside it.
  *
  * Written as a consumer of `@fleuron/wasm` writes one. The module,
- * the worker, the postcard buffer and the display list are all in
+ * the worker, the postcard buffer and the display structure are all in
  * here somewhere, and none of them is named: a `Preview` mounts into
  * an element and takes a manuscript.
  */

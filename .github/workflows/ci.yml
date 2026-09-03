@@ -68,10 +68,10 @@ jobs:
           wasmtime run target/wasm32-wasip1/release/perf-gate.wasm -- --runs 3 \
             | tee reports/wasm.txt
       # The wire is positional and layout is deterministic, so the
-      # display list a worker builds is the one a native run builds,
+      # structured output a worker builds is the one a native run builds,
       # to the byte. The digest is how that is checked rather than
       # assumed.
-      - name: One display list, both targets
+      - name: Same structured output, both targets
         run: |
           native=$(grep -o 'digest [0-9a-f]*' reports/native.txt | head -1)
           wasm=$(grep -o 'digest [0-9a-f]*' reports/wasm.txt | head -1)
@@ -80,7 +80,7 @@ jobs:
             echo "the two targets laid out different books" >&2
             exit 1
           fi
-          printf '### display list %s on both targets\n\n' "$native" >> "$GITHUB_STEP_SUMMARY"
+          printf '### structured output %s on both targets\n\n' "$native" >> "$GITHUB_STEP_SUMMARY"
       # Whatever got measured before the failure is still worth reading.
       - name: Publish reports
         if: always()

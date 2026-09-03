@@ -1,9 +1,9 @@
 ---
 title: The preview
-description: Painting the display list as SVG, mounting it in an element, and the harness that pages a book through it.
+description: Painting the display structure as SVG, mounting it in an element, and the harness that pages a book through it.
 ---
 
-The engine's output is a display list: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG, with one `<text>` element per run of text and an explicit x for every character in it.
+The engine's output is a display structure: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG, with one `<text>` element per run of text and an explicit x for every character in it.
 
 ## Mounting one
 
@@ -18,7 +18,7 @@ preview.page = 12;
 preview.zoom = 1.5;
 ```
 
-`Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display list yourself, though all three stay exported if you want them.
+`Preview` starts the worker, loads the module into it, keeps the session that makes a second render cheap, fetches the fonts the book was set in, and paints one page into the element you gave it. You never handle the encoded buffer, the worker messages or the display structure yourself, though all three stay exported if you want them.
 
 ## Images
 
@@ -44,7 +44,7 @@ Whatever string the manuscript writes is the name the image is matched under, so
 
 The module reads the header for the intrinsic size, which is how much room the image takes on the page, and decodes nothing. The preview keeps a `blob:` url over the same bytes and the painter draws from that, so the page on screen and the page in the PDF are one file.
 
-An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to name your own urls, and the preview hands the display list's asset to it rather than resolving a blob of its own.
+An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to name your own urls, and the preview hands the display structure's asset to it rather than resolving a blob of its own.
 
 <Playground
   caption="A mounted Preview: setStyle and edit on one side, the page it painted on the other."
@@ -137,7 +137,7 @@ const output = decodeDisplayList(bytes);
 element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts, zoom: 2 });
 ```
 
-`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the trim size in points with the origin at the top left, which is the display list's own coordinate system, so nothing is rescaled on the way out.
+`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the trim size in points with the origin at the top left, which is the display structure's own coordinate system, so nothing is rescaled on the way out.
 
 The second argument is all optional:
 
@@ -146,7 +146,7 @@ The second argument is all optional:
 | `fonts` | none | The font table, `output.fonts`. Leave it out and the painter cannot name the faces, so every run falls back to a generic serif. |
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
-| `ink` | `'#000000'` | The fill for text and rules. The display list carries no colour of its own yet, so this is the whole page's. |
+| `ink` | `'#000000'` | The fill for text and rules. The display structure carries no colour of its own yet, so this is the whole page's. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 
@@ -158,11 +158,11 @@ Hand a browser a string and a font and it does its own typesetting: it chooses g
 
 So the painter leaves the browser nothing to work out. Each `<text>` carries an x for every character it holds, taken from the glyph the engine placed there.
 
-The PDF writer reads the same display list, so the two painters draw the same numbers. The test suite checks it both ways: every glyph of every page of the fixture book against the x the painter wrote for it, and a screenshot of the preview against a raster of the PDF from the same run.
+The PDF writer reads the same display structure, so the two painters draw the same numbers. The test suite checks it both ways: every glyph of every page of the fixture book against the x the painter wrote for it, and a screenshot of the preview against a raster of the PDF from the same run.
 
 ## Fonts
 
-A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display list carries a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
+A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display structure carries a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
 
 Those files have to reach the browser as `FontFace`s. For a face you registered yourself you already hold the bytes. For the face built into the engine you do not, and there is no URL to fetch it from, so ask the module:
 
@@ -179,7 +179,7 @@ One file can answer for several faces. The bundled EB Garamond is a variable fon
 
 A face that never arrives does not blank the run. The painter's `font-family` list ends in `serif`, so the text appears in whatever the reader has: the wrong font, but readable.
 
-That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` registers nothing and leaves the painter's list to resolve against whatever the document already has, under the family the display list names. Use it when you already serve the same file, or a subset of it with the same metrics: the glyphs land on the x the display list gave them either way, and parsing a book face twice is main-thread work a page can feel. The default is `'module'`, which is the only way to be certain the page on screen is set in the face the export will use.
+That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` registers nothing and leaves the painter's list to resolve against whatever the document already has, under the family the display structure names. Use it when you already serve the same file, or a subset of it with the same metrics: the glyphs land on the x the display structure gave them either way, and parsing a book face twice is main-thread work a page can feel. The default is `'module'`, which is the only way to be certain the page on screen is set in the face the export will use.
 
 ## The harness
 
@@ -189,4 +189,4 @@ That fallback is also a setting. `Preview.mount(element, { faces: 'host' })` reg
 node examples/preview/serve.mjs
 ```
 
-It is written the way a consumer writes one, naming no buffer, no worker and no display list, which is why the browser test drives that page rather than one of its own.
+It is written the way a consumer writes one, naming no buffer, no worker and no display structure, which is why the browser test drives that page rather than one of its own.

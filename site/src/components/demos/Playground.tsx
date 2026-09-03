@@ -47,7 +47,7 @@ export interface PlaygroundProps {
   images?: string[];
   /** The faces the stylesheet names, for the island to fetch. */
   fonts?: Face[];
-  /** What the display list is drawn as over the page it made. */
+  /** What the display structure is drawn as over the page it made. */
   highlight?: string;
   /** Whether the warnings are open to begin with. */
   warnings?: boolean;

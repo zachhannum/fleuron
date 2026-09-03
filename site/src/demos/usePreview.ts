@@ -4,7 +4,7 @@
  *
  * Everything about the engine lives in the worker. This holds a
  * `Preview` from `@fleuron/wasm`, hands it whatever prop changed,
- * and reports what came back. It knows the shape of a display list
+ * and reports what came back. It knows the shape of a display structure
  * and nothing about how one is made.
  *
  * The module is not fetched until a demo is on screen, so a visitor
@@ -105,7 +105,7 @@ export interface Running {
 
 /**
  * Every mounted demo, by id, for a console and for the browser check
- * that holds an island's SVG against the display list behind it.
+ * that holds an island's SVG against the display structure behind it.
  */
 declare global {
   // eslint-disable-next-line no-var

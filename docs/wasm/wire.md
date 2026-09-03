@@ -1,25 +1,25 @@
 ---
 title: The wire
-description: The postcard display list, the worker protocol, and what the host owes the engine.
+description: The postcard display structure, the worker protocol, and what the host owes the engine.
 ---
 
 ## The encoding
 
-The display list crosses as [postcard](https://postcard.jamesmunns.com/): a non-self-describing, varint-packed format. Field names do not travel, small integers cost one byte, and there is no parse step that allocates a tree of maps before you can read the first page. *Pride and Prejudice*, 333 pages and 9,667 lines, encodes to about 6 MB in 6 ms.
+The display structure crosses as [postcard](https://postcard.jamesmunns.com/): a non-self-describing, varint-packed format. Field names do not travel, small integers cost one byte, and there is no parse step that allocates a tree of maps before you can read the first page. *Pride and Prejudice*, 333 pages and 9,667 lines, encodes to about 6 MB in 6 ms.
 
 Inputs are a different contract. [The content tree](../reference/content-tree.md) is a Rust type a frontend constructs, and it serializes to JSON, which is also how a host hands one over with the `content` op.
 
-A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks fields in the order they were written and cannot notice that the order changed. So a module and a host that disagree about the shape of the display list have to fail at the first byte. `decodeDisplayList` refuses a version it does not know, and `wireVersion()` is what the module writes.
+A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks fields in the order they were written and cannot notice that the order changed. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` refuses a version it does not know, and `wireVersion()` is what the module writes.
 
 ## What crosses
 
 In: whatever changed. Markdown source, CSS text, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
 
-Out: one transferable `ArrayBuffer`, holding either the postcard-encoded display list or, on the export path, PDF bytes. Transferred rather than copied.
+Out: one transferable `ArrayBuffer`, holding either the postcard-encoded display structure or, on the export path, PDF bytes. Transferred rather than copied.
 
-## The display list
+## The display structure
 
-[The display-list reference](../reference/display-list.mdx) is the structure. Three things about it matter to a host in particular.
+[The display structure reference](../reference/display-structure.mdx) is the structure. Three things about it matter to a host in particular.
 
 Coordinates are points, origin top-left. Every painter, SVG, canvas or PDF, consumes the same numbers. A preview that disagrees with the export about where a glyph goes has a bug in the painter, not in the engine.
 
@@ -29,9 +29,9 @@ Glyphs carry their text. Each text run holds the string it was shaped from, and 
 
 ## One book, both targets
 
-Layout is deterministic and the wire is positional, so the display list a worker produces is the one a native run produces, byte for byte. The perf gate encodes the gate book on both targets and CI compares the digests.
+Layout is deterministic and the wire is positional, so the display structure a worker produces is the one a native run produces, byte for byte. The perf gate encodes the gate book on both targets and CI compares the digests.
 
-PDF bytes are not identical across builds, though the PDF is the same book, of the same length, with the same pages and the same text. The writer orders its font objects by a hash that carries the build in it: the target's pointer width, and the identity of the crates it was compiled against. So two builds can number the same two font objects the other way round. One build renders one book to one file every time, which is what the end-to-end test's two runs check, and the digest it holds the pipeline to is of the display list, where nothing about the build reaches the bytes.
+PDF bytes are not identical across builds, though the PDF is the same book, of the same length, with the same pages and the same text. The writer orders its font objects by a hash that carries the build in it: the target's pointer width, and the identity of the crates it was compiled against. So two builds can number the same two font objects the other way round. One build renders one book to one file every time, which is what the end-to-end test's two runs check, and the digest it holds the pipeline to is of the display structure, where nothing about the build reaches the bytes.
 
 ## The protocol
 
@@ -57,7 +57,7 @@ That is also what makes it cache-safe. A superseded render is one that never sta
 
 A request the engine refuses, font bytes that are not a font, a content tree that will not parse: each replies with an error, and the session carries on rendering.
 
-A warning is different. A book that laid out anyway reports through the display list's own `warnings`, which holds the whole run's, [the frontend's complaints included](../library/diagnostics.mdx).
+A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which holds the whole run's, [the frontend's complaints included](../library/diagnostics.mdx).
 
 ## Host duties
 

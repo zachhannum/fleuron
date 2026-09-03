@@ -8,7 +8,7 @@
  * in for, which is what makes it safe to serve to a reader whose
  * JavaScript never runs.
  *
- * Every glyph on every poster is checked against the display list it
+ * Every glyph on every poster is checked against the display structure it
  * was painted from, so a painter that drifts fails the build here
  * rather than on a page nobody measured.
  */
@@ -113,7 +113,7 @@ for (const id of Object.keys(DEMOS)) {
   } else {
     console.log(
       `  ok    ${id}: page ${sheet.number} of ${output.pages.length}, ` +
-        `${sheet.items.length} items, every glyph where the display list put it`,
+        `${sheet.items.length} items, every glyph where the display structure put it`,
     );
   }
 }
@@ -136,7 +136,7 @@ for (const url of new Set(Object.keys(DEMOS).flatMap((id) => demo(id).images))) 
 }
 
 if (wrong > 0) {
-  console.error(`${wrong} poster(s) disagree with the display list they were painted from`);
+  console.error(`${wrong} poster(s) disagree with the display structure they were painted from`);
   process.exit(1);
 }
 console.log('demos prepared: the module, the bench corpus, and a poster each');
@@ -156,7 +156,7 @@ function inline(pixels) {
  *
  * A poster is markup in every document that shows one, and the
  * painter writes every position to the last digit a 32-bit float
- * has, because a preview is checked against the display list to that
+ * has, because a preview is checked against the display structure to that
  * digit. A picture is not: a tenth of a point is a seven-thousandth
  * of an inch, and the attributes every run repeats are the same
  * attributes on all of them.

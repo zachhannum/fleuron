@@ -1,7 +1,7 @@
 /**
  * A preview, mounted: markdown in, a page on screen.
  *
- * The worker, the module, the postcard buffer and the display list
+ * The worker, the module, the postcard buffer and the display structure
  * are what this is built out of, not what it asks a caller to hold.
  * A host that wants them keeps having them, since the client, the
  * protocol, the reader and the painter are all still exported. A host
@@ -49,7 +49,7 @@ export interface PreviewOptions {
    * to resolve against whatever the document already has. A host
    * that already serves the same file, or a subset of it with the
    * same metrics, uses this rather than fetch a second copy: the
-   * glyphs land where the display list put them either way, and
+   * glyphs land where the display structure put them either way, and
    * parsing a book face is main-thread work a page paying for it
    * twice can see.
    */

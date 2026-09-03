@@ -16,7 +16,7 @@ wins and the quick fix waits for its own PR.
   `examples/` is written the way a consumer writes it, and the browser
   run drives it rather than a page of its own.
 - Pipeline is one-way: markdown → content tree + style tree → box tree →
-  line layout → fragmentation → pages → display list / PDF. Downstream
+  line layout → fragmentation → pages → structured output / PDF. Downstream
   never reaches back upstream.
 - Markdown is the way in. The content tree stays public for a host with
   a structured source of its own, but the docs lead with markdown and it

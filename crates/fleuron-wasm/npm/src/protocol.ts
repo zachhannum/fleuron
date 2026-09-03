@@ -57,7 +57,7 @@ export type Op =
   | { op: 'style'; css: string };
 
 /**
- * What a request wants back, if anything: a display list, a PDF, or
+ * What a request wants back, if anything: a display structure, a PDF, or
  * the file a face was registered from.
  *
  * The first two are renders and the last is a question, which is
@@ -79,7 +79,7 @@ export interface Request {
   font?: number;
 }
 
-/** The bytes a request produced: a display list, a PDF, or a font file. */
+/** The bytes a request produced: a display structure, a PDF, or a font file. */
 export interface Rendered {
   id: number;
   generation: number;

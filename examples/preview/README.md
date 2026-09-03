@@ -24,6 +24,6 @@ preview as bytes, which is what a host does: nothing in the package
 fetches a url.
 
 `harness.js` is written the way a consumer of `@fleuron/wasm` writes
-one: it names no buffer, no worker and no display list. That is why the
+one: it names no buffer, no worker and no display structure. That is why the
 browser run in `crates/fleuron-wasm/npm/test/browser.ts` drives this
 page rather than one of its own.

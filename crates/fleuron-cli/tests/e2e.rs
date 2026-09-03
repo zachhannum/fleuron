@@ -41,15 +41,12 @@ const STYLED_TRIM: &str = "396 x 612 pts";
 /// What the built-in sheet sets a thematic break in.
 const ORNAMENT: &str = "\u{2766}";
 
-/// The head that sheet paints in the opening page's top margin box.
-const STYLED_HEAD: &str = "STYLED BY FLEURON";
-
-/// SHA-256 of the fixture book's display list under the built-in
+/// SHA-256 of the fixture book's display structure under the built-in
 /// sheet alone. Layout is deterministic, so these bytes are a fact
 /// about the pipeline: a digest that moves is a change someone meant
 /// to make.
 ///
-/// The display list rather than the PDF, because a PDF's object
+/// The display structure rather than the PDF, because a PDF's object
 /// numbering is the writer's own. krilla orders its font objects by
 /// a hash that carries the build's dependency graph in it, so one
 /// book comes out under two numberings on two build configurations,
@@ -72,14 +69,14 @@ fn the_fixture_book_renders_a_pdf() {
     );
 }
 
-/// The built-in sheet lays the book out to the display list it is
+/// The built-in sheet lays the book out to the display structure it is
 /// checked in as laying it out to.
 #[test]
 fn the_default_sheet_lays_out_the_checked_in_display_list() {
     assert_eq!(
         sha256(&fixture_display_list()),
         DEFAULT_DISPLAY_LIST,
-        "the fixture book's display list is not the one checked in",
+        "the fixture book's display structure is not the one checked in",
     );
 }
 
@@ -154,8 +151,7 @@ fn the_styled_pdf_takes_its_trim_from_at_page() {
 }
 
 /// The page masters paint what the sheet asked: the opening page
-/// carries the head and its own folio — which the built-in sheet
-/// blinds — and no later page carries the head.
+/// carries its own folio, which the built-in sheet blinds.
 #[test]
 fn page_masters_paint_what_the_author_asked() {
     let (styled, _) = render("styled-masters", &[&styled_sheet()]);
@@ -163,13 +159,6 @@ fn page_masters_paint_what_the_author_asked() {
     let (Some(styled), Some(plain)) = (extract_text(&styled), extract_text(&plain)) else {
         return;
     };
-
-    let heads = styled.matches(STYLED_HEAD).count();
-    assert_eq!(heads, 1, "the head belongs on the one chapter opening");
-    assert!(
-        pages_of(&styled)[0].contains(STYLED_HEAD),
-        "the head is not on the opening page",
-    );
 
     assert_eq!(
         folio_of(pages_of(&styled)[0]),
@@ -257,7 +246,7 @@ fn the_styled_pdf_holds_every_word_of_the_book() {
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    let rendered = squeeze(&strip_furniture(&text, Some(STYLED_HEAD)));
+    let rendered = squeeze(&strip_furniture(&text, None));
     let expected = squeeze(&laid_out_text(&fixture_book()));
     if rendered != expected {
         panic!(
@@ -669,7 +658,7 @@ fn default_pdf(name: &str) -> Vec<u8> {
     std::fs::read(&pdf).expect("the CLI wrote its output")
 }
 
-/// The fixture book's display list, built the way the CLI builds it:
+/// The fixture book's display structure, built the way the CLI builds it:
 /// the built-in sheet alone, and the images resolved against the
 /// manuscript's own directory.
 fn fixture_display_list() -> Vec<u8> {
@@ -678,7 +667,7 @@ fn fixture_display_list() -> Vec<u8> {
     let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
     let assets = Assets::probe(&book, &Beside);
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
-    fleuron::wire::encode(&output).expect("a display list encodes")
+    fleuron::wire::encode(&output).expect("a display structure encodes")
 }
 
 /// Image urls, as the CLI resolves them: against the directory the

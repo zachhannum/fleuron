@@ -44,12 +44,12 @@ pub mod budget {
     /// The same book laid out in the worker and encoded for the wire,
     /// where the budget is a span of a reader's patience rather than
     /// a build step, and where export is a separate act the reader
-    /// asked for. Serialization is inside it because a display list
+    /// asked for. Serialization is inside it because a display structure
     /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
     /// Bytes a book-scale layout may hold at its peak, over what the
-    /// content tree already costs. The display list is the floor —
+    /// content tree already costs. The display structure is the floor —
     /// every glyph of every page is retained — and a section's lines
     /// are the only thing held above it, so the ceiling sits at about
     /// twice the floor. Allocation counts are identical on every
@@ -127,16 +127,16 @@ pub struct Report {
     pub fragment: Duration,
     /// Both of the above, as one call — what a caller pays.
     pub layout: Duration,
-    /// Display list to the bytes that cross to the host.
+    /// display structure to the bytes that cross to the host.
     pub serialize: Duration,
-    /// Size of the encoded display list.
+    /// Size of the encoded display structure.
     pub wire_bytes: usize,
     /// What those bytes hash to. Layout is deterministic and the wire
     /// is positional, so this number is the same on every target that
     /// agrees about the book, which is how a run under wasm and a
     /// run natively are held to producing the same page.
     pub wire_digest: u64,
-    /// Display list to PDF bytes.
+    /// display structure to PDF bytes.
     pub pdf: Duration,
     /// Size of the PDF the run wrote.
     pub pdf_bytes: usize,
@@ -310,7 +310,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         pages = output.pages.len();
 
         let start = Instant::now();
-        let encoded = black_box(wire::encode(&output).expect("a display list encodes"));
+        let encoded = black_box(wire::encode(&output).expect("a display structure encodes"));
         serialize = serialize.min(start.elapsed());
         wire_bytes = encoded.len();
         wire_digest = digest(&encoded);
@@ -370,7 +370,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
     }
 }
 
-/// FNV-1a over the encoded display list: a number two runs can be
+/// FNV-1a over the encoded display structure: a number two runs can be
 /// compared on without a hash crate in the harness.
 fn digest(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -412,7 +412,7 @@ impl fmt::Display for Report {
         writeln!(
             f,
             "  {:<14} {:>9} KiB  digest {:016x}",
-            "display list",
+            "display structure",
             self.wire_bytes / 1024,
             self.wire_digest,
         )?;

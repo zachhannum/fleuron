@@ -250,7 +250,7 @@ pub struct Line {
     pub runs: Vec<ShapedRun>,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
-    /// joins the runs when the display list paints it. What hangs
+    /// joins the runs when the structured outpur paints it. What hangs
     /// past the measure is charged here too, and taken off again by
     /// `overhang` and `protrusion`.
     pub width: u32,

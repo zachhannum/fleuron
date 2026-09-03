@@ -3,17 +3,17 @@ title: CLI quickstart
 description: Markdown in, PDF out, in one command.
 ---
 
+
+## Install
+
 ```sh
-git clone https://github.com/zachhannum/fleuron
-cd fleuron
-cargo run --release -p fleuron-cli -- fixtures/gulliver-excerpt.md -o book.pdf -c fixtures/styled.css
+cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
+fleuron fixtures/corpus/pride-and-prejudice.md -c fixtures/styled.css -o book.pdf
 ```
 
 ```text
-fleuron: fixtures/gulliver-excerpt.md → book.pdf: 34 pages
+fleuron: fixtures/corpus/pride-and-prejudice.md → book.pdf: 443 pages
 ```
-
-That is an excerpt of *Gulliver's Travels*: dialogue, em-dashes, hyphenation-prone words. It comes out at 5.5×8.5 inches with mirrored margins, a folio in the bottom margin, and a running head on each chapter's opening page. The stylesheet doing all of that is `fixtures/styled.css`, and it is 47 lines.
 
 <Playground
   demo="quickstart"
@@ -21,18 +21,9 @@ That is an excerpt of *Gulliver's Travels*: dialogue, em-dashes, hyphenation-pro
   caption="Page 1 of book.pdf, from the manuscript and the stylesheet the command above read. Edit the manuscript here and it is set again."
 />
 
-## Install it instead
+## Multi-file books
 
-```sh
-cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
-fleuron manuscript.md -o book.pdf
-```
-
-With no `-c`, the built-in stylesheet does all the styling: a trade paperback, justified, chapters opening recto. A book that never overrides it still comes out looking like a book.
-
-## Several files
-
-Markdown files compose in the order the command line gives them:
+Multiple markdown files can be passed to the CLI. The engine combines all of the files into a single output.
 
 ```sh
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
@@ -40,7 +31,7 @@ fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 
 Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in.
 
-## Naming the book
+## Book metadata
 
 One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed. That leaves the work's own title and author to the command line:
 

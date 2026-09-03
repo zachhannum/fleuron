@@ -92,7 +92,7 @@ jobs:
         run: npm run build
 
       # The demos, driven: every glyph an island paints is held
-      # against the display list the worker sent it, and the landing
+      # against the structured output the worker sent it, and the landing
       # page is opened once with scripting off.
       - uses: actions/cache@v4
         with:

@@ -125,13 +125,13 @@ console.log(`  the CLI sets the fixture book in ${cli.pages} pages\n`);
 
 const { client, worker } = open();
 
-// The display list crosses the wall and reads back as the book the
+// The display structure crosses the wall and reads back as the book the
 // CLI laid out.
 const preview = await client.preview(book);
 if (preview === null) {
   throw new Error('nothing overtook the first render, and it still came back superseded');
 }
-check('the display list decodes', preview.pages.length > 0);
+check('the display structure decodes', preview.pages.length > 0);
 check(
   'the worker sets the book in the same pages as the CLI',
   preview.pages.length === cli.pages,
@@ -150,7 +150,7 @@ check(
   ),
 );
 check(
-  'the display list names the face it set',
+  'the display structure names the face it set',
   preview.fonts.some((font) => font.family === 'eb garamond'),
 );
 check(
@@ -214,7 +214,7 @@ function misplaced(page: Page, output: LayoutOutput): string | null {
 }
 
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
-check('every glyph is painted at the x the display list gave it', wrong === undefined, wrong ?? '');
+check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
 check(
   'every page paints',
   preview.pages.every((page) => {
@@ -260,7 +260,7 @@ check(
 // the same width on a 32-bit target as on a 64-bit one, so the two
 // files carry the same objects under swapped numbers. What the book
 // is, its length and its pages and its text, is compared instead, and
-// the display list above, which is the engine's own output, already
+// the display structure above, which is the engine's own output, already
 // matches to the byte.
 const pdf = await client.exportPdf();
 if (pdf === null) {

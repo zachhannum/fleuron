@@ -10,7 +10,7 @@
    list gives it, so the painter's family stack resolves to the file
    the site is already serving rather than to a second copy of the
    book face fetched out of the module. Subset from the same bytes,
-   so every glyph lands on the x the display list gave it. */
+   so every glyph lands on the x the display structure gave it. */
 @font-face {
   font-family: 'eb garamond';
   src: url('../assets/fonts/ebgaramond-subset.woff2') format('woff2-variations');
@@ -381,7 +381,7 @@
 
 /* The marks sit in the page's own box rather than in the column
    around it, so what is drawn over a glyph is drawn at the x the
-   display list gave it. */
+   display structure gave it. */
 .d-marks {
   position: absolute;
   inset: 0;

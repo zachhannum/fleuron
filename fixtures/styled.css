@@ -22,15 +22,11 @@
   margin-right: 40pt;
 }
 
-/* A chapter's opening page carries a head. Its folio comes back too:
-   the rule above outranks the built-in sheet's blinding of it,
-   because author CSS outranks the defaults whatever their
-   specificity. */
+/* A chapter opens low on the page. Its folio comes back too: the
+   rule above outranks the built-in sheet's blinding of it, because
+   author CSS outranks the defaults whatever their specificity. */
 @page chapter:first {
-  @top-center {
-    content: "STYLED BY FLEURON";
-    font-size: 8pt;
-  }
+  margin-top: 2in;
 }
 
 book {
@@ -38,17 +34,17 @@ book {
   line-height: 1.5;
 }
 
-h1, h2, h3 {
-  font-size: 20pt;
+h2 {
+  font-size: 25pt;
+  margin-bottom: 1in;
+  text-align: center;
 }
 
 blockquote p {
   font-size: 10pt;
 }
 
-/* A chapter opens with a three-line drop cap: the initial letter of
-   the paragraph after the chapter heading is sunk into the lines
-   beside it. */
+/* dropcap */
 h2 + p::first-letter {
   initial-letter: 3;
 }

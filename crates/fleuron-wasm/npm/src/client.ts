@@ -1,5 +1,5 @@
 /**
- * The host's side of the wall: send an edit, get a display list, and
+ * The host's side of the wall: send an edit, get a display structure, and
  * never paint one the reader has already typed past.
  */
 
@@ -63,7 +63,7 @@ export class Client {
   }
 
   /**
-   * Applies inputs and asks for a display list. Resolves to `null`
+   * Applies inputs and asks for a display structure. Resolves to `null`
    * when a later render overtook this one, or when its reply came
    * back behind the current generation.
    */
@@ -99,7 +99,7 @@ export class Client {
   }
 
   /**
-   * Applies inputs and asks for bytes: the display list as the
+   * Applies inputs and asks for bytes: the display structure as the
    * engine encoded it, or a PDF. `null` when this render was
    * overtaken.
    */

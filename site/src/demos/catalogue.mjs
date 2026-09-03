@@ -344,8 +344,8 @@ export const DEMOS = {
   }),
   /** What the CLI quickstart writes, from the manuscript it writes it from. */
   quickstart: () => ({
-    name: 'gulliver-excerpt.md',
-    markdown: fixture('gulliver-excerpt.md'),
+    name: 'pride-and-prejudice.md',
+    markdown: chapter('corpus/pride-and-prejudice.md', 1),
     css: fixture('styled.css'),
     // Nothing fetches a url for the demo, so the images the
     // manuscript names are handed over as urls it fetches itself.

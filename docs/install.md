@@ -48,7 +48,8 @@ npm install @fleuron/react
 
 That is the same preview as a React component, and nothing else.
 
-Next: the [wasm quickstart](wasm/quickstart.md), or [the demos](https://fleuron.typeworks.dev/demos/), which run this package in your browser.
+Next: the [wasm quickstart](wasm/quickstart.md), or [the demos](https://fleuron.typeworks.dev/demos/), 
+which run this package in your browser.
 
 ## Working on fleuron itself
 
@@ -58,11 +59,5 @@ cd fleuron
 cargo test --workspace
 ```
 
-The end-to-end test runs the fixture book through the CLI and checks the PDF. It wants `qpdf` and `pdftotext` (from poppler) on the path. Without them it skips the validation instead of failing.
-
-The perf harness is a separate binary, and it reports against absolute performance ceilings:
-
-```sh
-cargo run --release -p fleuron-fixtures --bin perf-gate
-cargo bench -p fleuron
-```
+The end-to-end test runs the fixture book through the CLI and checks the PDF. It wants `qpdf` and `pdftotext` 
+(from poppler) on the path. Without them it skips the validation instead of failing.

@@ -1,4 +1,4 @@
-//! PDF export: display list in, PDF bytes out.
+//! PDF export: structured output in, PDF bytes out.
 //!
 //! The painter for print. Everything it needs already exists on the
 //! page — glyph ids, absolute positions, page trim — so this stage
@@ -24,7 +24,7 @@ use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::pages::{DrawItem, Glyph, Page};
 
-/// What can go wrong turning a display list into a PDF.
+/// What can go wrong turning the structured output into a PDF.
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
     /// The face named could not be embedded.
@@ -49,7 +49,7 @@ pub enum PdfError {
 /// Writes one laid-out book as PDF bytes.
 ///
 /// Fonts resolve through the registry that shaped the run and images
-/// through the table that sized them: the display list carries
+/// through the table that sized them: the structured output carries
 /// indexes, the tables own the files, and so the embedded subset
 /// holds the outlines the shaper measured and the embedded image is
 /// the file the header was read from.
@@ -95,7 +95,7 @@ fn write_with(
         .map_err(|e| PdfError::Serialize(format!("{e:?}")))
 }
 
-/// Every asset as a krilla image, indexed as the display list
+/// Every asset as a krilla image, indexed as the display structure
 /// indexes them.
 ///
 /// The format is read off the bytes rather than off the url, since a
@@ -391,7 +391,7 @@ mod tests {
         book
     }
 
-    /// One hand-built page: the display list a painter sees, without
+    /// One hand-built page: the display structure a painter sees, without
     /// going through layout.
     fn page_of(items: Vec<DrawItem>, width: f32, height: f32) -> LayoutOutput {
         LayoutOutput {
@@ -459,7 +459,7 @@ mod tests {
     }
 
     /// The page's trim size is the media box: krilla is told the size
-    /// the display list carries, not a default.
+    /// the display structure carries, not a default.
     #[test]
     fn page_trim_becomes_the_media_box() {
         let pdf = readable(&page_of(Vec::new(), 432.0, 648.0), &Metadata::default());
@@ -712,7 +712,7 @@ mod tests {
         assert!(pdf.starts_with("%PDF-1.7"), "no PDF header");
         assert!(
             pdf.contains(&format!("/Type /Pages\n  /Count {}", output.pages.len())),
-            "page tree does not count the display list's pages"
+            "page tree does not count the display structure's pages"
         );
         assert!(pdf.contains("startxref"), "no cross-reference offset");
         assert!(pdf.trim_end().ends_with("%%EOF"), "no trailer");

@@ -3,13 +3,15 @@ title: Diagnostics
 description: What warns, what fails, and what to do about it.
 ---
 
-fleuron reports trouble two ways, and almost everything falls on the first.
+fleuron reports trouble two ways: warnings and errors. Unsupported CSS, a font that would not load,
+a family that resolved nothing, all are reported as warnings. Whatever caused the warning is ignored by
+the engine, and the book is still successfully rendered.
 
-A warning means the book laid out anyway. Unsupported CSS, a font that would not load, a family that resolved nothing. The run finishes, the PDF is written, and the warning names where the problem was written.
+Any errors prevent the book from being rendered. Malformed input, a face that cannot be embedded,
+or geometry a PDF cannot express.
 
-An error means the book did not lay out. Malformed input, a face that cannot be embedded, geometry a PDF cannot express.
-
-The stylesheet below has two declarations the engine has no room for. Both are reported, with the line and column they were written at, and the chapter sets anyway.
+The stylesheet below has two declarations the engine does not support. Both are reported, with the line and
+column they were written at, and the content still renders.
 
 <Playground
   demo="warnings"
@@ -32,42 +34,38 @@ for warning in &output.warnings {
 }
 ```
 
-`origin` is a source location when one exists. For CSS it is the sheet's name with a line and column, the name being whatever you passed to `Source::author`, so pass something a reader will recognise. For content it is the source file and position, like `chapter-01.md:12:3`, carried on the node the markdown was read into. A node with no position degrades to the bare file name, and the warning is not dropped.
+`origin` is a source location when one exists. For CSS it is the sheet's name with a line and column,
+the name being whatever you passed to `Source::author`. For content it is the source file and position,
+like `chapter-01.md:12:3`, carried on the node the markdown was read into. A node with no position degrades
+to the bare file name.
 
-Style compilation collects its own warnings before layout runs, and `Stylesheets::warnings()` has them as soon as parsing and font loading are done. `LayoutOutput::warnings` holds the whole run's, compilation included, so reading it once at the end is enough.
+Style compilation collects its own warnings before layout runs, and `Stylesheets::warnings()`
+has them as soon as parsing and font loading are done. `LayoutOutput::warnings` holds the whole run's,
+compilation included, so reading it once at the end is enough.
 
 ## What warns
 
-| | |
-|---|---|
-| a construct the content vocabulary has no room for | A list, a table, a code block. The frontend sets them as prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.mdx) is the full list. |
-| a declaration outside the subset | The property, the at-rule or the selector, at the line and column it was written at. See [the CSS subset](../css-subset.mdx). |
-| a font that would not load | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a font this build can read. Text falls back to the next family in the list. |
-| a family that resolved nothing | The whole `font-family` stack came up empty and the first registered face answered. Usually a spelling mistake, or a loader rooted in the wrong directory. |
-| a missing cut | An italic or a weight the family does not have. Nothing is synthesised, so the text sets in the nearest cut and the warning says which one was wanted. |
-| an image nobody supplied | A url the manuscript names that the host handed no bytes for, or bytes no header probe recognises. The image is skipped and the page closes over the space it would have taken. |
-| an image taller than the page | The image is scaled down to the content box, and the warning says so. |
+|                                                    |                                                                                                                                                                                                                                                           |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a construct the content structure does not support | A list, a table, a code block. The frontend falls back to plain prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.mdx) is the full list. |
+| a CSS declaration outside the supported subset     | The property, the at-rule or the selector, at the line and column it was written at. See [the CSS subset](../css-subset.mdx).                                                                                                                             |
+| a font that would not load                         | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a readable font. Text falls back to the next family in the list.                                                                                              |
+| a family that resolved nothing                     | The whole `font-family` stack came up empty. Usually a spelling mistake, or a loader rooted in the wrong directory.                                                                                                                                       |
+| a missing font style                               | An italic or a weight the family does not have. Nothing is synthesised, so the text is rendered with the closest style and the warning says which one was wanted.                                                                                         |
+| an image not supplied to the engine                | A url the manuscript names that is missing, or bytes the header probe doesn't recognize. The image is skipped.                                                                                                                                            |
+| an image taller than the page                      | The image is scaled down to the content box, and the warning says so.                                                                                                                                                                                     |
 
 ## What fails
 
-| | |
-|---|---|
-| input that is not markdown | A file the CLI cannot place by extension. |
-| a face that could not be embedded | `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer refuses. |
-| an image that could not be embedded | `PdfError::Image`, naming the url. The header probe and the writer read the same file, so this is a format one knows and the other does not. |
-| geometry a PDF cannot express | `PdfError::Geometry`, naming the folio and the kind of item. A non-finite coordinate reaching the writer is the usual cause, and that is a bug in the engine rather than a problem with the document. |
-| serialization | `PdfError::Serialize`, with whatever the writer said. |
+|                                     |                                                                                                                                                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| input that is not markdown          | A file the CLI cannot read.                                                                                                                                                                           |
+| a font that could not be embedded   | `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer refuses.                                                                                              |
+| an image that could not be embedded | `PdfError::Image`, naming the url. The header probe and the writer read the same file, so this is a format one knows and the other does not.                                                          |
+| geometry a PDF cannot express       | `PdfError::Geometry`, naming the folio and the kind of item. A non-finite coordinate reaching the writer is the usual cause, and that is a bug in the engine rather than a problem with the document. |
+| serialization                       | `PdfError::Serialize`, with whatever the writer said.                                                                                                                                                 |
 
 ## From the command line
 
-The CLI prints warnings to stderr, one per line, prefixed with the input they came from, and then a count. It still exits 0, because the PDF was written. [The CLI reference](../cli/reference.md) has the exit codes.
-
-## Warnings worth failing a build over
-
-Warnings are non-fatal so that a mistake in a stylesheet never stops a manuscript from laying out. That also makes them easy to accumulate. Three are worth promoting to errors in a build:
-
-A font warning changes what the book looks like. Text that fell back is set in the wrong face on every page it appears on.
-
-A CSS warning means a rule you wrote had no effect, and nothing downstream will mention it again.
-
-A frontend warning is the one to weigh. A table set as one paragraph per cell is a page that no longer says what the manuscript meant.
+The CLI prints warnings to stderr, one per line, prefixed with the input they came from, and then a count.
+It still exits 0, because the PDF was written. [The CLI reference](../cli/reference.md) has the exit codes.

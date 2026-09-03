@@ -115,7 +115,7 @@ A book of one source takes its title and author from that source's frontmatter. 
 
 ### What comes back
 
-`client.preview` hands back a display list: pages of text runs, rules and images, in points, origin top left. See [the display-list reference](../reference/display-list.mdx) for the structure, and [the wire](wire.md) for the postcard encoding underneath it.
+`client.preview` hands back a display structure: pages of text runs, rules and images, in points, origin top left. See [the display structure reference](../reference/display-structure.mdx) for the structure, and [the wire](wire.md) for the postcard encoding underneath it.
 
 Turning those pages into pixels is a painter's job. `paintPage` is the one the package ships. See [the preview](preview.mdx).
 

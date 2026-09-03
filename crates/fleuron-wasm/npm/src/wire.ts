@@ -1,5 +1,5 @@
 /**
- * The wire: display-list bytes in, a display list out.
+ * The wire: display-list bytes in, a display structure out.
  *
  * The engine encodes with postcard, which sends no field names and
  * packs small numbers into one byte. Nothing in the buffer says what
@@ -74,7 +74,7 @@ export interface Intrinsic {
 /**
  * One image the book placed, as {@link ImageItem.asset} indexes it.
  *
- * All the display list says about an image: layout read the header
+ * All the display structure says about an image: layout read the header
  * and decoded nothing, so a painter takes the url back to its own
  * pixels.
  */
@@ -133,7 +133,7 @@ export interface FaceAttributes {
   weight: number;
 }
 
-/** A font's identity, as the display list indexes it. */
+/** A font's identity, as the display structure indexes it. */
 export interface FontRefEntry {
   /** Family for matching, lowercase. */
   family: string;
@@ -326,7 +326,7 @@ export function wireVersionOf(bytes: Uint8Array): number {
 }
 
 /**
- * Reads a display list, refusing a version this reader does not know
+ * Reads a display structure, refusing a version this reader does not know
  * rather than painting whatever the bytes happen to decode to.
  */
 export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
@@ -342,7 +342,7 @@ export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
     warnings: r.seq(() => warning(r)),
   };
   if (!r.done()) {
-    throw new WireError('the buffer holds more than one display list');
+    throw new WireError('the buffer holds more than one display structure');
   }
   return output;
 }
