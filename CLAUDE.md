@@ -16,8 +16,8 @@ wins and the quick fix waits for its own PR.
   `examples/` is written the way a consumer writes it, and the browser
   run drives it rather than a page of its own.
 - Pipeline is one-way: markdown → content tree + style tree → box tree →
-  line layout → fragmentation → pages → structured output / PDF. Downstream
-  never reaches back upstream.
+  line layout → fragmentation → pages → display structure / PDF.
+  Downstream never reaches back upstream.
 - Markdown is the way in. The content tree stays public for a host with
   a structured source of its own, but the docs lead with markdown and it
   is not advertised as a peer.
@@ -43,9 +43,9 @@ wins and the quick fix waits for its own PR.
   files: no line exceeds the measure; baselines are monotonically
   increasing down a page; `layout()` is deterministic (two runs,
   byte-identical output); page count stable across runs.
-- Display-list and wire-format structures get `insta` snapshots. `.snap`
-  files are reviewed like code; `cargo insta review` after intentional
-  changes, never blind `--accept`.
+- The display structure and the wire format get `insta` snapshots.
+  `.snap` files are reviewed like code; `cargo insta review` after
+  intentional changes, never blind `--accept`.
 - Property and snapshot tests live in the crate's `tests/` integration
   directory; unit tests stay colocated.
 
@@ -154,11 +154,14 @@ Run it against its own rules. Nothing in this repo is a writing
 sample to match, so nothing overrides them, the em dash rule
 included.
 
+`STYLE.md` is the voice the docs, the README and the npm READMEs are
+written in.
+
 ## Conventions
 
 - Errors: `thiserror` in library crates, `anyhow` in the CLI.
 - Serialization: serde everywhere; postcard on the WASM wire.
-- Public API docs (`///`) on every public item; the display-list types
-  are a cross-painter contract and get treated like documentation.
+- Public API docs (`///`) on every public item; the display-structure
+  types are a cross-painter contract and get treated like documentation.
 - Benchmarks: criterion, in `crates/fleuron/benches/`, one bench per
   pipeline stage, run over the fixture corpus.

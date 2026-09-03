@@ -336,7 +336,7 @@ export const DEMOS = {
     page: 1,
   }),
   /** A page of running text, for pointing at one box on. */
-  'display-list': () => ({
+  'display-structure': () => ({
     name: 'pride-and-prejudice.md',
     markdown: chapter('corpus/pride-and-prejudice.md', 1),
     css: BOOK_CSS,

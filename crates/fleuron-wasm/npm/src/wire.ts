@@ -1,5 +1,5 @@
 /**
- * The wire: display-list bytes in, a display structure out.
+ * The wire: postcard bytes in, a display structure out.
  *
  * The engine encodes with postcard, which sends no field names and
  * packs small numbers into one byte. Nothing in the buffer says what

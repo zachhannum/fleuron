@@ -1,4 +1,4 @@
-//! Page output: the structured output.
+//! Page output: the display structure.
 //!
 //! The engine's only product. Painters (SVG preview, PDF export) consume
 //! this and never re-derive layout. Coordinates are page units (points),

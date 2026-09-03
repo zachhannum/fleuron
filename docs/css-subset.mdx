@@ -17,7 +17,7 @@ The stylesheet below is written in this vocabulary: mirrored margins, a folio, a
 
 Type, universal, descendant, child, adjacent and general sibling. The structural pseudo-classes `:first-child`, `:nth-child()`, `:only-child`, `:empty` and `:root`. Also `:is()`, `:where()`, `:not()` and `:has()`.
 
-Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree carries none, and no pseudo-classes that describe a document being interacted with.
+Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree carries none, and no interaction pseudo-classes, because nothing here is interactive.
 
 There is one pseudo-element, `::first-letter`, which is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size.
 
@@ -60,15 +60,15 @@ Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`, and everything
 
 ### Setting the measure
 
-Lines break by total fit over the whole paragraph: every set of breaks is costed by how far each line is from the measure, cubed, and the cheapest set wins. A word pulled up to fill one line at the cost of a hole in the next is not a bargain the paragraph takes.
+Lines break by total fit over the whole paragraph: every set of breaks is costed by how far each line is from the measure, cubed, and the cheapest set wins. A word pulled up to fill one line is not taken when it leaves a hole in the next.
 
-`text-align: justify` opens the space between words to reach the measure exactly, on every line but the last. `text-justify: inter-character` lets the space between letters give a little as well; by default it does not. Left, right and centred text break the same way and sit where the alignment puts them.
+`text-align: justify` opens the space between words to reach the measure exactly, on every line but the last. `text-justify: inter-character` lets the space between letters change as well. The default does not. Left, right and centred text break the same way and sit where the alignment puts them.
 
 `hyphens: auto` adds syllable boundaries to the breaks a line may take, each charged for the hyphen it leaves and for coming after another one. No more than two lines in a row end hyphenated.
 
 ### Hanging punctuation
 
-`hanging-punctuation` lets a mark sit outside the measure so the edge of the text block reads straight: a full stop or a comma leaves a hole in the margin the eye sees as a ragged edge, and hanging it closes the hole.
+`hanging-punctuation` lets a mark sit outside the measure so the edge of the text block reads straight. A full stop or a comma at the end of a line leaves a hole in the margin, and hanging it closes the hole.
 
 `first` hangs an opening quotation mark or bracket back into the margin the line starts at. `force-end` hangs a closing mark past the measure on every line; `allow-end` hangs one only where that is what makes the line fit. `last` hangs the mark a paragraph ends on.
 
@@ -105,7 +105,7 @@ An initial letter is sized from the sink rather than from `font-size`. Its cap h
 }
 ```
 
-`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` or `upper-alpha`. A value the style has no spelling for falls back to decimal.
+`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` or `upper-alpha`. A number the style cannot express falls back to decimal.
 
 `string(<name>)` reads a running string as it stood when the page opened, not as the first element on the page set it, so a chapter opening halfway down a page does not retitle the page it opened on. A string nothing has set yet paints nothing.
 
@@ -115,7 +115,7 @@ Page selectors cascade like any other rule: origin first, then specificity, then
 
 All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`, `@top-right` and their `@bottom-` counterparts. A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
 
-A page the flow put nothing on paints no margin boxes at all, so a blank leaf is blank and a page whose only content would be a running head does not carry one. `@page :blank` still gives that leaf its trim and margins.
+A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not carry one. `@page :blank` still gives that leaf its trim and margins.
 
 ## `@font-face`
 
@@ -128,10 +128,12 @@ A page the flow put nothing on paints no margin boxes at all, so a blank leaf is
 }
 ```
 
-Whatever string you write in `url()` is handed to the loader as it is, and never has to be a real URL. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
+The string in `url()` is handed to the loader unchanged, and does not have to be a real URL. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
 
-`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. Nothing is synthesised. [Fonts](library/fonts.md) has the whole of the matching rules and what variable files do.
+`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. Nothing is synthesised. See [fonts](library/fonts.md) for the full matching rules and how variable files register.
 
 ## Not in the subset
 
-Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element. The engine says so, per declaration, where it was written.
+Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
+
+Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.

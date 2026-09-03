@@ -18,7 +18,7 @@ let mut session = Session::new(&registry);
 session.set_content(book);
 session.set_style(Stylesheets::parse(&[Source::author("book.css", &css)]));
 
-let output = session.preview();      // the structured output
+let output = session.preview();      // the display structure
 let bytes = session.export()?;       // the same run, as PDF
 ```
 

@@ -50,9 +50,9 @@ A section is what the fragmenter opens a page on, so where sections begin decide
 fleuron manuscript.md -o book.pdf --split 2
 ```
 
-A heading at level 2 or shallower opens a section, which suits a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, which is what a vault of one chapter per file wants: the file is the section.
+A heading at level 2 or shallower opens a section, which suits a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, so in a vault of one chapter per file the file is the section.
 
-`--dialect` says which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx) for what each construct becomes and which of them warn.
+`--dialect` sets which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx) for what each construct becomes and which of them warn.
 
 ## Adding your own styling
 

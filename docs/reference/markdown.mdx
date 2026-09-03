@@ -3,18 +3,18 @@ title: Markdown mapping
 description: What each markdown construct becomes in the content tree, and which of them warn.
 ---
 
-The frontend reads markdown into the [content tree](content-tree.md). Every decision below moves a page count, so all of it is here.
+The frontend reads markdown into the [content tree](content-tree.md). Every construct below either maps to a node or warns.
 
 ```rust
 let (sections, warnings) = fleuron_markdown::to_sections(&text, "chapter-01.md", &Options::default());
 let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&text), sections);
 ```
 
-`to_sections` works on one source, not one book. A novel may arrive as one file that has to become sixty chapters, or as sixty files that each become one, and both are ordinary. Composing sources into a book is `assemble`, a step of its own, so the caller orders them and decides the metadata.
+`to_sections` works on one source, not one book. A novel may arrive as one file to split into chapters, or as one file per chapter. Composing sources into a book is `assemble`, a step of its own, so the caller orders them and decides the metadata.
 
 ## Sections
 
-A section is what the fragmenter opens a page on. `Options::sections` says where one begins.
+A section is what the fragmenter opens a page on. `Options::sections` sets where one begins.
 
 | policy | |
 |---|---|
@@ -39,9 +39,9 @@ year: 1813
 ---
 ```
 
-A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out today; it is carried through the tree for whatever does.
+A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out yet. It is carried through the tree.
 
-That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows and the CLI passes what its flags named. Sixty chapter files have sixty frontmatter blocks and none of them describes the work, so the frontend never reads the book's title out of whichever file came first.
+That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows and the CLI passes what its flags named. The frontend never takes the book's title from whichever file came first.
 
 A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is carried for whoever wants it.
 
@@ -77,7 +77,7 @@ let book = assemble(
 );
 ```
 
-`assemble` numbers the whole tree, so it runs once over every section rather than once per file. Node ids are document-order over the book, and a file read on its own has no idea where in the book it will sit.
+`assemble` numbers the whole tree, so it runs once over every section rather than once per file. Node ids are document-order over the book, and a file read on its own carries no position in it.
 
 Warnings accumulate the same way, and each one already names the file it came from.
 
@@ -91,9 +91,9 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
 
-An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph that held it, alt text and all, which is a move, so it warns.
+An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph that held it, alt text and all. Moving it changes the page, so it warns.
 
-Whatever string you write in `![](…)` is the name the image is matched under. It never has to be a real URL: the host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nobody supplies is a warning and a gap.
+The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
 
 ## Inlines
 
@@ -109,7 +109,7 @@ A line wrapped in the source is a space in the tree. The shaper never sees the m
 
 ## What warns
 
-The manuscript below uses every construct in the tables above, the ones with no counterpart included. What the vocabulary holds is set; the rest is set as prose and reported under the page.
+The manuscript below uses every construct in the tables above, the ones with no counterpart included. Constructs the content tree holds are laid out. The rest is laid out as prose and reported under the page.
 
 <Playground
   demo="mapping"
@@ -118,7 +118,7 @@ The manuscript below uses every construct in the tables above, the ones with no 
   caption="One manuscript through the frontend, read as GFM so the table is a table. Take a construct out, or put another in, and the report changes with it."
 />
 
-These constructs have no counterpart in the content tree. The frontend sets them as prose and reports the file, line and column. Prose is never dropped: a manuscript that quietly loses a paragraph is worse than one that warns about a table.
+These constructs have no counterpart in the content tree. The frontend lays them out as prose and reports the file, line and column. Prose is never dropped.
 
 | construct | becomes |
 |---|---|
@@ -134,7 +134,7 @@ These constructs have no counterpart in the content tree. The frontend sets them
 
 ## Dialects
 
-`Options::dialect` is a set of switches, so a host's departures from CommonMark are configuration rather than a second mapping to keep in step with this one.
+`Options::dialect` is a set of switches, so a host's departures from CommonMark are configuration.
 
 | switch | |
 |---|---|
@@ -143,12 +143,12 @@ These constructs have no counterpart in the content tree. The frontend sets them
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 
-`Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the three combinations worth naming.
+`Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the three named combinations.
 
-A switch that is off does not make its syntax an error. It makes it prose: `[[Another Note]]` without `wikilinks` is four brackets and a title.
+A switch that is off turns its syntax into prose rather than an error. `[[Another Note]]` without `wikilinks` is four brackets and a title.
 
 ## Reading a source twice
 
-`Cache` holds a source's sections against its name and a hash of its bytes, which is what a host re-rendering on every keystroke wants. The key is deliberately not a node id. Ids are assigned in document order over the whole book and renumber whenever a section is added or removed, so a cache keyed on one would miss on every edit while appearing to work.
+`Cache` holds a source's sections against its name and a hash of its bytes, which is what a host re-rendering on every keystroke wants. The key is the name and the hash, not a node id: ids are assigned in document order over the whole book and renumber whenever a section is added or removed.
 
 Parsing is deterministic, so two readings of the same bytes give the same tree.

@@ -94,7 +94,7 @@ body {
 ```
 
 If `"Author Serif"` is registered it answers, and `"Fallback Serif"` is never consulted, 
-even when the emphasis on the page wants an italic that `"Author Serif"` has no style for. 
+even when the emphasis on the page needs an italic that `"Author Serif"` has no style for. 
 The stack names families to try in order, and the one that is selected must supply the style.
 
 Within a family, slope decides before weight. A family with an italic style never answers 

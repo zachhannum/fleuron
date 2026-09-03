@@ -3,9 +3,9 @@ title: Content tree
 description: The engine's input contract, and the semantic document it lays out.
 ---
 
-The content tree is a semantic document, not markup. Everything downstream consumes these types, and nothing widens the vocabulary without a fixture and a test.
+The content tree is a semantic document, not markup. Everything downstream consumes these types.
 
-Most callers never build one. [Markdown](markdown.mdx) is the usual input, and the frontend produces this. The types are here for a host whose source is already structured, such as a CMS or a docx converter: it constructs a `Book` in Rust, typed and checked by the compiler, with no schema document to keep in step.
+Most callers never build one. [Markdown](markdown.mdx) is the usual input, and the frontend produces this. The types are here for a host whose source is already structured, such as a CMS or a docx converter, which constructs a `Book` in Rust directly.
 
 The tree serializes, internally tagged so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast). That is an output only: `fleuron manuscript.md --dump-tree` reads back what the frontend did, and nothing parses one back into a `Book`.
 
@@ -72,7 +72,7 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `paragraph` | `inlines`. The unit line layout breaks. |
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
-| `image` | `url` and `alt`. Whatever string you write is the name the image is matched under, and it never has to be a real URL: the engine neither resolves it nor decodes the image. `alt` is not laid out, is carried through for painters and for accessibility, and is not optional. |
+| `image` | `url` and `alt`. The string in `url` is the name the image is matched under, and it does not have to be a real URL, since the engine neither resolves it nor decodes the image. `alt` is not laid out, is carried through for painters and for accessibility, and is not optional. |
 
 ## Inlines
 
@@ -90,10 +90,10 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 Every node has an id, and the engine assigns it, so input cannot collide ids or forge a diagnostic origin. Ids are never serialized, so a tree built by hand holds unassigned ids until `Book::assign_node_ids` numbers them from 1 in document order. Numbering is pre-order: a node before its children, sections in reading order.
 
-Call it once, after building the tree. Calling it again renumbers. A [session](../library/sessions.md) numbers what it is handed, so content set through one arrives numbered whatever the host did.
+Call it once, after building the tree. Calling it again renumbers. A [session](../library/sessions.md) numbers what it is handed, so content set through a session arrives numbered.
 
 ## Source positions
 
 `position` is a 1-based line and column into the markdown the frontend read the node out of, exactly as its parser reported them. Paired with the section's `source`, it is what a diagnostic points at: `chapter-01.md:12:3`.
 
-It is diagnostic data and never layout input. A missing position never fails a run. It degrades to the bare file name, and a node with neither still warns, without a location.
+Positions are diagnostic data and never layout input, so a missing one never fails a run. A node with no position degrades to the bare file name, and a node with neither still warns, without a location.

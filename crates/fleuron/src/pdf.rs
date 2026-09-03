@@ -1,4 +1,4 @@
-//! PDF export: structured output in, PDF bytes out.
+//! PDF export: display structure in, PDF bytes out.
 //!
 //! The painter for print. Everything it needs already exists on the
 //! page — glyph ids, absolute positions, page trim — so this stage
@@ -24,7 +24,7 @@ use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::pages::{DrawItem, Glyph, Page};
 
-/// What can go wrong turning the structured output into a PDF.
+/// What can go wrong turning the display structure into a PDF.
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
     /// The face named could not be embedded.
@@ -49,7 +49,7 @@ pub enum PdfError {
 /// Writes one laid-out book as PDF bytes.
 ///
 /// Fonts resolve through the registry that shaped the run and images
-/// through the table that sized them: the structured output carries
+/// through the table that sized them: the display structure carries
 /// indexes, the tables own the files, and so the embedded subset
 /// holds the outlines the shaper measured and the embedded image is
 /// the file the header was read from.
@@ -284,7 +284,7 @@ fn paint(
     Ok(())
 }
 
-/// Display-list glyphs as krilla glyphs.
+/// Display-structure glyphs as krilla glyphs.
 ///
 /// krilla walks a run by advances from its origin, so an absolute x
 /// becomes the gap to the glyph after it. The last glyph has no

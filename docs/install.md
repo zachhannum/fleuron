@@ -40,7 +40,7 @@ Next: the [CLI quickstart](cli/quickstart.mdx).
 npm install @fleuron/wasm
 ```
 
-You get the module, a worker, a client, a display-list reader and an SVG painter.
+You get the module, a worker, a client, a display-structure reader and an SVG painter.
 
 ```sh
 npm install @fleuron/react
@@ -59,5 +59,5 @@ cd fleuron
 cargo test --workspace
 ```
 
-The end-to-end test runs the fixture book through the CLI and checks the PDF. It wants `qpdf` and `pdftotext` 
+The end-to-end test runs the fixture book through the CLI and checks the PDF. It needs `qpdf` and `pdftotext` 
 (from poppler) on the path. Without them it skips the validation instead of failing.

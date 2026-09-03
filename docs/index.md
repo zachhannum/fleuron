@@ -52,4 +52,4 @@ While it uses CSS to describe the intended formatting, `fleuron` is not a browse
 Pre-alpha. fleuron is the pagination backend for [Orca](https://github.com/zachhannum/obsidian-orca), 
 the Obsidian novel-writing suite, extracted into its own project.
 
-These pages describe what has landed. A page that documents a contract before its implementation says so at the top.
+These pages describe what has landed. A page that documents a contract before its implementation is marked at the top.

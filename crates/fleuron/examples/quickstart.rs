@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // The PDF is painted from the structured output.
+    // The PDF is painted from the display structure.
     let bytes = fleuron::pdf::write(&output, &registry, &assets, &book.metadata)?;
     std::fs::write(Path::new("book.pdf"), bytes)?;
     println!("{} pages", output.pages.len());

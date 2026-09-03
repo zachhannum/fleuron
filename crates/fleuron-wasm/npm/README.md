@@ -1,7 +1,7 @@
 # @fleuron/wasm
 
-Paged-media layout in a worker: markdown and CSS in, a display structure or
-PDF bytes out.
+Paged-media layout in a worker: markdown and CSS in, a display
+structure or PDF bytes out.
 
 [fleuron](https://fleuron.typeworks.dev/) is a layout engine for
 book-shaped documents, compiled to WebAssembly. It shapes text, breaks
@@ -28,8 +28,8 @@ preview.zoom = 1.5;
 
 `Preview` starts the worker, loads the module into it, keeps the
 session, fetches the fonts the book was set in, and paints a page as
-SVG. You never handle the encoded buffer, the worker messages or the
-display structure yourself, though all three stay exported.
+SVG. The encoded buffer, the worker messages and the display structure
+are handled internally, and all three stay exported.
 
 `@fleuron/react` is the same thing as a component, and holds no engine
 logic of its own.
@@ -72,7 +72,7 @@ a reply that arrives behind the current one is dropped.
 The package ships the worker in the shape above, so a host that wants
 no worker file of its own can point at `@fleuron/wasm/worker`.
 
-## Inputs cross when they change
+## Sending what changed
 
 The module keeps a session between calls: the content tree, the
 styling, and every stage between them and the page. A second render
@@ -118,14 +118,15 @@ around itself. Nothing about using the package requires touching them.
 
 ## What the host owns
 
-Fonts, because the engine reads no paths. Fetch the bytes and send them
-once. `client.fontBytes(id)` hands back the file a face was registered
-from, which is how a painter draws with the bundled one.
+The engine reads no paths, so the host fetches the font bytes and sends
+them once. `client.fontBytes(id)` hands back the file a face was
+registered from, which is how a painter draws with the bundled one.
 
-Images, because layout never decodes one. It places an image from the
-size the host gives it, and the host draws the pixels.
+Layout never decodes an image. It places one from the size the host
+gives it, and the host draws the pixels.
 
-The thread, because a book-scale manuscript is hundreds of milliseconds
-of work.
+The host starts the worker. A book-scale manuscript is hundreds of
+milliseconds of work, and that much time on the main thread drops
+interactions.
 
 MIT or Apache-2.0.

@@ -3,15 +3,15 @@ title: WebAssembly quickstart
 description: Installing the package, running layout in a worker, and painting what comes back.
 ---
 
-The engine compiles to WebAssembly and ships as `@fleuron/wasm`. The package holds the module, a worker, a client, a display-list reader and an SVG painter.
+The engine compiles to WebAssembly and ships as `@fleuron/wasm`. The package holds the module, a worker, a client, a display-structure reader and an SVG painter.
 
 ```sh
 npm install @fleuron/wasm
 ```
 
-## Preview does everything
+## Preview
 
-`Preview` starts the worker, loads the module into it, keeps the session, fetches the fonts and paints pages into an element you give it.
+`Preview` starts the worker, loads the module into it, keeps the session, fetches the fonts and paints pages into an element the host gives it.
 
 ```js
 import { Preview } from '@fleuron/wasm';
@@ -23,19 +23,19 @@ await preview.setMarkdown(markdown);
 preview.page = 12;
 ```
 
-Layout is already running off the main thread, and page 12 is on the screen. Most hosts want this. [The preview](preview.mdx) has the rest of its surface.
+Layout runs off the main thread, and page 12 is on the screen. [The preview](preview.mdx) covers the rest of the API.
 
 ## Assembling it yourself
 
-The same thing is available in pieces: a worker, a client that talks to it, a reader for what comes back, and a painter. Assemble them yourself when you want to paint the pages some other way, run the engine somewhere a `Worker` is not what starts it, or take the pages without putting any of them on a screen.
+The same thing is available in pieces: a worker, a client that talks to it, a reader for what comes back, and a painter. Assemble them directly to paint the pages some other way, to start the engine somewhere `Worker` is not what starts it, or to read the pages without rendering them.
 
 ### The worker
 
 Layout belongs off the main thread. A book-scale manuscript is hundreds of milliseconds of work, and that much time on the main thread drops interactions.
 
-You do not have to write the worker file. The package ships one at the `@fleuron/wasm/worker` export, which is what `Preview` starts, and a host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
+The package ships a worker at the `@fleuron/wasm/worker` export, which is what `Preview` starts. A host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
 
-Writing your own is six lines, and worth doing when the worker has to hold something else, or when your bundler needs to hand the module its bytes rather than let it fetch them:
+A worker of your own is worth writing when it has to hold something else, or when the bundler needs to hand the module its bytes rather than let it fetch them:
 
 ```js
 // fleuron.worker.js
@@ -50,7 +50,7 @@ self.onmessage = ({ data }) => {
 };
 ```
 
-Install the handler before the module has finished loading, rather than after an `await`. A worker that awaits the load first drops whatever the host posted while the module was still coming down, and a host that opens a preview and immediately hands it a manuscript posts exactly then.
+Install the handler before the module has finished loading, rather than after an `await`. A worker that awaits the load first drops whatever the host posted while the module was still loading, and a host that opens a preview and immediately sets a manuscript posts then.
 
 ### The client
 
@@ -93,7 +93,7 @@ await client.apply([{ op: 'font', bytes: face }]);
 
 A sheet that only moves the page box re-fragments over lines already broken. A keystroke in one chapter reparses that file alone. Font bytes cross once and stay registered, so nothing re-sends a face per keystroke.
 
-`client.stages` reports how many times each stage has run since the session opened. It shows a host when a cache served, which a clock cannot distinguish from a fast machine.
+`client.stages` reports how many times each stage has run since the session opened, which is how a host or a test sees that a cache served.
 
 ### The ops
 
@@ -154,8 +154,8 @@ cd crates/fleuron-wasm/npm && npm ci && npm run build
 
 ## What the host owns
 
-Fonts, because the engine reads no paths. Fetch the files, cache them, send the bytes once. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine, since it has no URL to fetch from.
+The engine reads no paths, so the host fetches the font files, caches them, and sends the bytes once. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine, since it has no URL to fetch from.
 
-Images, because the engine opens nothing and layout never decodes one. Fetch the file, send the bytes with the `image` op, and the engine reads the header to size the box. Drawing the pixels stays on your side of the wall, and `Preview` does it for you from the same bytes.
+The host fetches each image file and sends the bytes with the `image` op. The engine reads the header to size the box and never decodes the pixels. The painter decodes them, and `Preview` does it from the same bytes.
 
-The thread, because layout runs in a worker.
+Layout runs in a worker, which the host starts. [The wire](wire.md) has the rest.
