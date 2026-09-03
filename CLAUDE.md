@@ -138,10 +138,15 @@ wasm workflow again with the tag held against every version the
 repository carries, then puts both tarballs and the module on a GitHub
 release and both packages on the registry.
 
-npm authenticates the workflow over OIDC, so there is no token in the
-repository's secrets. Trusted publishing is configured per package on
-npmjs.com against `release.yml`, which is why the publish steps stay in
-that file rather than moving into the workflow it calls.
+npm authenticates the workflow over OIDC, so no npm token exists.
+Trusted publishing is configured per package on npmjs.com against
+`release.yml`, which is why the publish steps stay in that file rather
+than moving into the workflow it calls.
+
+The one secret is `RELEASE_TOKEN`, which a dispatched release checks out
+under because it raises the version on `main` and `main` is protected
+against the bot. The tag goes up under `GITHUB_TOKEN` instead, since a
+tag pushed under the other token would start a second release run.
 
 `scripts/version.mjs` is where a version is read and where it is
 bumped, because the number lives in the workspace, both packages, the
