@@ -1,5 +1,5 @@
 {
-  "name": "@fleuron/react",
+  "name": "fleuron-react",
   "version": "0.1.0",
   "description": "The fleuron preview as a React component, and nothing else",
   "license": "MIT OR Apache-2.0",
@@ -25,17 +25,14 @@
     "test": "npm run build && node test/wrapper.mjs"
   },
   "peerDependencies": {
-    "@fleuron/wasm": "0.1.0",
+    "fleuron": "0.1.0",
     "react": ">=18"
   },
   "devDependencies": {
-    "@fleuron/wasm": "file:../../crates/fleuron-wasm/npm",
+    "fleuron": "file:../../crates/fleuron-wasm/npm",
     "@types/react": "^19.2.2",
     "react": "^19.2.0",
     "typescript": "^5.9.2"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "engines": {
     "node": ">=20"

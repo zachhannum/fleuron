@@ -10,9 +10,9 @@ wins and the quick fix waits for its own PR.
   (frontend), `crates/fleuron-cli` (binary), `crates/fleuron-wasm`
   (bindings), `crates/fleuron-fixtures` (corpus and perf harness, never
   published).
-- Outside the workspace: `crates/fleuron-wasm/npm` is `@fleuron/wasm`,
-  the TypeScript beside the module; `packages/react` is
-  `@fleuron/react`, a wrapper over it that holds no engine logic;
+- Outside the workspace: `crates/fleuron-wasm/npm` is the npm package
+  `fleuron`, the TypeScript beside the module; `packages/react` is
+  `fleuron-react`, a wrapper over it that holds no engine logic;
   `examples/` is written the way a consumer writes it, and the browser
   run drives it rather than a page of its own.
 - Pipeline is one-way: markdown → content tree + style tree → box tree →

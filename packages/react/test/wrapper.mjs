@@ -3,7 +3,7 @@
  *
  * The claim this package makes is a negative one: there is no engine
  * logic in here. So what is checked is what the built module reaches
- * for, React and one name from `@fleuron/wasm`, and that the
+ * for, React and one name from `fleuron`, and that the
  * vocabulary of the engine appears nowhere in it.
  */
 
@@ -21,7 +21,7 @@ function check(what, passed, detail = '') {
   }
 }
 
-console.log('@fleuron/react: the wrapper stays a wrapper\n');
+console.log('fleuron-react: the wrapper stays a wrapper\n');
 
 const imports = [...built.matchAll(/^import\s+(?:(.+?)\s+from\s+)?["']([^"']+)["'];$/gm)].map(
   ([, names, from]) => ({ names: names ?? '', from }),
@@ -29,11 +29,11 @@ const imports = [...built.matchAll(/^import\s+(?:(.+?)\s+from\s+)?["']([^"']+)["
 
 check(
   'it reaches for React and the bindings, and nothing else',
-  imports.every(({ from }) => ['react', 'react/jsx-runtime', '@fleuron/wasm'].includes(from)),
+  imports.every(({ from }) => ['react', 'react/jsx-runtime', 'fleuron'].includes(from)),
   imports.map(({ from }) => from).join(', '),
 );
 
-const fromBindings = imports.filter(({ from }) => from === '@fleuron/wasm');
+const fromBindings = imports.filter(({ from }) => from === 'fleuron');
 check(
   'and takes one name from the bindings: the preview it wraps',
   fromBindings.length === 1 && /^\{\s*Preview(\s+as\s+\w+)?\s*\}$/.test(fromBindings[0].names),

@@ -11,8 +11,8 @@
  * decided to put the glue.
  */
 
-import { createEngine } from '@fleuron/wasm';
-import type { Request, Response } from '@fleuron/wasm';
+import { createEngine } from 'fleuron';
+import type { Request, Response } from 'fleuron';
 
 interface Scope {
   onmessage: ((event: MessageEvent<Request>) => void) | null;

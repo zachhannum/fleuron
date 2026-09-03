@@ -2,14 +2,14 @@
  * The fleuron preview, as a React component.
  *
  * There is no engine logic in here and there is not meant to be:
- * everything this file knows how to do is hand `@fleuron/wasm`'s
+ * everything this file knows how to do is hand `fleuron`'s
  * `Preview` an element and pass props along to it. React stays out
  * of the binding package for the same reason, that a host which does
  * not use it should not download it, and a host that deletes this one
  * still has a preview a plain page can mount.
  */
 
-import { Preview as Mounted, type PreviewOptions } from '@fleuron/wasm';
+import { Preview as Mounted, type PreviewOptions } from 'fleuron';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 /** What the component takes, over what a preview takes. */

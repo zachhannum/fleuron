@@ -38,7 +38,7 @@ if (missing) {
   process.exit(1);
 }
 
-const { Session, decodeDisplayList, initWasm, paintPage } = await import('@fleuron/wasm');
+const { Session, decodeDisplayList, initWasm, paintPage } = await import('fleuron');
 
 // The module, and one session per demo: a session holds the whole
 // pipeline, and two demos with different stylesheets have nothing to

@@ -37,13 +37,13 @@ Next: the [CLI quickstart](cli/quickstart.mdx).
 ## As an npm package
 
 ```sh
-npm install @fleuron/wasm
+npm install fleuron
 ```
 
 You get the module, a worker, a client, a display-structure reader and an SVG painter.
 
 ```sh
-npm install @fleuron/react
+npm install fleuron-react
 ```
 
 That is the same preview as a React component, and nothing else.

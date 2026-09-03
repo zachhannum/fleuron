@@ -11,7 +11,7 @@
  * row that ran it.
  */
 
-import { Client, type Op } from '@fleuron/wasm';
+import { Client, type Op } from 'fleuron';
 import { useEffect, useRef, useState } from 'react';
 
 import { BENCH_CSS, RESTYLE_CSS } from '../../demos/sheets';

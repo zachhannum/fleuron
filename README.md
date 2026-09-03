@@ -53,9 +53,9 @@ The pipeline runs one way. Nothing downstream reaches back upstream.
 | `fleuron` | The engine: style compilation, box construction, inline layout, fragmentation, page assembly. No I/O. |
 | `fleuron-markdown` | Markdown in, sections out. The mapping is in [`docs/reference/markdown.mdx`](docs/reference/markdown.mdx). |
 | `fleuron-cli` | The `fleuron` binary. Markdown in, PDF out. |
-| `fleuron-wasm` | WASM bindings, plus a worker, a display-structure reader and an SVG painter in TypeScript. Ships as `@fleuron/wasm`. |
+| `fleuron-wasm` | WASM bindings, plus a worker, a display-structure reader and an SVG painter in TypeScript. Ships to npm as `fleuron`. |
 
-`@fleuron/react` wraps the preview as a component and holds no engine
+`fleuron-react` wraps the preview as a component and holds no engine
 logic.
 
 Most callers write markdown. The content tree stays public for a host

@@ -18,7 +18,7 @@ can be used to keep the pipeline open so a preview re-runs only what an edit cha
 The `fleuron` CLI can read markdown and write a PDF, taking author stylesheets as flags. It is the quickest way to see output. 
 Start at the [CLI quickstart](cli/quickstart.mdx).
 
-The `@fleuron/wasm` package can be used to run layout in a worker and render as `<svg>` or output PDF bytes. 
+The `fleuron` package can be used to run layout in a worker and render as `<svg>` or output PDF bytes. 
 Start at the [wasm quickstart](wasm/quickstart.md), or open [the demos](https://fleuron.typeworks.dev/demos/) 
 to test it out.
 
