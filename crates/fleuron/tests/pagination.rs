@@ -22,9 +22,8 @@ fn paragraph_strategy() -> impl Strategy<Value = String> {
     proptest::collection::vec(word_strategy(), 1..60).prop_map(|words| words.join(" "))
 }
 
-/// A book of one section per chapter, each a heading plus prose
-/// paragraphs.
-fn book_strategy() -> impl Strategy<Value = Book> {
+/// One chapter: a heading and the prose under it.
+fn chapter_strategy() -> impl Strategy<Value = Section> {
     proptest::collection::vec(paragraph_strategy(), 1..20).prop_map(|paragraphs| {
         let blocks: Vec<Block> = std::iter::once(Block::Heading {
             id: NodeId::UNASSIGNED,
@@ -46,19 +45,35 @@ fn book_strategy() -> impl Strategy<Value = Book> {
             position: None,
         }))
         .collect();
-        let mut book = Book {
-            metadata: Default::default(),
-            sections: vec![Section {
-                id: NodeId::UNASSIGNED,
-                source: None,
-                title: None,
-                blocks,
-                position: None,
-            }],
-        };
-        book.assign_node_ids();
-        book
+        Section {
+            id: NodeId::UNASSIGNED,
+            source: None,
+            title: None,
+            blocks,
+            position: None,
+        }
     })
+}
+
+fn book_of(sections: Vec<Section>) -> Book {
+    let mut book = Book {
+        metadata: Default::default(),
+        sections,
+    };
+    book.assign_node_ids();
+    book
+}
+
+/// A book of one section per chapter, each a heading plus prose
+/// paragraphs.
+fn book_strategy() -> impl Strategy<Value = Book> {
+    chapter_strategy().prop_map(|chapter| book_of(vec![chapter]))
+}
+
+/// The same, several chapters over: what a page holding two of them
+/// needs to exist at all.
+fn chapters_strategy() -> impl Strategy<Value = Book> {
+    proptest::collection::vec(chapter_strategy(), 2..5).prop_map(book_of)
 }
 
 fn paginate(book: &Book) -> Vec<Page> {
@@ -206,6 +221,18 @@ proptest! {
                     prop_assert!((ay - by).abs() < 1e-6);
                 }
             }
+        }
+    }
+
+    /// The mapping from page to section is a layout result like any
+    /// other: two runs name the same sections on the same pages.
+    #[test]
+    fn the_section_mapping_is_stable_across_runs(book in chapters_strategy()) {
+        let first = paginate(&book);
+        let second = paginate(&book);
+        prop_assert_eq!(first.len(), second.len());
+        for (a, b) in first.iter().zip(&second) {
+            prop_assert_eq!(&a.sections, &b.sections);
         }
     }
 
@@ -377,6 +404,7 @@ fn page_assembly_snapshot() {
                 serde_json::json!({
                     "number": page.number,
                     "side": page.side,
+                    "sections": page.sections.iter().map(|id| id.get()).collect::<Vec<_>>(),
                     "items": page.items.len(),
                     "first_baselines": firsts,
                     "folio": folio,

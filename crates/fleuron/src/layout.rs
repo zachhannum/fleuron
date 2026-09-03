@@ -392,6 +392,7 @@ impl<'a> Paginator<'a> {
             side: Side::Verso,
             width: geometry.width,
             height: geometry.height,
+            sections: Vec::new(),
             items: Vec::new(),
         }
     }
@@ -933,6 +934,11 @@ fn strip_initial(inlines: &mut [Inline]) -> Option<char> {
 
 /// One fragment placed on the page being built.
 struct Placed {
+    /// The section its content came out of. It travels with the
+    /// fragment, so a fragment carried onto the next page counts
+    /// toward the page it ends on rather than the one it was measured
+    /// for.
+    section: NodeId,
     /// Top of its box, from the content box's top.
     top: f32,
     /// Its own height.
@@ -983,6 +989,8 @@ struct Flow<'a, 'p> {
     /// The slot the next page opens with: a section waiting for a
     /// page of its own.
     pending_slot: Option<PageSlot>,
+    /// The section whose fragments are being placed.
+    section: NodeId,
     /// Bottom of what is placed, from the content box's top.
     cursor: f32,
     /// Height of the content box being filled.
@@ -1005,6 +1013,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             slot,
             strings: Strings::new(),
             pending_slot: None,
+            section: NodeId::UNASSIGNED,
             cursor: 0.0,
             height,
         }
@@ -1015,6 +1024,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// section that breaks `auto` carries on where the last left off.
     fn section(&mut self, section: &Section, fragments: &[Fragment]) {
         let style = self.paginator.styles.style(section.id);
+        self.section = section.id;
         self.pending_slot = Some(PageSlot {
             name: style.page.clone(),
             first: true,
@@ -1132,6 +1142,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         };
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
+            section: self.section,
             top,
             height: fragment.height,
             break_before: fragment.break_before,
@@ -1153,7 +1164,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let mut items = Vec::new();
+        let mut sections: Vec<NodeId> = Vec::new();
         for placed in self.placed.drain(..) {
+            if sections.last() != Some(&placed.section) {
+                sections.push(placed.section);
+            }
             if let Some(marks) = placed.marks {
                 for (name, value) in marks.strings {
                     self.strings.insert(name, value);
@@ -1164,6 +1179,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);
+        page.sections = sections;
         page.items = items;
         let content_items = page.items.len();
         self.pages.push(page);
@@ -1765,6 +1781,81 @@ mod tests {
                 assert_eq!(folio(next).map(|(_, d)| d), Some((open + 1).to_string()));
             }
         }
+    }
+
+    /// Every page names the section its content came out of, and the
+    /// chapters read across the book in the order they were written.
+    #[test]
+    fn a_page_names_the_section_it_holds_content_from() {
+        let book = book_of(vec![chapter("Chapter One", 14), chapter("Chapter Two", 14)]);
+        let styles = crate::style::defaults(&book, registry());
+        let pages = Paginator::new(registry(), &styles).paginate(&book);
+        let ids: Vec<NodeId> = book.sections.iter().map(|s| s.id).collect();
+        let mut read: Vec<NodeId> = Vec::new();
+        for page in &pages {
+            for id in &page.sections {
+                if read.last() != Some(id) {
+                    read.push(*id);
+                }
+            }
+        }
+        assert_eq!(read, ids, "the pages name the chapters out of order");
+        // Each chapter opens where its own pages start.
+        for (index, id) in ids.iter().enumerate() {
+            let first = pages
+                .iter()
+                .position(|page| page.sections.contains(id))
+                .expect("every chapter reaches a page");
+            assert!(
+                opens_a_chapter(&pages[first]),
+                "chapter {index} first appears on a page that does not open one",
+            );
+        }
+    }
+
+    /// A leaf inserted to square the sheet holds nobody's content, so
+    /// it names no section.
+    #[test]
+    fn a_blank_leaf_names_no_section() {
+        // A one-paragraph chapter between two long ones ends on its
+        // own opening recto, which leaves a blank verso behind it.
+        let pages = paginate(vec![
+            chapter("Chapter One", 14),
+            section(vec![heading("Chapter Two"), paragraph("A short chapter.")]),
+            chapter("Chapter Three", 14),
+        ]);
+        let blanks: Vec<&Page> = pages.iter().filter(|page| page.items.is_empty()).collect();
+        assert!(
+            !blanks.is_empty(),
+            "expected a blank leaf in {} pages",
+            pages.len()
+        );
+        for blank in blanks {
+            assert!(
+                blank.sections.is_empty(),
+                "page {} is blank and still names {:?}",
+                blank.number,
+                blank.sections,
+            );
+        }
+    }
+
+    /// A chapter that ends mid-page is followed on that page by the
+    /// next one opening, and the page names both, in that order.
+    #[test]
+    fn a_page_shared_by_two_chapters_names_both() {
+        let css = "section { break-before: auto }";
+        let book = book_of(vec![chapter("Chapter One", 3), chapter("Chapter Two", 3)]);
+        let styles =
+            crate::style::Stylesheets::parse(&[crate::style::Source::author("test.css", css)])
+                .compile(&book, registry());
+        let pages = Paginator::new(registry(), &styles).paginate(&book);
+        let ids: Vec<NodeId> = book.sections.iter().map(|s| s.id).collect();
+        let shared = pages
+            .iter()
+            .find(|page| page.sections.len() > 1)
+            .expect("two short chapters running on share a page");
+        assert_eq!(shared.sections, ids);
     }
 
     /// The folio baseline sits in the bottom margin box — strictly

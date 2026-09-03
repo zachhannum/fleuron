@@ -400,6 +400,7 @@ mod tests {
                 side: Side::Recto,
                 width,
                 height,
+                sections: Vec::new(),
                 items,
             }],
             fonts: registry().font_ref(0).cloned().into_iter().collect(),

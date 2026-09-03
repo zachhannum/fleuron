@@ -7,6 +7,7 @@
 //! through: encode, decode, encode again, and the second buffer is
 //! the first one.
 
+use fleuron::content::NodeId;
 use fleuron::images::{Asset, Assets, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Page, Side};
 use fleuron::wire;
@@ -62,18 +63,31 @@ fn item() -> impl Strategy<Value = DrawItem> {
     ]
 }
 
+/// Section ids as the engine hands them out. Nothing else makes a
+/// `NodeId`, so the ones a page can name come from a tree that has
+/// been assigned.
+fn section_ids() -> Vec<NodeId> {
+    let markdown = "# One\n\nProse.\n\n# Two\n\nProse.\n\n# Three\n\nProse.\n";
+    let sections =
+        fleuron_markdown::to_sections(markdown, "ids.md", &fleuron_markdown::Options::default()).0;
+    let book = fleuron_markdown::assemble(fleuron::content::Metadata::default(), sections);
+    book.sections.iter().map(|section| section.id).collect()
+}
+
 fn page() -> impl Strategy<Value = Page> {
     (
         1u32..2000,
         1.0f32..2000.0,
         1.0f32..2000.0,
+        proptest::sample::subsequence(section_ids(), 0..=3),
         proptest::collection::vec(item(), 0..8),
     )
-        .prop_map(|(number, width, height, items)| Page {
+        .prop_map(|(number, width, height, sections, items)| Page {
             number,
             side: Side::of_number(number),
             width,
             height,
+            sections,
             items,
         })
 }

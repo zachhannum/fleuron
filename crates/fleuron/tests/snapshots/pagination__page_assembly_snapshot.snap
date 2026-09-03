@@ -1,7 +1,6 @@
 ---
 source: crates/fleuron/tests/pagination.rs
-assertion_line: 302
-expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usize)> =\n    page.items.iter().filter_map(|item| match item\n    {\n        DrawItem::Text { x, y, size, glyphs, .. } =>\n        Some((*x, *y, *size, glyphs.len())), _ => None,\n    }).take(3).collect(); let folio =\n    page.items.iter().find(|i|\n    is_folio(i)).map(|item|\n    {\n        let DrawItem::Text { x, y, size, glyphs, .. } = item else\n        { unreachable!() }; (*x, *y, *size, folio_digits(glyphs))\n    });\n    serde_json::json!({\n        \"number\": page.number, \"side\": page.side, \"items\": page.items.len(),\n        \"first_baselines\": firsts, \"folio\": folio,\n    })\n}).collect::<Vec<_>>()"
+expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usize)> =\n    page.items.iter().filter_map(|item| match item\n    {\n        DrawItem::Text { x, y, size, glyphs, .. } =>\n        Some((*x, *y, *size, glyphs.len())), _ => None,\n    }).take(3).collect(); let folio =\n    page.items.iter().find(|i|\n    is_folio(i)).map(|item|\n    {\n        let DrawItem::Text { x, y, size, glyphs, .. } = item else\n        { unreachable!() }; (*x, *y, *size, folio_digits(glyphs))\n    });\n    serde_json::json!({\n        \"number\": page.number, \"side\": page.side, \"sections\":\n        page.sections.iter().map(|id| id.get()).collect::<Vec<_>>(), \"items\":\n        page.items.len(), \"first_baselines\": firsts, \"folio\": folio,\n    })\n}).collect::<Vec<_>>()"
 ---
 [
   {
@@ -28,6 +27,9 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
     "folio": null,
     "items": 34,
     "number": 1,
+    "sections": [
+      1
+    ],
     "side": "recto"
   },
   {
@@ -59,6 +61,9 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
     ],
     "items": 28,
     "number": 2,
+    "sections": [
+      1
+    ],
     "side": "verso"
   },
   {
@@ -85,6 +90,9 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
     "folio": null,
     "items": 34,
     "number": 3,
+    "sections": [
+      6
+    ],
     "side": "recto"
   },
   {
@@ -116,6 +124,9 @@ expression: "pages.iter().map(|page|\n{\n    let firsts: Vec<(f32, f32, f32, usi
     ],
     "items": 28,
     "number": 4,
+    "sections": [
+      6
+    ],
     "side": "verso"
   }
 ]

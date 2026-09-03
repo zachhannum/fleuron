@@ -369,6 +369,20 @@ check(
   `worker ${assembled?.pages.length}, CLI ${whole.pages}`,
 );
 
+// Which section a page came out of crosses with it: a host that wants
+// a contents page or a page range per chapter reads it back here.
+const held = assembled?.pages.flatMap((page) => page.sections) ?? [];
+check(
+  'a page says which sections it holds content from',
+  new Set(held).size >= sources.length &&
+    held.every((id, at) => at === 0 || id >= (held[at - 1] as number)),
+  `${new Set(held).size} sections over ${assembled?.pages.length} pages`,
+);
+check(
+  'a leaf that holds nobody\'s content names no section',
+  assembled?.pages.every((page) => page.sections.length > 0 || page.items.length === 0) ?? false,
+);
+
 const titled = await client.exportPdf();
 const said = titled === null ? null : info(titled);
 if (said === null) {

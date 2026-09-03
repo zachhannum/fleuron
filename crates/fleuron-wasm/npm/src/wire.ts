@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader understands. */
-export const WIRE_VERSION = 3;
+export const WIRE_VERSION = 4;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -113,6 +113,13 @@ export interface Page {
   width: number;
   /** Trimmed page height in points. */
   height: number;
+  /**
+   * The content-tree node ids of the sections this page holds content
+   * from, in the order their content appears on it. A chapter that
+   * ends mid-page is followed there by the next one opening, so the
+   * page names both. A blank leaf names none.
+   */
+  sections: number[];
   /** What to paint, in paint order. */
   items: DrawItem[];
 }
@@ -294,7 +301,14 @@ function page(r: Reader): Page {
   if (side === undefined) {
     throw new WireError('a page fell on neither side of the spread');
   }
-  return { number, side, width: r.f32(), height: r.f32(), items: r.seq(() => item(r)) };
+  return {
+    number,
+    side,
+    width: r.f32(),
+    height: r.f32(),
+    sections: r.seq(() => r.varint()),
+    items: r.seq(() => item(r)),
+  };
 }
 
 function font(r: Reader): FontRefEntry {
