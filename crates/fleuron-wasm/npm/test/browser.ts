@@ -52,7 +52,7 @@ const ZOOM = 2;
  * mostly one tonal block measures the resampling rather than where
  * the glyphs are.
  */
-const COMPARED = 2;
+const COMPARED = 3;
 
 let failures = 0;
 
