@@ -41,11 +41,17 @@ export function Bench(props: BenchProps): React.ReactElement {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [where, setWhere] = useState('');
+  const [hydrated, setHydrated] = useState(false);
   const worker = useRef<Worker | null>(null);
 
   // Read after mounting. The server has a machine of its own, and a
   // number measured here belongs next to the one it was measured on.
-  useEffect(() => setWhere(machine()), []);
+  // The button waits for the same moment: the markup the server
+  // sends has no engine behind it.
+  useEffect(() => {
+    setWhere(machine());
+    setHydrated(true);
+  }, []);
 
   async function measure(): Promise<void> {
     setRunning(true);
@@ -101,9 +107,11 @@ export function Bench(props: BenchProps): React.ReactElement {
   return (
     <div className="d-bench">
       <div className="d-bar">
-        <button type="button" className="d-run" onClick={() => void measure()} disabled={running}>
-          {running ? 'Running' : rows.length > 0 ? 'Run it again' : 'Run it here'}
-        </button>
+        {hydrated && (
+          <button type="button" className="d-run" onClick={() => void measure()} disabled={running}>
+            {running ? 'Running' : rows.length > 0 ? 'Run it again' : 'Run it here'}
+          </button>
+        )}
         <span className="d-machine">{where}</span>
       </div>
       {error !== null && <p className="d-broke">The engine stopped: {error}</p>}
