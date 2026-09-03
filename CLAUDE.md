@@ -129,6 +129,25 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 7. perf job: book-scale invariants in release, then `perf-gate` against
    the budgets natively and under wasmtime, reported to the run summary
 
+## Releases
+
+`.github/workflows/release.yml` is the only thing that publishes. A
+`v*` tag runs it, and so does a manual dispatch, which raises the
+version, cuts the tag and carries on with it. Either way it runs the
+wasm workflow again with the tag held against every version the
+repository carries, then puts both tarballs and the module on a GitHub
+release and both packages on the registry.
+
+npm authenticates the workflow over OIDC, so there is no token in the
+repository's secrets. Trusted publishing is configured per package on
+npmjs.com against `release.yml`, which is why the publish steps stay in
+that file rather than moving into the workflow it calls.
+
+`scripts/version.mjs` is where a version is read and where it is
+bumped, because the number lives in the workspace, both packages, the
+peer range between them, the constant the package reports itself by and
+the lockfiles that mirror all of it.
+
 ## Documentation rules
 
 Applies to code comments and all documentation — internal (CLAUDE.md,

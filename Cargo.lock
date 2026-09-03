@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "criterion",
  "cssparser",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-cli"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "fleuron",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-fixtures"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fleuron",
  "fleuron-markdown",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-markdown"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fleuron",
  "proptest",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-wasm"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fleuron",
  "fleuron-markdown",
