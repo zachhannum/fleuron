@@ -8,6 +8,8 @@ use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
+use crate::content::NodeId;
+
 /// Which side of the spread a page falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -41,6 +43,11 @@ pub struct Page {
     pub width: f32,
     /// Trimmed page height in points.
     pub height: f32,
+    /// The sections this page holds content from, in the order their
+    /// content appears on it. A chapter that ends mid-page is followed
+    /// there by the next one opening, so the page names both. A blank
+    /// leaf names none.
+    pub sections: Vec<NodeId>,
     /// What to paint, in paint order.
     pub items: Vec<DrawItem>,
 }

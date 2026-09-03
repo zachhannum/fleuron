@@ -32,11 +32,16 @@ pub struct Page {
     pub side: Side,
     pub width: f32,
     pub height: f32,
+    pub sections: Vec<NodeId>,
     pub items: Vec<DrawItem>,
 }
 ```
 
 `number` is the folio, counting from 1. `side` is `recto` or `verso`; books open on a right-hand page, so odd numbers are recto. `width` and `height` are the trim, in points, per page, because a book may change page size at a named page.
+
+`sections` names the content-tree sections whose content the page holds, in the order their content appears on it. A chapter that ends mid-page is followed there by the next one opening, so the page names both. A blank leaf names none.
+
+Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this.
 
 `items` is in paint order.
 
