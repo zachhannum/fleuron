@@ -235,6 +235,76 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
+      "text_indent": 13.200001,
+      "hyphens": "none",
+      "orphans": 2,
+      "widows": 2,
+      "page": "chapter",
+      "content": "none",
+      "initial_letter": 0,
+      "margin": {
+        "top": 0.0,
+        "right": 0.0,
+        "bottom": 0.0,
+        "left": 0.0
+      },
+      "break_before": "auto",
+      "break_after": "auto",
+      "break_inside": "auto"
+    },
+    {
+      "font_id": 5,
+      "font_family": [
+        {
+          "generic": "serif"
+        }
+      ],
+      "font_size": 11.0,
+      "font_style": "italic",
+      "font_weight": 400,
+      "line_height": 1.4,
+      "text_align": "left",
+      "text_justify": "inter_word",
+      "hanging_punctuation": {
+        "first": false,
+        "end": "none",
+        "last": false
+      },
+      "text_indent": 13.200001,
+      "hyphens": "none",
+      "orphans": 2,
+      "widows": 2,
+      "page": "chapter",
+      "content": "none",
+      "initial_letter": 0,
+      "margin": {
+        "top": 0.0,
+        "right": 0.0,
+        "bottom": 0.0,
+        "left": 0.0
+      },
+      "break_before": "auto",
+      "break_after": "auto",
+      "break_inside": "auto"
+    },
+    {
+      "font_id": 0,
+      "font_family": [
+        {
+          "generic": "serif"
+        }
+      ],
+      "font_size": 11.0,
+      "font_style": "normal",
+      "font_weight": 400,
+      "line_height": 1.4,
       "text_align": "center",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -341,72 +411,72 @@ expression: tree
     {
       "id": 12,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 14,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 16,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 18,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 20,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 23,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 26,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 29,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 32,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 35,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 38,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 41,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 44,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 47,
       "element": "hr",
-      "style": 6
+      "style": 8
     },
     {
       "id": 48,
@@ -416,22 +486,22 @@ expression: tree
     {
       "id": 50,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 52,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 54,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 56,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 58,
@@ -451,42 +521,42 @@ expression: tree
     {
       "id": 63,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 65,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 67,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 69,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 71,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 73,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 75,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 78,
       "element": "blockquote",
-      "style": 7
+      "style": 9
     },
     {
       "id": 79,
@@ -511,17 +581,17 @@ expression: tree
     {
       "id": 90,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 92,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 94,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 96,
@@ -531,7 +601,7 @@ expression: tree
     {
       "id": 98,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 100,
@@ -551,112 +621,112 @@ expression: tree
     {
       "id": 105,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 107,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 109,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 111,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 113,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 115,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 117,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 119,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 121,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 124,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 126,
       "element": "em",
-      "style": 5
+      "style": 7
     },
     {
       "id": 129,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 131,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 133,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 135,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 137,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 139,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 141,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 143,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 145,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 147,
       "element": "p",
-      "style": 4
+      "style": 6
     },
     {
       "id": 149,
       "element": "p",
-      "style": 4
+      "style": 6
     }
   ],
   "masters": [

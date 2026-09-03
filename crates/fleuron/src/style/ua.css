@@ -25,6 +25,16 @@ h1, h2, h3, h4, h5, h6 {
   break-after: avoid;
 }
 
+/* Prose tells one paragraph from the next with an indent rather than
+   a blank line, so the indent belongs to a paragraph that follows
+   another one. A paragraph that opens a chapter or a quotation, or
+   picks the prose up again after a heading, a scene break or an
+   illustration, has nothing above it to be told apart from, and sets
+   flush. */
+p + p {
+  text-indent: 1.2em;
+}
+
 /* A quotation is set narrower than the measure and off from the
    prose around it, and holds together across a page turn as far as
    its own orphans and widows allow. */

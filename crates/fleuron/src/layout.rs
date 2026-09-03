@@ -1428,6 +1428,29 @@ mod tests {
         lines
     }
 
+    /// Where the content on one baseline ends: the far edge of the
+    /// last glyph on it, which is where a flush right edge falls.
+    fn right_edge(page: &Page, baseline: f32) -> f32 {
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Text {
+                    y,
+                    font_id,
+                    size,
+                    glyphs,
+                    ..
+                } if *size != folio_size() && (*y - baseline).abs() < 1e-3 => {
+                    let last = glyphs.last()?;
+                    let upem = registry().metrics(*font_id)?.units_per_em as f32;
+                    let advance = registry().advance_width(*font_id, last.id)? as f32;
+                    Some(last.x + advance / upem * size)
+                }
+                _ => None,
+            })
+            .fold(f32::MIN, f32::max)
+    }
+
     /// The content-box origin of the page `page` is.
     fn origin_of(page: &Page) -> (f32, f32) {
         master(Situation::Body(page.side)).geometry.content_origin()
@@ -2044,6 +2067,220 @@ mod tests {
                     glyph.x - left,
                 );
             }
+        }
+    }
+
+    /// The first-line indent the built-in sheet gives ordinary
+    /// prose: a paragraph with another one above it.
+    fn prose_indent() -> f32 {
+        let book = book_of(vec![section(vec![
+            paragraph("opening"),
+            paragraph("following"),
+        ])]);
+        let styles = crate::style::defaults(&book, registry());
+        let node = styles
+            .nodes()
+            .iter()
+            .filter(|node| node.element == "p")
+            .nth(1)
+            .expect("the sample book has a second paragraph");
+        styles.styles()[node.style as usize].text_indent
+    }
+
+    /// The computed indent of the `nth` paragraph of a book styled by
+    /// the built-in sheet alone.
+    fn indent_of(sections: Vec<Section>, nth: usize) -> f32 {
+        let book = book_of(sections);
+        let styles = crate::style::defaults(&book, registry());
+        let node = styles
+            .nodes()
+            .iter()
+            .filter(|node| node.element == "p")
+            .nth(nth)
+            .expect("the book has that many paragraphs");
+        styles.styles()[node.style as usize].text_indent
+    }
+
+    /// Acceptance: the built-in sheet names the convention. A
+    /// paragraph following another one indents; the paragraph a
+    /// chapter opens with and the one a scene break starts again
+    /// after do not.
+    #[test]
+    fn the_built_in_sheet_indents_prose_but_not_an_opening() {
+        let indent = prose_indent();
+        assert!(indent > 0.0, "the sheet indents nothing");
+
+        // Read off the tree first: an opening paragraph is flush
+        // whether a heading or nothing at all stands above it.
+        let words = "my father had a small estate in nottinghamshire ";
+        let opening = vec![section(vec![
+            heading("Chapter One"),
+            paragraph(&words.repeat(4)),
+            paragraph(&words.repeat(4)),
+        ])];
+        assert_eq!(indent_of(opening.clone(), 0), 0.0);
+        assert_eq!(indent_of(opening, 1), indent);
+        assert_eq!(
+            indent_of(vec![section(vec![paragraph("alone")])], 0),
+            0.0,
+            "a section opening on prose indented its first paragraph",
+        );
+
+        // And read it off the page: four paragraphs, the first under
+        // a heading and the third after a scene break.
+        let tagged = |tag: &str| paragraph(&format!("{tag} {}", words.repeat(3)));
+        let pages = paginate(vec![section(vec![
+            heading("Chapter One"),
+            tagged("alpha"),
+            tagged("bravo"),
+            scene_break(),
+            tagged("charlie"),
+            tagged("delta"),
+        ])]);
+        let page = pages.first().expect("the chapter set no pages");
+        let (left, _) = origin_of(page);
+        for (tag, expected) in [
+            ("alpha", 0.0),
+            ("bravo", indent),
+            ("charlie", 0.0),
+            ("delta", indent),
+        ] {
+            let (_, runs) = content_lines(page)
+                .into_iter()
+                .find(|(_, runs)| runs[0].2.starts_with(tag))
+                .unwrap_or_else(|| panic!("no line opens with {tag}"));
+            assert!(
+                (runs[0].0 - left - expected).abs() < 1e-3,
+                "{tag} starts {}pt in, not {expected}pt",
+                runs[0].0 - left,
+            );
+        }
+    }
+
+    /// Acceptance: justification resolves against the shortened
+    /// first-line measure, so an indented first line still ends
+    /// flush on the measure's right edge.
+    #[test]
+    fn a_justified_first_line_still_ends_on_the_measure() {
+        let indent = 24.0;
+        let pages = paginate_styled(
+            &format!("p {{ text-indent: {indent}pt; text-align: justify }}"),
+            vec![section(vec![paragraph(
+                &"my father had a small estate ".repeat(20),
+            )])],
+        );
+        let page = pages.first().expect("the paragraph set no pages");
+        let (left, _) = origin_of(page);
+        let measure = master(Situation::Body(page.side)).geometry.measure();
+        let lines = content_lines(page);
+        assert!(lines.len() > 2, "not enough lines to justify");
+
+        // Every line but the last reaches the right edge, the
+        // indented first one included: its own edge is the same edge.
+        for (index, (baseline, _)) in lines.iter().enumerate().take(lines.len() - 1) {
+            let right = right_edge(page, *baseline);
+            assert!(
+                (right - left - measure).abs() < 0.5,
+                "line {index} ends {}pt in, not on the {measure}pt measure",
+                right - left,
+            );
+        }
+    }
+
+    /// Acceptance: a paragraph split over a page turn indents its
+    /// first line and nothing else. The continuation opens flush at
+    /// the top of the next page.
+    #[test]
+    fn a_paragraph_broken_across_a_page_indents_once() {
+        let indent = 18.0;
+        let pages = paginate_styled(
+            &format!("p {{ text-indent: {indent}pt; text-align: left }}"),
+            vec![section(vec![paragraph(
+                &"my father had a small estate in nottinghamshire ".repeat(220),
+            )])],
+        );
+        assert!(pages.len() > 1, "the paragraph fitted on one page");
+        let mut indented = 0;
+        for page in &pages {
+            let (left, _) = origin_of(page);
+            for (index, (_, runs)) in content_lines(page).iter().enumerate() {
+                let start = runs[0].0 - left;
+                if (start - indent).abs() < 1e-3 {
+                    assert_eq!(
+                        (page.number, index),
+                        (pages[0].number, 0),
+                        "page {} indented line {index}",
+                        page.number,
+                    );
+                    indented += 1;
+                } else {
+                    assert!(
+                        start.abs() < 1e-3,
+                        "page {}: line {index} starts {start}pt in",
+                        page.number,
+                    );
+                }
+            }
+        }
+        assert_eq!(indented, 1, "the paragraph indented {indented} lines");
+    }
+
+    /// Acceptance: a drop cap and an indent do not stack. The cap's
+    /// reserved measure is what offsets its line; the indent the
+    /// sheet asks for adds nothing on top of it.
+    #[test]
+    fn a_drop_cap_absorbs_the_indent() {
+        let prose = "my father had a small estate in nottinghamshire ".repeat(12);
+        let capped = |css: &str| {
+            let pages = paginate_styled(css, vec![section(vec![paragraph(&prose)])]);
+            let page = pages.first().expect("the paragraph set no pages");
+            let (left, _) = origin_of(page);
+            content_lines(page)
+                .iter()
+                .map(|(_, runs)| runs[0].0 - left)
+                .collect::<Vec<f32>>()
+        };
+        let plain = capped("p::first-letter { initial-letter: 3 }");
+        let indented = capped("p::first-letter { initial-letter: 3 } p { text-indent: 18pt }");
+        assert!(plain.len() > 4, "not enough lines to sink into");
+        assert_eq!(
+            plain, indented,
+            "the indent moved a line the cap had already displaced",
+        );
+    }
+
+    /// Acceptance: a quotation indents from its own leading edge,
+    /// not the page's.
+    #[test]
+    fn a_quotes_indent_starts_at_its_own_edge() {
+        let indent = 9.0;
+        let margin = quote_indent();
+        let pages = paginate_styled(
+            &format!("blockquote p {{ text-indent: {indent}pt; text-align: left }}"),
+            vec![section(vec![quote(vec![paragraph(
+                &"quoted prose runs on for a while ".repeat(12),
+            )])])],
+        );
+        let page = pages.first().expect("the quote set no pages");
+        let (left, _) = origin_of(page);
+        let lines = content_lines(page);
+        assert!(
+            lines.len() > 2,
+            "the quote broke into {} line(s)",
+            lines.len()
+        );
+        assert!(
+            (lines[0].1[0].0 - left - margin - indent).abs() < 1e-3,
+            "the first line starts {}pt in, not {}pt",
+            lines[0].1[0].0 - left,
+            margin + indent,
+        );
+        for (_, runs) in &lines[1..] {
+            assert!(
+                (runs[0].0 - left - margin).abs() < 1e-3,
+                "a later line starts {}pt in, not at the quote's edge",
+                runs[0].0 - left,
+            );
         }
     }
 

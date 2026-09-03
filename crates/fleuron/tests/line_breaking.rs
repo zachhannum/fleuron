@@ -3,7 +3,7 @@
 
 use fleuron::content::{Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::lines::{Line, LineBreakOptions, LineLayout, ParagraphStyle};
+use fleuron::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
 use proptest::prelude::*;
 
 fn registry() -> &'static FontRegistry {
@@ -175,6 +175,40 @@ proptest! {
                 (width - measure).abs() < 0.01,
                 "justified line {i} is {width}pt, measure {measure}pt"
             );
+        }
+    }
+
+    /// No line exceeds the measure when a first-line indent
+    /// shortens it. The indent comes out of the measure rather than
+    /// hanging off its end, so the first line, placed that far in,
+    /// still finishes inside the block, ragged or justified.
+    #[test]
+    fn no_indented_line_exceeds_the_measure(
+        text in text_strategy(),
+        measure in 60.0f32..300.0,
+        indent in 0.0f32..50.0,
+    ) {
+        let spec = Measure { full: measure, narrow: measure - indent, shortened: 1 };
+        let layout = LineLayout::new(registry());
+        for options in [LineBreakOptions::default(), justified()] {
+            let lines = layout.layout(&inlines_of(&text), body(), spec, options);
+            for (i, line) in lines.iter().enumerate() {
+                if is_single_word(line) {
+                    continue;
+                }
+                let width = width_pt(line);
+                let allowed = spec.at(i);
+                prop_assert!(
+                    width <= allowed + 0.01,
+                    "line {i} is {width}pt, measure {allowed}pt"
+                );
+                let start = if i == 0 { indent } else { 0.0 };
+                prop_assert!(
+                    start + width <= measure + 0.01,
+                    "line {i} runs {}pt past a {measure}pt measure",
+                    start + width - measure
+                );
+            }
         }
     }
 
