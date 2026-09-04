@@ -146,10 +146,11 @@ than moving into the workflow it calls.
 A dispatched release raises the version on `main`, which is protected,
 and a personal repository can exempt neither `github-actions[bot]` nor
 GitHub's Actions app from that. So the release owns a GitHub App, whose
-installation is on the branch ruleset's bypass list, and `RELEASE_APP_ID`
-and `RELEASE_APP_PRIVATE_KEY` are what it mints a token from. The tag
-goes up under `GITHUB_TOKEN` instead, since a tag pushed under the app's
-token would start a second release run.
+installation is on the branch ruleset's bypass list. It mints a token
+from the `RELEASE_APP_ID` variable and the `RELEASE_APP_PRIVATE_KEY`
+secret, an app id being nobody's secret. The tag goes up under
+`GITHUB_TOKEN` instead, since a tag pushed under the app's token would
+start a second release run.
 
 `scripts/version.mjs` is where a version is read and where it is
 bumped, because the number lives in the workspace, both packages, the
