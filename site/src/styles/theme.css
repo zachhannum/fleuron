@@ -1,12 +1,11 @@
 /* The face the engine ships, subset from the same bytes in
-   crates/fleuron/fonts/. Display type only: chrome is a system
-   grotesque, which costs nothing to load. */
+   crates/fleuron/fonts/. The page is set in it and nothing else is. */
 @font-face {
   font-family: 'EB Garamond Subset';
   src: url('../assets/fonts/ebgaramond-subset.woff2') format('woff2-variations');
   font-weight: 400 800;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 @font-face {
@@ -17,112 +16,134 @@
   font-display: swap;
 }
 
+/* The display face. Pinned to one optical size and one width, so the
+   weight axis is the only one left and the file is a quarter of what
+   the full one costs. */
+@font-face {
+  font-family: 'Bricolage Subset';
+  src: url('../assets/fonts/bricolage-subset.woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: block;
+}
+
+/* The chrome. Two cut weights: this face has no variable release. */
+@font-face {
+  font-family: 'Space Mono Subset';
+  src: url('../assets/fonts/spacemono-subset.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono Subset';
+  src: url('../assets/fonts/spacemono-bold-subset.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── The token layer ──────────────────────────────────────────────
-   One definition of the palette. Both themes are written out; the
-   light one is designed rather than inverted, because inverted glass
-   looks like a mistake. Everything else in the site, Starlight
-   included, is expressed in terms of these. */
+   Four-colour process, printed a hair out of true. Light is the
+   designed theme and dark is a swap of these tokens; nothing
+   structural moves between them. Every colour on the site, Starlight
+   included, resolves through this block. */
 
 :root {
-  --f-ground: #07080b;
-  --f-ground-2: #0c0e13;
-  --f-raise: #141821;
-  --f-glass: rgb(255 255 255 / 0.045);
-  --f-glass-solid: #12151c;
-  --f-hairline: rgb(255 255 255 / 0.1);
-  --f-hairline-strong: rgb(255 255 255 / 0.18);
+  /* Process inks. The same four in both themes. */
+  --f-ink-c: #00a9e0;
+  --f-ink-m: #e6007e;
+  --f-ink-y: #ffdd00;
 
-  --f-text: #eef0f6;
-  --f-text-muted: #a7aebd;
-  --f-text-faint: #767d8d;
+  --f-ground: #ffffff;
+  --f-ink: #111111;
+  --f-ink-2: #4a4a4a;
+  --f-rule: #111111;
+  --f-panel: #ffffff;
+  --f-panel-ink: #111111;
 
-  --f-accent: #9b9cfb;
-  --f-accent-deep: #5750e0;
-  --f-accent-low: #1a1b3a;
-  --f-ember: #e8b06a;
+  /* The editor half of the playground. */
+  --f-edit-bg: #111111;
+  --f-edit-ink: #ffffff;
+  --f-edit-rule: #ffffff;
 
-  --f-paper: #fffefb;
-  --f-paper-ink: #14151a;
-  --f-paper-edge: rgb(0 0 0 / 0.5);
+  /* The pasteboard the page is proofed on, and what the page throws
+     onto it. Both stay lit in the dark theme. */
+  --f-board: #d9d7d1;
+  --f-board-ink: #111111;
+  --f-board-edge: rgb(17 17 17 / 0.35);
+  --f-sheet-shadow: #111111;
+  --f-box-shadow: var(--f-ink-c);
 
-  --f-dot: rgb(255 255 255 / 0.09);
-  --f-grain: 0.38;
-  --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 42%, transparent);
-  --f-bleed-b: color-mix(in oklab, var(--f-ember) 26%, transparent);
-  --f-bleeds:
-    radial-gradient(60rem 40rem at 12% -8%, var(--f-bleed-a), transparent 70%),
-    radial-gradient(48rem 34rem at 92% 4%, var(--f-bleed-b), transparent 68%),
-    radial-gradient(70rem 44rem at 50% 108%, var(--f-bleed-a), transparent 72%);
-  --f-bleed-mask:
-    radial-gradient(60rem 40rem at 12% -8%, #000, transparent 70%),
-    radial-gradient(48rem 34rem at 92% 4%, #000, transparent 68%),
-    radial-gradient(70rem 44rem at 50% 108%, #000, transparent 72%);
+  --f-hi: var(--f-ink-y);
+  --f-hi-ink: #111111;
+  --f-btn-bg: #ffffff;
+  --f-btn-p-bg: var(--f-ink-m);
+  --f-btn-p-ink: #ffffff;
+  --f-btn-p-shadow: var(--f-ink-c);
 
-  --f-radius: 18px;
-  --f-radius-sm: 10px;
-  --f-measure: 68ch;
+  --f-bright-bg: var(--f-ink-c);
+  --f-bright-ink: #111111;
+  --f-foot-bg: #111111;
+  --f-foot-ink: #ffffff;
 
-  --f-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  --f-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
-    'Liberation Mono', monospace;
-  --f-display: 'EB Garamond Subset', Garamond, 'Times New Roman', serif;
+  /* Code keeps one key ground in both themes: it is ink on a
+     terminal wherever it is read, and one palette is one check. */
+  --f-code-bg: #111111;
+  --f-code-ink: #f2f0ea;
+
+  /* Type. */
+  --f-display: 'Bricolage Subset', system-ui, sans-serif;
+  --f-display-var: 'opsz' 96, 'wdth' 100;
+  --f-chrome: 'Space Mono Subset', ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+  --f-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --f-book: 'EB Garamond Subset', Garamond, 'Times New Roman', serif;
+
+  /* How far the plates sit out of true. Tuned to the display face at
+     600: a lighter stroke than the offset loses its skeleton into the
+     ghosts, so the offset moves with the face and not on its own. */
+  --f-gx: 0.04em;
+  --f-gy: 0.027em;
+
+  color-scheme: light;
 }
 
-:root[data-theme='light'] {
-  --f-ground: #f5f3ef;
-  --f-ground-2: #faf9f6;
-  --f-raise: #ffffff;
-  --f-glass: rgb(255 255 255 / 0.72);
-  --f-glass-solid: #ffffff;
-  --f-hairline: rgb(20 21 26 / 0.12);
-  --f-hairline-strong: rgb(20 21 26 / 0.22);
-
-  --f-text: #16181d;
-  --f-text-muted: #4d5361;
-  --f-text-faint: #626976;
-
-  --f-accent: #4740c4;
-  --f-accent-deep: #4740c4;
-  --f-accent-low: #e8e7fb;
-  --f-ember: #8a5a12;
-
-  --f-paper: #ffffff;
-  --f-paper-ink: #14151a;
-  --f-paper-edge: rgb(20 21 26 / 0.14);
-
-  --f-dot: rgb(20 21 26 / 0.1);
-  --f-grain: 0.2;
-  --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
-  --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
-}
-
-/* The landing page ships no JavaScript, so it cannot read the theme a
-   visitor chose in the docs. It follows the system instead. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --f-ground: #f5f3ef;
-    --f-ground-2: #faf9f6;
-    --f-raise: #ffffff;
-    --f-glass: rgb(255 255 255 / 0.72);
-    --f-glass-solid: #ffffff;
-    --f-hairline: rgb(20 21 26 / 0.12);
-    --f-hairline-strong: rgb(20 21 26 / 0.22);
-    --f-text: #16181d;
-    --f-text-muted: #4d5361;
-    --f-text-faint: #626976;
-    --f-accent: #4740c4;
-    --f-accent-deep: #4740c4;
-    --f-accent-low: #e8e7fb;
-    --f-ember: #8a5a12;
-    --f-paper: #ffffff;
-    --f-paper-ink: #14151a;
-    --f-paper-edge: rgb(20 21 26 / 0.14);
-    --f-dot: rgb(20 21 26 / 0.1);
-    --f-grain: 0.2;
-    --f-bleed-a: color-mix(in oklab, var(--f-accent-deep) 12%, transparent);
-    --f-bleed-b: color-mix(in oklab, var(--f-ember) 10%, transparent);
+/* The ground goes to key, every rule goes white, and the footer flips
+   to a light bar. The pasteboard stays lit: a black block thrown off
+   a white page is half of what makes this direction read, and that
+   block is invisible on a dark ground. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --f-ground: #0d0d0f;
+    --f-ink: #f2f0ea;
+    --f-ink-2: #b9b5ab;
+    --f-rule: #f2f0ea;
+    --f-panel: #16161a;
+    --f-panel-ink: #f2f0ea;
+    --f-edit-bg: #000000;
+    --f-btn-bg: transparent;
+    --f-foot-bg: #f2f0ea;
+    --f-foot-ink: #0d0d0f;
+    --f-code-bg: #000000;
+    color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --f-ground: #0d0d0f;
+  --f-ink: #f2f0ea;
+  --f-ink-2: #b9b5ab;
+  --f-rule: #f2f0ea;
+  --f-panel: #16161a;
+  --f-panel-ink: #f2f0ea;
+  --f-edit-bg: #000000;
+  --f-btn-bg: transparent;
+  --f-foot-bg: #f2f0ea;
+  --f-foot-ink: #0d0d0f;
+  --f-code-bg: #000000;
+  color-scheme: dark;
 }
 
 /* ── Starlight, expressed in the token layer ─────────────────────── */
@@ -131,202 +152,332 @@
 :root[data-theme='dark'],
 :root[data-theme='light'] {
   --sl-font: var(--f-sans);
-  --sl-font-mono: var(--f-mono);
+  --sl-font-mono: var(--f-chrome);
 
-  --sl-color-white: var(--f-text);
-  --sl-color-gray-1: var(--f-text);
-  --sl-color-gray-2: var(--f-text-muted);
-  --sl-color-gray-3: var(--f-text-faint);
-  --sl-color-gray-4: var(--f-hairline-strong);
-  --sl-color-gray-5: var(--f-raise);
-  --sl-color-gray-6: var(--f-ground-2);
-  --sl-color-gray-7: var(--f-glass-solid);
+  --sl-color-white: var(--f-ink);
+  --sl-color-gray-1: var(--f-ink);
+  --sl-color-gray-2: var(--f-ink);
+  --sl-color-gray-3: var(--f-ink-2);
+  --sl-color-gray-4: var(--f-rule);
+  --sl-color-gray-5: var(--f-rule);
+  --sl-color-gray-6: var(--f-panel);
+  --sl-color-gray-7: var(--f-panel);
   --sl-color-black: var(--f-ground);
 
-  --sl-color-accent-low: var(--f-accent-low);
-  --sl-color-accent: var(--f-accent-deep);
-  --sl-color-accent-high: var(--f-accent);
+  --sl-color-accent-low: var(--f-hi);
+  --sl-color-accent: var(--f-ink);
+  --sl-color-accent-high: var(--f-ink);
 
-  --sl-color-text: var(--f-text-muted);
-  --sl-color-text-accent: var(--f-accent);
+  --sl-color-text: var(--f-ink);
+  --sl-color-text-accent: var(--f-ink);
   --sl-color-text-invert: var(--f-ground);
   --sl-color-bg: var(--f-ground);
-  --sl-color-bg-nav: transparent;
-  --sl-color-bg-sidebar: transparent;
-  --sl-color-bg-inline-code: var(--f-glass);
-  --sl-color-bg-accent: var(--f-accent-deep);
-  --sl-color-hairline: var(--f-hairline);
-  --sl-color-hairline-light: var(--f-hairline);
-  --sl-color-hairline-shade: var(--f-hairline);
-  --sl-color-backdrop-overlay: color-mix(in oklab, var(--f-ground) 88%, transparent);
+  --sl-color-bg-nav: var(--f-ground);
+  --sl-color-bg-sidebar: var(--f-ground);
+  --sl-color-bg-inline-code: transparent;
+  --sl-color-bg-accent: var(--f-ink-m);
+  --sl-color-hairline: var(--f-rule);
+  --sl-color-hairline-light: var(--f-rule);
+  --sl-color-hairline-shade: var(--f-rule);
+  --sl-color-backdrop-overlay: var(--f-ground);
 
-  --sl-nav-height: 4rem;
+  /* The black rule, the colour bar and the nav row it sits over. */
+  --sl-nav-height: calc(4rem + 32px);
   --sl-content-width: 48rem;
 }
 
-:root[data-theme='light'] {
-  --sl-color-text: #3b4150;
-}
-
-/* ── Ground, bleeds, grain ───────────────────────────────────────── */
+/* ── Ground ──────────────────────────────────────────────────────── */
 
 html {
   background: var(--f-ground);
-  color-scheme: dark;
 }
 
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    color-scheme: light;
-  }
-}
-
-/* The ground is painted by `html` and nowhere else. A background on
-   `body` would sit above body's own negative-z children in the root
-   stacking context, and the bleeds and grain below are exactly that. */
 body {
-  background: transparent;
-  color: var(--f-text);
+  background: var(--f-ground);
+  color: var(--f-ink);
   font-family: var(--f-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Two fixed pseudo-elements do every atmospheric effect on the site.
-   The bleeds are gradients; the grain is one tiled turbulence tile,
-   painted once and never repainted on scroll. The grain is not
-   decoration — it is what stops a large dark gradient banding. */
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
+/* Nothing on this site has a corner radius. */
+:where(input, button, textarea, select, img, video, details, dialog) {
+  border-radius: 0;
 }
 
-body::before {
-  background: var(--f-bleeds);
-  animation: f-drift 44s ease-in-out infinite alternate;
+:where(a, button, input, textarea, summary, select):focus-visible {
+  outline: 3px solid var(--f-ink-m);
+  outline-offset: 2px;
 }
 
-/* The grain is masked to the bleed shapes, so it is texture belonging to
-   the colour rather than a film lying over the whole viewport. Both
-   layers carry the same drift so the grain stays inside its colour. */
-body::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 140px 140px;
-  opacity: var(--f-grain);
-  -webkit-mask-image: var(--f-bleed-mask);
-  mask-image: var(--f-bleed-mask);
-  animation: f-drift 44s ease-in-out infinite alternate;
+/* ── The colour bar ──────────────────────────────────────────────── */
+
+.f-bar {
+  display: flex;
+  box-sizing: border-box;
+  height: 32px;
+  border-top: 10px solid var(--f-rule);
 }
 
-@keyframes f-drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(0, -2.5%, 0) scale(1.06);
-  }
+.f-bar i {
+  flex: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  body::before,
-  body::after {
-    animation: none;
-  }
+.f-bar i:nth-child(1) {
+  background: var(--f-ink-c);
 }
 
-/* ── Glass ───────────────────────────────────────────────────────
-   backdrop-filter lives on fixed chrome and nowhere else: it
-   composites every frame, and a scrolling surface cannot afford it.
-   Panels are opaque enough that text on them passes AA without the
-   blur, which is also what makes the reduced-transparency fallback a
-   one-line change. */
-
-.f-glass {
-  background: var(--f-glass-solid);
-  border: 1px solid var(--f-hairline);
-  border-radius: var(--f-radius);
+.f-bar i:nth-child(2) {
+  background: var(--f-ink-m);
 }
 
-.f-chrome {
-  background: color-mix(in oklab, var(--f-ground) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--f-hairline);
+.f-bar i:nth-child(3) {
+  background: var(--f-ink-y);
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .f-chrome {
-    background: var(--f-ground);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  body::before {
-    opacity: 0.4;
-  }
+.f-bar i:nth-child(4) {
+  background: var(--f-rule);
 }
 
-/* A dot field: a background-image, not an asset. */
-.f-dots {
-  background-image: radial-gradient(var(--f-dot) 1px, transparent 1px);
-  background-size: 22px 22px;
+/* ── Shared marks ────────────────────────────────────────────────── */
+
+.f-mark {
+  font-family: var(--f-book);
+  color: var(--f-ink-m);
+  line-height: 1;
+}
+
+.f-eyebrow {
+  display: inline-block;
+  padding: 0.3rem 0.6rem;
+  border: 2px solid var(--f-rule);
+  background: var(--f-hi);
+  color: var(--f-hi-ink);
+  font-family: var(--f-chrome);
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 /* ── Starlight chrome, dressed ───────────────────────────────────── */
 
-.f-mark {
-  font-family: var(--f-display);
-  color: var(--f-ember);
-  line-height: 1;
-}
-
-.site-title,
-.sl-markdown-content h1,
-.sl-markdown-content h2 {
-  font-family: var(--f-display);
-  letter-spacing: 0.01em;
-}
-
-.sl-markdown-content h1 {
-  font-weight: 500;
-}
-
-.sl-markdown-content :is(h1, h2, h3, h4) {
-  color: var(--f-text);
-}
-
-.sl-markdown-content a:not(:where(.not-content *)) {
-  color: var(--f-accent);
-  text-underline-offset: 0.2em;
-}
-
-.sl-markdown-content :is(pre, .expressive-code) {
-  border-radius: var(--f-radius-sm);
-}
-
-/* Starlight's nav is fixed, which is the only place backdrop-filter is
-   affordable. The sidebar is not: it scrolls. */
 .page > header.header {
-  background: color-mix(in oklab, var(--f-ground) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--f-hairline);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .page > header.header {
-    background: var(--f-ground);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
+  height: var(--sl-nav-height);
+  padding: 0;
+  background: var(--f-ground);
+  border-bottom: 3px solid var(--f-rule);
 }
 
 .sidebar-pane {
-  border-inline-end: 1px solid var(--f-hairline);
+  border-inline-end: 3px solid var(--f-rule);
+  background: var(--f-ground);
+}
+
+/* The sidebar is chrome, so it takes the chrome face. The current
+   page is a yellow block, which reads the same on either ground. */
+.sidebar-content a {
+  border: 2px solid transparent;
+  border-radius: 0;
+  font-family: var(--f-chrome);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  background: var(--f-hi);
+  color: var(--f-hi-ink);
+  border-color: var(--f-hi-ink);
+  font-weight: 700;
+}
+
+.sidebar-content summary,
+.sidebar-content .group-label span {
+  font-family: var(--f-chrome);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+starlight-toc a {
+  border-radius: 0;
+  font-family: var(--f-chrome);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  border-inline-start: 3px solid transparent;
+}
+
+starlight-toc a[aria-current='true'],
+starlight-toc a[aria-current='true']:hover,
+starlight-toc a[aria-current='true']:focus {
+  border-inline-start-color: var(--f-ink-m);
+  color: var(--f-ink);
+  font-weight: 700;
+}
+
+starlight-menu-button button {
+  border: 3px solid var(--f-rule);
+  border-radius: 0;
+  background: var(--f-ground);
+  box-shadow: 4px 4px 0 var(--f-rule);
+}
+
+/* ── Prose ───────────────────────────────────────────────────────── */
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--f-display);
+  font-variation-settings: var(--f-display-var);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--f-ink);
+}
+
+/* The rule belongs to the block, and Starlight's headings are inline
+   inside a wrapper. */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  padding-top: 0.7rem;
+  border-top: 3px solid var(--f-rule);
+}
+
+/* A link is ink with a magenta plate under it, so it reads as a link
+   on either ground without a second colour to check. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--f-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--f-ink-m);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  background: var(--f-hi);
+  color: var(--f-hi-ink);
+  text-decoration-color: var(--f-hi-ink);
+}
+
+.sl-markdown-content :is(code, kbd) {
+  font-family: var(--f-chrome);
+  border-radius: 0;
+}
+
+.sl-markdown-content :not(pre) > code {
+  border: 2px solid var(--f-rule);
+  padding: 0.05em 0.3em;
+  color: var(--f-ink);
+}
+
+/* The keyline goes round the frame, so the title bar and the code
+   under it are one box. */
+.sl-markdown-content :is(pre, .expressive-code .frame) {
+  border: 3px solid var(--f-rule);
+  border-radius: 0;
+  background: var(--f-code-bg);
+  color: var(--f-code-ink);
+  box-shadow: none;
+}
+
+.sl-markdown-content .expressive-code pre {
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Expressive Code paints the frame and the code from grounds of its
+   own. Both take the token. */
+.sl-markdown-content .expressive-code {
+  --ec-codeBg: var(--f-code-bg);
+  --ec-frm-edBg: var(--f-code-bg);
+  --ec-frm-edTabBarBg: var(--f-code-bg);
+  --ec-frm-edActTabBg: var(--f-code-bg);
+  --ec-frm-trmBg: var(--f-code-bg);
+  --ec-frm-trmTtbBg: var(--f-code-bg);
+}
+
+.sl-markdown-content .expressive-code .frame > .header {
+  font-family: var(--f-chrome);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--f-code-ink);
+}
+
+.sl-markdown-content .expressive-code .frame.has-title > .header {
+  border-bottom: 3px solid var(--f-ink-m);
+}
+
+.sl-markdown-content blockquote {
+  border-inline-start: 3px solid var(--f-ink-m);
+}
+
+.sl-markdown-content :is(table) {
+  border-collapse: collapse;
+  font-family: var(--f-chrome);
+  font-size: 0.82rem;
+}
+
+.sl-markdown-content :is(th, td) {
+  border: 3px solid var(--f-rule);
+  padding: 0.6rem 0.8rem;
+}
+
+.sl-markdown-content thead th {
+  background: var(--f-rule);
+  color: var(--f-ground);
+  font-family: var(--f-chrome);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sl-markdown-content hr {
+  border: 0;
+  border-top: 3px solid var(--f-rule);
+}
+
+.sl-markdown-content :is(.starlight-aside, .card, .link-card) {
+  border-radius: 0;
+  border: 3px solid var(--f-rule);
+  border-inline-start-width: 3px;
+  background: var(--f-panel);
+  color: var(--f-panel-ink);
+}
+
+.sl-markdown-content .starlight-aside__title {
+  font-family: var(--f-chrome);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--f-ink);
+}
+
+site-search button,
+.right-sidebar button,
+dialog {
+  border-radius: 0;
+}
+
+site-search button[data-open-modal] {
+  border: 3px solid var(--f-rule);
+  background: var(--f-ground);
+  color: var(--f-ink);
+  font-family: var(--f-chrome);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+starlight-theme-select select {
+  font-family: var(--f-chrome);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--f-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+  }
 }

@@ -24,15 +24,17 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     display: block;
     margin-bottom: 1.25rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid var(--f-hairline);
-    font-size: var(--sl-text-sm);
-    letter-spacing: 0.04em;
+    border-bottom: 3px solid var(--f-rule);
+    font-family: var(--f-chrome);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--f-text-faint);
+    color: var(--f-ink);
     text-decoration: none;
   }
 
   .back:hover {
-    color: var(--f-text);
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
   }
 </style>

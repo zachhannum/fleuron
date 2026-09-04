@@ -62,7 +62,7 @@ const codeTheme = 'github-dark-default';
   .tabs {
     display: grid;
     grid-template-columns: repeat(3, auto) 1fr;
-    gap: 0.5rem 0.35rem;
+    gap: 0.6rem 0.35rem;
     align-items: center;
   }
 
@@ -76,18 +76,15 @@ const codeTheme = 'github-dark-default';
 
   label {
     grid-row: 1;
-    padding: 0.4rem 0.85rem;
-    border: 1px solid transparent;
-    border-radius: 999px;
-    font-size: 0.8125rem;
-    letter-spacing: 0.02em;
-    color: var(--f-text-muted);
+    padding: 0.35rem 0.75rem;
+    border: 2px solid transparent;
+    font-family: var(--f-chrome);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--f-ink);
     cursor: pointer;
     white-space: nowrap;
-  }
-
-  label:hover {
-    color: var(--f-text);
   }
 
   .panel {
@@ -97,31 +94,31 @@ const codeTheme = 'github-dark-default';
     min-width: 0;
   }
 
-  /* Code keeps one dark ground in both themes: it is ink on a terminal
-     wherever you read it, and one palette is one contrast check. */
   .panel :global(pre) {
     margin: 0;
     padding: 1.1rem 1.25rem;
     overflow-x: auto;
-    background: #0b0d12 !important;
-    border: 1px solid var(--f-hairline);
-    border-radius: var(--f-radius-sm);
-    font-size: 0.8125rem;
-    line-height: 1.65;
+    border: 3px solid var(--f-rule);
+    background: var(--f-code-bg) !important;
+    box-shadow: 10px 10px 0 var(--f-box-shadow);
+    font-family: var(--f-chrome);
+    font-size: 0.78rem;
+    line-height: 1.7;
   }
 
   #c-lib:checked ~ label[for='c-lib'],
   #c-cli:checked ~ label[for='c-cli'],
   #c-wasm:checked ~ label[for='c-wasm'] {
-    color: var(--f-text);
-    border-color: var(--f-hairline-strong);
-    background: var(--f-glass-solid);
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
+    border-color: var(--f-hi-ink);
+    font-weight: 700;
   }
 
   #c-lib:focus-visible ~ label[for='c-lib'],
   #c-cli:focus-visible ~ label[for='c-cli'],
   #c-wasm:focus-visible ~ label[for='c-wasm'] {
-    outline: 2px solid var(--f-accent);
+    outline: 3px solid var(--f-ink-m);
     outline-offset: 2px;
   }
 

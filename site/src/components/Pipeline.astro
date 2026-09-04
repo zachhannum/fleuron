@@ -20,16 +20,16 @@ const stages = [
     </title>
 
     <g class="node">
-      <rect x="8" y="34" width="118" height="34" rx="8"></rect>
+      <rect x="8" y="34" width="118" height="34" ></rect>
       <text x="67" y="56">markdown</text>
     </g>
     <path class="wire" d="M126 51 H166"></path>
     <g class="node">
-      <rect x="166" y="34" width="132" height="34" rx="8"></rect>
+      <rect x="166" y="34" width="132" height="34" ></rect>
       <text x="232" y="56">content tree</text>
     </g>
     <g class="node">
-      <rect x="8" y="112" width="132" height="34" rx="8"></rect>
+      <rect x="8" y="112" width="132" height="34" ></rect>
       <text x="74" y="134">CSS</text>
     </g>
 
@@ -39,7 +39,7 @@ const stages = [
     {
       stages.map((stage, i) => (
         <g class="node">
-          <rect x={stage.x} y={73} width={stage.label.length * 7.6 + 30} height={34} rx={8} />
+          <rect x={stage.x} y={73} width={stage.label.length * 7.6 + 30} height={34} />
           <text x={stage.x + (stage.label.length * 7.6 + 30) / 2} y={95}>
             {stage.label}
           </text>
@@ -57,11 +57,11 @@ const stages = [
     <path class="wire" d="M968 90 H1000 Q1008 90 1008 98 V132 Q1008 140 1016 140 H1036"></path>
 
     <g class="node out">
-      <rect x="976" y="23" width="136" height="34" rx="8"></rect>
+      <rect x="976" y="23" width="136" height="34" ></rect>
       <text x="1044" y="45">display structure</text>
     </g>
     <g class="node out">
-      <rect x="976" y="123" width="136" height="34" rx="8"></rect>
+      <rect x="976" y="123" width="136" height="34" ></rect>
       <text x="1044" y="145">PDF</text>
     </g>
   </svg>
@@ -81,25 +81,30 @@ const stages = [
   }
 
   .node rect {
-    fill: var(--f-glass-solid);
-    stroke: var(--f-hairline-strong);
-    stroke-width: 1;
+    fill: var(--f-panel);
+    stroke: var(--f-rule);
+    stroke-width: 3;
   }
 
   .node.out rect {
-    stroke: color-mix(in oklab, var(--f-accent) 55%, transparent);
+    fill: var(--f-hi);
   }
 
   .node text {
-    fill: var(--f-text);
-    font-family: var(--f-mono);
-    font-size: 13px;
+    fill: var(--f-panel-ink);
+    font-family: var(--f-chrome);
+    font-size: 12px;
+    letter-spacing: 0.04em;
     text-anchor: middle;
+  }
+
+  .node.out text {
+    fill: var(--f-hi-ink);
   }
 
   .wire {
     fill: none;
-    stroke: var(--f-hairline-strong);
-    stroke-width: 1.25;
+    stroke: var(--f-rule);
+    stroke-width: 3;
   }
 </style>
