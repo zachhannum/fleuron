@@ -6,13 +6,19 @@ const PAGE_TITLE_ID = '_top';
 <h1 id={PAGE_TITLE_ID}>{Astro.locals.starlightRoute.entry.data.title}</h1>
 
 <style>
+  /* The plates, out of register. The ghosting is on the page title
+     and nowhere else. */
   h1 {
     margin-top: 1rem;
     font-family: var(--f-display);
+    font-variation-settings: var(--f-display-var);
     font-size: clamp(2.2rem, 1.6rem + 2vw, 3rem);
-    font-weight: 500;
-    line-height: 1.1;
-    letter-spacing: -0.01em;
-    color: var(--f-text);
+    font-weight: 600;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: var(--f-ink);
+    text-shadow:
+      var(--f-gx) var(--f-gy) 0 var(--f-ink-c),
+      calc(var(--f-gx) * -0.8) calc(var(--f-gy) * -0.8) 0 var(--f-ink-m);
   }
 </style>

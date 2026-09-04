@@ -82,6 +82,9 @@ export default defineConfig({
       description:
         'A paged-media layout engine for book-shaped documents, in Rust.',
       customCss: ['./src/styles/tailwind.css', './src/styles/theme.css'],
+      // Code keeps one key ground in both themes, the same as the
+      // blocks on the landing page: one palette, one contrast check.
+      expressiveCode: { themes: ['github-dark-default'] },
       social: [
         {
           icon: 'github',

@@ -20,8 +20,11 @@ const css = (await readFile(demos, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
 
 let failed = 0;
 
-function check(what, passed, detail = '') {
-  console.log(`${passed ? 'ok  ' : 'FAIL'} ${what}${detail === '' ? '' : `\n       ${detail}`}`);
+// The detail is what failed, and finding it means scanning the whole
+// document. The check asks for it only when it has something to say.
+function check(what, passed, detail = () => '') {
+  const said = passed ? '' : detail();
+  console.log(`${passed ? 'ok  ' : 'FAIL'} ${what}${said === '' ? '' : `\n       ${said}`}`);
   if (!passed) failed += 1;
 }
 
@@ -31,28 +34,34 @@ function check(what, passed, detail = '') {
 const blocking = (html.match(/<script\b[^>]*>/g) ?? []).filter(
   (tag) => / src=/.test(tag) && !/type="module"/.test(tag) && !/\bdefer\b|\basync\b/.test(tag),
 );
-check('nothing on the landing page blocks the parser', blocking.length === 0, blocking.join('\n       '));
+check('nothing on the landing page blocks the parser', blocking.length === 0, () =>
+  blocking.join('\n       '),
+);
 
 // The engine is the worker's business. Naming it in the markup is
 // how it ends up on the critical path.
 check(
   'the module is not named in the markup',
   !html.includes('.wasm'),
-  (html.match(/[^"'\s]*\.wasm/g) ?? []).join(', '),
+  () => (html.match(/[^"'\s]*\.wasm/g) ?? []).join(', '),
 );
 check(
   'the corpus is not named in the markup',
   !html.includes('/fixtures/'),
-  (html.match(/[^"'\s]*\/fixtures\/[^"'\s]*/g) ?? []).join(', '),
+  () => (html.match(/[^"'\s]*\/fixtures\/[^"'\s]*/g) ?? []).join(', '),
 );
+const preloads = html.match(/<link\b[^>]*rel="preload"[^>]*>/g) ?? [];
 check(
-  'nothing but the display face is preloaded',
-  (html.match(/rel="preload"/g) ?? []).length === 1 && html.includes('as="font"'),
+  'nothing but the display faces is preloaded',
+  preloads.length > 0 &&
+    preloads.length <= 2 &&
+    preloads.every((tag) => tag.includes('as="font"')),
+  () => `${preloads.length} preload(s): ${preloads.join(' ')}`,
 );
 
 // A reader whose scripts never run still gets a book.
 const runs = (html.match(/<text\b/g) ?? []).length;
-check('the page the server sends is a typeset page', runs > 0, `${runs} runs of shaped text`);
+check('the page the server sends is a typeset page', runs > 0, () => `${runs} runs of shaped text`);
 
 // Glass goes around a demo, never on it.
 check('no demo container is a blurred surface', !css.includes('backdrop-filter'));

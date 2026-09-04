@@ -24,7 +24,7 @@ const heads = [
 ];
 ---
 
-<div class="scroller f-glass">
+<div class="scroller">
   <table>
     <caption class="sr-only">
       Stage timings and peak layout memory for two public-domain novels.
@@ -66,7 +66,8 @@ const heads = [
     width: 100%;
     min-width: 44rem;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-family: var(--f-chrome);
+    font-size: 0.82rem;
   }
 
   caption {
@@ -75,49 +76,54 @@ const heads = [
 
   th,
   td {
-    padding: 0.7rem 1rem;
+    padding: 0.7rem 0.9rem;
+    border: 3px solid var(--f-rule);
     text-align: end;
     white-space: nowrap;
   }
 
   thead th {
-    font-family: var(--f-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.06em;
+    background: var(--f-rule);
+    color: var(--f-ground);
+    font-size: 0.68rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--f-text-muted);
-    border-bottom: 1px solid var(--f-hairline);
-  }
-
-  tbody th {
-    font-family: var(--f-display);
-    font-size: 1.05rem;
-    font-weight: 500;
-    font-style: italic;
-    text-align: start;
-    color: var(--f-text);
   }
 
   thead th:first-child {
     text-align: start;
   }
 
+  tbody th {
+    background: var(--f-panel);
+    color: var(--f-panel-ink);
+    font-family: var(--f-display);
+    font-variation-settings: var(--f-display-var);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-align: start;
+  }
+
   tbody td {
-    font-family: var(--f-mono);
-    color: var(--f-text);
+    background: var(--f-panel);
+    color: var(--f-panel-ink);
     font-variant-numeric: tabular-nums;
   }
 
-  tbody tr + tr th,
-  tbody tr + tr td {
-    border-top: 1px solid var(--f-hairline);
+  /* The memory figure is the one the budgets are written against. */
+  tbody td:last-child {
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
   }
 
   .note {
     margin: 0.9rem 0 0;
-    font-size: 0.8125rem;
-    color: var(--f-text-muted);
+    font-family: var(--f-chrome);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
   }
 
   .sr-only {

@@ -30,8 +30,10 @@ const year = new Date().getUTCFullYear();
     justify-content: space-between;
     flex-wrap: wrap;
     margin-top: 3rem;
-    font-size: var(--sl-text-sm);
-    color: var(--f-text-muted);
+    font-family: var(--f-chrome);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--f-ink);
   }
 
   .meta > :global(p:only-child) {
@@ -43,10 +45,14 @@ const year = new Date().getUTCFullYear();
     align-items: center;
     gap: 0.9rem;
     margin: 1.5rem 0 2rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--f-hairline);
-    font-size: var(--sl-text-xs);
-    color: var(--f-text-muted);
+    padding: 1rem;
+    border: 3px solid var(--f-rule);
+    background: var(--f-foot-bg);
+    color: var(--f-foot-ink);
+    font-family: var(--f-chrome);
+    font-size: 0.7rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
   }
 
   .colophon .f-mark {

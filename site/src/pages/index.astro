@@ -3,7 +3,8 @@ import '../styles/theme.css';
 import { Code } from 'astro:components';
 import Consumers from '../components/Consumers.astro';
 import Playground from '../components/demos/Playground.astro';
-import garamond from '../assets/fonts/ebgaramond-subset.woff2';
+import bricolage from '../assets/fonts/bricolage-subset.woff2';
+import fleuronMixed from '../assets/fonts/fleuron-mixed-subset.woff2';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/zachhannum/fleuron';
@@ -50,36 +51,58 @@ const description =
     <meta property="og:title" content="fleuron" />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <!-- The face the display type is set in. Nothing else on the
-         critical path waits on the network. -->
+    <!-- The face the display type is set in, and the flowered cut the
+         headline opens on. Nothing else on the critical path waits on
+         the network. -->
+    <link rel="preload" href={bricolage} as="font" type="font/woff2" crossorigin />
     <link
       rel="preload"
-      href={garamond}
+      href={fleuronMixed}
       as="font"
       type="font/woff2"
       crossorigin
     />
+    <!-- The theme the reader chose, under the key the docs keep it in,
+         stamped before the first paint. Left unset, the page follows
+         the system. -->
+    <script is:inline>
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem('starlight-theme');
+        } catch (e) {}
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.dataset.theme = stored;
+        }
+      })();
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
 
-    <header class="nav f-chrome">
-      <a class="brand" href={`${base}/`}>
-        <span class="f-mark" aria-hidden="true">&#10086;</span>
-        <span>fleuron</span>
-      </a>
-      <nav aria-label="Primary">
-        <a href={`${base}/overview/`}>Docs</a>
-        <a href={`${base}/api/fleuron/`}>API</a>
-        <a href={repo}>GitHub</a>
-      </nav>
-    </header>
+    <div class="f-bar"><i></i><i></i><i></i><i></i></div>
+
+    <div class="wrap">
+      <header class="nav">
+        <a class="brand" href={`${base}/`}>
+          <span>fleuron</span>
+          <span class="f-mark" aria-hidden="true">&#10086;</span>
+        </a>
+        <nav aria-label="Primary">
+          <a href={`${base}/overview/`}>Docs</a>
+          <a href={`${base}/api/fleuron/`}>API</a>
+          <a href={repo}>GitHub</a>
+          <!-- Revealed by the script that gives it something to do. -->
+          <button class="flip" type="button" hidden>Theme</button>
+        </nav>
+      </header>
+    </div>
 
     <main id="main">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">CSS paged media, in Rust</p>
-          <h1>A typesetting engine<br />for novels.</h1>
+          <p class="eyebrow f-eyebrow">CSS paged media, in Rust</p>
+          <h1><span class="ini">A</span> typesetting engine<br />for novels.</h1>
           <p class="lede">
             fleuron turns a manuscript into a typeset book and renders it
             as a print ready PDF. Styling is CSS. It is built for markdown
@@ -96,14 +119,13 @@ const description =
         <div class="wrap">
           <Playground demo="playground" />
           <p class="stage-note">
-            <span class="f-mark" aria-hidden="true">&#10086;</span>
-            Fleuron playground. Change the manuscript
+            <b>Fleuron playground.</b> Change the manuscript
             or the stylesheet and watch the book update in real time.
           </p>
         </div>
       </section>
 
-      <section class="band f-dots">
+      <section class="band">
         <div class="wrap two-up">
           <div>
             <h2>Paged media</h2>
@@ -122,13 +144,13 @@ const description =
         </div>
       </section>
 
-      <section class="band">
+      <section class="band bright">
         <div class="wrap">
           <h2>Performance</h2>
           <p class="section-lede">
             fleron is built for speed. Two complete novels, measured from markdown to PDF.
           </p>
-          <div class="speed f-glass">
+          <div class="speed">
             <table>
               <caption class="sr-only">
                 Layout time and peak memory for two public-domain novels.
@@ -203,6 +225,35 @@ const description =
         <p><a href={repo}>github.com/zachhannum/fleuron</a></p>
       </div>
     </footer>
+
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        var flip = document.querySelector('.flip');
+        function now() {
+          if (root.dataset.theme === 'light' || root.dataset.theme === 'dark') {
+            return root.dataset.theme;
+          }
+          return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        function say() {
+          flip.setAttribute(
+            'aria-label',
+            now() === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme',
+          );
+        }
+        flip.hidden = false;
+        say();
+        flip.addEventListener('click', function () {
+          var next = now() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try {
+            localStorage.setItem('starlight-theme', next);
+          } catch (e) {}
+          say();
+        });
+      })();
+    </script>
   </body>
 </html>
 
@@ -213,8 +264,13 @@ const description =
     top: 0;
     z-index: 100;
     padding: 0.75rem 1rem;
-    background: var(--f-raise);
-    color: var(--f-text);
+    border: 3px solid var(--f-rule);
+    background: var(--f-ground);
+    color: var(--f-ink);
+    font-family: var(--f-chrome);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .skip:focus {
@@ -222,114 +278,156 @@ const description =
   }
 
   .nav {
-    position: fixed;
-    inset-inline: 0;
-    top: 0;
-    z-index: 20;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    height: 4rem;
-    padding-inline: clamp(1rem, 4vw, 3rem);
+    gap: 0.7rem 1.5rem;
+    padding-block: 0.9rem;
+    border-bottom: 3px solid var(--f-rule);
+    font-family: var(--f-chrome);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .brand {
     display: flex;
     align-items: baseline;
-    gap: 0.5rem;
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--f-text);
+    gap: 0.1rem;
+    font-family: var(--f-display);
+    font-variation-settings: var(--f-display-var);
+    font-weight: 700;
+    font-size: 1.45rem;
+    letter-spacing: -0.03em;
+    text-transform: lowercase;
+    color: var(--f-ink);
     text-decoration: none;
   }
 
   .brand .f-mark {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
   }
 
   .nav nav {
+    margin-left: auto;
     display: flex;
-    gap: clamp(1rem, 3vw, 2rem);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem 1.25rem;
   }
 
   .nav nav a {
-    font-size: 0.875rem;
-    color: var(--f-text-muted);
+    padding-bottom: 2px;
+    border-bottom: 3px solid transparent;
+    color: var(--f-ink);
     text-decoration: none;
   }
 
   .nav nav a:hover {
-    color: var(--f-text);
+    border-bottom-color: var(--f-ink-c);
   }
 
-  main {
-    padding-top: 4rem;
+  .flip {
+    padding: 0.3rem 0.55rem;
+    border: 2px solid var(--f-rule);
+    background: transparent;
+    color: var(--f-ink);
+    font: inherit;
+    font-family: var(--f-chrome);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .flip:hover {
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
+    border-color: var(--f-hi-ink);
   }
 
   .wrap {
-    width: min(72rem, 100% - clamp(2rem, 8vw, 6rem));
+    width: min(78rem, 100%);
     margin-inline: auto;
+    padding-inline: clamp(1.2rem, 4vw, 3rem);
   }
 
   .hero {
-    width: min(72rem, 100% - clamp(2rem, 8vw, 6rem));
+    width: min(78rem, 100%);
     margin-inline: auto;
-    padding-block: clamp(3rem, 6vw, 5rem) clamp(1.5rem, 3vw, 2.5rem);
+    padding-inline: clamp(1.2rem, 4vw, 3rem);
+    padding-block: clamp(1.8rem, 4vw, 2.9rem) 1.6rem;
   }
 
   /* The demo is the hero image, so it gets the width the page has
      and the copy above it keeps a reading measure. */
   .stage {
-    padding-bottom: clamp(3.5rem, 8vw, 6rem);
+    padding-bottom: clamp(3rem, 7vw, 4.5rem);
   }
 
   .stage-note {
-    max-width: 42rem;
-    margin: 1.25rem 0 0;
-    font-size: 0.875rem;
-    line-height: 1.65;
-    color: var(--f-text-muted);
+    margin: 1.1rem 0 0;
+    font-family: var(--f-chrome);
+    font-size: 0.76rem;
+    line-height: 1.7;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
-  .stage-note .f-mark {
-    color: var(--f-ember);
-    margin-right: 0.35rem;
+  .stage-note b {
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
+    padding: 0.1rem 0.35rem;
+    font-weight: 700;
   }
 
   .eyebrow {
-    margin: 0 0 1.25rem;
-    font-family: var(--f-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--f-text-muted);
+    margin: 0 0 1.3rem;
   }
 
+  /* The plates, out of register. Both ghosts are process inks, so the
+     headline reads the same way on either ground. */
   h1 {
     margin: 0;
+    max-width: 17ch;
     font-family: var(--f-display);
-    font-size: clamp(2.6rem, 1.5rem + 3.8vw, 4.1rem);
-    font-weight: 500;
-    line-height: 1.02;
-    letter-spacing: -0.015em;
-    color: var(--f-text);
+    font-variation-settings: var(--f-display-var);
+    font-weight: 600;
+    font-size: clamp(2.5rem, 7vw, 5.8rem);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+    color: var(--f-ink);
+    text-shadow:
+      var(--f-gx) var(--f-gy) 0 var(--f-ink-c),
+      calc(var(--f-gx) * -0.8) calc(var(--f-gy) * -0.8) 0 var(--f-ink-m);
+    /* Room for the initial to hang its flowers into. */
+    padding-left: 0.08em;
+    margin-left: -0.08em;
+  }
+
+  /* One cut weight in this face. Left to inherit the headline's 600
+     the browser fakes the bold, and the glyph is dense enough. */
+  h1 .ini {
+    font-family: var(--f-display-ini);
+    font-weight: 400;
+    letter-spacing: 0.02em;
   }
 
   .lede {
-    max-width: 34rem;
-    margin: 1.5rem 0 0;
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    color: var(--f-text-muted);
+    max-width: 48ch;
+    margin: 1.4rem 0 0;
+    font-size: 1.02rem;
+    line-height: 1.5;
+    font-weight: 500;
   }
 
   .cta {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.75rem;
-    margin-top: 2rem;
+    margin-top: 1.5rem;
   }
 
   .cta.center {
@@ -338,89 +436,103 @@ const description =
 
   .button {
     display: inline-block;
-    padding: 0.7rem 1.4rem;
-    border: 1px solid var(--f-hairline-strong);
-    border-radius: 999px;
-    font-size: 0.9375rem;
-    color: var(--f-text);
+    padding: 0.78rem 1.3rem;
+    border: 3px solid var(--f-rule);
+    background: var(--f-btn-bg);
+    color: var(--f-ink);
+    box-shadow: 6px 6px 0 var(--f-rule);
+    font-family: var(--f-chrome);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-decoration: none;
-    background: var(--f-glass-solid);
   }
 
   .button:hover {
-    border-color: var(--f-text-faint);
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 var(--f-rule);
   }
 
   .button.primary {
-    background: var(--f-accent-deep);
-    border-color: var(--f-accent-deep);
-    color: #ffffff;
-    font-weight: 500;
+    background: var(--f-btn-p-bg);
+    color: var(--f-btn-p-ink);
+    box-shadow: 6px 6px 0 var(--f-btn-p-shadow);
   }
 
   .button.primary:hover {
-    filter: brightness(1.1);
+    box-shadow: 3px 3px 0 var(--f-btn-p-shadow);
   }
 
-  .claim {
-    max-width: 34rem;
-    margin: 2rem 0 0;
-    font-size: 0.9375rem;
-    line-height: 1.6;
-    color: var(--f-text-muted);
+  @media (prefers-reduced-motion: reduce) {
+    .button:hover {
+      transform: none;
+    }
   }
 
   .band {
-    padding-block: clamp(3.5rem, 8vw, 6rem);
-    border-top: 1px solid var(--f-hairline);
+    padding-block: clamp(2rem, 4.5vw, 3.2rem);
+    border-top: 3px solid var(--f-rule);
+  }
+
+  /* The performance band is a full-bleed cyan panel in both themes,
+     so the numbers land on one ground wherever they are read. */
+  .band.bright {
+    background: var(--f-bright-bg);
+    color: var(--f-bright-ink);
   }
 
   .band h2 {
-    margin: 0;
+    margin: 0 0 1rem;
     font-family: var(--f-display);
-    font-size: clamp(1.9rem, 1.3rem + 2vw, 2.75rem);
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--f-text);
+    font-variation-settings: var(--f-display-var);
+    font-weight: 600;
+    font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: inherit;
   }
 
   .section-lede {
-    max-width: 44rem;
-    margin: 1rem 0 2.5rem;
-    font-size: 1rem;
-    line-height: 1.7;
-    color: var(--f-text-muted);
+    max-width: 52ch;
+    margin: 0 0 1.5rem;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    font-weight: 500;
   }
 
   .section-lede.center {
     margin-inline: auto;
-    text-align: center;
   }
 
   .section-lede code {
-    font-family: var(--f-mono);
-    font-size: 0.9em;
-    color: var(--f-text);
+    font-family: var(--f-chrome);
+    font-size: 0.86em;
+    font-weight: 700;
   }
 
-  a:not(.button):not(.brand) {
-    color: var(--f-accent);
+  main a:not(.button) {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--f-ink-m);
+    text-decoration-thickness: 2px;
     text-underline-offset: 0.2em;
   }
 
-  .nav nav a,
-  .foot a {
-    color: var(--f-text-muted);
-  }
-
-  .nav nav a:hover {
-    color: var(--f-text);
+  .band.bright a:not(.button) {
+    text-decoration-color: var(--f-bright-ink);
   }
 
   .two-up {
     display: grid;
-    gap: clamp(2rem, 5vw, 4rem);
+    gap: clamp(1.5rem, 4vw, 3rem);
     align-items: start;
+  }
+
+  /* The column holds a code block that scrolls, which needs a track
+     free to be narrower than the code in it. */
+  .two-up > * {
+    min-width: 0;
   }
 
   @media (min-width: 60rem) {
@@ -430,71 +542,28 @@ const description =
   }
 
   .two-up p {
-    max-width: 38rem;
-    font-size: 1rem;
-    line-height: 1.75;
-    color: var(--f-text-muted);
-  }
-
-  .defaults {
-    padding: clamp(1.5rem, 3vw, 2.25rem);
-  }
-
-  .defaults h3 {
-    margin: 0;
-    font-family: var(--f-display);
-    font-size: 1.4rem;
+    max-width: 52ch;
+    font-size: 0.98rem;
+    line-height: 1.55;
     font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--f-text);
-  }
-
-  .defaults p {
-    margin: 0.5rem 0 1.25rem;
-    font-size: 0.9375rem;
-    color: var(--f-text-muted);
-  }
-
-  .defaults dl {
-    margin: 0;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.75rem 1.25rem;
-    font-size: 0.9375rem;
-    line-height: 1.5;
-  }
-
-  .defaults dt {
-    font-family: var(--f-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--f-text-muted);
-    padding-top: 0.15em;
-  }
-
-  .defaults dd {
-    margin: 0;
-    color: var(--f-text);
   }
 
   .two-up p code {
-    font-family: var(--f-mono);
-    font-size: 0.9em;
-    color: var(--f-text);
+    font-family: var(--f-chrome);
+    font-size: 0.86em;
+    font-weight: 700;
   }
 
-  /* Code keeps one dark ground in both themes, matching the panels in
-     the consumer tabs. */
   .page-css :global(pre) {
     margin: 0;
     padding: 1.1rem 1.25rem;
     overflow-x: auto;
-    background: #0b0d12 !important;
-    border: 1px solid var(--f-hairline);
-    border-radius: var(--f-radius-sm);
-    font-size: 0.8125rem;
-    line-height: 1.65;
+    border: 3px solid var(--f-rule);
+    background: var(--f-code-bg) !important;
+    box-shadow: 10px 10px 0 var(--f-box-shadow);
+    font-family: var(--f-chrome);
+    font-size: 0.78rem;
+    line-height: 1.7;
   }
 
   .speed {
@@ -505,7 +574,8 @@ const description =
     width: 100%;
     min-width: 34rem;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-family: var(--f-chrome);
+    font-size: 0.82rem;
   }
 
   .speed caption {
@@ -514,19 +584,19 @@ const description =
 
   .speed th,
   .speed td {
-    padding: 0.7rem 1rem;
+    padding: 0.7rem 0.9rem;
+    border: 3px solid var(--f-rule);
     text-align: end;
     white-space: nowrap;
   }
 
   .speed thead th {
-    font-family: var(--f-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.06em;
+    background: var(--f-rule);
+    color: var(--f-ground);
+    font-size: 0.68rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--f-text-muted);
-    border-bottom: 1px solid var(--f-hairline);
   }
 
   .speed thead th:first-child {
@@ -534,30 +604,34 @@ const description =
   }
 
   .speed tbody th {
+    background: var(--f-panel);
+    color: var(--f-panel-ink);
     font-family: var(--f-display);
-    font-size: 1.05rem;
-    font-weight: 500;
-    font-style: italic;
+    font-variation-settings: var(--f-display-var);
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
     text-align: start;
-    color: var(--f-text);
   }
 
   .speed tbody td {
-    font-family: var(--f-mono);
+    background: var(--f-panel);
+    color: var(--f-panel-ink);
     font-variant-numeric: tabular-nums;
-    color: var(--f-text);
   }
 
-  .speed tbody tr + tr th,
-  .speed tbody tr + tr td {
-    border-top: 1px solid var(--f-hairline);
+  /* The memory figure is the one the budgets are written against. */
+  .speed tbody td:last-child {
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
   }
 
   .speed-note {
     margin: 0.9rem 0 0;
-    max-width: 44rem;
-    font-size: 0.8125rem;
-    color: var(--f-text-muted);
+    font-family: var(--f-chrome);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .sr-only {
@@ -576,16 +650,22 @@ const description =
     text-align: center;
   }
 
+  .closing .section-lede {
+    text-align: center;
+  }
+
   .closing-mark {
     margin: 0 0 1.5rem;
     font-size: 2.5rem;
   }
 
   .foot {
-    padding-block: 2.5rem 4rem;
-    border-top: 1px solid var(--f-hairline);
-    font-size: 0.8125rem;
-    color: var(--f-text-muted);
+    padding-block: 1.4rem;
+    border-top: 3px solid var(--f-rule);
+    background: var(--f-foot-bg);
+    color: var(--f-foot-ink);
+    font-family: var(--f-chrome);
+    font-size: 0.72rem;
   }
 
   .foot .wrap {
@@ -599,10 +679,8 @@ const description =
     margin: 0;
   }
 
-  em {
-    font-family: var(--f-display);
-    font-style: italic;
-    font-size: 1.08em;
-    color: var(--f-text);
+  .foot a {
+    color: inherit;
+    text-decoration-color: var(--f-ink-m);
   }
 </style>

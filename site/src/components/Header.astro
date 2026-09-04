@@ -10,11 +10,13 @@ const shouldRenderSearch =
   config.components.Search !== '@astrojs/starlight/components/Search.astro';
 ---
 
+<div class="f-bar"><i></i><i></i><i></i><i></i></div>
+
 <div class="header">
   <div class="title-wrapper sl-flex">
     <a href={`${base}/`} class="site-title sl-flex">
-      <span class="f-mark" aria-hidden="true">&#10086;</span>
       <span translate="no">fleuron</span>
+      <span class="f-mark" aria-hidden="true">&#10086;</span>
     </a>
   </div>
   <div class="sl-flex print:hidden">
@@ -30,12 +32,15 @@ const shouldRenderSearch =
 </div>
 
 <style>
+  /* Starlight gives the bar its padding; the colour bar above runs
+     the full width, so this row takes it back. */
   .header {
     display: flex;
     gap: var(--sl-nav-gap);
     justify-content: space-between;
     align-items: center;
-    height: 100%;
+    height: calc(100% - 32px);
+    padding: var(--sl-nav-pad-y) var(--sl-nav-pad-x);
   }
 
   .title-wrapper {
@@ -47,29 +52,36 @@ const shouldRenderSearch =
 
   .site-title {
     align-items: baseline;
-    gap: 0.5rem;
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--f-text);
+    gap: 0.1rem;
+    font-family: var(--f-display);
+    font-variation-settings: var(--f-display-var);
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    text-transform: lowercase;
+    color: var(--f-ink);
     text-decoration: none;
     white-space: nowrap;
     min-width: 0;
   }
 
   .site-title .f-mark {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
   }
 
   .chrome-link {
-    font-size: var(--sl-text-sm);
-    color: var(--f-text-muted);
+    padding-bottom: 2px;
+    border-bottom: 3px solid transparent;
+    font-family: var(--f-chrome);
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--f-ink);
     text-decoration: none;
-    letter-spacing: 0.04em;
   }
 
   .chrome-link:hover {
-    color: var(--f-text);
+    border-bottom-color: var(--f-ink-c);
   }
 
   .right-group,
@@ -81,7 +93,7 @@ const shouldRenderSearch =
   .social-icons::after {
     content: '';
     height: 1.5rem;
-    border-inline-end: 1px solid var(--f-hairline);
+    border-inline-end: 3px solid var(--f-rule);
   }
 
   @media (min-width: 50rem) {
@@ -92,6 +104,7 @@ const shouldRenderSearch =
       --__toc-width: 0rem;
     }
     .header {
+      height: calc(100% - 32px);
       --__sidebar-width: max(
         0rem,
         var(--sl-content-inline-start, 0rem) - var(--sl-nav-pad-x)
