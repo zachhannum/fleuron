@@ -131,20 +131,20 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 
 ## Releases
 
-`.github/workflows/release.yml` is the only thing that publishes. A
-`v*` tag runs it: the wasm workflow again with the tag held against
-every version the repository carries, then both tarballs and the
-module on a GitHub release and both packages on the registry. A manual
-dispatch raises the version and cuts the tag, and the tag does the
-rest.
+`.github/workflows/release.yml` is the only thing that publishes, and a
+`v*` tag is the only thing that runs it: the wasm workflow again with
+the tag held against every version the repository carries, then both
+tarballs and the module on a GitHub release and both packages on the
+registry. `cut-release.yml` is the dispatch that raises the version and
+cuts that tag.
 
 npm authenticates the workflow over OIDC, so no npm token exists.
 Trusted publishing is configured per package on npmjs.com against
 `release.yml`, which is why the publish steps stay in that file rather
 than moving into the workflow it calls.
 
-A dispatched release raises the version on `main`, which is protected,
-and a personal repository can exempt neither `github-actions[bot]` nor
+`cut-release.yml` raises the version on `main`, which is protected, and
+a personal repository can exempt neither `github-actions[bot]` nor
 GitHub's Actions app from that. So the release owns a GitHub App, whose
 installation is on the branch ruleset's bypass list. It mints a token
 from the `RELEASE_APP_ID` variable and the `RELEASE_APP_PRIVATE_KEY`

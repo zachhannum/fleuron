@@ -1,73 +1,23 @@
-# The one workflow that publishes. A tag runs the wasm workflow again,
-# with the tag held against every version the repository carries, and
-# the module and the built package come out of that run rather than
-# being built a second time here.
+# The one workflow that publishes, and a `v*` tag is the only thing that
+# runs it. It runs the wasm workflow again, with the tag held against
+# every version the repository carries, and the module and the built
+# package come out of that run rather than being built a second time
+# here.
 name: release
 
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: "Which part of the version to raise"
-        type: choice
-        options: [patch, minor, major]
-        default: patch
 
 permissions:
-  contents: write
-  # The release's own assets, signed back to the commit and the run that
-  # built them. npm attests the tarballs it takes on its own.
-  attestations: write
-  # npm authenticates the workflow over OIDC, so publishing needs no
-  # token in the repository's secrets.
-  id-token: write
+  contents: read
 
 jobs:
-  # A dispatch raises the version and cuts the tag, and stops there. The
-  # tag goes up under the app, which starts this workflow again on the
-  # push trigger, and that run is the one that checks and publishes.
-  tag:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      # `main` takes no push from `GITHUB_TOKEN`. It is protected, and a
-      # personal repository can exempt neither an administrator's bot nor
-      # GitHub's own Actions app from that: the bypass list holds apps
-      # installed on this account, so the release is one of those.
-      #
-      # The token checkout leaves in the local config is sent on every
-      # request to github.com, whichever remote a push names, so both
-      # pushes here go up as the app whatever they are addressed to.
-      - uses: actions/create-github-app-token@v3
-        id: app
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-      - uses: actions/checkout@v7
-        with:
-          token: ${{ steps.app.outputs.token }}
-      - name: The bump and the tag
-        env:
-          BUMP: ${{ inputs.bump }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          version=$(node scripts/version.mjs --bump "$BUMP")
-          git commit -am "Release v$version"
-          git tag -a "v$version" -m "v$version"
-          # The branch first. Two refs are not one push, and a tag whose
-          # commit went nowhere is what the other order leaves behind.
-          git push origin "HEAD:$GITHUB_REF_NAME"
-          git push origin "v$version"
-
   # The module built the way a host consumes it, the fixture book through
   # a worker and a browser, and the tarball installed into a directory
   # that has never seen this repository. A failure here is a release that
   # does not happen.
   checks:
-    if: github.event_name == 'push'
     uses: ./.github/workflows/wasm.yml
     with:
       tag: ${{ github.ref_name }}
@@ -75,6 +25,15 @@ jobs:
   publish:
     needs: checks
     runs-on: ubuntu-latest
+    permissions:
+      # The release itself, and its assets signed back to the commit and
+      # the run that built them. npm attests the tarballs it takes on its
+      # own.
+      contents: write
+      attestations: write
+      # npm authenticates the workflow over OIDC, so publishing needs no
+      # token in the repository's secrets.
+      id-token: write
     env:
       TAG: ${{ github.ref_name }}
     steps:
