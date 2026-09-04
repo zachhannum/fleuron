@@ -50,9 +50,13 @@ check(
   !html.includes('/fixtures/'),
   () => (html.match(/[^"'\s]*\/fixtures\/[^"'\s]*/g) ?? []).join(', '),
 );
+const preloads = html.match(/<link\b[^>]*rel="preload"[^>]*>/g) ?? [];
 check(
-  'nothing but the display face is preloaded',
-  (html.match(/rel="preload"/g) ?? []).length === 1 && html.includes('as="font"'),
+  'nothing but the display faces is preloaded',
+  preloads.length > 0 &&
+    preloads.length <= 2 &&
+    preloads.every((tag) => tag.includes('as="font"')),
+  () => `${preloads.length} preload(s): ${preloads.join(' ')}`,
 );
 
 // A reader whose scripts never run still gets a book.

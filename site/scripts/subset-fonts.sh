@@ -33,5 +33,13 @@ fonttools varLib.instancer -q -o "$work/bricolage.ttf" \
   "$root/site/fonts/BricolageGrotesque-VF.ttf" opsz=96 wdth=100
 subset "$work/bricolage.ttf" bricolage-subset
 
+# Only the letter the landing headline opens on, which is the
+# difference between three kilobytes and a hundred.
+pyftsubset "$root/site/fonts/Fleuron-Mixed.otf" \
+  --unicodes='U+0041' \
+  --layout-features='' \
+  --flavor=woff2 --with-zopfli \
+  --output-file="$out/fleuron-mixed-subset.woff2"
+
 subset "$root/site/fonts/SpaceMono-Regular.ttf" spacemono-subset
 subset "$root/site/fonts/SpaceMono-Bold.ttf" spacemono-bold-subset

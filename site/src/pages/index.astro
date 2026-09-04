@@ -4,6 +4,7 @@ import { Code } from 'astro:components';
 import Consumers from '../components/Consumers.astro';
 import Playground from '../components/demos/Playground.astro';
 import bricolage from '../assets/fonts/bricolage-subset.woff2';
+import fleuronMixed from '../assets/fonts/fleuron-mixed-subset.woff2';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/zachhannum/fleuron';
@@ -50,11 +51,13 @@ const description =
     <meta property="og:title" content="fleuron" />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <!-- The face the display type is set in. Nothing else on the
-         critical path waits on the network. -->
+    <!-- The face the display type is set in, and the flowered cut the
+         headline opens on. Nothing else on the critical path waits on
+         the network. -->
+    <link rel="preload" href={bricolage} as="font" type="font/woff2" crossorigin />
     <link
       rel="preload"
-      href={bricolage}
+      href={fleuronMixed}
       as="font"
       type="font/woff2"
       crossorigin
@@ -99,7 +102,7 @@ const description =
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow f-eyebrow">CSS paged media, in Rust</p>
-          <h1>A typesetting engine<br />for novels.</h1>
+          <h1><span class="ini">A</span> typesetting engine<br />for novels.</h1>
           <p class="lede">
             fleuron turns a manuscript into a typeset book and renders it
             as a print ready PDF. Styling is CSS. It is built for markdown
@@ -398,6 +401,17 @@ const description =
     text-shadow:
       var(--f-gx) var(--f-gy) 0 var(--f-ink-c),
       calc(var(--f-gx) * -0.8) calc(var(--f-gy) * -0.8) 0 var(--f-ink-m);
+    /* Room for the initial to hang its flowers into. */
+    padding-left: 0.08em;
+    margin-left: -0.08em;
+  }
+
+  /* One cut weight in this face. Left to inherit the headline's 600
+     the browser fakes the bold, and the glyph is dense enough. */
+  h1 .ini {
+    font-family: var(--f-display-ini);
+    font-weight: 400;
+    letter-spacing: 0.02em;
   }
 
   .lede {
