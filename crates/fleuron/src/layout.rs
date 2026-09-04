@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use crate::content::{Block, Book, Inline, NodeId, Section, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, ShapedRun};
+use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
@@ -400,21 +400,13 @@ impl<'a> Paginator<'a> {
     /// One string as a single shaped line: page furniture, and the
     /// ornaments and initial letters that are content but not prose.
     fn line_of(&self, text: &str, style: ParagraphStyle) -> Option<Line> {
-        let glyphs = self.registry.shape(style.font_id, text)?;
-        let run = ShapedRun {
-            font_id: style.font_id,
-            size: style.size,
-            text: text.to_string(),
-            text_start: 0,
-            advance: glyphs.iter().map(|g| g.x_advance).sum(),
-            glyphs,
-        };
+        let runs = self.lines.shape(text, style)?;
         Some(Line {
-            width: run.advance,
+            width: runs.iter().map(|run| run.advance).sum(),
             overhang: 0.0,
             protrusion: 0.0,
-            box_: self.lines.line_box(std::slice::from_ref(&run), style),
-            runs: vec![run],
+            box_: self.lines.line_box(&runs, style),
+            runs,
         })
     }
 
@@ -857,9 +849,8 @@ impl Paginator<'_> {
         let body_cap = cap_height(body_metrics) / body_metrics.units_per_em as f32 * body.size;
         let sunk = (sink - 1) as f32 * self.lines.strut(body).height() + body_cap;
         let style = ParagraphStyle {
-            font_id: initial.font_id,
             size: sunk * cap_metrics.units_per_em as f32 / cap_units,
-            line_height: initial.line_height,
+            ..initial.paragraph()
         };
         let line = self.line_of(&letter.to_string(), style)?;
         // A word space of the body text separates the cap from the

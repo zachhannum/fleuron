@@ -227,6 +227,46 @@ fn running_heads_and_roman_folios_reach_the_pdf() {
     );
 }
 
+/// A chapter title set in capitals is drawn in capitals and extracted
+/// as the author wrote it. The transform reaches the shaper; the
+/// glyph-to-character map still points at the source, which is what
+/// copy and paste and a search over the PDF read.
+#[test]
+fn a_transformed_title_extracts_as_the_author_wrote_it() {
+    const TITLE: &str = "A Voyage to Lilliput";
+    let source = write_source(
+        "transform",
+        &format!("---\ntitle: Travels\n---\n\n# {TITLE}\n\nThe prose under it.\n"),
+    );
+    let sheet = write_sheet(
+        "transform",
+        "h1 { text-transform: uppercase; letter-spacing: 0.08em }\n",
+    );
+    let (plain, _) = run("transform-plain", &[source.as_path()], &[]);
+    let (pdf, stderr) = run("transform", &[source.as_path()], &[sheet.as_path()]);
+    assert!(
+        !stderr.contains("unsupported"),
+        "display typography is in the subset: {stderr}",
+    );
+    assert!(
+        std::fs::read(&pdf).expect("the CLI wrote its output")
+            != std::fs::read(&plain).expect("the CLI wrote its output"),
+        "a title set in capitals and tracked out changed nothing",
+    );
+
+    let (Some(text), Some(untransformed)) = (extract_text(&pdf), extract_text(&plain)) else {
+        return;
+    };
+    assert!(
+        squeeze(&untransformed).contains(&squeeze(TITLE)),
+        "the untransformed title does not extract: {untransformed}",
+    );
+    assert!(
+        squeeze(&text).contains(&squeeze(TITLE)),
+        "the transformed title extracts as it was drawn, not as it was written: {text}",
+    );
+}
+
 /// The heading the fixture book's one chapter opens with, which the
 /// built-in sheet sets the `chapter` running string from.
 fn chapter_title(book: &Book) -> String {

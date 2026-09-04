@@ -4,6 +4,7 @@
 use fleuron::content::{Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use fleuron::style::{FontVariantCaps, TextTransform};
 use proptest::prelude::*;
 
 fn registry() -> &'static FontRegistry {
@@ -41,6 +42,29 @@ fn justified() -> LineBreakOptions {
         justify: true,
         ..Default::default()
     }
+}
+
+/// The body style with a title's tracking on it.
+fn tracked(letter_spacing: f32) -> ParagraphStyle {
+    ParagraphStyle {
+        letter_spacing,
+        ..body()
+    }
+}
+
+/// A line's width in points, as the measure sees it: every run
+/// against its own face and size, since font units do not commute
+/// across sizes.
+fn width_of(line: &Line) -> f32 {
+    line.runs
+        .iter()
+        .map(|run| {
+            let upem = registry().metrics(run.font_id).unwrap().units_per_em as f32;
+            run.advance as f32 / upem * run.size
+        })
+        .sum::<f32>()
+        - line.overhang
+        - line.protrusion
 }
 
 /// A line with no space glyph on it is a single word: the one thing
@@ -247,5 +271,94 @@ proptest! {
                 "hyphenated line is {width}pt over measure {measure}pt"
             );
         }
+    }
+
+    /// Tracking is width the breaker measures. A title set with it is
+    /// wider than the same title without, by the tracking times the
+    /// gaps between its glyphs, and no line of tracked text runs past
+    /// the measure.
+    #[test]
+    fn tracking_widens_the_line_and_still_fits_the_measure(
+        text in text_strategy(),
+        measure in 60.0f32..300.0,
+        letter_spacing in 0.01f32..1.5,
+    ) {
+        let layout = LineLayout::new(registry());
+        let style = tracked(letter_spacing);
+        let plain = layout.layout(&inlines_of(&text), body(), 1.0e6, LineBreakOptions::default());
+        let wide = layout.layout(&inlines_of(&text), style, 1.0e6, LineBreakOptions::default());
+        // Tracking goes after a cluster, not after a glyph: a
+        // ligature is one letter's worth of gap, not two.
+        let mut clusters: Vec<u32> = plain[0]
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.cluster))
+            .collect();
+        clusters.dedup();
+        let gaps = (clusters.len() - 1) as f32;
+        // Advances are integers, so each gap may be half a font unit
+        // out; at 11pt over 1000 units to the em that is 0.006pt.
+        let upem = registry().metrics(0).unwrap().units_per_em as f32;
+        let slack = gaps * 0.5 / upem * body().size + 0.01;
+        prop_assert!(
+            (width_of(&wide[0]) - width_of(&plain[0]) - letter_spacing * gaps).abs() < slack,
+            "a tracked title is not {gaps} gaps wider than an untracked one",
+        );
+
+        let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
+        for (i, line) in lines.iter().enumerate() {
+            let width = width_of(line);
+            prop_assert!(
+                width <= measure + 0.01 || is_single_word(line),
+                "tracked line {i} is {width}pt, measure {measure}pt"
+            );
+        }
+    }
+
+    /// Tracking does not cost justification its exactness: the glue
+    /// still opens to the measure, to the same tolerance the untracked
+    /// paragraph holds to.
+    #[test]
+    fn justified_tracked_lines_hit_the_measure(
+        text in text_strategy(),
+        measure in 60.0f32..300.0,
+        letter_spacing in 0.01f32..1.5,
+    ) {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(&inlines_of(&text), tracked(letter_spacing), measure, justified());
+        if lines.len() < 2 {
+            return Ok(());
+        }
+        for (i, line) in lines[..lines.len() - 1].iter().enumerate() {
+            if is_single_word(line) {
+                continue;
+            }
+            let width = width_of(line);
+            prop_assert!(
+                (width - measure).abs() < 0.01,
+                "justified tracked line {i} is {width}pt, measure {measure}pt"
+            );
+        }
+    }
+
+    /// Display typography is deterministic too: tracking, small
+    /// capitals and a transform are functions of the style, not of
+    /// anything a pass carries between runs.
+    #[test]
+    fn display_typography_is_deterministic(
+        text in text_strategy(),
+        measure in 20.0f32..300.0,
+        letter_spacing in 0.0f32..1.5,
+    ) {
+        let layout = LineLayout::new(registry());
+        let style = ParagraphStyle {
+            letter_spacing,
+            caps: FontVariantCaps::SmallCaps,
+            transform: TextTransform::Capitalize,
+            ..body()
+        };
+        let first = layout.layout(&inlines_of(&text), style, measure, justified());
+        let second = layout.layout(&inlines_of(&text), style, measure, justified());
+        prop_assert_eq!(first, second);
     }
 }

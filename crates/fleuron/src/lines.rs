@@ -18,8 +18,9 @@
 use std::ops::Range;
 
 use crate::content::{Inline, NodeId};
-use crate::fonts::{FontRegistry, ShapedGlyph};
+use crate::fonts::{Features, FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
+use crate::style::{FontVariantCaps, TextTransform};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 use serde::Serialize;
 use unicode_linebreak::{BreakOpportunity, linebreaks};
@@ -36,6 +37,12 @@ const SPACE_SHRINK: f32 = 1.0 / 3.0;
 /// stops being one.
 const LETTER_STRETCH: f32 = 0.02;
 const LETTER_SHRINK: f32 = 0.01;
+
+/// What a synthesized small capital is set at, as a fraction of the
+/// size around it. A face's own small caps sit a little above the
+/// x-height, and four-fifths of the cap height is about where that
+/// lands.
+const SMALL_CAPS_RATIO: f32 = 0.8;
 
 /// What a ragged line may leave at the right, as a fraction of the
 /// measure, before it counts as loose. Ragged setting has no glue to
@@ -81,6 +88,14 @@ pub struct ParagraphStyle {
     /// Line height as a unitless multiple of `size`, as in CSS
     /// `line-height: <number>`.
     pub line_height: f32,
+    /// Extra advance between glyphs, in points, from
+    /// `letter-spacing`. A line ends at its last glyph's own edge, so
+    /// nothing is added after it.
+    pub letter_spacing: f32,
+    /// Which capitals the text is drawn with.
+    pub caps: FontVariantCaps,
+    /// What the text is transformed to before it is shaped.
+    pub transform: TextTransform,
 }
 
 /// Where line layout gets the style of one inline node.
@@ -263,54 +278,197 @@ pub struct Line {
     pub box_: LineBox,
 }
 
-/// Flattened paragraph content: plain text plus, per style span, the
-/// byte range it covers. Style boundaries are segmentation
-/// boundaries — a shaped run never spans two fonts.
+/// Flattened paragraph content: the text as it is shaped, the text
+/// the author wrote under it, and, per style span, the byte range it
+/// covers. Style boundaries are segmentation boundaries — a shaped
+/// run never spans two fonts.
+#[derive(Default)]
 struct FlatParagraph {
+    /// What is shaped, measured and broken. `text-transform` and
+    /// synthesized small capitals have already been applied.
     text: String,
-    /// `(font_id, size, byte range into text)` in document order.
-    spans: Vec<(u16, f32, Range<usize>)>,
+    /// What the author wrote. Kept only from the point something
+    /// first transforms; until then `text` is the source.
+    source: String,
+    /// Source offset of every byte of `text`, kept alongside
+    /// `source`.
+    map: Vec<u32>,
+    /// Whether anything has been written that differs from its
+    /// source.
+    transformed: bool,
+    /// Whether the next character opens a word: what `capitalize`
+    /// reads.
+    word_start: bool,
+    /// The style spans, in document order.
+    spans: Vec<Span>,
 }
 
-fn flatten(inlines: &[Inline], style: ParagraphStyle, styles: &dyn InlineStyles) -> FlatParagraph {
-    let mut flat = FlatParagraph {
-        text: String::new(),
-        spans: Vec::new(),
-    };
-    walk_inlines(inlines, style, styles, &mut flat);
-    flat
+/// One span of uniform shaping: a face, a size, the tracking after
+/// each of its clusters, and the features it is shaped with.
+struct Span {
+    font_id: u16,
+    size: f32,
+    /// Extra advance after each cluster, in points.
+    tracking: f32,
+    features: Features,
+    /// Byte range in the paragraph's shaped text.
+    range: Range<usize>,
 }
 
-/// Flattens inlines, each one styled as the tree says. A style
-/// boundary is a span boundary, so a run never spans two faces.
-fn walk_inlines(
-    inlines: &[Inline],
-    style: ParagraphStyle,
-    styles: &dyn InlineStyles,
-    flat: &mut FlatParagraph,
-) {
-    for inline in inlines {
-        match inline {
-            Inline::Text { value, .. } => {
-                let start = flat.text.len();
-                flat.text.push_str(value);
-                flat.spans
-                    .push((style.font_id, style.size, start..flat.text.len()));
-            }
-            Inline::Code { id, value, .. } => {
-                let code = styles.style(*id, style);
-                let start = flat.text.len();
-                flat.text.push_str(value);
-                flat.spans
-                    .push((code.font_id, code.size, start..flat.text.len()));
-            }
-            Inline::Emphasis { id, children, .. }
-            | Inline::Strong { id, children, .. }
-            | Inline::Link { id, children, .. } => {
-                walk_inlines(children, styles.style(*id, style), styles, flat);
-            }
+/// How a span gets its small capitals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SmallCaps {
+    /// It does not: the text is set in the letters it was written in.
+    Off,
+    /// The face draws them, and the shaper is asked for `smcp`.
+    Feature,
+    /// The face does not, so lowercase letters are set as capitals at
+    /// a reduced size.
+    Synthesized,
+}
+
+impl FlatParagraph {
+    /// An empty paragraph, at a word boundary because nothing has
+    /// been written yet.
+    fn new() -> FlatParagraph {
+        FlatParagraph {
+            word_start: true,
+            ..FlatParagraph::default()
         }
     }
+
+    /// The text extraction reads back: the source where something
+    /// transformed, and the shaped text where nothing did.
+    fn source_text(&self) -> &str {
+        if self.transformed {
+            &self.source
+        } else {
+            &self.text
+        }
+    }
+
+    /// Where one offset in the shaped text sits in the source.
+    fn to_source(&self, at: usize) -> usize {
+        if !self.transformed {
+            return at;
+        }
+        match self.map.get(at) {
+            Some(offset) => *offset as usize,
+            None => self.source.len(),
+        }
+    }
+
+    /// Starts keeping the source text, backfilling what has been
+    /// written so far, all of which stood as it was written.
+    fn start_mapping(&mut self) {
+        if self.transformed {
+            return;
+        }
+        self.transformed = true;
+        self.source.push_str(&self.text);
+        self.map.extend(0..self.text.len() as u32);
+    }
+
+    /// Appends a stretch of text nothing transformed.
+    fn push_verbatim(&mut self, value: &str) {
+        if self.transformed {
+            let at = self.source.len() as u32;
+            self.map
+                .extend((0..value.len() as u32).map(|byte| at + byte));
+            self.source.push_str(value);
+        }
+        self.text.push_str(value);
+    }
+
+    /// Appends one character shaped as something other than itself.
+    /// Every byte written points back at the character it came from,
+    /// which is what extraction follows.
+    fn push_mapped(&mut self, letter: char, written: &str) {
+        self.start_mapping();
+        let at = self.source.len() as u32;
+        self.map.extend(std::iter::repeat_n(at, written.len()));
+        self.source.push(letter);
+        self.text.push_str(written);
+    }
+
+    /// Appends one styled stretch of text: `text-transform` first,
+    /// then small capitals over what it produced, and the spans they
+    /// come to.
+    fn push_styled(&mut self, value: &str, style: ParagraphStyle, caps: SmallCaps) {
+        if style.transform == TextTransform::None && caps != SmallCaps::Synthesized {
+            let start = self.text.len();
+            self.push_verbatim(value);
+            if let Some(last) = value.chars().next_back() {
+                self.word_start = !continues_word(last);
+            }
+            self.span(style, caps, false, start);
+            return;
+        }
+        // A span breaks where the reduced size does, so the letters a
+        // synthesis raised are shaped apart from the ones it left.
+        let mut open: Option<(bool, usize)> = None;
+        let mut written = String::new();
+        for letter in value.chars() {
+            written.clear();
+            let mut changed = style.transform.write(letter, self.word_start, &mut written);
+            self.word_start = !continues_word(letter);
+            let small = raise(caps, &mut written, &mut changed);
+            if open.map(|(was, _)| was) != Some(small) {
+                if let Some((was, at)) = open {
+                    self.span(style, caps, was, at);
+                }
+                open = Some((small, self.text.len()));
+            }
+            if changed {
+                self.push_mapped(letter, &written);
+            } else {
+                self.push_verbatim(&written);
+            }
+        }
+        if let Some((was, at)) = open {
+            self.span(style, caps, was, at);
+        }
+    }
+
+    /// Records the span that ends where the text now does.
+    fn span(&mut self, style: ParagraphStyle, caps: SmallCaps, small: bool, start: usize) {
+        if start >= self.text.len() {
+            return;
+        }
+        self.spans.push(Span {
+            font_id: style.font_id,
+            size: if small {
+                style.size * SMALL_CAPS_RATIO
+            } else {
+                style.size
+            },
+            tracking: style.letter_spacing,
+            features: Features {
+                small_caps: caps == SmallCaps::Feature,
+            },
+            range: start..self.text.len(),
+        });
+    }
+}
+
+/// Raises one character to a capital where a synthesis has to draw a
+/// small one, and answers whether it is set at the reduced size. Only
+/// what was lowercase is: a face's own small capitals leave the word
+/// space and the comma the size they were.
+fn raise(caps: SmallCaps, written: &mut String, changed: &mut bool) -> bool {
+    if caps != SmallCaps::Synthesized || !written.chars().any(char::is_lowercase) {
+        return false;
+    }
+    *written = written.to_uppercase();
+    *changed = true;
+    true
+}
+
+/// Whether a character carries a word on rather than ending it.
+/// `capitalize` raises the letter after every other kind, which is
+/// why `well-known` comes out with two capitals and `don't` with one.
+fn continues_word(letter: char) -> bool {
+    letter.is_alphanumeric() || letter == '\'' || letter == '\u{2019}'
 }
 
 /// A candidate line end: the exclusive byte offset where a line may
@@ -369,14 +527,23 @@ struct Widths {
     /// Whether a glyph's cluster starts at byte `i`. A break inside
     /// a cluster would cut a ligature in half and lose it.
     starts: Vec<bool>,
+    /// Tracking charged to the last cluster starting before byte `i`.
+    /// Empty where nothing is tracked, which is most paragraphs.
+    trailing: Vec<f32>,
 }
 
 impl Widths {
     fn build(text: &str, shaped: &[ShapedSpan]) -> Widths {
+        let tracked = shaped.iter().any(|span| span.tracking != 0.0);
         let mut widths = Widths {
             text: vec![0.0; text.len() + 1],
             spaces: vec![0.0; text.len() + 1],
             starts: vec![false; text.len() + 1],
+            trailing: if tracked {
+                vec![0.0; text.len() + 1]
+            } else {
+                Vec::new()
+            },
         };
         let bytes = text.as_bytes();
         for span in shaped {
@@ -388,20 +555,40 @@ impl Widths {
                     widths.spaces[at] += advance;
                 }
                 widths.starts[at] = true;
+                if tracked {
+                    widths.trailing[at] = span.tracking;
+                }
             }
         }
         // Exclusive prefixes: entry `i` totals the glyphs that
         // start before byte `i`, which is exactly the glyphs on a line
         // ending there.
-        let (mut text_total, mut space_total) = (0.0, 0.0);
+        let (mut text_total, mut space_total, mut track) = (0.0, 0.0, 0.0);
         for at in 0..widths.text.len() {
             let (here, space) = (widths.text[at], widths.spaces[at]);
             widths.text[at] = text_total;
             widths.spaces[at] = space_total;
             text_total += here;
             space_total += space;
+            if tracked {
+                let charged = widths.trailing[at];
+                widths.trailing[at] = track;
+                if widths.starts[at] {
+                    track = charged;
+                }
+            }
         }
         widths
+    }
+
+    /// The advance of the glyphs in `[from, to)`, less the tracking
+    /// charged after the last of them: what runs between two letters
+    /// does not run past the last one.
+    fn advance(&self, from: usize, to: usize) -> f32 {
+        if to <= from {
+            return 0.0;
+        }
+        self.text[to] - self.text[from] - self.trailing.get(to).copied().unwrap_or(0.0)
     }
 }
 
@@ -474,7 +661,7 @@ impl<'a> LineLayout<'a> {
         options: LineBreakOptions,
     ) -> Vec<Line> {
         let measure = measure.into();
-        let flat = flatten(inlines, style, styles);
+        let flat = self.flatten(inlines, style, styles);
         if flat.text.is_empty() {
             return Vec::new();
         }
@@ -486,24 +673,7 @@ impl<'a> LineLayout<'a> {
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
 
-        // Shape each span; a glyph's cluster is an offset into the
-        // span, which indexes the paragraph text once offset by span
-        // start.
-        // A span set at another size measures in its own font units,
-        // so `scale` takes it into the paragraph's.
-        let shaped: Vec<ShapedSpan> = flat
-            .spans
-            .iter()
-            .map(|(font_id, size, range)| ShapedSpan {
-                range: range.clone(),
-                scale: self.scale(*font_id, *size, style, upem),
-                glyphs: self
-                    .registry
-                    .shape(*font_id, &flat.text[range.clone()])
-                    .unwrap_or_default(),
-            })
-            .collect();
-
+        let shaped = self.shape_spans(&flat, style, upem);
         let widths = Widths::build(&flat.text, &shaped);
         let hyphen = self.hyphen_advance(style) as f32;
         let breaks = self.break_points(&flat.text, &widths, hyphen, options);
@@ -523,7 +693,7 @@ impl<'a> LineLayout<'a> {
             let at = &breaks[fit.at];
             if at.content_end > start {
                 let mut line = self.cut(&flat, &shaped, start, at.content_end, style);
-                self.adjust(&mut line, &flat.text, fit.ratio, options);
+                self.adjust(&mut line, flat.source_text(), fit.ratio, options);
                 if at.hyphen {
                     self.hyphenate(&mut line, style);
                 }
@@ -534,6 +704,125 @@ impl<'a> LineLayout<'a> {
             start = at.next;
         }
         lines
+    }
+
+    /// One string as shaped runs, set the way `style` asks for it.
+    /// The counterpart of `layout` for text that is not broken into
+    /// lines: page furniture, an ornament, an initial letter.
+    pub fn shape(&self, text: &str, style: ParagraphStyle) -> Option<Vec<ShapedRun>> {
+        let upem = self.registry.metrics(style.font_id)?.units_per_em as f32;
+        let mut flat = FlatParagraph::new();
+        flat.push_styled(text, style, self.small_caps(style));
+        let shaped = self.shape_spans(&flat, style, upem);
+        Some(cut_runs(&flat, &shaped, 0, flat.text.len()))
+    }
+
+    /// Flattens a paragraph's inlines, each one styled as the tree
+    /// says. A style boundary is a span boundary, so a run never
+    /// spans two faces.
+    fn flatten(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+    ) -> FlatParagraph {
+        let mut flat = FlatParagraph::new();
+        self.walk_inlines(inlines, style, styles, &mut flat);
+        flat
+    }
+
+    fn walk_inlines(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        flat: &mut FlatParagraph,
+    ) {
+        for inline in inlines {
+            match inline {
+                Inline::Text { value, .. } => {
+                    flat.push_styled(value, style, self.small_caps(style))
+                }
+                Inline::Code { id, value, .. } => {
+                    let code = styles.style(*id, style);
+                    flat.push_styled(value, code, self.small_caps(code));
+                }
+                Inline::Emphasis { id, children, .. }
+                | Inline::Strong { id, children, .. }
+                | Inline::Link { id, children, .. } => {
+                    self.walk_inlines(children, styles.style(*id, style), styles, flat);
+                }
+            }
+        }
+    }
+
+    /// Where a style's small capitals come from: the face's own where
+    /// it has them, and a synthesis where it does not.
+    fn small_caps(&self, style: ParagraphStyle) -> SmallCaps {
+        match style.caps {
+            FontVariantCaps::Normal => SmallCaps::Off,
+            FontVariantCaps::SmallCaps if self.registry.has_small_caps(style.font_id) => {
+                SmallCaps::Feature
+            }
+            FontVariantCaps::SmallCaps => SmallCaps::Synthesized,
+        }
+    }
+
+    /// Shapes each span. A glyph's cluster is an offset into the
+    /// span, which indexes the paragraph text once offset by the
+    /// span's start. A span set at another size measures in its own
+    /// font units, so `scale` takes it into the paragraph's.
+    ///
+    /// Tracking is added here, to the last glyph of every cluster, so
+    /// every pass downstream measures it without being told about it.
+    fn shape_spans(
+        &self,
+        flat: &FlatParagraph,
+        style: ParagraphStyle,
+        upem: f32,
+    ) -> Vec<ShapedSpan> {
+        flat.spans
+            .iter()
+            .map(|span| {
+                let mut glyphs = self
+                    .registry
+                    .shape_with(span.font_id, &flat.text[span.range.clone()], span.features)
+                    .unwrap_or_default();
+                let track = self.tracking_units(span);
+                if track != 0 {
+                    for at in 0..glyphs.len() {
+                        let last = glyphs
+                            .get(at + 1)
+                            .is_none_or(|next| next.cluster != glyphs[at].cluster);
+                        if last {
+                            glyphs[at].x_advance =
+                                (glyphs[at].x_advance as i64 + track).max(0) as u32;
+                        }
+                    }
+                }
+                let scale = self.scale(span.font_id, span.size, style, upem);
+                ShapedSpan {
+                    range: span.range.clone(),
+                    scale,
+                    track,
+                    tracking: track as f32 * scale,
+                    glyphs,
+                }
+            })
+            .collect()
+    }
+
+    /// A span's tracking in its own font units.
+    fn tracking_units(&self, span: &Span) -> i64 {
+        if span.tracking == 0.0 || span.size <= 0.0 {
+            return 0;
+        }
+        let upem = self
+            .registry
+            .metrics(span.font_id)
+            .map(|m| m.units_per_em as f32)
+            .unwrap_or(1000.0);
+        (span.tracking / span.size * upem).round() as i64
     }
 
     /// What a span's own font units are worth in the paragraph's.
@@ -647,7 +936,7 @@ impl<'a> LineLayout<'a> {
             }
             match text[at..].chars().next() {
                 Some(first) if widths.starts[at] => {
-                    hang_start(first) * (widths.text[at + first.len_utf8()] - widths.text[at])
+                    hang_start(first) * widths.advance(at, at + first.len_utf8())
                 }
                 _ => 0.0,
             }
@@ -670,9 +959,7 @@ impl<'a> LineLayout<'a> {
             } else {
                 match text[..content_end].chars().next_back() {
                     Some(last) if widths.starts[content_end - last.len_utf8()] => {
-                        hang_end(last)
-                            * (widths.text[content_end]
-                                - widths.text[content_end - last.len_utf8()])
+                        hang_end(last) * widths.advance(content_end - last.len_utf8(), content_end)
                     }
                     _ => 0.0,
                 }
@@ -887,7 +1174,7 @@ impl Breaker<'_> {
         let start = self.breaks[a].next;
         let end = self.breaks[b].content_end.max(start);
         let measure = self.units(self.measure.at(line - 1));
-        let text = self.widths.text[end] - self.widths.text[start];
+        let text = self.widths.advance(start, end);
         let spaces = self.widths.spaces[end] - self.widths.spaces[start];
         let hyphen = if self.breaks[b].hyphen {
             self.hyphen
@@ -1210,6 +1497,11 @@ struct ShapedSpan {
     /// What one of this span's font units is worth in the
     /// paragraph's.
     scale: f32,
+    /// Tracking charged after each of its clusters, in its own font
+    /// units.
+    track: i64,
+    /// The same in the paragraph's font units.
+    tracking: f32,
     glyphs: Vec<ShapedGlyph>,
 }
 
@@ -1247,32 +1539,54 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
 /// Slices shaped spans into the runs of one line. `end` is where the
 /// line's paintable text stops: the spaces a break swallows are
 /// already off it.
+///
+/// A run carries the text the author wrote rather than the text that
+/// was shaped, and its glyphs point back into it, because extraction
+/// and copy and paste have to return the one and not the other.
 fn cut_runs(
     flat: &FlatParagraph,
     shaped: &[ShapedSpan],
     start: usize,
     end: usize,
 ) -> Vec<ShapedRun> {
+    let source = flat.source_text();
     let mut runs = Vec::new();
-    for (span, (font_id, size, _)) in shaped.iter().zip(flat.spans.iter()) {
+    let mut trailing = 0i64;
+    for (span, spec) in shaped.iter().zip(flat.spans.iter()) {
         if span.range.start >= end || span.range.end <= start {
             continue;
         }
-        let glyphs = span.glyphs_in(start, end);
+        let mut glyphs = span.glyphs_in(start, end);
         if glyphs.is_empty() {
             continue;
         }
+        if flat.transformed {
+            for glyph in &mut glyphs {
+                glyph.cluster = flat.to_source(glyph.cluster as usize) as u32;
+            }
+        }
         let advance = glyphs.iter().map(|g| g.x_advance).sum();
-        let text_start = span.range.start.max(start);
-        let text_end = span.range.end.min(end).max(text_start);
+        let text_start = flat.to_source(span.range.start.max(start));
+        let text_end = flat.to_source(span.range.end.min(end)).max(text_start);
+        trailing = span.track;
         runs.push(ShapedRun {
-            font_id: *font_id,
-            size: *size,
-            text: flat.text[text_start..text_end].to_string(),
+            font_id: spec.font_id,
+            size: spec.size,
+            text: source[text_start..text_end].to_string(),
             text_start: text_start as u32,
             glyphs,
             advance,
         });
+    }
+    // Tracking goes between letters: the line's last glyph keeps its
+    // own advance and nothing more.
+    if trailing != 0
+        && let Some(run) = runs.last_mut()
+    {
+        if let Some(glyph) = run.glyphs.last_mut() {
+            glyph.x_advance = (glyph.x_advance as i64 - trailing).max(0) as u32;
+        }
+        run.advance = run.glyphs.iter().map(|g| g.x_advance).sum();
     }
     runs
 }
@@ -1326,6 +1640,18 @@ mod tests {
 
     fn units_per_em() -> u16 {
         registry().metrics(0).unwrap().units_per_em
+    }
+
+    /// One paragraph laid out under a style of the caller's, ragged
+    /// and unhyphenated.
+    fn layout_style(text: &str, measure_pt: f32, style: ParagraphStyle) -> Vec<Line> {
+        let layout = LineLayout::new(registry());
+        let inlines = vec![Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: text.to_string(),
+            position: None,
+        }];
+        layout.layout(&inlines, style, measure_pt, LineBreakOptions::default())
     }
 
     /// A line's text, concatenated from its runs.
@@ -1924,6 +2250,172 @@ mod tests {
         assert_ne!(
             got[0], "My father had a",
             "line 1 was packed greedily: {got:?}",
+        );
+    }
+
+    /// Letter-spacing is advance the shaper's glyphs carry: every gap
+    /// between two glyphs opens by the tracking, and the last glyph
+    /// keeps its own advance, so a tracked title measures the tracking
+    /// times one fewer than its glyphs.
+    #[test]
+    fn letter_spacing_opens_the_gaps_between_glyphs() {
+        let plain = layout_style("HANDGLOVES", 400.0, body());
+        let tracking = 0.08 * body().size;
+        let tracked = layout_style(
+            "HANDGLOVES",
+            400.0,
+            ParagraphStyle {
+                letter_spacing: tracking,
+                ..body()
+            },
+        );
+        let glyphs = plain[0].runs[0].glyphs.len();
+        assert_eq!(glyphs, 10, "the title shaped to one glyph a letter");
+        let units = tracking / body().size * units_per_em() as f32;
+        assert_eq!(
+            tracked[0].width - plain[0].width,
+            (units * (glyphs - 1) as f32).round() as u32,
+            "tracking did not open exactly the gaps between the glyphs",
+        );
+        for (loose, tight) in tracked[0].runs[0]
+            .glyphs
+            .iter()
+            .zip(&plain[0].runs[0].glyphs)
+            .take(glyphs - 1)
+        {
+            assert_eq!(
+                loose.x_advance - tight.x_advance,
+                units.round() as u32,
+                "a glyph carries no tracking of its own",
+            );
+        }
+    }
+
+    /// Small capitals come out of the face where the face has them:
+    /// the run stays at the size around it and draws glyphs the plain
+    /// text does not. A face with no substitutions of its own gets a
+    /// synthesis instead, the letters raised to capitals and set at a
+    /// fraction of the size, and the capitals already there are left
+    /// alone.
+    #[test]
+    fn small_caps_take_the_feature_or_a_synthesis() {
+        let style = ParagraphStyle {
+            caps: FontVariantCaps::SmallCaps,
+            ..body()
+        };
+        let plain = layout_style("hello", 400.0, body());
+        let feature = layout_style("hello", 400.0, style);
+        assert_eq!(feature[0].runs.len(), 1, "the feature split the run");
+        assert_eq!(feature[0].runs[0].size, body().size);
+        assert_ne!(
+            feature[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            plain[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            "the face's small capitals drew the lowercase glyphs",
+        );
+
+        let bare = crate::fonts::registry_without_substitutions();
+        assert!(!bare.has_small_caps(0), "the face still substitutes");
+        let inlines = vec![Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: "hi Ho".to_string(),
+            position: None,
+        }];
+        let synthesized =
+            LineLayout::new(&bare).layout(&inlines, style, 400.0, LineBreakOptions::default());
+        let runs: Vec<(f32, &str)> = synthesized[0]
+            .runs
+            .iter()
+            .map(|run| (run.size, run.text.as_str()))
+            .collect();
+        assert_eq!(
+            runs,
+            vec![
+                (body().size * SMALL_CAPS_RATIO, "hi"),
+                (body().size, " H"),
+                (body().size * SMALL_CAPS_RATIO, "o"),
+            ],
+            "the synthesis did not reduce what was lowercase and leave the rest",
+        );
+    }
+
+    /// `text-transform` changes what is shaped and nothing else: the
+    /// glyphs are the transformed text's, and the run carries the text
+    /// the author wrote, which is what extraction reads back. A
+    /// mapping that is not one for one, `ß` to `SS`, keeps both
+    /// glyphs pointing at the letter they came from.
+    #[test]
+    fn text_transform_shapes_one_text_and_reports_another() {
+        let style = ParagraphStyle {
+            transform: TextTransform::Uppercase,
+            ..body()
+        };
+        let lines = layout_style("Lilliput", 400.0, style);
+        assert_eq!(line_text(&lines[0]), "Lilliput", "the run lost the source");
+        let shouted = layout_style("LILLIPUT", 400.0, body());
+        assert_eq!(
+            lines[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            shouted[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            "the transform did not reach the shaper",
+        );
+
+        let lines = layout_style("Straße", 400.0, style);
+        let run = &lines[0].runs[0];
+        assert_eq!(run.text, "Straße");
+        assert_eq!(run.glyphs.len(), 7, "STRASSE is seven glyphs");
+        let ranges = run.glyph_ranges();
+        let sharp = run.text.find('ß').expect("the source keeps its ß") as u32;
+        assert_eq!(
+            (&ranges[4], &ranges[5]),
+            (&(sharp..sharp + 2), &(sharp..sharp + 2)),
+            "the two capitals do not both stand for the ß",
+        );
+        assert_eq!(
+            ranges.last().map(|range| range.end),
+            Some(run.text.len() as u32),
+            "the last glyph does not run to the end of the source",
+        );
+    }
+
+    /// `capitalize` raises the letter that opens a word, and a word is
+    /// carried on by letters, digits and the apostrophe inside one.
+    #[test]
+    fn capitalize_raises_the_letter_that_opens_a_word() {
+        let style = ParagraphStyle {
+            transform: TextTransform::Capitalize,
+            ..body()
+        };
+        let source = "the well-known don't of it";
+        let lines = layout_style(source, 400.0, style);
+        assert_eq!(line_text(&lines[0]), source, "the run lost the source");
+        let shaped = layout_style("The Well-Known Don't Of It", 400.0, body());
+        assert_eq!(
+            lines[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            shaped[0].runs[0]
+                .glyphs
+                .iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>(),
+            "capitalize did not raise the letters a word opens with",
         );
     }
 }

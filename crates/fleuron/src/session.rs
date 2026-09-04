@@ -872,6 +872,9 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         font_style: _,
         font_weight: _,
         line_height,
+        letter_spacing,
+        font_variant_caps,
+        text_transform,
         text_align,
         text_justify,
         hanging_punctuation,
@@ -892,6 +895,7 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         break_inside,
     } = style;
     (font_id, font_size.to_bits(), line_height.to_bits()).hash(h);
+    (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);

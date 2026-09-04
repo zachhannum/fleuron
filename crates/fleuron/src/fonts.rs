@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use harfrust::{
-    BufferClusterLevel, FontRef as HarfFontRef, Language, ShaperData, ShaperInstance,
+    BufferClusterLevel, Feature, FontRef as HarfFontRef, Language, ShaperData, ShaperInstance, Tag,
     UnicodeBuffer, script,
 };
 use serde::{Deserialize, Serialize};
@@ -179,6 +179,20 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
+/// The OpenType features a run is shaped with, beyond the ones the
+/// shaper turns on for every run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Features {
+    /// `smcp`: the face's own small capitals, from
+    /// `font-variant-caps`.
+    pub small_caps: bool,
+}
+
+impl Features {
+    /// Nothing beyond the default set.
+    pub const NONE: Features = Features { small_caps: false };
+}
+
 /// A font's identity in the engine's output.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FontRefEntry {
@@ -236,6 +250,8 @@ struct Face {
     /// The shaper's view of `location`; `None` at the default, where
     /// there is nothing to vary.
     instance: Option<ShaperInstance>,
+    /// Whether the file draws small capitals of its own.
+    small_caps: bool,
 }
 
 /// The registry: assigns `font_id`s, hands shaper access and metrics
@@ -290,6 +306,7 @@ impl FontRegistry {
                     variations: cut.variations,
                 },
                 metrics: read_metrics(&font, &cut.location),
+                small_caps: draws_small_caps(&harf, &shaper_data, instance.as_ref()),
                 shaper_data: shaper_data.clone(),
                 location: cut.location,
                 instance,
@@ -368,6 +385,14 @@ impl FontRegistry {
         self.faces.get(id as usize).map(|face| face.metrics)
     }
 
+    /// Whether a face draws small capitals of its own. A face that
+    /// does not has to have them synthesized from its capitals.
+    pub fn has_small_caps(&self, id: u16) -> bool {
+        self.faces
+            .get(id as usize)
+            .is_some_and(|face| face.small_caps)
+    }
+
     /// The raw bytes of a face, for embedding at write time.
     ///
     /// Shared: the faces a variable file yielded are one file, and a
@@ -433,37 +458,74 @@ impl FontRegistry {
     /// text offsets (break opportunities) back to glyphs; offsets data
     /// stays in the shaper's buffer.
     pub fn shape(&self, id: u16, text: &str) -> Option<Vec<ShapedGlyph>> {
+        self.shape_with(id, text, Features::NONE)
+    }
+
+    /// The same, with the features a style asked for turned on.
+    pub fn shape_with(&self, id: u16, text: &str, features: Features) -> Option<Vec<ShapedGlyph>> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
-        let shaper = face
-            .shaper_data
-            .shaper(&font)
-            .instance(face.instance.as_ref())
-            .build();
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-        buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
-        buffer.set_script(script::LATIN);
-        buffer.set_direction(harfrust::Direction::LeftToRight);
-        buffer.set_language(Language::new("en").unwrap());
-        let shaped = shaper.shape(
-            buffer,
-            harfrust::ShapeOptions::new(), // unscaled: font units
-        );
-        let positions = shaped.glyph_positions();
-        Some(
-            shaped
-                .glyph_infos()
-                .iter()
-                .zip(positions)
-                .map(|(info, pos)| ShapedGlyph {
-                    id: info.glyph_id,
-                    x_advance: pos.x_advance as u32,
-                    cluster: info.cluster,
-                })
-                .collect(),
-        )
+        Some(shape_text(
+            &font,
+            &face.shaper_data,
+            face.instance.as_ref(),
+            text,
+            features,
+        ))
     }
+}
+
+/// One shaping call: the buffer the engine always sets up the same
+/// way, plus whatever features the run asked for.
+fn shape_text(
+    font: &HarfFontRef<'_>,
+    data: &ShaperData,
+    instance: Option<&ShaperInstance>,
+    text: &str,
+    features: Features,
+) -> Vec<ShapedGlyph> {
+    let shaper = data.shaper(font).instance(instance).build();
+    let mut buffer = UnicodeBuffer::new();
+    buffer.push_str(text);
+    buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
+    buffer.set_script(script::LATIN);
+    buffer.set_direction(harfrust::Direction::LeftToRight);
+    buffer.set_language(Language::new("en").unwrap());
+    let mut wanted = Vec::new();
+    if features.small_caps {
+        wanted.push(Feature::new(Tag::new(b"smcp"), 1, ..));
+    }
+    let shaped = shaper.shape(
+        buffer,
+        // unscaled: font units
+        harfrust::ShapeOptions::new().features(&wanted),
+    );
+    let positions = shaped.glyph_positions();
+    shaped
+        .glyph_infos()
+        .iter()
+        .zip(positions)
+        .map(|(info, pos)| ShapedGlyph {
+            id: info.glyph_id,
+            x_advance: pos.x_advance as u32,
+            cluster: info.cluster,
+        })
+        .collect()
+}
+
+/// Whether a face has small capitals of its own: shape a lowercase
+/// letter with `smcp` and see whether the face draws something else
+/// for it. A file that lists the feature and substitutes nothing has
+/// no small capitals to offer.
+fn draws_small_caps(
+    font: &HarfFontRef<'_>,
+    data: &ShaperData,
+    instance: Option<&ShaperInstance>,
+) -> bool {
+    const PROBE: &str = "a";
+    let plain = shape_text(font, data, instance, PROBE, Features::NONE);
+    let small = shape_text(font, data, instance, PROBE, Features { small_caps: true });
+    plain.iter().map(|g| g.id).ne(small.iter().map(|g| g.id))
 }
 
 /// One face a font file yields: an identity, a location on the
@@ -635,6 +697,36 @@ pub fn bundled_registry() -> Result<FontRegistry, FontError> {
             .expect("bundled face is registered");
     }
     Ok(registry)
+}
+
+/// The bundled face with its glyph substitutions taken away: the
+/// table's tag is blanked, so every offset in the file still stands
+/// and nothing in it can substitute a glyph. This stands in for a
+/// face that never had small capitals.
+#[cfg(test)]
+pub(crate) fn registry_without_substitutions() -> FontRegistry {
+    let mut bytes = BUNDLED_FONT.to_vec();
+    let tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+    for table in 0..tables {
+        let at = 12 + 16 * table;
+        if &bytes[at..at + 4] == b"GSUB" {
+            bytes[at..at + 4].copy_from_slice(b"xsub");
+        }
+    }
+    let mut registry = FontRegistry::new();
+    let mut source = FontSource::from_bytes(bytes).expect("the face parses");
+    source.declared = Some(FaceAttributes::REGULAR);
+    registry.add(source).expect("the face registers");
+    for generic in [
+        GenericFamily::Serif,
+        GenericFamily::SansSerif,
+        GenericFamily::Monospace,
+    ] {
+        registry
+            .map_generic(generic, "eb garamond")
+            .expect("the face is registered");
+    }
+    registry
 }
 
 #[cfg(test)]

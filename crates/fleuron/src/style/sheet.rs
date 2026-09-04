@@ -19,8 +19,8 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
-    Break, Content, CounterStyle, Declaration, Edge, Family, FontStyle, Hyphens, Length,
-    LineHeight, MarginBox, StringPiece, StringSet, TextAlign, TextJustify,
+    Break, Content, CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps, Hyphens,
+    Length, LineHeight, MarginBox, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -514,6 +514,9 @@ fn property<'i>(
         "font-style" => one(Declaration::FontStyle(keyword_or(input, font_style, bad)?)),
         "font-weight" => one(Declaration::FontWeight(keyword_or(input, weight, bad)?)),
         "line-height" => one(Declaration::LineHeight(keyword_or(input, line_height, bad)?)),
+        "letter-spacing" => one(Declaration::LetterSpacing(keyword_or(input, letter_spacing, bad)?)),
+        "font-variant-caps" => one(Declaration::FontVariantCaps(keyword_or(input, variant_caps, bad)?)),
+        "text-transform" => one(Declaration::TextTransform(keyword_or(input, text_transform, bad)?)),
         "text-align" => one(Declaration::TextAlign(keyword_or(input, text_align, bad)?)),
         "text-justify" => one(Declaration::TextJustify(keyword_or(input, text_justify, bad)?)),
         "text-indent" => one(Declaration::TextIndent(keyword_or(input, length, bad)?)),
@@ -560,6 +563,38 @@ fn font_style(input: &mut Parser<'_, '_>) -> Option<FontStyle> {
     match_ignore_ascii_case! { &keyword,
         "normal" => Some(FontStyle::Normal),
         "italic" | "oblique" => Some(FontStyle::Italic),
+        _ => None,
+    }
+}
+
+/// `letter-spacing: normal | <length>`. `normal` is no tracking at
+/// all, which is what a length of zero already says.
+fn letter_spacing(input: &mut Parser<'_, '_>) -> Option<Length> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("normal"))
+        .is_ok()
+    {
+        return Some(Length::Points(0.0));
+    }
+    length(input)
+}
+
+fn variant_caps(input: &mut Parser<'_, '_>) -> Option<FontVariantCaps> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "normal" => Some(FontVariantCaps::Normal),
+        "small-caps" => Some(FontVariantCaps::SmallCaps),
+        _ => None,
+    }
+}
+
+fn text_transform(input: &mut Parser<'_, '_>) -> Option<TextTransform> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(TextTransform::None),
+        "uppercase" => Some(TextTransform::Uppercase),
+        "lowercase" => Some(TextTransform::Lowercase),
+        "capitalize" => Some(TextTransform::Capitalize),
         _ => None,
     }
 }

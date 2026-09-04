@@ -15,6 +15,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -50,6 +53,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -87,6 +93,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -130,6 +139,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -165,6 +177,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -200,6 +215,9 @@ expression: tree
       "font_style": "italic",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -235,6 +253,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -270,6 +291,9 @@ expression: tree
       "font_style": "italic",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -305,6 +329,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "center",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -342,6 +369,9 @@ expression: tree
       "font_style": "normal",
       "font_weight": 400,
       "line_height": 1.4,
+      "letter_spacing": 0.0,
+      "font_variant_caps": "normal",
+      "text_transform": "none",
       "text_align": "left",
       "text_justify": "inter_word",
       "hanging_punctuation": {
@@ -763,6 +793,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -824,6 +857,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -885,6 +921,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -946,6 +985,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1005,6 +1047,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1064,6 +1109,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1123,6 +1171,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1184,6 +1235,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1245,6 +1299,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
@@ -1304,6 +1361,9 @@ expression: tree
               "font_style": "normal",
               "font_weight": 400,
               "line_height": 1.4,
+              "letter_spacing": 0.0,
+              "font_variant_caps": "normal",
+              "text_transform": "none",
               "text_align": "left",
               "text_justify": "inter_word",
               "hanging_punctuation": {
