@@ -143,10 +143,13 @@ Trusted publishing is configured per package on npmjs.com against
 `release.yml`, which is why the publish steps stay in that file rather
 than moving into the workflow it calls.
 
-The one secret is `RELEASE_TOKEN`, which a dispatched release checks out
-under because it raises the version on `main` and `main` is protected
-against the bot. The tag goes up under `GITHUB_TOKEN` instead, since a
-tag pushed under the other token would start a second release run.
+A dispatched release raises the version on `main`, which is protected,
+and a personal repository can exempt neither `github-actions[bot]` nor
+GitHub's Actions app from that. So the release owns a GitHub App, whose
+installation is on the branch ruleset's bypass list, and `RELEASE_APP_ID`
+and `RELEASE_APP_PRIVATE_KEY` are what it mints a token from. The tag
+goes up under `GITHUB_TOKEN` instead, since a tag pushed under the app's
+token would start a second release run.
 
 `scripts/version.mjs` is where a version is read and where it is
 bumped, because the number lives in the workspace, both packages, the
