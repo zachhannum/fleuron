@@ -276,8 +276,9 @@ const description =
 
   .nav {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1.5rem;
+    gap: 0.7rem 1.5rem;
     padding-block: 0.9rem;
     border-bottom: 3px solid var(--f-rule);
     font-family: var(--f-chrome);
@@ -307,8 +308,9 @@ const description =
   .nav nav {
     margin-left: auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1.25rem;
+    gap: 0.7rem 1.25rem;
   }
 
   .nav nav a {
@@ -511,6 +513,12 @@ const description =
     display: grid;
     gap: clamp(1.5rem, 4vw, 3rem);
     align-items: start;
+  }
+
+  /* The column holds a code block that scrolls, which needs a track
+     free to be narrower than the code in it. */
+  .two-up > * {
+    min-width: 0;
   }
 
   @media (min-width: 60rem) {

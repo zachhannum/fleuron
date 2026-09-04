@@ -188,11 +188,21 @@
 
 /* ── Ground ──────────────────────────────────────────────────────── */
 
+/* Starlight's reset does not reach the landing page, which is a
+   document of its own. Padding counts inside a declared width, and a
+   band that bleeds reaches the trim. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   background: var(--f-ground);
 }
 
 body {
+  margin: 0;
   background: var(--f-ground);
   color: var(--f-ink);
   font-family: var(--f-sans);
@@ -213,7 +223,6 @@ body {
 
 .f-bar {
   display: flex;
-  box-sizing: border-box;
   height: 32px;
   border-top: 10px solid var(--f-rule);
 }
@@ -325,7 +334,11 @@ starlight-menu-button button {
 
 /* ── Prose ───────────────────────────────────────────────────────── */
 
-.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+/* A demo is chrome inside the prose body, and `not-content` marks
+   it. Every rule below that names a bare element is scoped against
+   that class. */
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6):not(:where(.not-content *)) {
   font-family: var(--f-display);
   font-variation-settings: var(--f-display-var);
   font-weight: 600;
@@ -357,12 +370,12 @@ starlight-menu-button button {
   text-decoration-color: var(--f-hi-ink);
 }
 
-.sl-markdown-content :is(code, kbd) {
+.sl-markdown-content :is(code, kbd):not(:where(.not-content *)) {
   font-family: var(--f-chrome);
   border-radius: 0;
 }
 
-.sl-markdown-content :not(pre) > code {
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
   border: 2px solid var(--f-rule);
   padding: 0.05em 0.3em;
   color: var(--f-ink);
@@ -370,7 +383,7 @@ starlight-menu-button button {
 
 /* The keyline goes round the frame, so the title bar and the code
    under it are one box. */
-.sl-markdown-content :is(pre, .expressive-code .frame) {
+.sl-markdown-content :is(pre:not(:where(.not-content *)), .expressive-code .frame) {
   border: 3px solid var(--f-rule);
   border-radius: 0;
   background: var(--f-code-bg);
@@ -385,7 +398,8 @@ starlight-menu-button button {
 }
 
 /* Expressive Code paints the frame and the code from grounds of its
-   own. Both take the token. */
+   own. Both take the token, and so do the hairlines between them:
+   the block carries one keyline, the 3px one round the outside. */
 .sl-markdown-content .expressive-code {
   --ec-codeBg: var(--f-code-bg);
   --ec-frm-edBg: var(--f-code-bg);
@@ -393,6 +407,11 @@ starlight-menu-button button {
   --ec-frm-edActTabBg: var(--f-code-bg);
   --ec-frm-trmBg: var(--f-code-bg);
   --ec-frm-trmTtbBg: var(--f-code-bg);
+  --ec-brdCol: var(--f-code-bg);
+  --ec-frm-edTabBarBrdCol: var(--f-code-bg);
+  --ec-frm-edTabBarBrdBtmCol: var(--f-code-bg);
+  --ec-frm-edActTabBrdCol: var(--f-code-bg);
+  --ec-frm-trmTtbBrdBtmCol: var(--f-code-bg);
 }
 
 .sl-markdown-content .expressive-code .frame > .header {
@@ -407,22 +426,22 @@ starlight-menu-button button {
   border-bottom: 3px solid var(--f-ink-m);
 }
 
-.sl-markdown-content blockquote {
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
   border-inline-start: 3px solid var(--f-ink-m);
 }
 
-.sl-markdown-content :is(table) {
+.sl-markdown-content table:not(:where(.not-content *)) {
   border-collapse: collapse;
   font-family: var(--f-chrome);
   font-size: 0.82rem;
 }
 
-.sl-markdown-content :is(th, td) {
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
   border: 3px solid var(--f-rule);
   padding: 0.6rem 0.8rem;
 }
 
-.sl-markdown-content thead th {
+.sl-markdown-content thead th:not(:where(.not-content *)) {
   background: var(--f-rule);
   color: var(--f-ground);
   font-family: var(--f-chrome);
@@ -431,7 +450,7 @@ starlight-menu-button button {
   text-transform: uppercase;
 }
 
-.sl-markdown-content hr {
+.sl-markdown-content hr:not(:where(.not-content *)) {
   border: 0;
   border-top: 3px solid var(--f-rule);
 }
