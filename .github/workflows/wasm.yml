@@ -8,10 +8,6 @@ name: wasm
 on:
   workflow_call:
     inputs:
-      ref:
-        description: What to check out. A release that cut its own tag is not on the commit that started it.
-        type: string
-        default: ''
       tag:
         description: A tag every version has to agree with, when a release is what is running this.
         type: string
@@ -24,8 +20,6 @@ jobs:
       WASM_PACK_VERSION: v0.15.0
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
       # Before anything is built, let alone published: the crates, the
       # two packages and the peer range between them name one release.
       - name: One version everywhere

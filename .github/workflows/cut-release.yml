@@ -1,0 +1,51 @@
+# Where a release starts. It raises the version on `main` and cuts the
+# tag; the tag is what runs the checks and publishes, in `release.yml`.
+name: cut a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to raise"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      # `main` takes no push from `GITHUB_TOKEN`. It is protected, and a
+      # personal repository can exempt neither an administrator's bot nor
+      # GitHub's own Actions app from that: the bypass list holds apps
+      # installed on this account, so the release is one of those.
+      #
+      # The token checkout leaves in the local config is sent on every
+      # request to github.com, whichever remote a push names, so both
+      # pushes here go up as the app whatever they are addressed to. The
+      # tag needs that: one pushed under `GITHUB_TOKEN` starts no run,
+      # and the run it starts is the release.
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+      - name: The bump and the tag
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version=$(node scripts/version.mjs --bump "$BUMP")
+          git commit -am "Release v$version"
+          git tag -a "v$version" -m "v$version"
+          # The branch first. Two refs are not one push, and a tag whose
+          # commit went nowhere is what the other order leaves behind.
+          git push origin "HEAD:$GITHUB_REF_NAME"
+          git push origin "v$version"
