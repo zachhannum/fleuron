@@ -1,6 +1,6 @@
 {
   "name": "fleuron-react",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The fleuron preview as a React component, and nothing else",
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -25,7 +25,7 @@
     "test": "npm run build && node test/wrapper.mjs"
   },
   "peerDependencies": {
-    "fleuron": "0.1.1",
+    "fleuron": "0.1.2",
     "react": ">=18"
   },
   "devDependencies": {
