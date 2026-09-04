@@ -25,22 +25,21 @@ permissions:
   id-token: write
 
 jobs:
-  # A tag pushed with `GITHUB_TOKEN` starts no workflow run of its own, so
-  # a dispatched release cannot hand off to the push trigger. It cuts the
-  # tag here and the jobs below carry on with it.
-  #
-  # Separate from them so that re-running the failed half of a dispatched
-  # release does not raise the version a second time.
+  # A dispatch raises the version and cuts the tag, and stops there. The
+  # tag goes up under the app, which starts this workflow again on the
+  # push trigger, and that run is the one that checks and publishes.
   tag:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.bump.outputs.tag }}
     steps:
       # `main` takes no push from `GITHUB_TOKEN`. It is protected, and a
       # personal repository can exempt neither an administrator's bot nor
       # GitHub's own Actions app from that: the bypass list holds apps
       # installed on this account, so the release is one of those.
+      #
+      # The token checkout leaves in the local config is sent on every
+      # request to github.com, whichever remote a push names, so both
+      # pushes here go up as the app whatever they are addressed to.
       - uses: actions/create-github-app-token@v3
         id: app
         with:
@@ -49,13 +48,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           token: ${{ steps.app.outputs.token }}
-      - id: bump
+      - name: The bump and the tag
         env:
           BUMP: ${{ inputs.bump }}
-          # The tag goes up under `GITHUB_TOKEN`, which starts no
-          # workflow run. Under the app's token it would start a second
-          # release, racing this one to the registry.
-          TAG_REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -65,32 +60,25 @@ jobs:
           # The branch first. Two refs are not one push, and a tag whose
           # commit went nowhere is what the other order leaves behind.
           git push origin "HEAD:$GITHUB_REF_NAME"
-          git push "$TAG_REMOTE" "v$version"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          git push origin "v$version"
 
   # The module built the way a host consumes it, the fixture book through
   # a worker and a browser, and the tarball installed into a directory
   # that has never seen this repository. A failure here is a release that
   # does not happen.
   checks:
-    needs: tag
-    # `tag` is skipped for a tag push, which is not a failure.
-    if: ${{ !cancelled() && !failure() }}
+    if: github.event_name == 'push'
     uses: ./.github/workflows/wasm.yml
     with:
-      ref: ${{ needs.tag.outputs.tag || github.ref_name }}
-      tag: ${{ needs.tag.outputs.tag || github.ref_name }}
+      tag: ${{ github.ref_name }}
 
   publish:
-    needs: [tag, checks]
-    if: ${{ !cancelled() && !failure() }}
+    needs: checks
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ needs.tag.outputs.tag || github.ref_name }}
+      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.tag.outputs.tag || github.ref_name }}
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
@@ -121,9 +109,16 @@ jobs:
       # Last of the two channels, because a release can be edited
       # afterwards and a published version cannot. Trusted publishing
       # signs each tarball with provenance without being asked.
+      #
+      # A version already on the registry is a re-run of a release that
+      # got one package of the two up, and npm refuses to take it twice.
       - name: The bindings, on the registry
         working-directory: crates/fleuron-wasm/npm
-        run: npm publish
+        run: |
+          npm view "$(node -p 'const p = require("./package.json"); `${p.name}@${p.version}`')" version >/dev/null 2>&1 ||
+            npm publish
       - name: The wrapper, on the registry
         working-directory: packages/react
-        run: npm publish
+        run: |
+          npm view "$(node -p 'const p = require("./package.json"); `${p.name}@${p.version}`')" version >/dev/null 2>&1 ||
+            npm publish

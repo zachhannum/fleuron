@@ -132,11 +132,11 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 ## Releases
 
 `.github/workflows/release.yml` is the only thing that publishes. A
-`v*` tag runs it, and so does a manual dispatch, which raises the
-version, cuts the tag and carries on with it. Either way it runs the
-wasm workflow again with the tag held against every version the
-repository carries, then puts both tarballs and the module on a GitHub
-release and both packages on the registry.
+`v*` tag runs it: the wasm workflow again with the tag held against
+every version the repository carries, then both tarballs and the
+module on a GitHub release and both packages on the registry. A manual
+dispatch raises the version and cuts the tag, and the tag does the
+rest.
 
 npm authenticates the workflow over OIDC, so no npm token exists.
 Trusted publishing is configured per package on npmjs.com against
@@ -148,9 +148,8 @@ and a personal repository can exempt neither `github-actions[bot]` nor
 GitHub's Actions app from that. So the release owns a GitHub App, whose
 installation is on the branch ruleset's bypass list. It mints a token
 from the `RELEASE_APP_ID` variable and the `RELEASE_APP_PRIVATE_KEY`
-secret, an app id being nobody's secret. The tag goes up under
-`GITHUB_TOKEN` instead, since a tag pushed under the app's token would
-start a second release run.
+secret, an app id being nobody's secret. The tag goes up under the same
+token, which is what starts the run that publishes.
 
 `scripts/version.mjs` is where a version is read and where it is
 bumped, because the number lives in the workspace, both packages, the
