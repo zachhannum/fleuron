@@ -47,7 +47,7 @@ The dump, abridged:
 
 ## `metadata`
 
-`title` and `author` are the two the engine reads: the title for running heads, both for the PDF's document information. `extra` is a string map the frontend owns: language, ISBN, subtitle, anything. It is opaque to the engine; style may read it, layout does not.
+`title` and `author` are the two the engine reads: the title for running heads, both for the PDF's document information. `extra` is a string map the frontend owns: language, ISBN, subtitle, anything. `language` is the one key layout reads, for the hyphenation patterns. The rest is opaque to the engine, and style may read it.
 
 All three are optional. A book with no metadata lays out.
 

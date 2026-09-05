@@ -17,13 +17,13 @@
 //! something does not fit, walks back to the last place a break was
 //! allowed.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, Inline, NodeId, Section, origin, text};
+use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Patterns};
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
@@ -198,6 +198,11 @@ pub struct Paginator<'a> {
     styles: &'a StyleTree,
     assets: &'a Assets,
     lines: LineLayout<'a>,
+    /// The syllable patterns `hyphens: auto` breaks by.
+    patterns: Cell<Patterns>,
+    /// The declared language there are no patterns for, which the
+    /// first paragraph that asks to be hyphenated complains about.
+    unknown: RefCell<Option<String>>,
     /// What fragmentation had to complain about. Recorded once per
     /// message: a book that scales the same image twice has one
     /// problem, not two.
@@ -222,8 +227,40 @@ impl<'a> Paginator<'a> {
             styles,
             assets,
             lines: LineLayout::new(registry),
+            patterns: Cell::new(Patterns::default()),
+            unknown: RefCell::new(None),
             warnings: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Takes the hyphenation patterns from the language the book
+    /// declares. `paginate` reads them from the book it is handed. A
+    /// caller that builds one section's fragments on its own sets
+    /// them here.
+    ///
+    /// A language with no patterns leaves every word whole, rather
+    /// than breaking one language's words at another's syllables,
+    /// and the first paragraph that asks for hyphenation says so.
+    pub fn language(&self, metadata: &Metadata) {
+        let patterns = Patterns::of(metadata);
+        self.patterns.set(patterns);
+        *self.unknown.borrow_mut() = metadata
+            .language()
+            .filter(|_| patterns == Patterns::NONE)
+            .map(str::to_string);
+    }
+
+    /// What `hyphens: auto` has to break with, complaining the first
+    /// time it is asked for and there is nothing behind the language
+    /// the book declares.
+    fn patterns(&self) -> Patterns {
+        if let Some(tag) = self.unknown.borrow().as_deref() {
+            self.warn(
+                format!("no hyphenation patterns for language `{tag}`; its words are left whole"),
+                None,
+            );
+        }
+        self.patterns.get()
     }
 
     /// What fragmentation had to complain about.
@@ -237,6 +274,7 @@ impl<'a> Paginator<'a> {
     /// the next one is measured: what exists at once is the book's
     /// pages, not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
+        self.language(&book.metadata);
         let mut flow = Flow::new(self);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
@@ -654,8 +692,14 @@ impl Builder<'_, '_> {
         let measure = measure - computed.margin.left - computed.margin.right;
 
         let style = computed.paragraph();
+        let hyphenate = computed.hyphens == Hyphens::Auto;
         let options = LineBreakOptions {
-            hyphenate: computed.hyphens == Hyphens::Auto,
+            hyphenate,
+            patterns: if hyphenate {
+                self.paginator.patterns()
+            } else {
+                Patterns::NONE
+            },
             justify: computed.text_align == TextAlign::Justify,
             inter_character: computed.text_justify == TextJustify::InterCharacter,
             hanging: computed.hanging_punctuation,

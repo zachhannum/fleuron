@@ -70,6 +70,8 @@ Lines break by total fit over the whole paragraph: every set of breaks is costed
 
 `hyphens: auto` adds syllable boundaries to the breaks a line may take, each charged for the hyphen it leaves and for coming after another one. No more than two lines in a row end hyphenated.
 
+The syllables are the ones the book's language has. `extra["language"]` in the metadata names it, as a BCP 47 tag read by its primary subtag: `fr-CA` is French. A book that declares no language breaks by English. A language with no patterns leaves every word whole, and a diagnostic names the tag. The tag is the book's, so one book is set in one language.
+
 ### Display typography
 
 `letter-spacing` is advance added between the glyphs of a run, and the total-fit pass measures it like any other width. Nothing is added after a line's last glyph, so a tracked title centres on its own letters rather than on the space after them.

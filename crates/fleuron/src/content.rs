@@ -101,6 +101,18 @@ pub struct Metadata {
     pub extra: BTreeMap<String, String>,
 }
 
+impl Metadata {
+    /// The BCP 47 tag under `extra["language"]`. The PDF records it
+    /// and hyphenation takes its patterns from it. A blank tag counts
+    /// as none declared.
+    pub fn language(&self) -> Option<&str> {
+        self.extra
+            .get("language")
+            .map(|tag| tag.trim())
+            .filter(|tag| !tag.is_empty())
+    }
+}
+
 /// The root of the content tree: one book.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Book {

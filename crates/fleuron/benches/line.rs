@@ -7,7 +7,7 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fleuron::content::{Block, Inline};
-use fleuron::lines::{HangingPunctuation, LineBreakOptions, LineLayout};
+use fleuron::lines::{HangingPunctuation, LineBreakOptions, LineLayout, Patterns};
 use fleuron_fixtures::{Corpus, registry, styles};
 
 /// Every paragraph in the book, in document order. Headings are left
@@ -31,6 +31,7 @@ const SETTINGS: [(&str, LineBreakOptions); 2] = [
         "ragged",
         LineBreakOptions {
             hyphenate: false,
+            patterns: Patterns::ENGLISH,
             justify: false,
             inter_character: false,
             hanging: HangingPunctuation::NONE,
@@ -40,6 +41,7 @@ const SETTINGS: [(&str, LineBreakOptions); 2] = [
         "justified",
         LineBreakOptions {
             hyphenate: true,
+            patterns: Patterns::ENGLISH,
             justify: true,
             inter_character: false,
             hanging: HangingPunctuation::NONE,

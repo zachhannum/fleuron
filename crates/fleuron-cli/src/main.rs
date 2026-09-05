@@ -23,7 +23,8 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
   --title <text>       the book's title
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`
-                       is the one the PDF writer reads
+                       reaches the PDF and picks the hyphenation
+                       patterns
   --dump-tree          write the content tree the frontend read to
                        stdout as JSON, and lay nothing out
   -V, --version        print the version and exit

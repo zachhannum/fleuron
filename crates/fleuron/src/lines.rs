@@ -17,7 +17,7 @@
 
 use std::ops::Range;
 
-use crate::content::{Inline, NodeId};
+use crate::content::{Inline, Metadata, NodeId};
 use crate::fonts::{Features, FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
 use crate::style::{Color, FontVariantCaps, TextTransform};
@@ -197,12 +197,56 @@ pub enum HangEnd {
     Force,
 }
 
+/// The syllable patterns `hyphens: auto` breaks words by.
+///
+/// The book's declared language chooses them; a book that declares
+/// none breaks by English.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Patterns(Option<hypher::Lang>);
+
+impl Default for Patterns {
+    fn default() -> Patterns {
+        Patterns::ENGLISH
+    }
+}
+
+impl Patterns {
+    /// No patterns at all: every word stays whole.
+    pub const NONE: Patterns = Patterns(None);
+
+    /// The English patterns, which a book that declares no language
+    /// breaks by.
+    pub const ENGLISH: Patterns = Patterns(Some(hypher::Lang::English));
+
+    /// The patterns a book breaks by: the ones its declared
+    /// language names, English where it declares none, and `NONE`
+    /// where there are no patterns for the language it declares.
+    pub fn of(metadata: &Metadata) -> Patterns {
+        match metadata.language() {
+            Some(tag) => Patterns::of_tag(tag).unwrap_or(Patterns::NONE),
+            None => Patterns::default(),
+        }
+    }
+
+    /// The patterns a BCP 47 tag names, read from its primary
+    /// subtag, so `fr-CA` is French. `None` where there are no
+    /// patterns for that language.
+    pub fn of_tag(tag: &str) -> Option<Patterns> {
+        let primary = tag.split(['-', '_']).next().unwrap_or_default();
+        let code: [u8; 2] = primary.as_bytes().try_into().ok()?;
+        hypher::Lang::from_iso(code.map(|byte| byte.to_ascii_lowercase()))
+            .map(|lang| Patterns(Some(lang)))
+    }
+}
+
 /// How a paragraph is broken and filled. The defaults are ragged
 /// right, no hyphenation, and no mark hanging past the measure.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct LineBreakOptions {
     /// Whether `hyphens: auto` is in force.
     pub hyphenate: bool,
+    /// Which language's syllables `hyphenate` breaks at.
+    pub patterns: Patterns,
     /// Whether the lines fill the measure, from
     /// `text-align: justify`. Left, right and centred text all break
     /// the same way; where the line then sits is the caller's.
@@ -910,7 +954,7 @@ impl<'a> LineLayout<'a> {
             })
             .collect();
         if options.hyphenate {
-            self.add_hyphenation(text, widths, &mut opportunities);
+            self.add_hyphenation(text, widths, options.patterns, &mut opportunities);
         }
         // A hyphen and a space at the same offset are the same
         // break, and the one that costs nothing wins it.
@@ -919,17 +963,28 @@ impl<'a> LineLayout<'a> {
         opportunities
     }
 
-    fn add_hyphenation(&self, text: &str, widths: &Widths, opportunities: &mut Vec<Opportunity>) {
-        use hypher::Lang;
+    fn add_hyphenation(
+        &self,
+        text: &str,
+        widths: &Widths,
+        patterns: Patterns,
+        opportunities: &mut Vec<Opportunity>,
+    ) {
+        let Patterns(Some(lang)) = patterns else {
+            return;
+        };
         let mut start = 0usize;
         for boundary in self.segmenter.segment_str(text) {
             let word = &text[start..boundary];
+            // Letters of any script, since the patterns are of any
+            // language: German words carry umlauts and French ones
+            // accents, and a word held to ASCII would never break.
             let is_word = !word.is_empty()
                 && word
                     .chars()
-                    .all(|c| c.is_ascii_alphabetic() || c == '\'' || c == '-');
+                    .all(|c| c.is_alphabetic() || c == '\'' || c == '-');
             if is_word {
-                let syllables: Vec<&str> = hypher::hyphenate(word, Lang::English).collect();
+                let syllables: Vec<&str> = hypher::hyphenate(word, lang).collect();
                 let mut offset = start;
                 for syllable in syllables.iter().take(syllables.len().saturating_sub(1)) {
                     offset += syllable.len();
@@ -1831,6 +1886,61 @@ mod tests {
         let lines = layout_body("tick extraordinary", 40.0);
         assert!(lines.len() >= 2);
         assert_eq!(line_text(&lines[lines.len() - 1]), "extraordinary");
+    }
+
+    /// A BCP 47 tag is read by its primary subtag, whatever the
+    /// case and whatever follows it. A tag with no patterns behind it
+    /// resolves to nothing rather than to English.
+    #[test]
+    fn patterns_come_from_the_primary_subtag() {
+        let french = Patterns::of_tag("fr");
+        assert!(french.is_some());
+        assert_eq!(Patterns::of_tag("fr-CA"), french);
+        assert_eq!(Patterns::of_tag("FR_ca"), french);
+        assert_ne!(Patterns::of_tag("de"), french);
+
+        assert_eq!(Patterns::of_tag("xx"), None);
+        assert_eq!(Patterns::of_tag("haw"), None);
+        assert_eq!(Patterns::of_tag(""), None);
+    }
+
+    /// A book that declares nothing breaks by English, and one that
+    /// declares a language with no patterns breaks nowhere.
+    #[test]
+    fn a_book_without_a_language_breaks_by_english() {
+        let declared = |tag: &str| {
+            Patterns::of(&Metadata {
+                extra: [("language".to_string(), tag.to_string())]
+                    .into_iter()
+                    .collect(),
+                ..Default::default()
+            })
+        };
+        assert_eq!(Patterns::of(&Metadata::default()), Patterns::default());
+        assert_eq!(declared("en"), Patterns::default());
+        assert_eq!(declared("  "), Patterns::default());
+        assert_eq!(declared("xx"), Patterns::NONE);
+    }
+
+    /// Without patterns nothing breaks inside a word: the same lines
+    /// hyphenation off gives.
+    #[test]
+    fn no_patterns_leaves_every_word_whole() {
+        let text = "extraordinarily inconsiderate";
+        let whole = LineBreakOptions {
+            patterns: Patterns::NONE,
+            ..hyphenated()
+        };
+        assert_eq!(
+            layout_body_opts(text, 44.0, whole)
+                .iter()
+                .map(line_text)
+                .collect::<Vec<_>>(),
+            layout_body(text, 44.0)
+                .iter()
+                .map(line_text)
+                .collect::<Vec<_>>(),
+        );
     }
 
     /// Hyphenation on: a long word splits at syllable boundaries and
