@@ -38,6 +38,7 @@ use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
 use crate::images::Assets;
 use crate::layout::{Fragment, PageInfo, Paginator, font_table, no_assets};
+use crate::lines::Patterns;
 use crate::pdf::{self, PdfError};
 use crate::style::{ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
@@ -400,10 +401,14 @@ impl<'a> Session<'a> {
     /// Names the book: title, author, and whatever else a frontend
     /// read.
     ///
-    /// Nothing between the content tree and the page reads metadata,
-    /// so this invalidates no stage. The pages already laid out are
-    /// the pages the export writes under the new name.
+    /// The declared language is the one field a stage below reads,
+    /// and a book that changes it is hyphenated again. The pages
+    /// already laid out are otherwise the pages the export writes
+    /// under the new name.
     pub fn set_metadata(&mut self, metadata: Metadata) {
+        if Patterns::of(&metadata) != Patterns::of(&self.book.metadata) {
+            self.stale = self.stale.max(Stale::Break);
+        }
         self.book.to_mut().metadata = metadata;
     }
 
@@ -493,7 +498,13 @@ impl<'a> Session<'a> {
         }
         let mut fresh = Vec::with_capacity(self.book.sections.len());
         for section in &self.book.sections {
-            let key = section_key(section, &self.styles, against, supplied);
+            let key = section_key(
+                section,
+                &self.styles,
+                against,
+                supplied,
+                Patterns::of(&self.book.metadata),
+            );
             let kept = spare
                 .get_mut(&key)
                 .and_then(|slots| slots.pop())
@@ -508,6 +519,7 @@ impl<'a> Session<'a> {
                         &self.styles,
                         self.assets.get(),
                     );
+                    paginator.language(&self.book.metadata);
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -737,11 +749,13 @@ fn section_key(
     styles: &StyleTree,
     against: Against,
     assets: Option<usize>,
+    patterns: Patterns,
 ) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
     against.hash_into(h);
     assets.hash(h);
+    patterns.hash(h);
     (&section.source, &section.title, section.position).hash(h);
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);

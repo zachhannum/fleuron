@@ -17,13 +17,13 @@
 //! something does not fit, walks back to the last place a break was
 //! allowed.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, Inline, NodeId, Section, origin, text};
+use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Patterns};
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
@@ -198,6 +198,8 @@ pub struct Paginator<'a> {
     styles: &'a StyleTree,
     assets: &'a Assets,
     lines: LineLayout<'a>,
+    /// The syllable patterns `hyphens: auto` breaks by.
+    patterns: Cell<Patterns>,
     /// What fragmentation had to complain about. Recorded once per
     /// message: a book that scales the same image twice has one
     /// problem, not two.
@@ -222,8 +224,30 @@ impl<'a> Paginator<'a> {
             styles,
             assets,
             lines: LineLayout::new(registry),
+            patterns: Cell::new(Patterns::default()),
             warnings: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Takes the hyphenation patterns from the language the book
+    /// declares. `paginate` reads them from the book it is handed; a
+    /// caller that builds one section's fragments on its own says
+    /// them here.
+    ///
+    /// A tag no pattern set answers to leaves every word whole,
+    /// rather than breaking one language's words at another's
+    /// syllables.
+    pub fn language(&self, metadata: &Metadata) {
+        if let Some(tag) = metadata
+            .language()
+            .filter(|tag| Patterns::of_tag(tag).is_none())
+        {
+            self.warn(
+                format!("no hyphenation patterns for language `{tag}`; its words are left whole"),
+                None,
+            );
+        }
+        self.patterns.set(Patterns::of(metadata));
     }
 
     /// What fragmentation had to complain about.
@@ -237,6 +261,7 @@ impl<'a> Paginator<'a> {
     /// the next one is measured: what exists at once is the book's
     /// pages, not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
+        self.language(&book.metadata);
         let mut flow = Flow::new(self);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
@@ -656,6 +681,7 @@ impl Builder<'_, '_> {
         let style = computed.paragraph();
         let options = LineBreakOptions {
             hyphenate: computed.hyphens == Hyphens::Auto,
+            patterns: self.paginator.patterns.get(),
             justify: computed.text_align == TextAlign::Justify,
             inter_character: computed.text_justify == TextJustify::InterCharacter,
             hanging: computed.hanging_punctuation,

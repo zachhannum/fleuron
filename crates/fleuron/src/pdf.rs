@@ -181,8 +181,8 @@ fn document_metadata(metadata: &Metadata) -> PdfMetadata {
     if let Some(author) = &metadata.author {
         pdf = pdf.authors(vec![author.clone()]);
     }
-    if let Some(language) = metadata.extra.get("language") {
-        pdf = pdf.language(language.clone());
+    if let Some(language) = metadata.language() {
+        pdf = pdf.language(language.to_string());
     }
     if let Some(date) = metadata.extra.get("date").and_then(|date| written(date)) {
         pdf = pdf.creation_date(date);
