@@ -84,7 +84,10 @@ mod tests {
             font_id: 0,
             size,
             text: String::new(),
+            source: String::new(),
+            source_map: Vec::new(),
             text_start: 0,
+            features: crate::fonts::Features::NONE,
             glyphs: Vec::new(),
             advance: 0,
         }

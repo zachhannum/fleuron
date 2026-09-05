@@ -34,6 +34,9 @@ Text, inherited:
 | `font-style` | `normal`, `italic`, `oblique` |
 | `font-weight` | `normal`, `bold`, `1`–`1000` |
 | `line-height` | `normal`, `<number>`, `<length>`, `<percentage>` |
+| `letter-spacing` | `normal`, `<length>` |
+| `font-variant-caps` | `normal`, `small-caps` |
+| `text-transform` | `none`, `uppercase`, `lowercase`, `capitalize` |
 | `text-align` | `left`, `right`, `center`, `justify`, `start`, `end` |
 | `text-justify` | `auto`, `inter-word`, `inter-character`, `distribute` |
 | `text-indent` | `<length>` |
@@ -65,6 +68,14 @@ Lines break by total fit over the whole paragraph: every set of breaks is costed
 `text-align: justify` opens the space between words to reach the measure exactly, on every line but the last. `text-justify: inter-character` lets the space between letters change as well. The default does not. Left, right and centred text break the same way and sit where the alignment puts them.
 
 `hyphens: auto` adds syllable boundaries to the breaks a line may take, each charged for the hyphen it leaves and for coming after another one. No more than two lines in a row end hyphenated.
+
+### Display typography
+
+`letter-spacing` is advance added between the glyphs of a run, and the total-fit pass measures it like any other width. Nothing is added after a line's last glyph, so a tracked title centres on its own letters rather than on the space after them.
+
+`font-variant-caps: small-caps` takes the face's `smcp` feature. A face without one draws its lowercase as capitals at four-fifths of the size, and a diagnostic names it, so an author can pick a face that has them.
+
+`text-transform` changes the characters that are shaped. What a painter reads back is the text the author wrote: the run has the source and the shaper's mapping into the transformed form, so a PDF's text extraction, a search over it and copy and paste all return the manuscript. `capitalize` raises the letter a word opens with, where a word continues through letters, digits and the apostrophe inside one.
 
 ### Hanging punctuation
 
@@ -130,10 +141,10 @@ A page the flow put nothing on paints no margin boxes at all, so a page whose on
 
 The string in `url()` is handed to the loader unchanged, and does not have to be a real URL. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
 
-`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. Nothing is synthesised. See [fonts](library/fonts.md) for the full matching rules and how variable files register.
+`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. No slope or weight is synthesised. See [fonts](library/fonts.md) for the full matching rules and how variable files register.
 
 ## Not in the subset
 
-Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
+Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.

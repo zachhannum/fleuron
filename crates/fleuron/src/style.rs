@@ -33,8 +33,8 @@ use crate::pages::Side;
 
 pub use properties::{
     Align, Band, Break, ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle,
-    Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet, TextAlign,
-    TextJustify,
+    FontVariantCaps, Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet,
+    TextAlign, TextJustify, TextTransform,
 };
 pub use sheet::{Origin, Source};
 
@@ -535,6 +535,7 @@ fn cascade(
         let (font_id, warning) = resolve_face(&style, registry);
         style.font_id = font_id;
         report(&mut warnings, warning);
+        report(&mut warnings, synthesized_small_caps(&style, registry));
 
         // `::first-letter` cascades over the element's own style, so
         // it is a second matching pass rather than a second element.
@@ -551,6 +552,7 @@ fn cascade(
             let (font_id, warning) = resolve_face(&initial, registry);
             initial.font_id = font_id;
             report(&mut warnings, warning);
+            report(&mut warnings, synthesized_small_caps(&initial, registry));
             initial
         });
 
@@ -754,6 +756,23 @@ fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> (u16, Option<
             origin: None,
         }),
     )
+}
+
+/// The diagnostic for a face with no small capitals of its own, one
+/// per style that asks for them: an author who picked the face can
+/// pick another one.
+fn synthesized_small_caps(style: &ComputedStyle, registry: &FontRegistry) -> Option<Warning> {
+    let asked = style.font_variant_caps == FontVariantCaps::SmallCaps;
+    (asked && !registry.has_small_caps(style.font_id)).then(|| Warning {
+        message: format!(
+            "{} has no small capitals; reduced capitals used instead",
+            registry
+                .font_ref(style.font_id)
+                .map(|entry| entry.family.clone())
+                .unwrap_or_else(|| stack(&style.font_family)),
+        ),
+        origin: None,
+    })
 }
 
 /// A slope as a stylesheet names it.
@@ -1549,6 +1568,94 @@ mod tests {
                                     the first registered face used instead"
             }),
             "{:?}",
+            tree.warnings(),
+        );
+    }
+
+    /// The display-typography properties parse, cascade and inherit:
+    /// a rule on the book reaches the paragraph inside it, a rule on
+    /// the paragraph overrides it, and `em` inside picks up what the
+    /// paragraph set without being named.
+    #[test]
+    fn display_typography_parses_cascades_and_inherits() {
+        let book = nested();
+        let tree = compile(
+            &book,
+            "book { letter-spacing: 0.1em; font-variant-caps: small-caps;
+                    text-transform: uppercase }
+             p { letter-spacing: 2pt }",
+        );
+        let paragraph = first(&tree, "p");
+        assert_eq!(paragraph.letter_spacing, 2.0, "the closer rule lost");
+        assert_eq!(paragraph.font_variant_caps, FontVariantCaps::SmallCaps);
+        assert_eq!(paragraph.text_transform, TextTransform::Uppercase);
+        let emphasis = first(&tree, "em");
+        assert_eq!(
+            (
+                emphasis.letter_spacing,
+                emphasis.font_variant_caps,
+                emphasis.text_transform,
+            ),
+            (2.0, FontVariantCaps::SmallCaps, TextTransform::Uppercase,),
+            "emphasis did not inherit what the paragraph set",
+        );
+
+        // `em` is a multiple of the element's own size, `normal` and
+        // `none` are the initial values written out, and the defaults
+        // are what a book gets when nothing says otherwise.
+        let tree = compile(
+            &book,
+            "book { letter-spacing: 0.1em; text-transform: uppercase }
+             p { font-size: 20pt; letter-spacing: 0.1em }
+             em { letter-spacing: normal; text-transform: none;
+                  font-variant-caps: normal }",
+        );
+        assert_eq!(first(&tree, "p").letter_spacing, 2.0);
+        assert_eq!(first(&tree, "em").letter_spacing, 0.0);
+        assert_eq!(first(&tree, "em").text_transform, TextTransform::None);
+        let plain = first(&defaults(&book, registry()), "p");
+        assert_eq!(plain.letter_spacing, 0.0);
+        assert_eq!(plain.font_variant_caps, FontVariantCaps::Normal);
+        assert_eq!(plain.text_transform, TextTransform::None);
+
+        // A value none of the three has is a diagnostic, not a rule.
+        let tree = compile(&book, "p { text-transform: full-width }");
+        assert!(
+            tree.warnings()
+                .iter()
+                .any(|warning| { warning.message == "unsupported value for `text-transform`" }),
+            "{:?}",
+            tree.warnings(),
+        );
+    }
+
+    /// A face with no small capitals of its own is reported once,
+    /// however many nodes asked for them, and the book is set anyway.
+    /// A face that has them is not reported at all.
+    #[test]
+    fn a_face_without_small_capitals_says_so() {
+        let book = nested();
+        let bare = crate::fonts::registry_without_substitutions();
+        let css = "p, em, strong { font-variant-caps: small-caps }";
+        let tree = Stylesheets::parse(&[Source::author("author.css", css)]).compile(&book, &bare);
+        let complaints: Vec<&str> = tree
+            .warnings()
+            .iter()
+            .map(|warning| warning.message.as_str())
+            .filter(|message| message.contains("small capitals"))
+            .collect();
+        assert_eq!(
+            complaints,
+            vec!["eb garamond has no small capitals; reduced capitals used instead"],
+        );
+
+        let tree = compile(&book, css);
+        assert!(
+            !tree
+                .warnings()
+                .iter()
+                .any(|warning| warning.message.contains("small capitals")),
+            "the bundled face has small capitals: {:?}",
             tree.warnings(),
         );
     }

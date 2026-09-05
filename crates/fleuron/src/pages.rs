@@ -9,6 +9,7 @@ use std::ops::Range;
 use serde::{Deserialize, Serialize};
 
 use crate::content::NodeId;
+use crate::fonts::Features;
 
 /// Which side of the spread a page falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -65,11 +66,24 @@ pub enum DrawItem {
         font_id: u16,
         /// Em size in points.
         size: f32,
-        /// The text the glyphs were shaped from. Painters that map
-        /// glyphs back to characters — PDF text extraction, copy and
-        /// paste — read it through the glyphs' ranges; only the
-        /// shaper knew the correspondence, so it travels with them.
+        /// The text the glyphs were shaped from, which the glyphs'
+        /// ranges index. A painter that draws characters rather than
+        /// glyphs draws these.
         text: String,
+        /// What the author wrote, where `text-transform` or small
+        /// capitals made that differ from what was shaped, and empty
+        /// where the two are the same. Text extraction and copy and
+        /// paste return this rather than `text`: a title set in
+        /// capitals is read back in the case it was written in.
+        source: String,
+        /// The offset in `source` of every byte boundary of `text`,
+        /// so `source_map[range.start]..source_map[range.end]` is the
+        /// source a glyph stands for. Empty alongside `source`.
+        source_map: Vec<u32>,
+        /// The features the run was shaped with. A painter that draws
+        /// characters asks the face for these; one that draws glyphs
+        /// has the answer already.
+        features: Features,
         /// The glyphs, in visual order.
         glyphs: Vec<Glyph>,
     },

@@ -84,6 +84,53 @@ pub enum TextJustify {
     InterCharacter,
 }
 
+/// Which capitals a run is drawn with, from `font-variant-caps`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FontVariantCaps {
+    /// `normal`: the letters the text is written in.
+    Normal,
+    /// `small-caps`: lowercase letters set as small capitals.
+    SmallCaps,
+}
+
+/// What a run's letters are transformed to before they are shaped,
+/// from `text-transform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextTransform {
+    /// `none`
+    None,
+    /// `uppercase`
+    Uppercase,
+    /// `lowercase`
+    Lowercase,
+    /// `capitalize`: the first letter of every word.
+    Capitalize,
+}
+
+impl TextTransform {
+    /// Writes one character as this transform spells it, and answers
+    /// whether that differs from what was read. Case mapping is not
+    /// one for one, since `ß` uppercases to two letters, so what is
+    /// written is a stretch of text rather than a character.
+    ///
+    /// `word_start` is whether the character opens a word, which is
+    /// the only thing `capitalize` reads.
+    pub fn write(self, letter: char, word_start: bool, out: &mut String) -> bool {
+        let at = out.len();
+        match self {
+            TextTransform::None => out.push(letter),
+            TextTransform::Uppercase => out.extend(letter.to_uppercase()),
+            TextTransform::Lowercase => out.extend(letter.to_lowercase()),
+            TextTransform::Capitalize if word_start => out.extend(letter.to_uppercase()),
+            TextTransform::Capitalize => out.push(letter),
+        }
+        let mut one = [0u8; 4];
+        out[at..] != *letter.encode_utf8(&mut one)
+    }
+}
+
 /// Whether words may be broken at syllable boundaries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -459,6 +506,9 @@ pub enum Declaration {
     FontStyle(FontStyle),
     FontWeight(u16),
     LineHeight(LineHeight),
+    LetterSpacing(Length),
+    FontVariantCaps(FontVariantCaps),
+    TextTransform(TextTransform),
     TextAlign(TextAlign),
     TextJustify(TextJustify),
     TextIndent(Length),
@@ -527,6 +577,13 @@ pub struct ComputedStyle {
     pub font_weight: u16,
     /// Line height as a unitless multiple of the font size.
     pub line_height: f32,
+    /// Extra advance after every glyph, in points, from
+    /// `letter-spacing`.
+    pub letter_spacing: f32,
+    /// Which capitals the run is drawn with.
+    pub font_variant_caps: FontVariantCaps,
+    /// What the run's letters are transformed to before shaping.
+    pub text_transform: TextTransform,
     /// How lines fill the measure.
     pub text_align: TextAlign,
     /// What justification opens up to fill it.
@@ -579,6 +636,9 @@ impl ComputedStyle {
             font_style: FontStyle::Normal,
             font_weight: 400,
             line_height: NORMAL_LINE_HEIGHT,
+            letter_spacing: 0.0,
+            font_variant_caps: FontVariantCaps::Normal,
+            text_transform: TextTransform::None,
             text_align: TextAlign::Left,
             text_justify: TextJustify::InterWord,
             hanging_punctuation: HangingPunctuation::NONE,
@@ -628,6 +688,11 @@ impl ComputedStyle {
             Declaration::LineHeight(line_height) => {
                 self.line_height = line_height.to_multiple(self.font_size, root_size)
             }
+            Declaration::LetterSpacing(length) => {
+                self.letter_spacing = length.to_points(self.font_size, root_size)
+            }
+            Declaration::FontVariantCaps(caps) => self.font_variant_caps = *caps,
+            Declaration::TextTransform(transform) => self.text_transform = *transform,
             Declaration::TextAlign(align) => self.text_align = *align,
             Declaration::TextJustify(justify) => self.text_justify = *justify,
             Declaration::HangingPunctuation(hanging) => self.hanging_punctuation = *hanging,
@@ -663,6 +728,9 @@ impl ComputedStyle {
             font_id: self.font_id,
             size: self.font_size,
             line_height: self.line_height,
+            letter_spacing: self.letter_spacing,
+            caps: self.font_variant_caps,
+            transform: self.text_transform,
         }
     }
 }

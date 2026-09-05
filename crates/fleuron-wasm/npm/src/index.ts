@@ -39,6 +39,7 @@ export {
   type DrawItem,
   type AxisSetting,
   type FaceAttributes,
+  type Features,
   type FontRefEntry,
   type Glyph,
   type ImageItem,

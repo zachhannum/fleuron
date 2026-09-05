@@ -52,7 +52,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "9f6bf2a8bfe6da01da1d26fae8891edaae56c7f76083751677ea45cf24cc96c1";
+    "4c06bc76dd0681dfa93d80636bbaf3c2bed506fb42ec1572717f3354807dd78d";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -225,6 +225,93 @@ fn running_heads_and_roman_folios_reach_the_pdf() {
             .to_vec(),
         "the folios did not count in roman",
     );
+}
+
+/// The display-typography book: a title transformed to capitals, a
+/// chapter title in the face's own small capitals, a small-capital
+/// running head and tracking throughout, all through the CLI.
+///
+/// What a PDF can be asked is what a reader gets back, and what a
+/// reader gets back is the manuscript: the transform and the small
+/// capitals change which glyphs are drawn and neither changes a word.
+/// That the drawn glyphs are the right ones is asked of the two
+/// painters together, in the bindings' browser run.
+#[test]
+fn the_display_typography_book_extracts_as_it_was_written() {
+    let source = fixtures().join("display-typography.md");
+    let sheet = fixtures().join("display-typography.css");
+    let (pdf, stderr) = run(
+        "display-typography",
+        &[source.as_path()],
+        &[sheet.as_path()],
+    );
+    assert!(
+        !stderr.contains("unsupported"),
+        "the sheet is in the subset the engine honours: {stderr}",
+    );
+
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}{}",
+            String::from_utf8_lossy(&check.stdout),
+            String::from_utf8_lossy(&check.stderr),
+        );
+    }
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    // The title is drawn in capitals and the chapter title in small
+    // capitals. Neither is what the author wrote, and what comes back
+    // is what the author wrote.
+    for written in [
+        "A Voyage to Lilliput",
+        "The Author Gives Some Account of Himself",
+    ] {
+        assert!(
+            squeeze(&text).contains(&squeeze(written)),
+            "the PDF does not read back {written:?} as it was written:\n{text}",
+        );
+    }
+    assert!(
+        !squeeze(&text).contains(&squeeze("A VOYAGE TO LILLIPUT")),
+        "the PDF reads back the transform rather than the manuscript:\n{text}",
+    );
+
+    // The running head is the chapter string, so it comes back in the
+    // case the heading set it in rather than the small capitals it is
+    // drawn in.
+    let pages = pages_of(&text);
+    assert!(pages.len() >= 2, "the book runs past its opening page");
+    let head = pages[1]
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default();
+    assert_eq!(
+        squeeze(head),
+        squeeze("A Voyage to Lilliput"),
+        "page 2 has no running head, or not the one that was written",
+    );
+
+    // Every word of the manuscript, through a sheet that changed the
+    // case of two headings and the advance of every glyph.
+    let book = {
+        let markdown = std::fs::read_to_string(&source).expect("the fixture is checked in");
+        let name = source.display().to_string();
+        let (sections, warnings) =
+            fleuron_markdown::to_sections(&markdown, &name, &Options::default());
+        assert!(warnings.is_empty(), "the fixture is clean: {warnings:?}");
+        fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections)
+    };
+    let rendered = squeeze(&strip_furniture(&text, Some("A Voyage to Lilliput")));
+    let expected = squeeze(&laid_out_text(&book));
+    if rendered != expected {
+        panic!(
+            "the PDF's prose is not the book's: {}",
+            first_difference(&expected, &rendered)
+        );
+    }
 }
 
 /// The heading the fixture book's one chapter opens with, which the
@@ -723,7 +810,12 @@ fn folio_of(page: &str) -> Option<String> {
 }
 
 fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/gulliver-excerpt.md")
+    fixtures().join("gulliver-excerpt.md")
+}
+
+/// Where the checked-in manuscripts and sheets live.
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures")
 }
 
 /// The tree the CLI lays out, read the way the CLI reads it.

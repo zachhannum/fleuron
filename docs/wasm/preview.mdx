@@ -156,7 +156,9 @@ Layout never decodes an image. It probes the header for the intrinsic size, rese
 
 A browser handed a string and a font does its own typesetting: it chooses glyphs, applies kerning and ligatures, and works out where each one goes. fleuron has already done that work, and if the browser did it again the two answers would differ a little over a different shaper version, a rounded advance or a substituted font.
 
-So the painter leaves the browser nothing to work out. Each `<text>` sets an x for every one of its characters, taken from the glyph the engine placed there.
+So the painter leaves the browser nothing to work out. Each `<text>` sets an x for every one of its characters, taken from the glyph the engine placed there, and the run's axes and OpenType features are pinned so the browser reaches the glyphs the engine measured rather than the ones the characters spell.
+
+Where `text-transform` or small capitals changed the characters, the run has both. The painter draws what was shaped; beside it is what the author wrote, which is what selection and copy and paste return.
 
 The PDF writer reads the same display structure, so the two painters draw the same numbers, glyph for glyph.
 

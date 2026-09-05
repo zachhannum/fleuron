@@ -1,0 +1,63 @@
+/* Author styling for `display-typography.md`, in the three properties
+   that change which glyphs a run is shaped from: tracking, small
+   capitals and a case transform. The manuscript is titled in the case
+   an author writes in, because a transform over text already set in
+   capitals changes nothing and proves nothing.
+
+   Every rule here lands on the chapter's opening page, so one page
+   compared between the two painters covers all three. The engine chooses
+   glyphs once and both painters have to reach the same ones: the
+   preview draws characters and asks the face for the run's features,
+   the export draws the glyph ids themselves. A page where the two
+   disagree is a page a reader is shown one book and exports another. */
+
+@page {
+  size: 5.5in 8.5in;
+  margin: 54pt 48pt 54pt 48pt;
+
+  /* A running head in small capitals, tracked out: the face draws
+     the capitals, and the preview has to ask it for the same feature
+     rather than set the lowercase the characters spell. */
+  @top-center {
+    content: string(chapter);
+    font-variant-caps: small-caps;
+    letter-spacing: 0.08em;
+    font-size: 8pt;
+  }
+
+  @bottom-center {
+    content: counter(page);
+    font-size: 8pt;
+  }
+}
+
+book {
+  font-size: 11pt;
+  line-height: 1.4;
+}
+
+/* A part title in a case the author did not write, tracked out the
+   way a title is. What is drawn is the transform; what is read back
+   is the manuscript. */
+h2 {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 16pt;
+  text-align: center;
+}
+
+/* A chapter title in the face's own small capitals, over the case
+   the manuscript is written in. */
+h3 {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.06em;
+  font-size: 13pt;
+  text-align: center;
+}
+
+/* Tracking on running text, which is where the measure has to take
+   it in: every line breaks against the advance the tracking added. */
+p {
+  letter-spacing: 0.01em;
+  text-indent: 1.2em;
+}

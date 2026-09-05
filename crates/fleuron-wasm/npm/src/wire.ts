@@ -9,10 +9,16 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 4;
+export const WIRE_VERSION = 5;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
+
+/** The features beyond the default set a run was shaped with. */
+export interface Features {
+  /** `smcp`: the face's own small capitals. */
+  smallCaps: boolean;
+}
 
 /** One glyph: an id in its font, an absolute x, and the text it stands for. */
 export interface Glyph {
@@ -36,12 +42,30 @@ export interface TextItem {
   /** Em size in points. */
   size: number;
   /**
-   * The text the glyphs were shaped from. Only the shaper knew which
-   * glyph came from which character, so the correspondence travels
-   * with them: selection, copy-and-paste and accessible text read it
-   * through each glyph's range.
+   * The text the glyphs were shaped from, which each glyph's range
+   * indexes. A painter that draws characters rather than glyphs
+   * draws these.
    */
   text: string;
+  /**
+   * What the author wrote, where `text-transform` or small capitals
+   * made that differ from what was shaped, and empty where the two
+   * are the same. Selection, copy-and-paste and accessible text read
+   * this rather than {@link TextItem.text}.
+   */
+  source: string;
+  /**
+   * The offset in {@link TextItem.source} of every byte boundary of
+   * {@link TextItem.text}, so a glyph's range taken through it is
+   * the source that glyph stands for. Empty alongside `source`.
+   */
+  sourceMap: number[];
+  /**
+   * The OpenType features the run was shaped with. A painter that
+   * draws characters asks the face for these, or the browser picks
+   * its own glyphs and sets them at positions measured for others.
+   */
+  features: Features;
   /** The glyphs, in visual order. */
   glyphs: Glyph[];
 }
@@ -277,6 +301,9 @@ function item(r: Reader): DrawItem {
         fontId: r.varint(),
         size: r.f32(),
         text: r.string(),
+        source: r.string(),
+        sourceMap: r.seq(() => r.varint()),
+        features: { smallCaps: r.bool() },
         glyphs: r.seq(() => glyph(r)),
       };
     case 1:
