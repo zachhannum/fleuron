@@ -181,7 +181,12 @@ pub struct ShapedGlyph {
 
 /// The OpenType features a run is shaped with, beyond the ones the
 /// shaper turns on for every run.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+///
+/// These travel on the run. A painter that draws glyphs has them
+/// already; one that draws characters has to ask the face for the
+/// same features, or it draws different glyphs at the positions the
+/// engine measured.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Features {
     /// `smcp`: the face's own small capitals, from
     /// `font-variant-caps`.

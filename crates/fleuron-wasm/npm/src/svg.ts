@@ -101,7 +101,7 @@ function text(item: TextItem, options: PaintOptions): string {
     ` font-size="${num(item.size)}"` +
     ` font-weight="${entry?.attributes.weight ?? 400}"` +
     ` font-style="${entry?.attributes.italic === true ? 'italic' : 'normal'}"` +
-    ` style="${escape(style(entry))}" xml:space="preserve"` +
+    ` style="${escape(style(entry, item))}" xml:space="preserve"` +
     (entry === undefined ? ` data-missing-font="${item.fontId}"` : '') +
     `>${escape(item.text)}</text>`
   );
@@ -142,14 +142,26 @@ function stack(fontId: number, entry: FontRefEntry | undefined): string {
  * location on that file, not a file of its own, so a painter that
  * does not pin it draws the default weight for every one of them.
  */
-function style(entry: FontRefEntry | undefined): string {
+function style(entry: FontRefEntry | undefined, item: TextItem): string {
   const settings = (entry?.variations ?? [])
     .map((axis) => `"${axis.tag}" ${num(axis.value)}`)
     .join(', ');
   // A run includes the spaces the line was justified around, and SVG
   // collapses them by default, which would slide every character
   // after the first space one position along the x list.
-  return `white-space: pre` + (settings === '' ? '' : `; font-variation-settings: ${settings}`);
+  const rules = ['white-space: pre'];
+  if (settings !== '') {
+    rules.push(`font-variation-settings: ${settings}`);
+  }
+  // The engine shaped the run with the face's own small capitals, so
+  // the browser is asked for the same feature rather than left to
+  // draw the lowercase the characters spell. `font-feature-settings`
+  // rather than `font-variant-caps`, which synthesises where the
+  // face has nothing and would draw a size the engine never measured.
+  if (item.features.smallCaps) {
+    rules.push('font-feature-settings: "smcp" 1');
+  }
+  return rules.join('; ');
 }
 
 /**

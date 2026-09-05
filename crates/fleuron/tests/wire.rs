@@ -42,6 +42,11 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
             y,
             font_id,
             size,
+            // A run nothing transformed carries no source of its
+            // own; one that was is covered where the transform is.
+            source: String::new(),
+            source_map: Vec::new(),
+            features: fleuron::fonts::Features::NONE,
             text,
             glyphs,
         })

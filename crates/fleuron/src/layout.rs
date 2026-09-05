@@ -464,6 +464,9 @@ impl<'a> Paginator<'a> {
                 font_id: run.font_id,
                 size: run.size,
                 text: run.text.clone(),
+                source: run.source.clone(),
+                source_map: run.source_map.clone(),
+                features: run.features,
                 glyphs,
             });
             x_cursor = glyph_x;
@@ -1585,6 +1588,69 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A run's `text` is what was drawn, and its `source` is what was
+    /// written. The two painters read different fields for different
+    /// reasons: one draws characters and hands `text` to a browser,
+    /// the other maps glyphs back and reads `source`. A run that
+    /// carried only the manuscript would have the preview set a
+    /// chapter title in the case the export does not.
+    #[test]
+    fn a_run_says_both_what_was_drawn_and_what_was_written() {
+        let pages = paginate_styled(
+            "h1 { text-transform: uppercase }",
+            vec![section(vec![heading("A Voyage to Lilliput")])],
+        );
+        let title = pages[0]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                DrawItem::Text {
+                    text,
+                    source,
+                    source_map,
+                    glyphs,
+                    ..
+                } => Some((text, source, source_map, glyphs)),
+                _ => None,
+            })
+            .expect("the chapter set its title");
+        let (text, source, source_map, glyphs) = title;
+        assert_eq!(
+            text, "A VOYAGE TO LILLIPUT",
+            "the title was not drawn in capitals"
+        );
+        assert_eq!(
+            source, "A Voyage to Lilliput",
+            "the title lost its manuscript"
+        );
+        assert_eq!(
+            source_map.len(),
+            text.len() + 1,
+            "the map does not cover every byte boundary of what was drawn",
+        );
+        // Every glyph's range indexes what was drawn, and taken
+        // through the map it reads back the manuscript entire.
+        let read: String = glyphs
+            .iter()
+            .map(|glyph| {
+                let from = source_map[glyph.range.start as usize] as usize;
+                let to = source_map[glyph.range.end as usize] as usize;
+                &source[from..to]
+            })
+            .collect();
+        assert_eq!(read, *source, "the glyphs do not read the manuscript back");
+
+        // A book nothing transformed says nothing twice over.
+        let plain = paginate(vec![section(vec![heading("A Voyage to Lilliput")])]);
+        assert!(
+            plain[0].items.iter().all(|item| !matches!(
+                item,
+                DrawItem::Text { source, .. } if !source.is_empty()
+            )),
+            "an untransformed run carries a source of its own",
+        );
     }
 
     /// Overflow starts a new page: the first baseline of every page

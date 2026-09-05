@@ -236,17 +236,26 @@ fn paint(
             font_id,
             size,
             text,
+            source,
+            source_map,
+            // The glyphs are here; the features that chose them are
+            // for a painter that has to choose its own.
+            features: _,
             glyphs,
         } => {
             let font = fonts
                 .get(*font_id as usize)
                 .ok_or_else(|| PdfError::Font(font_id.to_string()))?;
-            let placed = place(glyphs, text, *x, *size, *font_id, registry);
+            // What a reader selects and what a search matches is the
+            // manuscript, so a run that was transformed hands over
+            // what the author wrote rather than what was drawn.
+            let extracted = extracted(text, source, source_map, glyphs);
+            let placed = place(glyphs, &extracted, *x, *size, *font_id, registry);
             surface.draw_glyphs(
                 Point::from_xy(*x, *y),
                 &placed,
                 font.clone(),
-                text,
+                extracted.text,
                 *size,
                 false,
             );
@@ -293,7 +302,7 @@ fn paint(
 /// Advances are in ems, hence the division by size.
 fn place(
     glyphs: &[Glyph],
-    text: &str,
+    extracted: &Extracted<'_>,
     origin: f32,
     size: f32,
     font_id: u16,
@@ -317,7 +326,7 @@ fn place(
             };
             KrillaGlyph {
                 glyph_id: GlyphId::new(glyph.id),
-                text_range: clamp_range(glyph, text),
+                text_range: extracted.ranges[i].clone(),
                 x_advance: advance,
                 x_offset: offset / size,
                 y_offset: 0.0,
@@ -328,10 +337,48 @@ fn place(
         .collect()
 }
 
-/// A glyph's range, kept inside the run's text and on character
-/// boundaries: krilla slices the text with it to build the ToUnicode
-/// map, and a bad range there is a panic, not a wrong glyph.
-fn clamp_range(glyph: &Glyph, text: &str) -> std::ops::Range<usize> {
+/// What a run's glyphs are read back as: one string, and the stretch
+/// of it each glyph stands for.
+struct Extracted<'a> {
+    text: &'a str,
+    ranges: Vec<std::ops::Range<usize>>,
+}
+
+/// The run as a reader gets it back. A run nothing transformed is
+/// read back as it was shaped; one that was carries what the author
+/// wrote, and every glyph's range is taken through the run's map
+/// into it.
+fn extracted<'a>(
+    text: &'a str,
+    source: &'a str,
+    source_map: &[u32],
+    glyphs: &[Glyph],
+) -> Extracted<'a> {
+    let transformed = !source_map.is_empty();
+    let read = if transformed { source } else { text };
+    let through = |at: u32| match source_map.get(at as usize) {
+        Some(offset) => *offset,
+        None => read.len() as u32,
+    };
+    let ranges = glyphs
+        .iter()
+        .map(|glyph| {
+            let range = if transformed {
+                through(glyph.range.start)..through(glyph.range.end)
+            } else {
+                glyph.range.start..glyph.range.end
+            };
+            clamp_range(range, read)
+        })
+        .collect();
+    Extracted { text: read, ranges }
+}
+
+/// A glyph's range, kept inside the string it indexes and on
+/// character boundaries: krilla slices the text with it to build the
+/// ToUnicode map, and a bad range there is a panic, not a wrong
+/// glyph.
+fn clamp_range(range: std::ops::Range<u32>, text: &str) -> std::ops::Range<usize> {
     let floor = |at: u32| {
         let mut at = (at as usize).min(text.len());
         while !text.is_char_boundary(at) {
@@ -339,15 +386,15 @@ fn clamp_range(glyph: &Glyph, text: &str) -> std::ops::Range<usize> {
         }
         at
     };
-    let start = floor(glyph.range.start);
-    start..floor(glyph.range.end).max(start)
+    let start = floor(range.start);
+    start..floor(range.end).max(start)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::content::{Block, Book, Inline, Section};
-    use crate::fonts::{BUNDLED_FONT, bundled_registry};
+    use crate::fonts::{BUNDLED_FONT, Features, bundled_registry};
     use crate::pages::{Glyph, Side};
 
     /// The fixture map: a JPEG whose JFIF density is not 96dpi, so
@@ -484,6 +531,9 @@ mod tests {
             font_id: 0,
             size: 10.0,
             text: "dd".into(),
+            source: String::new(),
+            source_map: Vec::new(),
+            features: Features::NONE,
             glyphs: vec![
                 Glyph {
                     id: d,
@@ -700,6 +750,41 @@ mod tests {
         assert!(
             pdf.contains("<006600660069>"),
             "the ffi ligature does not map back to f, f, i:\n{pdf}"
+        );
+    }
+
+    /// A transformed run is drawn in the letters the transform asked
+    /// for and read back in the ones the author wrote: the glyphs are
+    /// the capitals, and the ToUnicode map sends them to the source.
+    #[test]
+    fn a_transformed_run_extracts_as_it_was_written() {
+        let book = book("Some prose.");
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "author.css",
+            "p { text-transform: uppercase }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let (text, source) = output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Text { text, source, .. } => Some((text.clone(), source.clone())),
+                _ => None,
+            })
+            .expect("the book set a line");
+        assert_eq!(
+            (text.as_str(), source.as_str()),
+            ("SOME PROSE.", "Some prose.")
+        );
+
+        let pdf = readable(&output, &Metadata::default());
+        // The drawn capitals map back to what was written: an `O`
+        // that stands for an `o` is the whole of the difference.
+        assert!(
+            pdf.contains("<006F>"),
+            "the ToUnicode map does not send the capitals to the source:\n{pdf}",
         );
     }
 

@@ -218,13 +218,21 @@ pub struct ShapedRun {
     pub font_id: u16,
     /// Em size in points.
     pub size: f32,
-    /// The run's own text. Glyph ids alone do not spell anything:
-    /// text extraction and copy-paste need the characters back, and
-    /// the correspondence exists only in the shaper's output.
+    /// The text the run was shaped from. Glyph ids alone do not
+    /// spell anything, and the correspondence exists only in the
+    /// shaper's output.
     pub text: String,
+    /// What the author wrote, where a transform made that differ
+    /// from what was shaped, and empty where the two are the same.
+    pub source: String,
+    /// The offset in `source` of every byte boundary of `text`.
+    /// Empty alongside `source`.
+    pub source_map: Vec<u32>,
     /// Byte offset of `text` in the paragraph the glyphs' clusters
     /// index.
     pub text_start: u32,
+    /// The features the run was shaped with.
+    pub features: Features,
     /// The glyphs, in visual order.
     pub glyphs: Vec<ShapedGlyph>,
     /// Total advance of the run's glyphs, in font units.
@@ -290,8 +298,10 @@ struct FlatParagraph {
     /// What the author wrote. Kept only from the point something
     /// first transforms; until then `text` is the source.
     source: String,
-    /// Source offset of every byte of `text`, kept alongside
-    /// `source`.
+    /// How much of `source` the shaped text up to each of its bytes
+    /// accounts for. Kept alongside `source`, and rising with it, so
+    /// the stretch between two boundaries is the source that the
+    /// text between them was made from.
     map: Vec<u32>,
     /// Whether anything has been written that differs from its
     /// source.
@@ -337,25 +347,29 @@ impl FlatParagraph {
         }
     }
 
-    /// The text extraction reads back: the source where something
-    /// transformed, and the shaped text where nothing did.
-    fn source_text(&self) -> &str {
-        if self.transformed {
-            &self.source
-        } else {
-            &self.text
-        }
-    }
-
-    /// Where one offset in the shaped text sits in the source.
-    fn to_source(&self, at: usize) -> usize {
+    /// What the author wrote under one stretch of the shaped text,
+    /// and how much of it the text up to each byte accounts for.
+    ///
+    /// Both are empty where the two stretches are the same word for
+    /// word, which is every run of a book nothing transformed and
+    /// the untouched runs of a line that carries one.
+    fn source_of(&self, range: Range<usize>) -> (String, Vec<u32>) {
         if !self.transformed {
-            return at;
+            return (String::new(), Vec::new());
         }
-        match self.map.get(at) {
+        let at = |byte: usize| match self.map.get(byte) {
             Some(offset) => *offset as usize,
             None => self.source.len(),
+        };
+        let (from, to) = (at(range.start), at(range.end).max(at(range.start)));
+        let source = &self.source[from..to];
+        if source == &self.text[range.clone()] {
+            return (String::new(), Vec::new());
         }
+        let map = (range.start..=range.end)
+            .map(|byte| (at(byte).clamp(from, to) - from) as u32)
+            .collect();
+        (source.to_string(), map)
     }
 
     /// Starts keeping the source text, backfilling what has been
@@ -381,13 +395,20 @@ impl FlatParagraph {
     }
 
     /// Appends one character shaped as something other than itself.
-    /// Every byte written points back at the character it came from,
-    /// which is what extraction follows.
+    ///
+    /// The whole character is accounted for at the first byte it was
+    /// written as, so the first glyph of the pair `ß` shapes as
+    /// stands for the letter and the second stands for nothing.
+    /// Extraction walks the glyphs in order and reads the source back
+    /// once.
     fn push_mapped(&mut self, letter: char, written: &str) {
         self.start_mapping();
         let at = self.source.len() as u32;
-        self.map.extend(std::iter::repeat_n(at, written.len()));
         self.source.push(letter);
+        let after = self.source.len() as u32;
+        self.map.push(at);
+        self.map
+            .extend(std::iter::repeat_n(after, written.len() - 1));
         self.text.push_str(written);
     }
 
@@ -693,7 +714,7 @@ impl<'a> LineLayout<'a> {
             let at = &breaks[fit.at];
             if at.content_end > start {
                 let mut line = self.cut(&flat, &shaped, start, at.content_end, style);
-                self.adjust(&mut line, flat.source_text(), fit.ratio, options);
+                self.adjust(&mut line, &flat.text, fit.ratio, options);
                 if at.hyphen {
                     self.hyphenate(&mut line, style);
                 }
@@ -1039,6 +1060,12 @@ impl<'a> LineLayout<'a> {
         match line.runs.last_mut() {
             Some(run) if run.font_id == style.font_id && run.size == style.size => {
                 run.text.push('-');
+                // A hyphen the breaker drew stands for nothing the
+                // author wrote, so it maps to an empty stretch of the
+                // source and extraction reads straight past it.
+                if let Some(end) = run.source_map.last().copied() {
+                    run.source_map.push(end);
+                }
                 run.glyphs.push(ShapedGlyph {
                     id,
                     x_advance: advance,
@@ -1053,7 +1080,10 @@ impl<'a> LineLayout<'a> {
                 font_id: style.font_id,
                 size: style.size,
                 text: "-".to_string(),
+                source: String::new(),
+                source_map: Vec::new(),
                 text_start: ending,
+                features: Features::NONE,
                 glyphs: vec![ShapedGlyph {
                     id,
                     x_advance: advance,
@@ -1540,40 +1570,38 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
 /// line's paintable text stops: the spaces a break swallows are
 /// already off it.
 ///
-/// A run carries the text the author wrote rather than the text that
-/// was shaped, and its glyphs point back into it, because extraction
-/// and copy and paste have to return the one and not the other.
+/// A run carries the text it was shaped from, which is what a
+/// painter that draws characters draws, and beside it what the
+/// author wrote, which is what extraction and copy and paste return.
 fn cut_runs(
     flat: &FlatParagraph,
     shaped: &[ShapedSpan],
     start: usize,
     end: usize,
 ) -> Vec<ShapedRun> {
-    let source = flat.source_text();
     let mut runs = Vec::new();
     let mut trailing = 0i64;
     for (span, spec) in shaped.iter().zip(flat.spans.iter()) {
         if span.range.start >= end || span.range.end <= start {
             continue;
         }
-        let mut glyphs = span.glyphs_in(start, end);
+        let glyphs = span.glyphs_in(start, end);
         if glyphs.is_empty() {
             continue;
         }
-        if flat.transformed {
-            for glyph in &mut glyphs {
-                glyph.cluster = flat.to_source(glyph.cluster as usize) as u32;
-            }
-        }
         let advance = glyphs.iter().map(|g| g.x_advance).sum();
-        let text_start = flat.to_source(span.range.start.max(start));
-        let text_end = flat.to_source(span.range.end.min(end)).max(text_start);
+        let text_start = span.range.start.max(start);
+        let text_end = span.range.end.min(end).max(text_start);
         trailing = span.track;
+        let (source, source_map) = flat.source_of(text_start..text_end);
         runs.push(ShapedRun {
             font_id: spec.font_id,
             size: spec.size,
-            text: source[text_start..text_end].to_string(),
+            text: flat.text[text_start..text_end].to_string(),
+            source,
+            source_map,
             text_start: text_start as u32,
+            features: spec.features,
             glyphs,
             advance,
         });
@@ -2330,27 +2358,27 @@ mod tests {
         }];
         let synthesized =
             LineLayout::new(&bare).layout(&inlines, style, 400.0, LineBreakOptions::default());
-        let runs: Vec<(f32, &str)> = synthesized[0]
+        let runs: Vec<(f32, &str, &str)> = synthesized[0]
             .runs
             .iter()
-            .map(|run| (run.size, run.text.as_str()))
+            .map(|run| (run.size, run.text.as_str(), run.source.as_str()))
             .collect();
         assert_eq!(
             runs,
             vec![
-                (body().size * SMALL_CAPS_RATIO, "hi"),
-                (body().size, " H"),
-                (body().size * SMALL_CAPS_RATIO, "o"),
+                (body().size * SMALL_CAPS_RATIO, "HI", "hi"),
+                (body().size, " H", ""),
+                (body().size * SMALL_CAPS_RATIO, "O", "o"),
             ],
-            "the synthesis did not reduce what was lowercase and leave the rest",
+            "the synthesis did not raise what was lowercase, leave the rest, \
+             and keep what the author wrote",
         );
     }
 
-    /// `text-transform` changes what is shaped and nothing else: the
-    /// glyphs are the transformed text's, and the run carries the text
-    /// the author wrote, which is what extraction reads back. A
-    /// mapping that is not one for one, `ß` to `SS`, keeps both
-    /// glyphs pointing at the letter they came from.
+    /// `text-transform` changes what is shaped, and the run says so
+    /// twice over: `text` is what was drawn, which is what a painter
+    /// that draws characters draws, and `source` is what the author
+    /// wrote, which is what extraction reads back.
     #[test]
     fn text_transform_shapes_one_text_and_reports_another() {
         let style = ParagraphStyle {
@@ -2358,7 +2386,15 @@ mod tests {
             ..body()
         };
         let lines = layout_style("Lilliput", 400.0, style);
-        assert_eq!(line_text(&lines[0]), "Lilliput", "the run lost the source");
+        assert_eq!(
+            line_text(&lines[0]),
+            "LILLIPUT",
+            "the run was not drawn in capitals"
+        );
+        assert_eq!(
+            lines[0].runs[0].source, "Lilliput",
+            "the run lost the source"
+        );
         let shouted = layout_style("LILLIPUT", 400.0, body());
         assert_eq!(
             lines[0].runs[0]
@@ -2374,21 +2410,29 @@ mod tests {
             "the transform did not reach the shaper",
         );
 
+        // A mapping that is not one for one: `ß` shapes as two
+        // capitals, and both of them stand for the one letter.
         let lines = layout_style("Straße", 400.0, style);
         let run = &lines[0].runs[0];
-        assert_eq!(run.text, "Straße");
-        assert_eq!(run.glyphs.len(), 7, "STRASSE is seven glyphs");
-        let ranges = run.glyph_ranges();
-        let sharp = run.text.find('ß').expect("the source keeps its ß") as u32;
         assert_eq!(
-            (&ranges[4], &ranges[5]),
-            (&(sharp..sharp + 2), &(sharp..sharp + 2)),
-            "the two capitals do not both stand for the ß",
+            (run.text.as_str(), run.source.as_str()),
+            ("STRASSE", "Straße")
+        );
+        assert_eq!(run.glyphs.len(), 7, "STRASSE is seven glyphs");
+        let sharp = run.source.find('ß').expect("the source keeps its ß") as u32;
+        let through = |range: Range<u32>| {
+            run.source_map[range.start as usize]..run.source_map[range.end as usize]
+        };
+        let ranges = run.glyph_ranges();
+        assert_eq!(
+            (through(ranges[4].clone()), through(ranges[5].clone())),
+            (sharp..sharp + 2, sharp + 2..sharp + 2),
+            "the pair of capitals does not stand for the ß once",
         );
         assert_eq!(
-            ranges.last().map(|range| range.end),
-            Some(run.text.len() as u32),
-            "the last glyph does not run to the end of the source",
+            run.source_map.last().copied(),
+            Some(run.source.len() as u32),
+            "the map does not run to the end of the source",
         );
     }
 
@@ -2402,7 +2446,8 @@ mod tests {
         };
         let source = "the well-known don't of it";
         let lines = layout_style(source, 400.0, style);
-        assert_eq!(line_text(&lines[0]), source, "the run lost the source");
+        assert_eq!(line_text(&lines[0]), "The Well-Known Don't Of It");
+        assert_eq!(lines[0].runs[0].source, source, "the run lost the source");
         let shaped = layout_style("The Well-Known Don't Of It", 400.0, body());
         assert_eq!(
             lines[0].runs[0]

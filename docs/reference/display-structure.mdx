@@ -58,6 +58,9 @@ Text {
     font_id: u16,
     size: f32,
     text: String,
+    source: String,
+    source_map: Vec<u32>,
+    features: Features,
     glyphs: Vec<Glyph>,
 }
 ```
@@ -71,7 +74,11 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
   caption="Every text run of a page, with a rule drawn on the y the display structure gave it. The rules sit on the letters rather than above them, which is what a baseline is. Edit the manuscript and the rules move with the runs."
 />
 
-`text` is the string the glyphs were shaped from. It travels with the run because only the shaper knew which glyph came from which character, and a painter that supports text extraction or selection needs that correspondence back. A painter that only draws can ignore it.
+`text` is the string the glyphs were shaped from, and the glyphs' ranges index it. It travels with the run because only the shaper knew which glyph came from which character. A painter that draws characters rather than glyphs draws these.
+
+`source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped, and empty where the two are the same. Extraction, selection and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` holds the offset in `source` of every byte boundary of `text`, and is empty alongside it: a glyph's range taken through the map is the source that glyph stands for.
+
+`features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
 
 ### `Glyph`
 
@@ -110,6 +117,8 @@ A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the h
 For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
+
+A painter that cannot place glyphs by id, and draws characters instead, draws `text` and turns the run's `features` on, which is how it reaches the glyphs the engine measured. It reads `source` back rather than `text` wherever the reader gets the words: selection, extraction and copy and paste.
 
 For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
 
