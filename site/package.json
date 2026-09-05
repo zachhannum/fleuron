@@ -7,10 +7,11 @@
     "build": "node scripts/check-doc-links.mjs && astro check && astro build && node scripts/check-landing.mjs && node scripts/check-contrast.mjs",
     "preview": "astro preview",
     "check": "astro check",
+    "module": "node scripts/ensure-module.mjs",
     "demos": "node scripts/prepare-demos.mjs",
     "demos:check": "node scripts/check-island.mjs",
-    "predev": "npm run demos",
-    "prebuild": "npm run demos"
+    "predev": "npm run module && npm run demos",
+    "prebuild": "npm run module && npm run demos"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.2.4",

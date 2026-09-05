@@ -29,12 +29,7 @@ try {
   missing = true;
 }
 if (missing) {
-  console.error(
-    'the module is not built. From the repository root:\n' +
-      '  wasm-pack build crates/fleuron-wasm --target web --release --no-pack \\\n' +
-      '    --out-dir npm/wasm --out-name fleuron\n' +
-      '  npm --prefix crates/fleuron-wasm/npm ci && npm --prefix crates/fleuron-wasm/npm run build',
-  );
+  console.error('the module is not built:\n  npm --prefix site run module');
   process.exit(1);
 }
 
