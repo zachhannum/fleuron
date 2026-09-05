@@ -166,5 +166,8 @@ fn the_corpus_novel_breaks_the_same_under_english() {
 fn a_word_longer_than_the_inline_buffer_hyphenates() {
     let word = "человеконенавистничество";
     assert!(word.len() > 45, "the word is {} bytes", word.len());
-    assert!(!lines(&lay_out(&book(Some("ru"), word))).is_empty());
+    assert_eq!(
+        lines(&lay_out(&book(Some("ru"), word))),
+        ["че-", "ло-", "веко-", "нена-", "вист-", "ниче-", "ство"]
+    );
 }

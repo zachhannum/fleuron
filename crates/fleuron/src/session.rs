@@ -1129,13 +1129,7 @@ mod tests {
             "@page { size: 45pt 400pt; margin: 12pt } p { hyphens: auto }",
         ));
         session.set_content(Book {
-            metadata: Metadata {
-                extra: language
-                    .map(|tag| ("language".to_string(), tag.to_string()))
-                    .into_iter()
-                    .collect(),
-                ..Default::default()
-            },
+            metadata: language.map(declaring).unwrap_or_default(),
             sections: vec![section("one.md", vec![paragraph(prose)])],
         });
         session
