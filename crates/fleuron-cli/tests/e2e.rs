@@ -42,9 +42,10 @@ const STYLED_TRIM: &str = "396 x 612 pts";
 const ORNAMENT: &str = "\u{2766}";
 
 /// SHA-256 of the fixture book's display structure under the built-in
-/// sheet alone. Layout is deterministic, so these bytes are a fact
-/// about the pipeline: a digest that moves is a change someone meant
-/// to make.
+/// sheet alone, encoded without the wire version in front of it, so
+/// the digest is layout's own. Layout is deterministic, so these
+/// bytes are a fact about the pipeline: a digest that moves is a
+/// change someone meant to make.
 ///
 /// The display structure rather than the PDF, because a PDF's object
 /// numbering is the writer's own. krilla orders its font objects by
@@ -52,7 +53,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "79825ade60b6e3e854a0c6cf869347dc4f75ec5c8e851992866d2123d31f9a75";
+    "c8059d17b44d279d9aa1508f3466b1b596310521c2e0e67b0763344528e19166";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -754,7 +755,7 @@ fn fixture_display_list() -> Vec<u8> {
     let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
     let assets = Assets::probe(&book, &Beside);
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
-    fleuron::wire::encode(&output).expect("a display structure encodes")
+    postcard::to_stdvec(&output).expect("a display structure encodes")
 }
 
 /// Image urls resolved the way the CLI resolves them: against the
