@@ -666,9 +666,16 @@ mod tests {
         assert_eq!(heading, Color::rgb(180, 30, 30));
         let painted = content(&readable(&output, &Metadata::default()));
         // Channels as PDF writes them: each over 255.
+        let red = painted
+            .find("0.7058824 0.11764706 0.11764706 rg")
+            .unwrap_or_else(|| {
+                panic!("the heading did not fill with the colour its run carries:\n{painted}")
+            });
+        // The fill is surface state, so the prose under the heading
+        // has to set it back rather than inherit the red.
         assert!(
-            painted.contains("0.7058824 0.11764706 0.11764706 rg"),
-            "the heading did not fill with the colour its run carries:\n{painted}"
+            painted[red..].contains("\n0 g\n"),
+            "the heading's colour ran on into the prose under it:\n{painted}"
         );
 
         let rule = page_of(
