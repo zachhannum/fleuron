@@ -184,6 +184,42 @@ check(
   misplaced.slice(0, 3).join('; '),
 );
 
+// The face the site serves has to be able to draw what the engine
+// asked a face for. The preview draws characters and turns the run's
+// OpenType features on, so a face subset without one of them draws
+// the letters the characters spell at the advances the engine
+// measured for other glyphs, and a reader is shown a book the export
+// does not agree with.
+const features = await page.evaluate(async () => {
+  await document.fonts.ready;
+  // Measured the way the painter draws: `font-feature-settings` on
+  // an element set in the family the site serves the book face under.
+  const width = (settings) => {
+    const span = document.createElement('span');
+    span.textContent = 'handgloves';
+    span.setAttribute(
+      'style',
+      `position: absolute; white-space: pre; font: 32px "EB Garamond Subset";` +
+        ` font-feature-settings: ${settings}`,
+    );
+    document.body.append(span);
+    const measured = span.getBoundingClientRect().width;
+    span.remove();
+    return measured;
+  };
+  return {
+    loaded: document.fonts.check('32px "EB Garamond Subset"'),
+    plain: width('normal'),
+    small: width('"smcp" 1'),
+  };
+});
+check(
+  'the book face the site serves draws the small capitals the engine asks it for',
+  features.loaded && features.plain !== features.small,
+  `${features.loaded ? 'loaded' : 'NOT loaded'},` +
+    ` ${features.plain}px plain, ${features.small}px small`,
+);
+
 // An edit reaches the engine and comes back as a different book.
 // Typed the way a reader types it, through the controls the page
 // actually offers.

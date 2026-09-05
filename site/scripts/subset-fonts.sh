@@ -18,10 +18,15 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 chars='U+0020-007E,U+00A0,U+00A9,U+00B7,U+00D7,U+2013,U+2014,U+2018,U+2019,U+201C,U+201D,U+2026,U+2039,U+203A,U+2190,U+2192,U+2699,U+2766'
 
+# `smcp` is here because the engine can ask a face for it: a run set
+# in small capitals is shaped with the feature, and the preview draws
+# characters and asks the face for the same one. A face that arrived
+# without it draws the lowercase the characters spell, at the advances
+# the engine measured for capitals.
 subset() {
   pyftsubset "$1" \
     --unicodes="$chars" \
-    --layout-features='kern,liga,calt,onum,tnum' \
+    --layout-features='kern,liga,calt,onum,tnum,smcp' \
     --flavor=woff2 --with-zopfli \
     --output-file="$out/$2.woff2"
 }
