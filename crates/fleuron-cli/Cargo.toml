@@ -22,3 +22,6 @@ fleuron-markdown = { path = "../fleuron-markdown" }
 [dev-dependencies]
 # The e2e checks the fixture PDF against a digest; nothing ships with it.
 sha2 = "0.10"
+# The digest is taken over the display structure alone, so the e2e
+# encodes it rather than reading the version off the front of a buffer.
+postcard.workspace = true

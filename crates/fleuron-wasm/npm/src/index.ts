@@ -16,6 +16,7 @@ export { Engine, createEngine, type EngineOptions, type Reply } from './engine.j
 export {
   isFailed,
   isRendered,
+  styleOp,
   type Applied,
   type Failed,
   type Metadata,
@@ -23,6 +24,7 @@ export {
   type Rendered,
   type Request,
   type Response,
+  type Sheet,
   type Source,
   type Superseded,
   type Want,

@@ -59,7 +59,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `edit(name, text)` | one source replaced, the rest of the book left standing |
 | `remove(name)` | one source dropped |
 | `setMetadata({ title, author, extra })` | what names the book |
-| `setStyle(css)` | the author stylesheet |
+| `setStyle(css)` | the author's styling: one string, or named sheets in cascade order |
 | `addFont(bytes)` | a face, registered for the session's life |
 | `addImage(url, bytes)` | one image, by the url the manuscript names it by |
 | `render(ops?)` | lay out again, or apply anything the methods above do not reach |

@@ -10,9 +10,9 @@
 //! The encoding is positional, which is the price of that: a host's
 //! decoder reads fields in declaration order and has no way to notice
 //! that the order changed. So a version leads the bytes, [`VERSION`]
-//! moves whenever the display structure's shape does, and a host that
-//! reads a number it does not know refuses at the first byte instead
-//! of painting nonsense.
+//! moves whenever what crosses changes shape, and a host that reads
+//! a number it does not know refuses at the first byte instead of
+//! painting nonsense.
 //!
 //! [postcard]: https://postcard.jamesmunns.com/
 
@@ -20,7 +20,7 @@ use crate::LayoutOutput;
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 6;
+pub const VERSION: u16 = 7;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]

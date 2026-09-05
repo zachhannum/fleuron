@@ -50,7 +50,7 @@ self.onmessage = ({ data }) => {
 
 ```js
 // the host
-import { Client, paintPage } from 'fleuron';
+import { Client, paintPage, styleOp } from 'fleuron';
 
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), { type: 'module' });
 const client = new Client({ post: (request, transfer) => worker.postMessage(request, transfer) });
@@ -58,7 +58,7 @@ worker.onmessage = ({ data }) => client.receive(data);
 
 const output = await client.preview([
   { op: 'markdown', name: 'manuscript.md', text: markdown },
-  { op: 'style', css },
+  styleOp(css),
 ]);
 if (output !== null) {
   element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts });
@@ -79,7 +79,7 @@ styling, and every stage between them and the page. A second render
 pays for the edit rather than for the book.
 
 ```js
-await client.preview([{ op: 'style', css: '@page { margin-bottom: 84pt }' }]);
+await client.preview([styleOp('@page { margin-bottom: 84pt }')]);
 await client.preview([{ op: 'edit', name: 'ch03.md', text }]);
 await client.apply([{ op: 'font', bytes }]);
 ```
