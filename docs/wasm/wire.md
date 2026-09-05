@@ -11,7 +11,7 @@ Inputs are a different contract. [The content tree](../reference/content-tree.md
 
 A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks fields in the order they were written and cannot detect a change to that order. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` rejects an unknown version, and `wireVersion()` is what the module writes.
 
-`WIRE_VERSION` is the shape of what crosses: the ops a host sends, and the display structure that comes back. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest; the two move independently.
+`WIRE_VERSION` is the shape of what crosses, and it moves whenever either the ops or the display structure changes shape. What it refuses is a display structure it cannot read; an op in a shape the module no longer takes is answered on the error channel. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest; the two move independently.
 
 ## What crosses
 
