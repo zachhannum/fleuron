@@ -76,7 +76,7 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 
 `text` is the string the glyphs were shaped from, and the glyphs' ranges index it. It travels with the run because only the shaper knew which glyph came from which character. A painter that draws characters rather than glyphs draws these.
 
-`source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped, and empty where the two are the same. Extraction, selection and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` holds the offset in `source` of every byte boundary of `text`, and is empty alongside it: a glyph's range taken through the map is the source that glyph stands for.
+`source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped, and empty where the two are the same. Extraction, selection and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` records the offset in `source` of every byte boundary of `text`, and is empty alongside it: a glyph's range taken through the map is the source that glyph stands for.
 
 `features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
 

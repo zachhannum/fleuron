@@ -291,7 +291,7 @@ fn the_display_typography_book_extracts_as_it_was_written() {
     assert_eq!(
         squeeze(head),
         squeeze("A Voyage to Lilliput"),
-        "page 2 carries no running head, or not the one that was written",
+        "page 2 has no running head, or not the one that was written",
     );
 
     // Every word of the manuscript, through a sheet that changed the

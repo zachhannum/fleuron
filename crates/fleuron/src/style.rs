@@ -1575,7 +1575,7 @@ mod tests {
     /// The display-typography properties parse, cascade and inherit:
     /// a rule on the book reaches the paragraph inside it, a rule on
     /// the paragraph overrides it, and `em` inside picks up what the
-    /// paragraph carried without being named.
+    /// paragraph set without being named.
     #[test]
     fn display_typography_parses_cascades_and_inherits() {
         let book = nested();
@@ -1597,7 +1597,7 @@ mod tests {
                 emphasis.text_transform,
             ),
             (2.0, FontVariantCaps::SmallCaps, TextTransform::Uppercase,),
-            "emphasis did not inherit what the paragraph carried",
+            "emphasis did not inherit what the paragraph set",
         );
 
         // `em` is a multiple of the element's own size, `normal` and

@@ -345,7 +345,7 @@ struct Extracted<'a> {
 }
 
 /// The run as a reader gets it back. A run nothing transformed is
-/// read back as it was shaped; one that was carries what the author
+/// read back as it was shaped; one that was has what the author
 /// wrote, and every glyph's range is taken through the run's map
 /// into it.
 fn extracted<'a>(

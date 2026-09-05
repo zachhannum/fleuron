@@ -1593,8 +1593,8 @@ mod tests {
     /// A run's `text` is what was drawn, and its `source` is what was
     /// written. The two painters read different fields for different
     /// reasons: one draws characters and hands `text` to a browser,
-    /// the other maps glyphs back and reads `source`. A run that
-    /// carried only the manuscript would have the preview set a
+    /// the other maps glyphs back and reads `source`. A run with
+    /// only the manuscript in it would have the preview set a
     /// chapter title in the case the export does not.
     #[test]
     fn a_run_says_both_what_was_drawn_and_what_was_written() {
@@ -1649,7 +1649,7 @@ mod tests {
                 item,
                 DrawItem::Text { source, .. } if !source.is_empty()
             )),
-            "an untransformed run carries a source of its own",
+            "an untransformed run has a source of its own",
         );
     }
 

@@ -317,7 +317,7 @@ proptest! {
 
     /// Tracking does not cost justification its exactness: the glue
     /// still opens to the measure, to the same tolerance the untracked
-    /// paragraph holds to.
+    /// paragraph keeps to.
     #[test]
     fn justified_tracked_lines_hit_the_measure(
         text in text_strategy(),
@@ -343,7 +343,7 @@ proptest! {
 
     /// Display typography is deterministic too: tracking, small
     /// capitals and a transform are functions of the style, not of
-    /// anything a pass carries between runs.
+    /// anything a pass keeps between runs.
     #[test]
     fn display_typography_is_deterministic(
         text in text_strategy(),

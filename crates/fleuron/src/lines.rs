@@ -352,7 +352,7 @@ impl FlatParagraph {
     ///
     /// Both are empty where the two stretches are the same word for
     /// word, which is every run of a book nothing transformed and
-    /// the untouched runs of a line that carries one.
+    /// the untouched runs of a line that has one.
     fn source_of(&self, range: Range<usize>) -> (String, Vec<u32>) {
         if !self.transformed {
             return (String::new(), Vec::new());
@@ -485,7 +485,7 @@ fn raise(caps: SmallCaps, written: &mut String, changed: &mut bool) -> bool {
     true
 }
 
-/// Whether a character carries a word on rather than ending it.
+/// Whether a character continues a word rather than ending it.
 /// `capitalize` raises the letter after every other kind, which is
 /// why `well-known` comes out with two capitals and `don't` with one.
 fn continues_word(letter: char) -> bool {
@@ -1570,7 +1570,7 @@ fn skip_spaces(text: &str, mut at: usize) -> usize {
 /// line's paintable text stops: the spaces a break swallows are
 /// already off it.
 ///
-/// A run carries the text it was shaped from, which is what a
+/// A run records the text it was shaped from, which is what a
 /// painter that draws characters draws, and beside it what the
 /// author wrote, which is what extraction and copy and paste return.
 fn cut_runs(
@@ -2281,7 +2281,7 @@ mod tests {
         );
     }
 
-    /// Letter-spacing is advance the shaper's glyphs carry: every gap
+    /// Letter-spacing is advance on the shaper's glyphs: every gap
     /// between two glyphs opens by the tracking, and the last glyph
     /// keeps its own advance, so a tracked title measures the tracking
     /// times one fewer than its glyphs.
@@ -2314,7 +2314,7 @@ mod tests {
             assert_eq!(
                 loose.x_advance - tight.x_advance,
                 units.round() as u32,
-                "a glyph carries no tracking of its own",
+                "a glyph has no tracking of its own",
             );
         }
     }
@@ -2436,8 +2436,8 @@ mod tests {
         );
     }
 
-    /// `capitalize` raises the letter that opens a word, and a word is
-    /// carried on by letters, digits and the apostrophe inside one.
+    /// `capitalize` raises the letter that opens a word, and a word
+    /// continues through letters, digits and the apostrophe inside one.
     #[test]
     fn capitalize_raises_the_letter_that_opens_a_word() {
         let style = ParagraphStyle {

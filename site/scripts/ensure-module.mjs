@@ -8,7 +8,7 @@
  * engine.
  *
  * The module, the dependencies its package builds under, and the
- * package itself are each held against what they were last built
+ * package itself are each checked against what they were last built
  * from, and only the ones behind it are built. Where none of them
  * are, this costs a walk over a few directories.
  */
