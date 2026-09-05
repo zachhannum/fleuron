@@ -594,8 +594,7 @@ fn color(input: &mut Parser<'_, '_>) -> Option<Color> {
 }
 
 /// `rgb(r, g, b)`, with either commas or spaces between the
-/// channels. All three are numbers or all three are percentages, as
-/// CSS asks.
+/// channels. All three are numbers or all three are percentages.
 fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, StyleError<'i>>> {
     input.expect_function_matching("rgb")?;
     input.parse_nested_block(|input| {
@@ -612,8 +611,8 @@ fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, 
 }
 
 /// One channel of `rgb()`: `0` to `255`, or a percentage of it, and
-/// which of the two it was. `written` is what the channels before it
-/// were written as, and a channel that disagrees is not a colour.
+/// which of the two it was. `written` is how the channels before it
+/// were written, and a channel that disagrees is not a colour.
 fn channel<'i>(
     input: &mut Parser<'i, '_>,
     written: Option<bool>,
@@ -1422,8 +1421,8 @@ const NAMED: [(&str, Color); 148] = [
 mod tests {
     use super::*;
 
-    /// The name table is sorted, which is what the search over it
-    /// depends on, and every name in it reads back.
+    /// The name table is sorted, because the search over it is
+    /// binary, and every name in it reads back.
     #[test]
     fn every_colour_name_is_in_order_and_reads_back() {
         for pair in NAMED.windows(2) {

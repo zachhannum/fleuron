@@ -146,7 +146,7 @@ The second argument is all optional:
 | `fonts` | none | The font table, `output.fonts`. Leave it out and the painter cannot name the faces, so every run falls back to a generic serif. |
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
-| `ink` | `'#000000'` | The fill for a run or a rule left in black. A run the sheet coloured takes its own colour, so an `ink` other than black draws only what the sheet left black, and those runs are black in the export. |
+| `ink` | `'#000000'` | The fill for a run or a rule the sheet left black. A coloured run takes its own colour instead. `ink` reaches the preview only: the export prints black wherever the sheet named no colour. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 

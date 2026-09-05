@@ -39,10 +39,9 @@ impl Length {
     }
 }
 
-/// A colour, as `color` sets it: three eight-bit channels and no
-/// alpha.
+/// A colour: three eight-bit channels and no alpha.
 ///
-/// Serialization has two forms: `#rrggbb` where a person reads it,
+/// Serialization has two forms, `#rrggbb` where a person reads it
 /// and the three bytes on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Color {
@@ -55,7 +54,7 @@ pub struct Color {
 }
 
 impl Color {
-    /// What a page is set in until a rule says otherwise.
+    /// What a page is set in until a rule sets something else.
     pub const BLACK: Color = Color::rgb(0, 0, 0);
 
     /// A colour from its three channels.
@@ -63,13 +62,13 @@ impl Color {
         Color { r, g, b }
     }
 
-    /// The colour as CSS spells it, which is what a painter that
-    /// takes a string is given.
+    /// The colour written the way CSS writes it, for a painter
+    /// that takes a string.
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 
-    /// A `#rrggbb` string back, and `None` for anything else.
+    /// A colour from `#rrggbb`, and `None` for anything else.
     pub fn from_hex(text: &str) -> Option<Color> {
         let digits = text.strip_prefix('#')?;
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {

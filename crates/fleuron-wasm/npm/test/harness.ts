@@ -331,8 +331,7 @@ check(
 );
 
 // Colour: what the sheet names travels with the run, and the painter
-// fills with it. The PDF writer fills from the same field, which is
-// where the preview and the export come to agree.
+// fills with it. The PDF writer fills from the same field.
 const coloured = await client.preview([{ op: 'style', css: 'h2, h3 { color: #b41e1e }' }]);
 const headed =
   coloured?.pages.find((page) =>

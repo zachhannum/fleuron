@@ -299,9 +299,8 @@ fn paint(
     Ok(())
 }
 
-/// What the next item is filled with. Black is what PDF fills with
-/// when nothing says otherwise, so a run in black writes no colour at
-/// all.
+/// What the next item is filled with. A page starts out filling in
+/// black, so a run in black writes no colour at all.
 fn ink(surface: &mut Surface, color: Color) {
     surface.set_fill((color != Color::BLACK).then(|| Fill {
         paint: rgb::Color::new(color.r, color.g, color.b).into(),
@@ -454,8 +453,7 @@ mod tests {
         book
     }
 
-    /// A book that opens with a heading: what a sheet colours to see
-    /// the colour through style, layout and the writer.
+    /// A book that opens with a heading, for a sheet to colour.
     fn chapter() -> Book {
         let mut book = Book {
             metadata: Metadata::default(),
@@ -553,8 +551,9 @@ mod tests {
     /// The rest of a PDF is font and image bytes, and a byte pair
     /// inside a subset is not an operator.
     fn content(pdf: &str) -> String {
-        // On `\nstream\n` rather than `stream\n`, which cuts
-        // `endstream` in half and takes the terminator with it.
+        // The split is on `\nstream\n` rather than `stream\n`, which
+        // also matches the tail of `endstream` and takes the
+        // terminator with it.
         let streams: Vec<&str> = pdf
             .split("\nstream\n")
             .skip(1)
@@ -644,8 +643,7 @@ mod tests {
 
     /// Colour reaches the page: a heading the sheet coloured fills
     /// with the colour its run carries, a rule fills with its own,
-    /// and a page in black writes no colour at all, which is what a
-    /// PDF fills with anyway.
+    /// and a page in black writes no colour at all.
     #[test]
     fn items_fill_with_the_colour_they_carry() {
         let book = chapter();
@@ -665,7 +663,7 @@ mod tests {
             .expect("the heading opens the first page");
         assert_eq!(heading, Color::rgb(180, 30, 30));
         let painted = content(&readable(&output, &Metadata::default()));
-        // Channels as PDF writes them: each over 255.
+        // The channels the PDF writes, each over 255.
         let red = painted
             .find("0.7058824 0.11764706 0.11764706 rg")
             .unwrap_or_else(|| {

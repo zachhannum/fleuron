@@ -1651,8 +1651,9 @@ mod tests {
             "a book nothing coloured is set in black",
         );
 
-        // A name nothing has, and channels written half one way and
-        // half the other, which CSS does not allow either.
+        // A name no colour has, and channels written half as
+        // numbers and half as percentages, neither of which CSS
+        // allows.
         for css in ["p { color: octarine }", "p { color: rgb(10, 20%, 30) }"] {
             let tree = compile(&book, css);
             assert!(
@@ -1680,9 +1681,9 @@ mod tests {
         assert_eq!(first(&tree, "h1").color, Color::rgb(180, 30, 30));
     }
 
-    /// Colour on a box is a colour on its text, and the properties
-    /// that would fill the box behind it need a box model to be an
-    /// edge of. Each still names where it was written.
+    /// `color` sets the text of a box. `background-color` fills the
+    /// box behind it and needs a box model, so it warns at the line
+    /// and column it was written at.
     #[test]
     fn background_colour_warns_where_it_was_written() {
         let book = sample();

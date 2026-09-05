@@ -1064,9 +1064,9 @@ impl<'a> LineLayout<'a> {
             .last()
             .map(|run| run.text_start + run.text.len() as u32)
             .unwrap_or_default();
-        // The face is the paragraph's because the charge was read
-        // from it. The colour is the word's: it costs no width, and a
-        // hyphen at the end of a coloured word belongs to the word.
+        // The hyphen takes the last run's colour, because colour
+        // costs no width, and the paragraph's face, because that is
+        // where its width was charged.
         let color = line.runs.last().map_or(style.color, |run| run.color);
         match line.runs.last_mut() {
             Some(run) if run.font_id == style.font_id && run.size == style.size => {

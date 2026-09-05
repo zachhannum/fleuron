@@ -26,7 +26,7 @@ export interface PaintOptions {
   zoom?: number;
   /** What the page is printed on; `null` leaves it transparent. */
   paper?: string | null;
-  /** What a run the sheet gave no colour of its own is printed in. */
+  /** What a run or a rule the sheet left black is printed in. */
   ink?: string;
   /**
    * Where an image's pixels come from: any url an `<img>` would
@@ -116,8 +116,8 @@ function rect(item: RectItem): string {
 }
 
 /**
- * An item's own fill, where it has one. Black is what a sheet that
- * named no colour leaves, and the page's ink draws that, so a host
+ * An item's own fill, where it has one. A sheet that names no colour
+ * leaves the item black, and the page's ink draws those, so a host
  * printing in grey still gets grey.
  */
 function filled(color: string): string {

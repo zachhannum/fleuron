@@ -1,5 +1,5 @@
 //! Colour: what a sheet sets, what the runs carry, and what a page
-//! comes out as when nothing sets any.
+//! comes out as when no sheet names one.
 //!
 //! One fixture — a chapter opening and a paragraph under it — set
 //! twice: once under a sheet that names no colour, and once under one
@@ -145,8 +145,8 @@ fn described(item: &DrawItem) -> String {
             source,
             source_map,
             features,
-            // What every other test here is about; this one is about
-            // everything else standing where it stood.
+            // Every other test here checks the colour; this one
+            // checks everything else.
             color: _,
             glyphs,
         } => {
@@ -179,7 +179,7 @@ fn described(item: &DrawItem) -> String {
     }
 }
 
-/// Every page of a laid-out book, as the lines a painter would read.
+/// Every page of a laid-out book, one line per item.
 fn description(pages: &[Page]) -> Vec<Vec<String>> {
     pages
         .iter()
@@ -208,7 +208,7 @@ fn colour_of(pages: &[Page], opening: &str) -> Vec<Color> {
 
 /// Every run carries the colour its own style named: the heading its
 /// own, the prose the section's, the emphasis inside the prose a
-/// third, and the folio what the margin box was given.
+/// third, and the folio the margin box's.
 #[test]
 fn every_run_carries_the_colour_its_style_named() {
     let book = fixture();
@@ -220,9 +220,9 @@ fn every_run_carries_the_colour_its_style_named() {
     assert_eq!(colour_of(&pages, "1"), [Color::rgb(128, 128, 128)]);
 }
 
-/// A hyphen the breaker draws inside a coloured word is the word's
-/// colour. It is set in the paragraph's face, because that is where
-/// its width was charged, and colour costs no width.
+/// A hyphen the breaker draws inside a coloured word takes the
+/// word's colour. It is set in the paragraph's face, because that is
+/// where its width was charged.
 #[test]
 fn a_hyphen_inside_a_coloured_word_takes_the_words_colour() {
     let book = hyphenated();
@@ -245,9 +245,8 @@ fn a_hyphen_inside_a_coloured_word_takes_the_words_colour() {
     );
 }
 
-/// A book whose sheet names no colour is set the way it was set
-/// before a sheet could name one: the pages, the runs and every glyph
-/// on them stand where they stood.
+/// A sheet that names no colour changes nothing: the pages, the runs
+/// and every glyph on them stand where they stood.
 #[test]
 fn a_sheet_that_names_no_colour_sets_the_book_unchanged() {
     let book = fixture();

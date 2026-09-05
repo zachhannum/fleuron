@@ -871,8 +871,8 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         font_size,
         font_style: _,
         font_weight: _,
-        // Nothing about a line moves for it. The runs the broken
-        // lines hold carry it, so a sheet that recolours them has to
+        // No line moves for it. The runs the broken lines hold
+        // carry the colour, so a sheet that recolours them has to
         // break them again.
         color,
         line_height,
@@ -1200,9 +1200,8 @@ mod tests {
         assert_eq!(after.paint, before.paint, "the furniture was painted again");
     }
 
-    /// A colour edit breaks the lines again. The colour is on the
-    /// runs the broken lines hold, so a sheet that recolours them has
-    /// no shorter way back to a page than breaking them.
+    /// A colour edit breaks the lines again: the runs the broken
+    /// lines hold are what carry the colour.
     #[test]
     fn a_colour_edit_breaks_the_lines_again() {
         let mut session = three_chapters();

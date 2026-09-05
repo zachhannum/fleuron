@@ -67,8 +67,8 @@ export interface TextItem {
    */
   features: Features;
   /**
-   * What the run is painted in, as `#rrggbb`. Black is what a sheet
-   * that named no colour leaves.
+   * The `#rrggbb` the run is painted in. A sheet that names no
+   * colour leaves it black.
    */
   color: string;
   /** The glyphs, in visual order. */
@@ -86,7 +86,7 @@ export interface RectItem {
   w: number;
   /** Height in points. */
   h: number;
-  /** What the rectangle is filled with, as `#rrggbb`. */
+  /** The `#rrggbb` the rectangle is filled with. */
   color: string;
 }
 
@@ -279,7 +279,7 @@ class Reader {
     return out;
   }
 
-  /** One byte, as a `u8` is written: itself, not a varint. */
+  /** One byte. A `u8` is written as itself, not as a varint. */
   byte(): number {
     const value = this.bytes[this.at++];
     if (value === undefined) {
@@ -288,7 +288,7 @@ class Reader {
     return value;
   }
 
-  /** Three channels, as the `#rrggbb` a painter fills with. */
+  /** Three bytes, one per channel, read back as `#rrggbb`. */
   color(): string {
     const digits = [this.byte(), this.byte(), this.byte()]
       .map((channel) => channel.toString(16).padStart(2, '0'))
