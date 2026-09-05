@@ -1,6 +1,6 @@
 # The one workflow that publishes, and a `v*` tag is the only thing that
-# runs it. It runs the wasm workflow again, with the tag held against
-# every version the repository carries, and the module and the built
+# runs it. It runs the wasm workflow again, with the tag checked against
+# every version in the repository, and the module and the built
 # package come out of that run rather than being built a second time
 # here.
 name: release
@@ -46,7 +46,7 @@ jobs:
         with:
           name: package
           path: .
-      - name: The tarballs the release carries
+      - name: The tarballs the release ships
         run: |
           mkdir -p release
           npm pack --pack-destination "$GITHUB_WORKSPACE/release" \

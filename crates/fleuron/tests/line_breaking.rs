@@ -12,7 +12,7 @@ fn registry() -> &'static FontRegistry {
 }
 
 /// The body style the built-in sheet computes: what these properties
-/// hold for the styling a book gets by default.
+/// come to for the styling a book gets by default.
 fn body() -> ParagraphStyle {
     fleuron::style::defaults(&fleuron::content::Book::default(), registry())
         .root()
@@ -103,8 +103,8 @@ proptest! {
     /// Every glyph survives layout, in order: breaking never drops or
     /// reorders content. Stated over the shaper's output rather than
     /// the source letters, because ligatures merge letters into one
-    /// glyph — `ff` is a single glyph carrying the cluster of the
-    /// first `f`, so a letter count is not a glyph count. Layout is
+    /// glyph — `ff` is a single glyph at the cluster of the first
+    /// `f`, so a letter count is not a glyph count. Layout is
     /// allowed to drop spaces at line edges and nothing else.
     #[test]
     fn every_glyph_survives_in_order(text in text_strategy(), measure in 30.0f32..300.0) {
@@ -213,7 +213,7 @@ proptest! {
     }
 
     /// Justified layout is deterministic too: the adjustment is a
-    /// function of the line, not of anything the pass carries between
+    /// function of the line, not of any state the pass keeps between
     /// runs.
     #[test]
     fn justified_layout_is_deterministic(text in text_strategy(), measure in 20.0f32..300.0) {

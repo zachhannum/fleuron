@@ -20,7 +20,7 @@ jobs:
     steps:
       # `main` takes no push from `GITHUB_TOKEN`. It is protected, and a
       # personal repository can exempt neither an administrator's bot nor
-      # GitHub's own Actions app from that: the bypass list holds apps
+      # GitHub's own Actions app from that: the bypass list takes apps
       # installed on this account, so the release is one of those.
       #
       # The token checkout leaves in the local config is sent on every

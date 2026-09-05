@@ -4,10 +4,10 @@
 //! it by decoding would put a pixel buffer in the layout pass. So the
 //! engine reads the header: PNG's `IHDR` and `pHYs`, JPEG's `SOFn` and
 //! JFIF density, GIF's screen descriptor, WebP's chunk headers. The
-//! file is held as it arrived and decoded by nothing until a painter
-//! asks for the pixels.
+//! file is kept as it arrived and decoded by nothing until a painter
+//! needs the pixels.
 //!
-//! The engine opens nothing itself, as with fonts. Whatever string
+//! The engine opens nothing itself, the same as with fonts. Whatever string
 //! the content tree writes is the name an image is matched under. It
 //! never has to be a real URL; the host is what turns a name into
 //! bytes.
@@ -150,10 +150,10 @@ impl Assets {
             .map(|index| (index as u32, self.assets[index].intrinsic))
     }
 
-    /// Whether this table has an answer for a url: an asset, or a
-    /// complaint about why there is none. A url it has never been
-    /// offered is neither, and is what layout reports.
-    pub fn knows(&self, url: &str) -> bool {
+    /// Whether a url has been probed: an asset came of it, or a
+    /// complaint about why none did. A url nobody offered is neither,
+    /// and is what layout reports.
+    pub fn probed(&self, url: &str) -> bool {
         self.refused.contains(url) || self.lookup(url).is_some()
     }
 
@@ -163,7 +163,7 @@ impl Assets {
     }
 
     /// The file one asset was probed from: the bytes a painter
-    /// embeds, as the host handed them over.
+    /// embeds, unchanged from what the host handed over.
     pub fn bytes(&self, index: u32) -> Option<&[u8]> {
         self.files.get(index as usize).map(Vec::as_slice)
     }
@@ -186,7 +186,7 @@ impl Assets {
         for block in blocks {
             match block {
                 Block::Image { url, position, .. } => {
-                    if self.knows(url) {
+                    if self.probed(url) {
                         continue;
                     }
                     let origin = Some(crate::content::origin(None, *position));
@@ -212,7 +212,7 @@ impl Assets {
 }
 
 /// Reads an image's size from its header. `None` for a format no
-/// probe knows, or a header too short to hold one.
+/// probe recognises, or a header too short to read one from.
 pub fn probe(bytes: &[u8]) -> Option<Intrinsic> {
     png(bytes)
         .or_else(|| jpeg(bytes))
@@ -283,7 +283,7 @@ fn jpeg(bytes: &[u8]) -> Option<Intrinsic> {
             return None;
         }
         let marker = *bytes.get(at + 1)?;
-        // Padding fill bytes, and the standalone markers that carry no
+        // Padding fill bytes, and the standalone markers with no
         // segment at all.
         if marker == 0xFF {
             at += 1;
@@ -327,7 +327,7 @@ fn jpeg(bytes: &[u8]) -> Option<Intrinsic> {
     }
 }
 
-/// GIF: the logical screen descriptor, which carries no resolution.
+/// GIF: the logical screen descriptor, which has no resolution in it.
 fn gif(bytes: &[u8]) -> Option<Intrinsic> {
     if !bytes.starts_with(b"GIF87a") && !bytes.starts_with(b"GIF89a") {
         return None;
@@ -341,7 +341,7 @@ fn gif(bytes: &[u8]) -> Option<Intrinsic> {
 }
 
 /// WebP: the extended header when there is one, the lossy or lossless
-/// frame header otherwise. None of the three carries a resolution.
+/// frame header otherwise. None of the three records a resolution.
 fn webp(bytes: &[u8]) -> Option<Intrinsic> {
     if !bytes.starts_with(b"RIFF") || bytes.get(8..12)? != b"WEBP" {
         return None;
@@ -429,7 +429,7 @@ mod tests {
         bytes
     }
 
-    /// Every format the probe knows, read back at its declared size.
+    /// Every format the probe recognises, read back at its declared size.
     #[test]
     fn headers_give_up_their_dimensions() {
         assert_eq!(
@@ -485,7 +485,7 @@ mod tests {
 
     /// A host that pushes gets the same table a loader would have
     /// filled: the header sizes the image, the file is kept for the
-    /// painter, and bytes no probe knows are one complaint and no
+    /// painter, and bytes no probe recognises are one complaint and no
     /// asset.
     #[test]
     fn pushed_images_are_probed_and_kept() {
@@ -499,8 +499,8 @@ mod tests {
         assert_eq!(assets.lookup("a.png").map(|(index, _)| index), Some(0));
 
         assert_eq!(assets.add("c.txt", b"not an image".to_vec()), None);
-        assert!(assets.knows("c.txt"), "a refusal is an answer");
-        assert!(!assets.knows("d.png"), "a url nobody offered is not");
+        assert!(assets.probed("c.txt"), "a refusal counts as probed");
+        assert!(!assets.probed("d.png"), "a url nobody offered does not");
         assert_eq!(assets.warnings().len(), 1);
         assert!(assets.warnings()[0].message.contains("c.txt"));
         // Offered twice, complained about once.

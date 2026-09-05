@@ -9,7 +9,7 @@ import { decodeDisplayList, type LayoutOutput } from './wire.js';
 /** How a request reaches the worker. */
 export interface Transport {
   /**
-   * Sends one request. `transfer` holds the buffers that should move
+   * Sends one request. `transfer` lists the buffers that should move
    * rather than be copied: font and image bytes, which the host has
    * no reason to keep a second copy of.
    */
@@ -47,7 +47,7 @@ export class Client {
     settle(response);
   }
 
-  /** The generation the next render will carry. */
+  /** The generation the next render goes out under. */
   get current(): number {
     return this.generation;
   }
@@ -109,9 +109,9 @@ export class Client {
     if (!isRendered(response)) {
       return SUPERSEDED;
     }
-    // The worker only knows it was overtaken by a request it had in
-    // hand. A reply can also be outrun in flight, and the host is the
-    // one who can see that.
+    // Only overtaking among the requests the worker already had shows
+    // up there. A reply can also be outrun in flight, which only the
+    // host can see.
     if (response.generation < this.generation) {
       return SUPERSEDED;
     }

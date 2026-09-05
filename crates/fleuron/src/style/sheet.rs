@@ -2,7 +2,7 @@
 //!
 //! Nothing here matches or cascades. What it does decide is what the
 //! engine claims to understand: a declaration outside the novel
-//! subset does not become a rule, it becomes a warning carrying the
+//! subset does not become a rule, it becomes a warning naming the
 //! position it was written at, and the rest of the sheet parses on.
 
 use cssparser::{
@@ -122,7 +122,7 @@ pub enum PageDeclaration {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarginDeclaration {
     Content(Content),
-    /// A text property; margin boxes carry a line like any other.
+    /// A text property; margin boxes set a line like any other.
     Style(Declaration),
 }
 
@@ -993,8 +993,8 @@ fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
             })
             .ok();
     }
-    // `string(name)`: the running string, as it stood at the page's
-    // start.
+    // `string(name)`: the running string, at the value it stood at
+    // when the page began.
     if function.eq_ignore_ascii_case("string") {
         return input
             .parse_nested_block(|input| {
@@ -1133,7 +1133,7 @@ impl<'i> RuleBodyItemParser<'i, FaceDeclaration, StyleError<'i>> for FontFaceBod
 }
 
 /// A `src` list: urls for the host to resolve, or faces it may
-/// already hold. `format()` hints are read and dropped — the loader
+/// already have. `format()` hints are read and dropped — the loader
 /// hands back bytes and the registry decides what they are.
 fn sources<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Src>, ParseError<'i, StyleError<'i>>> {
     input.parse_comma_separated(|input| {

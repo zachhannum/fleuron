@@ -55,8 +55,8 @@ The pipeline runs one way. Nothing downstream reaches back upstream.
 | `fleuron-cli` | The `fleuron` binary. Markdown in, PDF out. |
 | `fleuron-wasm` | WASM bindings, plus a worker, a display-structure reader and an SVG painter in TypeScript. Ships to npm as `fleuron`. |
 
-`fleuron-react` wraps the preview as a component and holds no engine
-logic.
+`fleuron-react` wraps the preview as a component and contains no
+engine logic.
 
 Most callers write markdown. The content tree stays public for a host
 that already has structured content, such as a CMS or a docx converter.
@@ -66,7 +66,7 @@ that already has structured content, such as a CMS or a docx converter.
 1. **Styling enters as CSS.** A built-in user-agent stylesheet supplies
    the defaults and author CSS cascades over it. Everything downstream
    reads the resolved style tree. [`docs/css-subset.mdx`](docs/css-subset.mdx)
-   lists what the engine understands.
+   lists what the engine supports.
 2. **The engine never touches the DOM.** Bytes in, bytes out. SVG,
    canvas and PDF are interchangeable painters over the display
    structure.
@@ -75,8 +75,8 @@ that already has structured content, such as a CMS or a docx converter.
 
 ## Performance
 
-Two public-domain novels, laid out from markdown and held against fixed
-budgets.
+Two public-domain novels, laid out from markdown and checked against
+fixed budgets.
 
 | | pages | parse | style | line layout | fragment | PDF | end to end | layout peak |
 |---|---|---|---|---|---|---|---|---|

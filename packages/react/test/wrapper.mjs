@@ -42,7 +42,7 @@ check(
 
 const engine = ['postcard', 'decodeDisplayList', 'Worker', 'Client', 'paintPage', 'wire'];
 const found = engine.filter((word) => built.includes(word));
-check('and knows none of the words the engine is built out of', found.length === 0, found.join(', '));
+check('and names none of the words the engine is built out of', found.length === 0, found.join(', '));
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

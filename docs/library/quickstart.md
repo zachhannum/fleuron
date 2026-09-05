@@ -182,7 +182,7 @@ let output = fleuron::layout::layout_book(&book, &styles, &registry, &Assets::no
 
 `layout_book` rebuilds every stage on every call. A program that lays the same book out over and over, 
 such as a preview beside an editor, should use a [session](sessions.md) instead. 
-A session remembers what each stage produced and re-runs only the ones an edit invalidates, 
+A session keeps what each stage produced and re-runs only the ones an edit invalidates, 
 so changing the page margins only re-runs fragmentation instead of another pass over every line.
 
 ```rust

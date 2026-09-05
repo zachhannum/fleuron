@@ -1,7 +1,7 @@
 /**
  * What the landing page may cost before it is legible.
  *
- * The page now carries a demo, so it is no longer scriptless. What
+ * The page now has a demo on it, so it is no longer scriptless. What
  * it must still be is a typeset page the moment the HTML lands: the
  * poster is in the markup, nothing blocks the parser, and neither
  * the module nor the corpus is on the way to first paint. A stray

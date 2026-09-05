@@ -43,7 +43,7 @@ pub struct Page {
     pub width: f32,
     /// Trimmed page height in points.
     pub height: f32,
-    /// The sections this page holds content from, in the order their
+    /// The sections whose content appears on this page, in the order their
     /// content appears on it. A chapter that ends mid-page is followed
     /// there by the next one opening, so the page names both. A blank
     /// leaf names none.

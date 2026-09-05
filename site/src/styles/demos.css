@@ -1,5 +1,5 @@
 /* The demos. Everything here is expressed in the theme's tokens, so a
-   demo carries the same rules and hard offsets as the chrome around
+   demo is on the same rules and hard offsets as the chrome around
    it. The page is the exception: the chrome is what is out of
    register, and the typeset page is the one object on screen that is
    not.
@@ -241,7 +241,7 @@
   height: auto;
 }
 
-/* Each run carries one x per character, so a collapsed run of spaces
+/* Each run sets one x per character, so a collapsed run of spaces
    would shift the rest of the line onto the wrong ones. */
 .d-paper text {
   white-space: pre;
@@ -255,7 +255,7 @@
   display: none;
 }
 
-/* The page has to hold its shape before anything has been painted
+/* The page has to keep its shape before anything has been painted
    into it, or the demo lands and the column jumps. */
 .d-live {
   aspect-ratio: 5.5 / 8.5;

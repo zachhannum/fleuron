@@ -1,4 +1,5 @@
-//! Fixtures and measurement: the harness the engine is held to.
+//! Fixtures and measurement: the harness the engine is measured
+//! against.
 //!
 //! Two real books, checked in as markdown and read into content trees
 //! through the shipped frontend; criterion benches that time one

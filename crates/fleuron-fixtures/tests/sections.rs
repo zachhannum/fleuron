@@ -2,7 +2,7 @@
 //!
 //! A chapter's opening page is found by what is painted on it, the
 //! heading at the size the sheet computes for one, so the mapping is
-//! held against something other than itself.
+//! checked against something other than itself.
 
 use fleuron::content::{Block, NodeId};
 use fleuron::images::Assets;
@@ -68,7 +68,7 @@ fn every_chapter_opens_on_a_page_that_names_it() {
     }
 
     // The novel squares its chapters onto rectos, so it has blank
-    // leaves, and a blank leaf holds nobody's content.
+    // leaves, and a blank leaf has nobody's content on it.
     let blanks = output
         .pages
         .iter()

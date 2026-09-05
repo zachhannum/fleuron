@@ -2,7 +2,7 @@
  * The fleuron preview, as a React component.
  *
  * There is no engine logic in here and there is not meant to be:
- * everything this file knows how to do is hand `fleuron`'s
+ * everything this file does is hand `fleuron`'s
  * `Preview` an element and pass props along to it. React stays out
  * of the binding package for the same reason, that a host which does
  * not use it should not download it, and a host that deletes this one
@@ -94,7 +94,7 @@ export function Preview(props: PreviewProps): React.ReactElement {
 
   // Images are registered rather than passed at mount, so one that
   // arrives after the manuscript still reaches the page. A url the
-  // session already holds costs no layout.
+  // session already has costs no layout.
   useEffect(() => {
     if (preview !== null && images !== undefined) {
       for (const [url, bytes] of Object.entries(images)) {

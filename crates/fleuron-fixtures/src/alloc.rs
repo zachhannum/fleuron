@@ -5,7 +5,8 @@
 //! mood as much as the engine's appetite, and reports it differently
 //! on every platform — including wasm, where there is no OS to ask.
 //! Counting bytes in and out of the allocator answers the question the
-//! ceiling actually asks: how much does a book-scale run hold at once?
+//! ceiling actually asks: how much is a book-scale run allocating at
+//! once?
 //!
 //! Installing the tracker is the binary's choice, never the library's:
 //! a crate that sets a global allocator sets it for everything that
@@ -31,7 +32,7 @@ pub fn installed() -> bool {
     INSTALLED.load(Ordering::Relaxed)
 }
 
-/// Bytes currently held.
+/// Bytes currently allocated.
 pub fn live() -> usize {
     LIVE.load(Ordering::Relaxed)
 }
@@ -48,7 +49,7 @@ pub fn reset_peak() {
     PEAK.store(LIVE.load(Ordering::Relaxed), Ordering::Relaxed);
 }
 
-/// Runs `body`, returning its value and the bytes held at the peak
+/// Runs `body`, returning its value and the bytes allocated at the peak
 /// over what was already live when it started.
 pub fn measure<T>(body: impl FnOnce() -> T) -> (T, usize) {
     reset_peak();

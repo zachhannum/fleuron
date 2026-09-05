@@ -1,7 +1,7 @@
 //! The library quickstart, as a program: manuscript in, PDF out.
 //!
-//! `docs/library/quickstart.md` quotes this file, and a test holds the
-//! two together.
+//! `docs/library/quickstart.md` quotes this file, and a test checks the
+//! two against each other.
 
 use std::path::{Path, PathBuf};
 

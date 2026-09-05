@@ -21,8 +21,8 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
 
   <p>
     Everything below runs the real engine, compiled to WebAssembly, in a
-    worker. The worker holds the module and never touches an element. The
-    page holds the DOM and never sees the engine. What crosses between them
+    worker. The worker owns the module and never touches an element. The
+    page owns the DOM and never sees the engine. What crosses between them
     is a display structure, and the SVG on screen is painted from it.
   </p>
 
@@ -69,7 +69,7 @@ import Diagnostics from '../components/demos/Diagnostics.astro';
   <h2>What this costs</h2>
 
   <p>
-    The module weighs about 3.7&nbsp;MB over the wire. It carries its own text
+    The module weighs about 3.7&nbsp;MB over the wire. It ships its own text
     face, its own hyphenation patterns and its own segmentation data, since
     the engine reads no files and asks its host for nothing. Nothing fetches
     it until a demo scrolls into view, and a page with no demo on it never

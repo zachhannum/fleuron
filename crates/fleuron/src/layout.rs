@@ -37,7 +37,7 @@ use crate::{LayoutOutput, Warning};
 ///
 /// A single run over a session that retains nothing. It keeps one
 /// section's lines at a time, which is what a process that renders a
-/// book once and exits wants. A live preview wants `Session`.
+/// book once and exits wants. A live preview uses `Session` instead.
 ///
 /// `assets` is the images the host probed. A book with none of them
 /// passes [`Assets::none`].
@@ -56,7 +56,7 @@ pub(crate) fn no_assets() -> &'static Assets {
     EMPTY.get_or_init(Assets::none)
 }
 
-/// The fonts a run used, as the output indexes them.
+/// The fonts a run used, in the order the output indexes them.
 pub(crate) fn font_table(registry: &FontRegistry) -> Vec<crate::fonts::FontRefEntry> {
     (0..registry.len() as u16)
         .filter_map(|id| registry.font_ref(id).cloned())
@@ -86,7 +86,7 @@ pub enum Piece {
     Line {
         /// The line itself, shaped and measured.
         line: Line,
-        /// The drop cap this line carries, on the first line of a
+        /// The drop cap set beside this line, on the first line of a
         /// paragraph that has one.
         cap: Option<DropCap>,
     },
@@ -149,7 +149,7 @@ pub struct Marks {
     /// Named strings, resolved from the element's own text, in the
     /// order the cascade gave them.
     pub strings: Vec<(String, String)>,
-    /// The folio the page carrying this fragment takes.
+    /// The folio of the page this fragment lands on.
     pub page_number: Option<u32>,
 }
 
@@ -234,7 +234,7 @@ impl<'a> Paginator<'a> {
     /// Flows one book into numbered, side-tagged pages.
     ///
     /// A section's fragments are built, flowed, and released before
-    /// the next one is measured: what a book holds at once is its
+    /// the next one is measured: what exists at once is the book's
     /// pages, not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         let mut flow = Flow::new(self);
@@ -308,7 +308,7 @@ impl<'a> Paginator<'a> {
     ///
     /// A page inserted to square the sheet paints no furniture. A
     /// blank leaf is blank: a page whose only content would be a
-    /// running head does not carry one.
+    /// running head does not get one.
     pub(crate) fn paint(&self, pages: &mut [Page], infos: &[PageInfo]) {
         let mut folio = 0;
         for ((index, page), info) in pages.iter_mut().enumerate().zip(infos) {
@@ -427,10 +427,10 @@ impl<'a> Paginator<'a> {
             .unwrap_or(1000.0)
     }
 
-    /// A line's width in points, as the measure sees it. Runs of
-    /// different sizes each convert against their own face: font
-    /// units do not commute across sizes. What hangs into a margin
-    /// is not part of the width, which is the point of hanging it.
+    /// A line's width in points. Runs of different sizes each convert
+    /// against their own face: font units do not commute across sizes.
+    /// What hangs into a margin is not part of the width, which is the
+    /// point of hanging it.
     fn line_width(&self, line: &Line) -> f32 {
         line.runs
             .iter()
@@ -500,10 +500,10 @@ struct Builder<'a, 'p> {
     fragments: Vec<Fragment>,
     /// What the cascade has asked for above the next fragment.
     pending: BreakPoint,
-    /// Space carried down from the last block's bottom margin.
+    /// Space left by the last block's bottom margin.
     lead: f32,
     /// What the blocks opened so far have set, waiting for a fragment
-    /// to carry it onto a page.
+    /// to attach it to a page.
     pending_marks: Option<Box<Marks>>,
 }
 
@@ -582,16 +582,16 @@ impl Builder<'_, '_> {
         self.ask(style.break_after);
     }
 
-    /// Emits the one fragment a block is: it carries everything the
-    /// cascade asked for above the block, there being nothing else to
-    /// carry it.
+    /// Emits the one fragment a block is: everything the cascade asked
+    /// for above the block goes on it, there being no other fragment
+    /// for it.
     fn emit_one(&mut self, x: f32, height: f32, piece: Piece) {
         self.emit(&mut true, BreakPoint::Allowed, x, height, piece);
     }
 
-    /// Emits one fragment. The first of a block carries the break the
+    /// Emits one fragment. The first of a block gets the break the
     /// cascade asked for above it and the space its margins left; the
-    /// rest carry what the block says about splitting itself.
+    /// rest get what the block says about splitting itself.
     fn emit(&mut self, first: &mut bool, inner: BreakPoint, x: f32, height: f32, piece: Piece) {
         let (break_before, lead, marks) = if *first {
             *first = false;
@@ -780,10 +780,10 @@ impl Builder<'_, '_> {
     /// down when that does not fit the page.
     fn image(&mut self, style: &ComputedStyle, url: &str, origin: String, x: f32, measure: f32) {
         let Some((asset, intrinsic)) = self.paginator.assets.lookup(url) else {
-            // A url the table has already complained about has been
-            // complained about; one it has never been offered is a
-            // host that supplied no image for it at all.
-            if !self.paginator.assets.knows(url) {
+            // A url the table probed and refused was complained about
+            // there; one it was never offered is a host that supplied
+            // no image for it at all.
+            if !self.paginator.assets.probed(url) {
                 self.paginator.warn(
                     format!("image {url}: no image was supplied for it; it is skipped"),
                     (!origin.is_empty()).then_some(origin),
@@ -934,10 +934,9 @@ fn strip_initial(inlines: &mut [Inline]) -> Option<char> {
 
 /// One fragment placed on the page being built.
 struct Placed {
-    /// The section its content came out of. It travels with the
-    /// fragment, so a fragment carried onto the next page counts
-    /// toward the page it ends on rather than the one it was measured
-    /// for.
+    /// The section its content came out of. The fragment records it, so
+    /// a fragment moved onto the next page counts toward the page it
+    /// ends on rather than the one it was measured for.
     section: NodeId,
     /// Top of its box, from the content box's top.
     top: f32,
@@ -951,7 +950,7 @@ struct Placed {
     marks: Option<Box<Marks>>,
 }
 
-/// What one finished page knows about itself: the master to ask for,
+/// What is recorded about one finished page: the master to ask for,
 /// the running strings as they stood when it opened, and the folio it
 /// restarts at.
 pub(crate) struct PageInfo {
@@ -972,7 +971,7 @@ pub(crate) struct Paged {
 
 /// The flow: fragments in, pages out.
 ///
-/// The page being built is held as placed fragments rather than as a
+/// The page being built is a list of placed fragments rather than a
 /// finished structure, because a fragment that does not fit can
 /// push the ones above it onto the next page — moving what is already
 /// painted, never measuring it again.
@@ -1021,7 +1020,7 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     /// Flows one section. Its page name and `@page :first` master are
     /// claimed by the page it opens — when it opens one at all: a
-    /// section that breaks `auto` carries on where the last left off.
+    /// section that breaks `auto` continues where the last left off.
     fn section(&mut self, section: &Section, fragments: &[Fragment]) {
         let style = self.paginator.styles.style(section.id);
         self.section = section.id;
@@ -1154,7 +1153,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Ends the page being built, if anything is on it.
     ///
     /// What the page's fragments set takes effect here, not where
-    /// they were placed: a fragment carried onto the next page sets
+    /// they were placed: a fragment moved onto the next page sets
     /// its strings there instead, so a page's furniture only ever
     /// reads what stood on it.
     fn close(&mut self) {
@@ -1242,7 +1241,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 }
 
-/// Moves already-painted items: what carrying a fragment to the next
+/// Moves already-painted items: what moving a fragment to the next
 /// page comes to.
 fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
     for item in items {
@@ -1371,7 +1370,7 @@ mod tests {
     fn folio_size() -> f32 {
         ua().default_page()
             .margin_box(MarginBox::BottomCenter)
-            .expect("the default page carries a folio")
+            .expect("the default page has a folio")
             .style
             .font_size
     }
@@ -1720,8 +1719,8 @@ mod tests {
         section(blocks)
     }
 
-    /// Folios are correct and sequential — every page that carries
-    /// one carries its own number, and the folios read in page order
+    /// Folios are correct and sequential — every page that shows a
+    /// folio shows its own number, and the folios read in page order
     /// with no repeats or gaps among body pages.
     #[test]
     fn folios_are_correct_and_sequential() {
@@ -1774,7 +1773,7 @@ mod tests {
                 page.items.is_empty()
             );
         }
-        // Counted, not shown: the page after an open carries its own
+        // Counted, not shown: the page after an open shows its own
         // number, one past the blind one.
         for open in opens {
             if let Some(next) = pages.get(open as usize) {
@@ -1813,8 +1812,8 @@ mod tests {
         }
     }
 
-    /// A leaf inserted to square the sheet holds nobody's content, so
-    /// it names no section.
+    /// A leaf inserted to square the sheet has nobody's content on it,
+    /// so it names no section.
     #[test]
     fn a_blank_leaf_names_no_section() {
         // A one-paragraph chapter between two long ones ends on its
@@ -1871,7 +1870,7 @@ mod tests {
             let geometry = master.geometry;
             let folio_style = master
                 .margin_box(MarginBox::BottomCenter)
-                .expect("body pages carry a folio")
+                .expect("body pages have a folio")
                 .style
                 .paragraph();
             let (band_top, band_height) = margin_band(master, Band::Bottom, folio_style);
@@ -1980,7 +1979,7 @@ mod tests {
     }
 
     /// No paragraph is left a single line at either end of a page:
-    /// the run of lines a page carries of a paragraph it shares with
+    /// the run of lines a page sets of a paragraph it shares with
     /// its neighbour is at least `widows` at the top and `orphans` at
     /// the bottom.
     fn assert_orphans_and_widows(pages: &[Page], orphans: usize, widows: usize) {
@@ -2033,8 +2032,8 @@ mod tests {
         assert_orphans_and_widows(&pages, 4, 3);
     }
 
-    /// The indent one level of quotation adds, as the built-in sheet
-    /// computes it.
+    /// The indent one level of quotation adds under the built-in
+    /// sheet.
     fn quote_indent() -> f32 {
         let book = book_of(vec![section(vec![quote(vec![paragraph("quoted")])])]);
         let styles = crate::style::defaults(&book, registry());
@@ -2061,7 +2060,7 @@ mod tests {
         let indent = quote_indent();
         assert!(indent > 0.0, "the sheet indents nothing");
 
-        let mut carrying = 0;
+        let mut spanned = 0;
         for page in &pages {
             let (left, _) = origin_of(page);
             let mut seen = false;
@@ -2079,11 +2078,11 @@ mod tests {
                     2.0 * indent,
                 );
             }
-            carrying += seen as usize;
+            spanned += seen as usize;
         }
         assert!(
-            carrying >= 2,
-            "the nested quote fitted on {carrying} page(s); nothing was split",
+            spanned >= 2,
+            "the nested quote fitted on {spanned} page(s); nothing was split",
         );
 
         // The measure narrows with the indent: every line of the
@@ -2453,7 +2452,7 @@ mod tests {
 
     /// Acceptance: a three-line drop cap sits on the third baseline,
     /// its top on the first line's cap height, and the lines beside
-    /// it hold the measure it left them.
+    /// it are set to the measure it left them.
     #[test]
     fn a_drop_cap_aligns_to_the_third_baseline_and_shortens_three_lines() {
         let pages = paginate_styled(
@@ -2504,14 +2503,14 @@ mod tests {
             "the cap's top is not the first line's cap height",
         );
 
-        // The three lines beside it start past the cap and hold the
-        // measure it left them; the fourth is back at the full one.
+        // The three lines beside it start past the cap and are set to
+        // the measure it left them; the fourth is back at the full one.
         let sunk = prose[0].1[0].0;
         assert!(sunk > left, "the first line was not moved aside");
         for line in prose.iter().take(3) {
             assert!(
                 (line.1[0].0 - sunk).abs() < 1e-3,
-                "a sunk line does not hold the shortened measure",
+                "a sunk line is not set to the shortened measure",
             );
         }
         assert!(
@@ -2665,7 +2664,7 @@ mod tests {
         ]
         .concat();
         // A quoted line is one set at the quotation's indent: only
-        // its first carries the words the quotation opens with.
+        // its first begins with the words the quotation opens with.
         let indent = quote_indent();
         let split = |css: &str| {
             let pages = paginate_styled(css, vec![section(blocks.clone())]);

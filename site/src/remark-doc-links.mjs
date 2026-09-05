@@ -7,7 +7,7 @@ import { relative, resolve, dirname } from 'node:path';
  * Prose lives in `docs/` and is read both there and here, so links are
  * written the way they have to be to work on GitHub — `../cli/reference.md`
  * — and turned into `/<base>/cli/reference/` on the way in. A page
- * carrying a demo is `.mdx`, and is linked to by that name.
+ * with a demo on it is `.mdx`, and is linked to by that name.
  *
  * Both ends are resolved through the symlink `docs/` is mounted at:
  * markdown arrives at the path inside `src/`, MDX at the real one,

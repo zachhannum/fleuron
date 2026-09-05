@@ -53,7 +53,7 @@ export function Diagnostics(props: DiagnosticsProps): React.ReactElement {
         onChange={(event) => setStyle(event.target.value)}
       />
       <div className="d-report">
-        {hydrated && status === 'held' && (
+        {hydrated && status === 'paused' && (
           <p className="d-note">
             <button type="button" className="d-run" onClick={start}>
               Compile it here

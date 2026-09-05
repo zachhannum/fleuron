@@ -36,7 +36,7 @@ p + p {
 }
 
 /* A quotation is set narrower than the measure and off from the
-   prose around it, and holds together across a page turn as far as
+   prose around it, and stays together across a page turn as far as
    its own orphans and widows allow. */
 blockquote {
   margin: 1em 2em;

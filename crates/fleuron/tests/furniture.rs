@@ -1,4 +1,4 @@
-//! Page furniture: running heads, folios, and the leaves that carry
+//! Page furniture: running heads, folios, and the leaves that get
 //! neither.
 //!
 //! One fixture book runs all of it — front matter numbered in roman, a
@@ -29,7 +29,7 @@ section:nth-child(2) { counter-reset: page 1 }
 @page :left  { @top-left  { content: string(chapter); font-size: 8pt } }
 @page :right { @top-right { content: string(chapter); font-size: 8pt } }
 
-/* A chapter's opening page carries neither head nor folio. */
+/* A chapter's opening page gets neither head nor folio. */
 @page chapter:first {
   @top-left { content: none }
   @top-right { content: none }
@@ -175,8 +175,8 @@ fn chapter_of(openings: &[usize], page: usize) -> &'static str {
     CHAPTERS[index]
 }
 
-/// The head one page carries, when it carries one. Heads are the
-/// furniture in the top margin.
+/// The head on one page, when it has one. Heads are the furniture in
+/// the top margin.
 fn head<'a>(page: &'a Page, styles: &StyleTree, named: Option<&str>) -> Option<Item<'a>> {
     let (_, top) = styles
         .page(PageQuery {
@@ -190,7 +190,7 @@ fn head<'a>(page: &'a Page, styles: &StyleTree, named: Option<&str>) -> Option<I
         .find(|item| item.y < top)
 }
 
-/// The folio one page carries: the furniture in the bottom margin.
+/// The folio on one page: the furniture in the bottom margin.
 fn folio(page: &Page, styles: &StyleTree, named: Option<&str>) -> Option<String> {
     let geometry = styles
         .page(PageQuery {
@@ -289,12 +289,12 @@ fn front_matter_is_roman_and_the_body_restarts_in_arabic() {
     assert_eq!(
         folio(&pages[body], &styles, Some("chapter")),
         None,
-        "a chapter opening carries no folio",
+        "a chapter opening has no folio",
     );
     assert_eq!(
         folio(&pages[body + 1], &styles, Some("chapter")),
         Some("2".to_string()),
-        "the body should carry on in arabic",
+        "the body should continue in arabic",
     );
 }
 
@@ -315,7 +315,10 @@ fn a_short_chapter_leaves_a_counted_blank_verso() {
 
     let blank = &pages[short + 1];
     assert_eq!(blank.side, Side::Verso, "a blank leaf is never a recto");
-    assert!(blank.items.is_empty(), "the blank leaf carries something");
+    assert!(
+        blank.items.is_empty(),
+        "something was painted on the blank leaf"
+    );
     assert_eq!(
         pages[next].number,
         blank.number + 1,
@@ -372,18 +375,18 @@ fn a_running_string_is_the_value_the_page_opened_with() {
     assert_eq!(
         head(&pages[opening], &styles, Some("chapter")).map(|item| item.text.to_string()),
         Some(CHAPTERS[1].to_string()),
-        "a chapter's opening page still carries the head it opened under",
+        "a chapter's opening page still shows the head it opened under",
     );
     assert_eq!(
         head(&pages[opening + 2], &styles, Some("chapter")).map(|item| item.text.to_string()),
         Some(CHAPTERS[2].to_string()),
-        "the next page carries the chapter that had opened by its start",
+        "the next page should name the chapter that had opened by its start",
     );
 }
 
 /// Snapshot of the furniture across a chapter boundary: the pages
-/// either side of the short chapter, what each carries in its
-/// margins, and what the blank leaf between them does not.
+/// either side of the short chapter, what each paints in its margins,
+/// and what the blank leaf between them does not.
 #[test]
 fn furniture_at_a_chapter_boundary_snapshot() {
     let book = fixture();

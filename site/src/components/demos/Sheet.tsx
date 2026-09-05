@@ -19,7 +19,7 @@ export interface SheetProps {
    *
    * Handed down as markup the server rendered rather than as a
    * string in the island's props: a prop is serialised into the page
-   * next to the DOM it produced, and a page carrying a poster twice
+   * next to the DOM it produced, and a page with a poster on it twice
    * pays for it twice.
    */
   poster: React.ReactNode;
@@ -45,7 +45,7 @@ export function Sheet(props: SheetProps): React.ReactElement {
       </div>
       <div className="d-paper d-live" ref={sheet} />
       {marks}
-      {hydrated && status === 'held' && (
+      {hydrated && status === 'paused' && (
         <div className="d-veil">
           <button type="button" className="d-run" onClick={onStart}>
             Run the engine here

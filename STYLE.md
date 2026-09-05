@@ -1,14 +1,14 @@
 # Prose style
 
 The voice the docs, the README and the package READMEs are written in.
-CLAUDE.md's documentation rules still hold. This says what the voice is
+CLAUDE.md's documentation rules still apply. This says what the voice is
 once they are satisfied.
 
 ## Voice
 
 ### Subject first, then verb
 
-No inverted openers, no clause that holds the subject back.
+No inverted openers, no clause that delays the subject.
 
 Before:
 
@@ -123,11 +123,11 @@ A quickstart opens with install, then the one command that produces
 output, then what came back.
 
 A section that explains a mechanism ends in a snippet that runs it. A
-snippet that is also a file in the repo is held against that file by a
-test, so the page cannot drift from the code.
+snippet that is also a file in the repo is checked against that file by
+a test, so the page cannot drift from the code.
 
-A reference table links out rather than carrying a paragraph inline.
-The page that owns a detail is the page that carries it.
+A reference table links out rather than repeating a paragraph inline.
+A detail stays on the page that owns it.
 
 ## Links
 

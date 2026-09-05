@@ -1,10 +1,10 @@
 /**
- * One version, in every place that carries one.
+ * One version, in every place a version appears.
  *
  * The crates, the two packages, the peer range between them, the
  * constant the package reports itself by and the lockfiles that
- * mirror all of it name the same release. A tag argument holds them
- * to it as well, which is what a release runs before it publishes
+ * mirror all of it name the same release. A tag argument is checked
+ * against them as well, which is what a release runs before it publishes
  * anything.
  *
  *   node scripts/version.mjs            compare

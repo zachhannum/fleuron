@@ -12,7 +12,7 @@ wins and the quick fix waits for its own PR.
   published).
 - Outside the workspace: `crates/fleuron-wasm/npm` is the npm package
   `fleuron`, the TypeScript beside the module; `packages/react` is
-  `fleuron-react`, a wrapper over it that holds no engine logic;
+  `fleuron-react`, a wrapper over it that contains no engine logic;
   `examples/` is written the way a consumer writes it, and the browser
   run drives it rather than a page of its own.
 - Pipeline is one-way: markdown → content tree + style tree → box tree →
@@ -23,7 +23,7 @@ wins and the quick fix waits for its own PR.
   is not advertised as a peer.
 - The mapping from markdown to content tree lives in
   `docs/reference/markdown.mdx` and is implemented once. A construct the
-  vocabulary cannot hold warns with line and column; prose is never
+  vocabulary cannot express warns with line and column; prose is never
   dropped.
 - The three invariants (see README): styling enters as CSS; the engine
   never touches the DOM; layout never decodes images.
@@ -82,7 +82,7 @@ markdown in → valid PDF out**, invoked through the CLI, living in
   them; CI runs the same binary natively and under wasmtime.
 - Timing verdicts warn rather than fail — a shared runner's clock is a
   trend, not a regression — and `--strict` is the switch to throw once
-  the numbers have held still. The memory ceiling does fail today:
+  the numbers have settled. The memory ceiling does fail today:
   allocation counts are identical on every machine.
 - A stage that gets a bench gets a seam it can be timed through. If
   timing a stage separately means reaching into a private method, the
@@ -133,7 +133,7 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 
 `.github/workflows/release.yml` is the only thing that publishes, and a
 `v*` tag is the only thing that runs it: the wasm workflow again with
-the tag held against every version the repository carries, then both
+the tag checked against every version in the repository, then both
 tarballs and the module on a GitHub release and both packages on the
 registry. `cut-release.yml` is the dispatch that raises the version and
 cuts that tag.

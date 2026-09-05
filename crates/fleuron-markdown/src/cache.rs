@@ -1,7 +1,7 @@
 //! Parsed sections, kept between edits.
 //!
 //! A host that re-renders on every keystroke re-reads one file and
-//! holds the rest. The key is the source's name and a hash of its
+//! reuses the rest. The key is the source's name and a hash of its
 //! bytes, and it deliberately is not a node id: ids are assigned in
 //! document order over the whole book and renumber whenever a section
 //! is added or removed, so a cache keyed on one would miss on every
@@ -38,7 +38,7 @@ impl SourceKey {
     }
 }
 
-/// Sections held by source, re-read only when the source changed.
+/// Sections by source, re-read only when the source changed.
 #[derive(Debug, Default)]
 pub struct Cache {
     entries: HashMap<String, (u64, Vec<Section>, Vec<Warning>)>,
@@ -77,7 +77,7 @@ impl Cache {
         (sections, warnings)
     }
 
-    /// Forgets one source, for a file the host no longer holds.
+    /// Forgets one source, for a file the host no longer has.
     pub fn forget(&mut self, source: &str) {
         self.entries.remove(source);
     }
@@ -109,7 +109,7 @@ mod tests {
     }
 
     /// Two sources with the same bytes are two entries: the name is
-    /// half the key, and it is what a section carries.
+    /// half the key, and it is what a section is named by.
     #[test]
     fn the_name_is_part_of_the_key() {
         let mut cache = Cache::new();

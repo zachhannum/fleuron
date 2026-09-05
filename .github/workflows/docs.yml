@@ -91,7 +91,7 @@ jobs:
         working-directory: site
         run: npm run build
 
-      # The demos, driven: every glyph an island paints is held
+      # The demos, driven: every glyph an island paints is checked
       # against the structured output the worker sent it, and the landing
       # page is opened once with scripting off.
       - uses: actions/cache@v4

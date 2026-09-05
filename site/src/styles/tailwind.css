@@ -1,7 +1,7 @@
 /* Tailwind, and the layer order Starlight's own rules cascade in.
    Kept apart from the token sheet because the landing page uses no
-   utility classes and would otherwise carry thirty kilobytes of
-   them into its first paint. */
+   utility classes and would otherwise pull thirty kilobytes of them
+   into its first paint. */
 
 @layer base, starlight, theme, components, utilities;
 

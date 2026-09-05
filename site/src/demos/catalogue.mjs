@@ -37,7 +37,7 @@ export function fixture(path) {
   return readFileSync(join(root, 'fixtures', path), 'utf8');
 }
 
-/** A fixture image or font file, as the bytes a host hands the engine. */
+/** A fixture image or font file, read as the bytes a host hands the engine. */
 export function bytes(url) {
   return new Uint8Array(readFileSync(join(root, 'fixtures', url)));
 }
@@ -105,7 +105,7 @@ export const BOOK_CSS = `@page {
   }
 }
 
-/* A chapter's opening page carries no head. */
+/* A chapter's opening page gets no head. */
 @page :first {
   @top-center { content: none; }
 }
@@ -185,7 +185,7 @@ export const BOOK_LANDING_CSS = `@page {
   }
 }
 
-/* A chapter's opening page carries no head. */
+/* A chapter's opening page gets no head. */
 @page :first {
   @top-center { content: none; }
 }
@@ -308,9 +308,10 @@ that afternoon.
  * the island fetches the images from where the build puts them, and
  * the faces from where the site's own CSS serves them.
  *
- * A face carries the family and weight the engine reads out of its
- * name table, which is what a stylesheet selects it by and what the
- * site serves it as. The poster build holds the file to that.
+ * A face is named by the family and weight the engine reads out of
+ * its name table, which is what a stylesheet selects it by and what
+ * the site serves it as. The poster build checks the file against
+ * that.
  */
 export const DEMOS = {
   /** The landing page's split view, and the docs' playground. */
@@ -367,7 +368,7 @@ export const DEMOS = {
     css: OUTSIDE_CSS,
     page: 1,
   }),
-  /** The bare sheet, for holding the styled one against. */
+  /** The bare sheet, for comparing the styled one against. */
   bare: () => ({
     name: 'pride-and-prejudice.md',
     markdown: chapter('corpus/pride-and-prejudice.md', 1),

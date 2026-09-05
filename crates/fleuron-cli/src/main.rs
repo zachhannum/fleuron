@@ -146,10 +146,10 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
             "--author" => metadata.author = Some(value()?),
             "--meta" => {
                 let field = value()?;
-                let (key, held) = field
+                let (key, val) = field
                     .split_once('=')
                     .ok_or_else(|| anyhow!("--meta takes key=value, got {field}"))?;
-                metadata.extra.insert(key.to_string(), held.to_string());
+                metadata.extra.insert(key.to_string(), val.to_string());
             }
             "--dump-tree" => dump = true,
             "-s" | "--split" => reading.sections = split(&value()?)?,
@@ -177,8 +177,8 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     })
 }
 
-/// Where a markdown file's sections begin, as the command line says
-/// it.
+/// Where a markdown file's sections begin, parsed from the command
+/// line.
 fn split(value: &str) -> Result<Sections> {
     if value.eq_ignore_ascii_case("none") {
         return Ok(Sections::Whole);

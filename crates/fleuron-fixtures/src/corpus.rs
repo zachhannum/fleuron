@@ -49,7 +49,7 @@ impl Corpus {
     }
 
     /// The file the markdown was vendored as, and the `source` every
-    /// section of the parsed book carries.
+    /// section of the parsed book is named by.
     pub fn source(self) -> &'static str {
         match self {
             Corpus::PrideAndPrejudice => "pride-and-prejudice.md",
@@ -86,7 +86,7 @@ impl Corpus {
         self.parse(self.markdown())
     }
 
-    /// The same, over markdown the caller holds. The bench and the
+    /// The same, over markdown the caller supplies. The bench and the
     /// gate both time this, so what they time is one call rather than
     /// a stage reached through a private method.
     pub fn parse(self, markdown: &str) -> Book {

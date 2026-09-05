@@ -29,7 +29,7 @@ Multiple markdown files can be passed to the CLI. The engine combines all of the
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 ```
 
-Each file carries its own name into the tree, so a diagnostic points at the file the trouble is in.
+The tree records each file's name, so a diagnostic points at the file the trouble is in.
 
 ## Book metadata
 
@@ -75,7 +75,7 @@ book { font-size: 12pt; line-height: 1.5; }
 h1, h2, h3 { font-size: 20pt; }
 ```
 
-[The CSS subset](../css-subset.mdx) is everything the engine understands. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
+[The CSS subset](../css-subset.mdx) is everything the engine supports. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
 
 ## Fonts
 

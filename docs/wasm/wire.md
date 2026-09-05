@@ -17,7 +17,7 @@ A version leads the encoding, and a host reads it before anything else. The enco
 
 In: whatever changed. Markdown source, CSS text, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
 
-Out: one transferable `ArrayBuffer`, holding either the postcard-encoded display structure or, on the export path, PDF bytes. Transferred rather than copied.
+Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. Transferred rather than copied.
 
 ## The display structure
 
@@ -25,9 +25,9 @@ The [display structure reference](../reference/display-structure.mdx) has the fu
 
 Coordinates are points, origin top-left. Every painter, SVG, canvas or PDF, consumes the same numbers. A preview that disagrees with the export about where a glyph goes has a bug in the painter, not in the engine.
 
-Faces carry their instance. The font table records where on its file's axes each face sits. A variable file names several styles and they are one file, so a painter that does not pin the axes draws the default weight for every one of them.
+Faces include their instance. The font table records where on its file's axes each face sits. A variable file names several styles and they are one file, so a painter that does not pin the axes draws the default weight for every one of them.
 
-Glyphs carry their text. Each text run holds the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so it travels with the glyphs. A painter that supports selection or accessible text reads it through those ranges; a painter that only draws ignores it.
+Glyphs are tied to their text. Each text run has the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so the display structure records it. A painter that supports selection or accessible text reads it through those ranges; a painter that only draws ignores it.
 
 ## One book, both targets
 
@@ -43,7 +43,7 @@ A request is an edit, a render, a question, or an edit and one of those:
 { id, generation, ops: [{ op: 'style', css }], want: 'preview' }
 ```
 
-Request and response are paired by `id`, and each request carries a generation the worker echoes back untouched.
+Request and response are paired by `id`, and each request has a generation the worker echoes back untouched.
 
 `want: 'font'` is the question: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. Nothing overtakes it and it overtakes nothing, since a face keeps its id for the session's life and the answer cannot go stale.
 
@@ -57,9 +57,9 @@ That is also what makes it cache-safe. A superseded render is one that never sta
 
 ### Errors and warnings
 
-A request the engine cannot apply, font bytes that are not a font, a content tree that will not parse: each replies with an error, and the session carries on rendering.
+A request the engine cannot apply, font bytes that are not a font, a content tree that will not parse: each replies with an error, and the session continues rendering.
 
-A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which holds the whole run's, [the frontend's included](../library/diagnostics.mdx).
+A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which is the whole run's, [the frontend's included](../library/diagnostics.mdx).
 
 ## Host duties
 

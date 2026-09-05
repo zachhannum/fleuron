@@ -6,7 +6,7 @@ use fleuron::content::Metadata;
 /// Reads the `---` block at the top of a source.
 ///
 /// `title` and `author` are the named fields; every other scalar
-/// joins `extra`, which the engine carries and style may read. Values
+/// joins `extra`, which the engine passes through and style may read. Values
 /// are scalars. A line that is not `key: value` is not metadata, and
 /// nothing outside the block is looked at.
 ///
@@ -45,7 +45,7 @@ fn block(text: &str) -> Option<&str> {
         .or_else(|| text.strip_prefix("---\r\n"))?;
     body.split("\n---")
         .next()
-        .filter(|held| held.len() < body.len())
+        .filter(|front| front.len() < body.len())
 }
 
 /// Strips a matching pair of quotes, as YAML would.

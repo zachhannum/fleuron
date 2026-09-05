@@ -10,7 +10,7 @@
  * is the right place for someone else's manuscript.
  */
 
-/** What a link carries. */
+/** What is in a link. */
 export interface Shared {
   markdown?: string;
   css?: string;

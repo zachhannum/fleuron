@@ -1,14 +1,14 @@
 //! The content tree as something selectors can match against.
 //!
 //! `selectors` walks a DOM through parent and sibling links the
-//! content tree does not carry, so compilation flattens the tree once
+//! content tree does not have, so compilation flattens the tree once
 //! into an arena that does. Element names are the markdown vocabulary
 //! spelled the way an author writes them in CSS: `book`, `section`,
 //! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`,
 //! `a`.
 //!
-//! Text runs are not elements, as in CSS: they carry no style of
-//! their own and never count towards `:first-child`.
+//! Text runs are not elements, the same as in CSS: they have no style
+//! of their own and never count towards `:first-child`.
 
 use std::borrow::Borrow;
 use std::fmt;
@@ -57,7 +57,7 @@ impl ToCss for Atom {
 
 impl PrecomputedHash for Atom {
     fn precomputed_hash(&self) -> u32 {
-        // FNV-1a: the bloom filter wants a hash that is a function of
+        // FNV-1a: the bloom filter needs a hash that is a function of
         // the name, not of where the string happens to live.
         let mut hash = 0x811c_9dc5u32;
         for byte in self.0.as_bytes() {
@@ -141,7 +141,7 @@ pub struct ElementNode {
     pub previous: Option<usize>,
     pub next: Option<usize>,
     pub first_child: Option<usize>,
-    /// True for elements that carry text of their own.
+    /// True for elements with text of their own.
     pub has_text: bool,
 }
 

@@ -13,7 +13,7 @@ fn registry() -> &'static FontRegistry {
 }
 
 /// The body style the built-in sheet computes: what these properties
-/// hold for the styling a book gets by default.
+/// come to for the styling a book gets by default.
 fn body() -> ParagraphStyle {
     fleuron::style::defaults(&fleuron::content::Book::default(), registry())
         .root()
@@ -69,7 +69,7 @@ proptest! {
     }
 
     /// No line is shorter than the strut: the paragraph's minimum
-    /// geometry holds whatever lands on the line.
+    /// geometry stands whatever lands on the line.
     #[test]
     fn no_line_is_shorter_than_the_strut(
         text in text_strategy(),

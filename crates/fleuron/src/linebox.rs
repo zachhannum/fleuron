@@ -7,7 +7,7 @@
 //! a single-face line always measures exactly `line_height × size`.
 //!
 //! The strut is the paragraph's own box — the line's minimum
-//! geometry, independent of what runs it carries. Runs larger than
+//! geometry, independent of the runs on it. Runs larger than
 //! the strut grow the line around the shared baseline; runs smaller
 //! never shrink it below the strut.
 //!

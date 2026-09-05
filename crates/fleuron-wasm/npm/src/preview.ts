@@ -2,7 +2,7 @@
  * A preview, mounted: markdown in, a page on screen.
  *
  * The worker, the module, the postcard buffer and the display structure
- * are what this is built out of, not what it asks a caller to hold.
+ * are what this is built out of, not what it asks a caller to supply.
  * A host that wants them keeps having them, since the client, the
  * protocol, the reader and the painter are all still exported. A host
  * that only wants to see the book says where to put it and hands over
@@ -133,7 +133,7 @@ export class Preview {
       setup.push({ op: 'split', level: options.split });
     }
     for (const [url, bytes] of Object.entries(options.images ?? {})) {
-      setup.push(preview.hold(url, bytes));
+      setup.push(preview.keepImage(url, bytes));
     }
     if (setup.length > 0) {
       await preview.client.apply(setup);
@@ -202,7 +202,7 @@ export class Preview {
    * and a page with nothing where the image was.
    */
   async addImage(url: string, bytes: Uint8Array): Promise<void> {
-    await this.render([this.hold(url, bytes)]);
+    await this.render([this.keepImage(url, bytes)]);
   }
 
   /** Lays the book out again and repaints. */
@@ -296,10 +296,10 @@ export class Preview {
    * across the wall rather than being copied and the buffer is empty
    * on this side afterwards.
    */
-  private hold(url: string, bytes: Uint8Array): Op {
-    const held = this.pixels.get(url);
-    if (held !== undefined) {
-      URL.revokeObjectURL(held);
+  private keepImage(url: string, bytes: Uint8Array): Op {
+    const previous = this.pixels.get(url);
+    if (previous !== undefined) {
+      URL.revokeObjectURL(previous);
     }
     this.pixels.set(url, URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })));
     return { op: 'image', url, bytes };

@@ -118,6 +118,6 @@ async function showPdf() {
 }
 
 // What a driver pages through. The harness is also the browser end
-// of the test suite, and this is the handle it takes hold of.
+// of the test suite, and this is the handle it drives.
 globalThis.preview = preview;
 document.body.dataset['ready'] = 'yes';

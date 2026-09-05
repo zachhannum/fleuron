@@ -70,7 +70,7 @@ fn book_strategy() -> impl Strategy<Value = Book> {
     chapter_strategy().prop_map(|chapter| book_of(vec![chapter]))
 }
 
-/// The same, several chapters over: what a page holding two of them
+/// The same, several chapters over: what a page with two of them on it
 /// needs to exist at all.
 fn chapters_strategy() -> impl Strategy<Value = Book> {
     proptest::collection::vec(chapter_strategy(), 2..5).prop_map(book_of)
@@ -121,7 +121,7 @@ fn master(situation: Situation) -> &'static PageStyle {
 fn folio_style() -> ParagraphStyle {
     master(Situation::Body(Side::Recto))
         .margin_box(MarginBox::BottomCenter)
-        .expect("body pages carry a folio")
+        .expect("body pages have a folio")
         .style
         .paragraph()
 }
@@ -339,7 +339,7 @@ proptest! {
 /// Snapshot of the assembled display structure for a two-chapter book:
 /// the wire-format shape of page assembly and page furniture — sides,
 /// numbering, the first text baselines, and the folio each page does
-/// or does not carry.
+/// or does not get.
 #[test]
 fn page_assembly_snapshot() {
     let prose = "My father had a small estate in Nottinghamshire; I was bred a surgeon. ";

@@ -2,7 +2,7 @@
  * The demos, driven: the same mechanical check the painter's own
  * suite makes, run against an island in a real browser.
  *
- * What is held against what: the display structure the worker sent the
+ * What is checked against what: the display structure the worker sent the
  * page, read off the mounted demo, and the SVG that demo put in the
  * DOM. Every glyph the engine placed has to be at that x in the
  * markup a reader is actually looking at. A painter that drifts, or
@@ -230,7 +230,7 @@ check(
 
 check('nothing threw on the page', broke.length === 0, broke.slice(0, 2).join('; '));
 
-// The other two demos, on the page that carries them.
+// The other two demos, on the page they sit on.
 const demos = await browser.newPage();
 const demosBroke = [];
 demos.on('pageerror', (error) => demosBroke.push(String(error)));

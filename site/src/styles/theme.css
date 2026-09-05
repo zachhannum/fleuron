@@ -27,8 +27,8 @@
   font-display: block;
 }
 
-/* The flowered face. It carries the one letter the landing headline
-   opens on, and nothing else is set in it. */
+/* The flowered face. The landing headline opens on the one letter it
+   supplies, and nothing else is set in it. */
 @font-face {
   font-family: 'Fleuron Mixed Subset';
   src: url('../assets/fonts/fleuron-mixed-subset.woff2') format('woff2');
@@ -410,7 +410,7 @@ starlight-menu-button button {
 
 /* Expressive Code paints the frame and the code from grounds of its
    own. Both take the token, and so do the hairlines between them:
-   the block carries one keyline, the 3px one round the outside. */
+   the block gets one keyline, the 3px one round the outside. */
 .sl-markdown-content .expressive-code {
   --ec-codeBg: var(--f-code-bg);
   --ec-frm-edBg: var(--f-code-bg);
