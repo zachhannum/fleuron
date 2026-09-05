@@ -63,7 +63,8 @@ export type Op =
   | { op: 'content'; json: string }
   /**
    * The author styling, as named sheets in cascade order. Later
-   * sheets win, and a warning names the sheet it came from.
+   * sheets win, and a warning names the sheet its declaration was
+   * written in.
    */
   | { op: 'style'; sheets: Sheet[] };
 

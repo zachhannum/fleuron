@@ -169,6 +169,12 @@ export class Engine {
         this.session.setContent(op.json);
         break;
       case 'style':
+        // A host that writes its own plumbing writes it in plain
+        // JavaScript, where the op's type reaches nothing, so what
+        // arrives is checked rather than assumed.
+        if (!Array.isArray(op.sheets)) {
+          throw new Error("the style op takes { op: 'style', sheets: [{ name, css }] }");
+        }
         this.session.setStyle(
           op.sheets.map((sheet) => sheet.name),
           op.sheets.map((sheet) => sheet.css),

@@ -412,6 +412,20 @@ try {
   refused = String(error);
 }
 check('bytes that are not a font come back on the error channel', refused.includes('font'), refused);
+
+// The types reach a host that compiles them and nothing else, so a
+// style op with no sheets on it is answered with what one takes.
+let malformed = '';
+try {
+  await client.preview([{ op: 'style', css: 'p { color: red }' } as unknown as Op]);
+} catch (error) {
+  malformed = String(error);
+}
+check(
+  'a style op written the way the types forbid says what one takes',
+  malformed.includes('sheets'),
+  malformed,
+);
 const alive = await client.preview([]);
 check('and the session that refused them still renders', alive !== null && alive.pages.length > 0);
 

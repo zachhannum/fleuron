@@ -18,7 +18,14 @@
  */
 
 import { Client, type Transport } from './client.js';
-import { styleOp, type Metadata, type Op, type Response, type Sheet, type Source } from './protocol.js';
+import {
+  styleOp,
+  type Metadata,
+  type Op,
+  type Response,
+  type Sheet,
+  type Source,
+} from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
 import type { Asset, LayoutOutput, Warning } from './wire.js';
 
