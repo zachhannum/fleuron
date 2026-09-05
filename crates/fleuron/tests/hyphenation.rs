@@ -171,3 +171,14 @@ fn a_word_longer_than_the_inline_buffer_hyphenates() {
         ["че-", "ло-", "веко-", "нена-", "вист-", "ниче-", "ство"]
     );
 }
+
+/// A book nothing hyphenates says nothing about its language: the
+/// missing patterns cost it nothing.
+#[test]
+fn a_book_that_hyphenates_nothing_is_not_warned_about_its_language() {
+    let book = book(Some("xx"), "Wassermann malheureusement");
+    let styles = Stylesheets::parse(&[Source::author("plain.css", "@page { size: 45pt 400pt }")])
+        .compile(&book, registry());
+    let output = layout_book(&book, &styles, registry(), &Assets::none());
+    assert_eq!(output.warnings, []);
+}

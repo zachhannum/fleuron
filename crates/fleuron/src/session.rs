@@ -1096,9 +1096,10 @@ mod tests {
         session
     }
 
-    /// Naming a book costs nothing: no stage between the content
-    /// tree and the page reads metadata, so the pages already laid
-    /// out are the ones the export writes under the new name.
+    /// Naming a book costs nothing: a rename that leaves the
+    /// hyphenation where it was reaches no stage between the content
+    /// tree and the page, so the pages already laid out are the ones
+    /// the export writes under the new name.
     #[test]
     fn naming_a_book_re_runs_no_stage() {
         let mut session = three_chapters();

@@ -200,6 +200,9 @@ pub struct Paginator<'a> {
     lines: LineLayout<'a>,
     /// The syllable patterns `hyphens: auto` breaks by.
     patterns: Cell<Patterns>,
+    /// The declared language there are no patterns for, which the
+    /// first paragraph that asks to be hyphenated complains about.
+    unknown: RefCell<Option<String>>,
     /// What fragmentation had to complain about. Recorded once per
     /// message: a book that scales the same image twice has one
     /// problem, not two.
@@ -225,6 +228,7 @@ impl<'a> Paginator<'a> {
             assets,
             lines: LineLayout::new(registry),
             patterns: Cell::new(Patterns::default()),
+            unknown: RefCell::new(None),
             warnings: RefCell::new(Vec::new()),
         }
     }
@@ -235,18 +239,28 @@ impl<'a> Paginator<'a> {
     /// them here.
     ///
     /// A language with no patterns leaves every word whole, rather
-    /// than breaking one language's words at another's syllables.
+    /// than breaking one language's words at another's syllables,
+    /// and the first paragraph that asks for hyphenation says so.
     pub fn language(&self, metadata: &Metadata) {
-        if let Some(tag) = metadata
+        let patterns = Patterns::of(metadata);
+        self.patterns.set(patterns);
+        *self.unknown.borrow_mut() = metadata
             .language()
-            .filter(|tag| Patterns::of_tag(tag).is_none())
-        {
+            .filter(|_| patterns == Patterns::NONE)
+            .map(str::to_string);
+    }
+
+    /// What `hyphens: auto` has to break with, complaining the first
+    /// time it is asked for and there is nothing behind the language
+    /// the book declares.
+    fn patterns(&self) -> Patterns {
+        if let Some(tag) = self.unknown.borrow().as_deref() {
             self.warn(
                 format!("no hyphenation patterns for language `{tag}`; its words are left whole"),
                 None,
             );
         }
-        self.patterns.set(Patterns::of(metadata));
+        self.patterns.get()
     }
 
     /// What fragmentation had to complain about.
@@ -678,9 +692,14 @@ impl Builder<'_, '_> {
         let measure = measure - computed.margin.left - computed.margin.right;
 
         let style = computed.paragraph();
+        let hyphenate = computed.hyphens == Hyphens::Auto;
         let options = LineBreakOptions {
-            hyphenate: computed.hyphens == Hyphens::Auto,
-            patterns: self.paginator.patterns.get(),
+            hyphenate,
+            patterns: if hyphenate {
+                self.paginator.patterns()
+            } else {
+                Patterns::NONE
+            },
             justify: computed.text_align == TextAlign::Justify,
             inter_character: computed.text_justify == TextJustify::InterCharacter,
             hanging: computed.hanging_punctuation,
