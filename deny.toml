@@ -1,5 +1,5 @@
 # cargo-deny configuration
-# Policy: no merged dependency may carry an open RUSTSEC advisory.
+# Policy: no merged dependency may have an open RUSTSEC advisory.
 # The rustybuzz deprecation (RUSTSEC-2026-0206) is why this job exists.
 
 [advisories]

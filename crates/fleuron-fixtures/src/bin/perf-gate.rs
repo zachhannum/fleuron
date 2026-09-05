@@ -7,7 +7,7 @@
 //! Warns by default and exits zero: the budgets are young and a CI
 //! runner is a noisy machine, so a blown budget is news before it is a
 //! verdict. `--strict` turns the same output into a failing exit code,
-//! which is the switch to throw once the numbers have held still.
+//! which is the switch to throw once the numbers have settled.
 //!
 //! Runs the same under wasi as natively, so the worker's budget is
 //! measured rather than extrapolated.
@@ -49,7 +49,7 @@ fn main() -> ExitCode {
     for corpus in books {
         let report = gate::measure(*corpus, registry(), runs);
         println!("\n{report}");
-        // Only the gate book carries budgets. The big book is there to
+        // Only the gate book has budgets. The big book is there to
         // show the curve, and a book four times the size failing a
         // book-scale ceiling would say nothing.
         if *corpus != Corpus::GATE {

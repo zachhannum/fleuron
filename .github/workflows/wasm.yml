@@ -56,7 +56,7 @@ jobs:
       - name: Build the package
         working-directory: crates/fleuron-wasm/npm
         run: npm ci && npm run build
-      # The harness holds the module against the CLI: same page count,
+      # The harness checks the module against the CLI: same page count,
       # same PDF, same text.
       - name: Build the CLI the harness compares against
         run: cargo build --release -p fleuron-cli
@@ -66,7 +66,7 @@ jobs:
           FLEURON_WASM_REQUIRE_TOOLS: "1"
         run: npm test
       # The painter needs a browser to be a painter. The same book, in
-      # Chromium, with page one held against a raster of the PDF the
+      # Chromium, with page one compared to a raster of the PDF the
       # same run exported.
       - uses: actions/cache@v4
         with:
@@ -94,7 +94,7 @@ jobs:
         working-directory: crates/fleuron-wasm/npm
         run: npm run test:package
       # What a release publishes is what this run built and drove, so
-      # it is carried out of here rather than built again.
+      # it comes out of here rather than being built again.
       - uses: actions/upload-artifact@v4
         with:
           name: package

@@ -10,7 +10,7 @@
 //! Justified text has its glue stretched or shrunk to the measure
 //! here. The adjustment lands on the glyphs' own advances, so a
 //! painter positions what it is given and never re-derives spacing.
-//! `Line` carries shaped runs: measurement happened here.
+//! A `Line` is shaped runs: measurement happened here.
 //!
 //! Units: advances come out of the shaper in font units; the measure
 //! arrives in points and converts once, via `units_per_em * size`.
@@ -205,7 +205,7 @@ pub struct ShapedRun {
     pub size: f32,
     /// The run's own text. Glyph ids alone do not spell anything:
     /// text extraction and copy-paste need the characters back, and
-    /// only the shaper knows which glyph came from which of them.
+    /// the correspondence exists only in the shaper's output.
     pub text: String,
     /// Byte offset of `text` in the paragraph the glyphs' clusters
     /// index.
@@ -391,8 +391,8 @@ impl Widths {
             }
         }
         // Exclusive prefixes: entry `i` totals the glyphs that
-        // start before byte `i`, which is exactly the glyphs a line
-        // ending there carries.
+        // start before byte `i`, which is exactly the glyphs on a line
+        // ending there.
         let (mut text_total, mut space_total) = (0.0, 0.0);
         for at in 0..widths.text.len() {
             let (here, space) = (widths.text[at], widths.spaces[at]);
@@ -415,7 +415,7 @@ pub struct LineLayout<'a> {
 type WordSegmenterBorrowedStatic = icu_segmenter::WordSegmenterBorrowed<'static>;
 
 impl<'a> LineLayout<'a> {
-    /// A layout pass over the faces `registry` holds.
+    /// A layout pass over the faces in `registry`.
     pub fn new(registry: &'a FontRegistry) -> Self {
         LineLayout {
             registry,
@@ -486,8 +486,9 @@ impl<'a> LineLayout<'a> {
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
 
-        // Shape each span; glyphs carry cluster offsets into the span,
-        // which index the paragraph text once offset by span start.
+        // Shape each span; a glyph's cluster is an offset into the
+        // span, which indexes the paragraph text once offset by span
+        // start.
         // A span set at another size measures in its own font units,
         // so `scale` takes it into the paragraph's.
         let shaped: Vec<ShapedSpan> = flat
@@ -1010,7 +1011,7 @@ impl Breaker<'_> {
                     };
                     if overfull
                         .as_ref()
-                        .is_none_or(|held| candidate.demerits < held.demerits)
+                        .is_none_or(|best| candidate.demerits < best.demerits)
                     {
                         overfull = Some(candidate);
                     }
@@ -1088,10 +1089,10 @@ impl Breaker<'_> {
         };
         match candidates
             .iter_mut()
-            .find(|held| key(held) == key(&candidate))
+            .find(|kept| key(kept) == key(&candidate))
         {
-            Some(held) if held.demerits <= candidate.demerits => {}
-            Some(held) => *held = candidate,
+            Some(kept) if kept.demerits <= candidate.demerits => {}
+            Some(kept) => *kept = candidate,
             None => candidates.push(candidate),
         }
     }
@@ -1201,8 +1202,8 @@ fn fitness(ratio: f32) -> u8 {
     }
 }
 
-/// One shaped span, its glyphs still carrying cluster offsets relative
-/// to the span's own text.
+/// One shaped span, its glyph clusters still relative to the span's
+/// own text.
 struct ShapedSpan {
     /// Byte range of the span in the paragraph text.
     range: Range<usize>,
@@ -1327,7 +1328,7 @@ mod tests {
         registry().metrics(0).unwrap().units_per_em
     }
 
-    /// A line's text, as its runs carry it.
+    /// A line's text, concatenated from its runs.
     ///
     /// Read off the runs rather than sliced out of the paragraph: a
     /// hyphenated line ends in a character the paragraph never had.
@@ -1499,11 +1500,10 @@ mod tests {
         );
     }
 
-    /// The hyphen is painted as well as charged: the run carries the
-    /// character and a glyph for it, and the last line carries
-    /// neither.
+    /// The hyphen is painted as well as charged: the run has the
+    /// character and a glyph for it, and the last line has neither.
     #[test]
-    fn a_hyphenated_line_carries_the_hyphen_it_paid_for() {
+    fn a_hyphenated_line_paints_the_hyphen_it_paid_for() {
         let text = "extraordinarily";
         let lines = layout_body_opts(text, 53.0, hyphenated());
         let first = &lines[0];
@@ -1723,7 +1723,7 @@ mod tests {
     }
 
     /// The adjustment lands on the spaces. Ragged and justified
-    /// settings of the same line carry the same letters at the same
+    /// settings of the same line set the same letters at the same
     /// advances; only what is between the words moves.
     #[test]
     fn justification_opens_the_spaces_and_nothing_else() {

@@ -79,23 +79,23 @@ enum Stale {
 /// A host with faces and images to lend keeps lending them. A worker
 /// has nowhere to keep either, since the module is all there is, so
 /// it hands them over once and adds to them through the session.
-enum Held<'a, T> {
+enum Table<'a, T> {
     Borrowed(&'a T),
     Owned(Box<T>),
 }
 
-impl<T> Held<'_, T> {
+impl<T> Table<'_, T> {
     fn get(&self) -> &T {
         match self {
-            Held::Borrowed(held) => held,
-            Held::Owned(held) => held,
+            Table::Borrowed(table) => table,
+            Table::Owned(table) => table,
         }
     }
 
     fn get_mut(&mut self) -> Option<&mut T> {
         match self {
-            Held::Borrowed(_) => None,
-            Held::Owned(held) => Some(held),
+            Table::Borrowed(_) => None,
+            Table::Owned(table) => Some(table),
         }
     }
 }
@@ -147,8 +147,8 @@ struct Cached {
 /// that brings its own `@font-face` needs the host to register that
 /// face before the sheet is set.
 pub struct Session<'a> {
-    registry: Held<'a, FontRegistry>,
-    assets: Held<'a, Assets>,
+    registry: Table<'a, FontRegistry>,
+    assets: Table<'a, Assets>,
     book: Cow<'a, Book>,
     /// The sheets the tree was compiled from. `None` on the one-shot
     /// path, where the caller compiled the tree itself and nothing
@@ -187,10 +187,10 @@ impl<'a> Session<'a> {
 
     /// The same, over images the host has already probed.
     pub fn with_assets(registry: &'a FontRegistry, assets: &'a Assets) -> Session<'a> {
-        Session::over(Held::Borrowed(registry), Held::Borrowed(assets))
+        Session::over(Table::Borrowed(registry), Table::Borrowed(assets))
     }
 
-    fn over(registry: Held<'a, FontRegistry>, assets: Held<'a, Assets>) -> Session<'a> {
+    fn over(registry: Table<'a, FontRegistry>, assets: Table<'a, Assets>) -> Session<'a> {
         let book = Book::default();
         let sheets = Stylesheets::parse(&[]);
         let styles = sheets.compile(&book, registry.get());
@@ -221,12 +221,12 @@ impl<'a> Session<'a> {
     /// more through [`add_font`](Session::add_font).
     ///
     /// This is the shape a worker needs: font bytes cross the
-    /// boundary once, the module holds them, and no caller on the
+    /// boundary once, the module keeps them, and no caller on the
     /// other side of the wall has a registry to lend.
     pub fn owning(registry: FontRegistry) -> Session<'static> {
         Session::over(
-            Held::Owned(Box::new(registry)),
-            Held::Owned(Box::new(Assets::none())),
+            Table::Owned(Box::new(registry)),
+            Table::Owned(Box::new(Assets::none())),
         )
     }
 
@@ -240,8 +240,8 @@ impl<'a> Session<'a> {
         assets: &'a Assets,
     ) -> Session<'a> {
         Session {
-            registry: Held::Borrowed(registry),
-            assets: Held::Borrowed(assets),
+            registry: Table::Borrowed(registry),
+            assets: Table::Borrowed(assets),
             book: Cow::Borrowed(book),
             sheets: None,
             styles: Cow::Borrowed(styles),
@@ -303,9 +303,9 @@ impl<'a> Session<'a> {
         self.stale = Stale::Break;
     }
 
-    /// Carries a frontend's complaints into the run's diagnostics.
+    /// Adds a frontend's complaints to the run's diagnostics.
     ///
-    /// A construct the content vocabulary cannot hold is reported
+    /// A construct the content vocabulary cannot express is reported
     /// where the source was read, which is upstream of every stage a
     /// session runs. The output's warnings are the whole run's, so
     /// they belong in the same channel rather than in a second one
@@ -327,8 +327,8 @@ impl<'a> Session<'a> {
     ///
     /// A family the registry did not have is a family the cascade
     /// resolved to something else, so the styling is compiled again
-    /// and the lines are broken again. The font table the output
-    /// carries is rebuilt with them.
+    /// and the lines are broken again. The output's font table is
+    /// rebuilt with them.
     ///
     /// Only a session that owns its registry has one to add to; one
     /// that borrowed it says so instead.
@@ -347,7 +347,7 @@ impl<'a> Session<'a> {
     }
 
     /// Registers one image, and the index `DrawItem::Image.asset`
-    /// will carry for it. `None` for bytes no probe recognises,
+    /// gets for it. `None` for bytes no probe recognises,
     /// which is a diagnostic on the next display structure and no asset.
     ///
     /// The header decides how much room the image takes, so the
@@ -398,7 +398,7 @@ impl<'a> Session<'a> {
     }
 
     /// Names the book: title, author, and whatever else a frontend
-    /// carries.
+    /// read.
     ///
     /// Nothing between the content tree and the page reads metadata,
     /// so this invalidates no stage. The pages already laid out are
@@ -420,8 +420,8 @@ impl<'a> Session<'a> {
     /// The faces this session lays out against.
     ///
     /// A painter that has to draw with the same file the shaper used
-    /// reaches the bytes through here; the display structure carries ids,
-    /// and the registry is what they index.
+    /// reaches the bytes through here; the display structure names
+    /// ids, and the registry is what they index.
     pub fn fonts(&self) -> &FontRegistry {
         self.registry.get()
     }
@@ -717,7 +717,7 @@ fn uniform_measure(styles: &StyleTree) -> bool {
         .all(|master| master.style.geometry.measure().to_bits() == measure)
 }
 
-/// Whether any element generates text that only pagination knows.
+/// Whether any element generates text that only pagination resolves.
 /// `counter(page)` and `string()` in prose would make inline text
 /// depend on where the prose fell, which is a fixpoint rather than a
 /// cache invalidation.

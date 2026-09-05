@@ -1,5 +1,5 @@
 /**
- * The stylesheets the islands carry with them.
+ * The stylesheets the islands ship with.
  *
  * These reach the browser, so they live apart from the catalogue,
  * which reads the corpus off disk and never leaves the server.

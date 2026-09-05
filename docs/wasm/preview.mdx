@@ -124,7 +124,7 @@ import { Preview } from 'fleuron-react';
 
 The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` hands back the underlying preview, for the page count and the PDF export.
 
-React is not a dependency of `fleuron`. The wrapper holds no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
+React is not a dependency of `fleuron`. The wrapper contains no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
 ## Painting a page yourself
 
@@ -146,7 +146,7 @@ The second argument is all optional:
 | `fonts` | none | The font table, `output.fonts`. Leave it out and the painter cannot name the faces, so every run falls back to a generic serif. |
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
-| `ink` | `'#000000'` | The fill for text and rules. The display structure carries no colour of its own yet, so this is the whole page's. |
+| `ink` | `'#000000'` | The fill for text and rules. The display structure has no colour of its own yet, so this is the whole page's. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 
@@ -156,15 +156,15 @@ Layout never decodes an image. It probes the header for the intrinsic size, rese
 
 A browser handed a string and a font does its own typesetting: it chooses glyphs, applies kerning and ligatures, and works out where each one goes. fleuron has already done that work, and if the browser did it again the two answers would differ a little over a different shaper version, a rounded advance or a substituted font.
 
-So the painter leaves the browser nothing to work out. Each `<text>` carries an x for every character it holds, taken from the glyph the engine placed there.
+So the painter leaves the browser nothing to work out. Each `<text>` sets an x for every one of its characters, taken from the glyph the engine placed there.
 
 The PDF writer reads the same display structure, so the two painters draw the same numbers, glyph for glyph.
 
 ## Fonts
 
-A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display structure carries a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
+A page is usually set in several faces at once: body text, an italic aside, a bold heading. Each text run in the display structure names a `fontId`, and `output.fonts` is the table those ids index. The painter draws every run in the file registered under that run's id.
 
-Those files have to reach the browser as `FontFace`s. The host already holds the bytes for a face it registered. The face built into the engine has no URL to fetch it from, so the module hands it back:
+Those files have to reach the browser as `FontFace`s. The host already has the bytes for a face it registered. The face built into the engine has no URL to fetch it from, so the module hands it back:
 
 ```js
 import { faceFamily } from 'fleuron';

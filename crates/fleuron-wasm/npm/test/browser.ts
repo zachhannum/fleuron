@@ -5,7 +5,7 @@
  * puts every glyph at the x the display structure gave it. What it cannot
  * prove is that those numbers reach a screen, so this opens the
  * harness in a real browser, pages the fixture book through it, and
- * holds one page against a raster of the PDF the same run exported.
+ * checks one page against a raster of the PDF the same run exported.
  *
  * The two rasters come from different engines, Chromium's and
  * poppler's, so they are compared as ink rather than as pixels: both
@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 
 /**
- * How far apart the two rasters may be, as ink per cell out of 255,
+ * How far apart the two rasters may be, in ink per cell out of 255,
  * and on average over the page.
  *
  * Where the numbers come from: the painter as it stands scores 14 and
@@ -45,7 +45,7 @@ const GRID = 16;
 /** Points to pixels for both sides of the comparison. */
 const ZOOM = 2;
 /**
- * The page the two rasters are held against, which is one of running
+ * The page the two rasters are compared on, which is one of running
  * text.
  *
  * The two sides resample an image differently, so a page whose ink is
@@ -130,7 +130,7 @@ const fallback = await page.evaluate(() => {
 check('a missing face falls back visibly rather than painting nothing', fallback > 0, `${fallback.toFixed(1)}pt of text`);
 
 // The export of the same run, rastered by something that is not a
-// browser, held against a screenshot of the page on screen. Both are
+// browser, compared with a screenshot of the page on screen. Both are
 // made at the same zoom, so a pixel is a pixel on either side.
 // The images the harness handed over are on the page, drawn from the
 // same files the engine sized them by.
@@ -200,7 +200,7 @@ if (rastered.status !== 0) {
   }
 } else {
   check(
-    'the page the two rasters are held against carries no image',
+    'the page the two rasters are compared on has no image',
     pictures === 0,
     `${pictures} on page ${COMPARED}`,
   );

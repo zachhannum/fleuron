@@ -13,7 +13,7 @@ import { remarkDocLinks } from './src/remark-doc-links.mjs';
 const docsRoot = fileURLToPath(new URL('./src/content/docs', import.meta.url));
 
 /**
- * Stops the bindgen glue from carrying a copy of the module.
+ * Stops the bindgen glue from emitting a copy of the module.
  *
  * The glue falls back to fetching `fleuron_bg.wasm` from beside
  * itself, and a bundler that sees that line emits the six megabytes
@@ -56,7 +56,7 @@ export default defineConfig({
   site: 'https://fleuron.typeworks.dev',
   // A stylesheet in the document is a stylesheet the reader is not
   // waiting a round trip for. The site's sheets are small enough
-  // that carrying them costs less than fetching them.
+  // that inlining them costs less than fetching them.
   build: { inlineStylesheets: 'always' },
 
   trailingSlash: 'always',

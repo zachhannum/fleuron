@@ -20,5 +20,5 @@ fleuron = { path = "../fleuron" }
 fleuron-markdown = { path = "../fleuron-markdown" }
 
 [dev-dependencies]
-# The e2e holds the fixture PDF to a digest; nothing ships with it.
+# The e2e checks the fixture PDF against a digest; nothing ships with it.
 sha2 = "0.10"

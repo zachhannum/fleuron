@@ -2,10 +2,10 @@
  * The island's half of the wall: an element, the inputs, and a page
  * on screen.
  *
- * Everything about the engine lives in the worker. This holds a
+ * Everything about the engine lives in the worker. This owns a
  * `Preview` from `fleuron`, hands it whatever prop changed,
- * and reports what came back. It knows the shape of a display structure
- * and nothing about how one is made.
+ * and reports what came back. It reads the shape of a display structure
+ * and nothing of how one is made.
  *
  * The module is not fetched until a demo is on screen, so a visitor
  * who never scrolls to one downloads no engine. A visitor whose
@@ -20,7 +20,7 @@ import { spawn } from './spawn';
 /** Where a demo is in its life. */
 export type Status =
   /** Waiting to be asked on a metered connection: nothing has been fetched. */
-  | 'held'
+  | 'paused'
   /** The module is on its way. */
   | 'loading'
   /** A page is on screen. */
@@ -99,13 +99,13 @@ export interface Running {
    * scripts never run.
    */
   hydrated: boolean;
-  /** Fetches the module and mounts, for a demo a metered browser held. */
+  /** Fetches the module and mounts, for a demo a metered browser paused. */
   start: () => void;
 }
 
 /**
  * Every mounted demo, by id, for a console and for the browser check
- * that holds an island's SVG against the display structure behind it.
+ * that checks an island's SVG against the display structure behind it.
  */
 declare global {
   // eslint-disable-next-line no-var
@@ -188,7 +188,7 @@ export function usePreview(inputs: Inputs): Running {
   useEffect(() => {
     if (wanted && metered()) {
       setWanted(false);
-      setStatus('held');
+      setStatus('paused');
     }
   }, []);
 

@@ -27,7 +27,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
 | | |
 |---|---|
-| `<input.md…>` | One or more markdown files, composed in the order given, each carrying its own name into the tree. An extension that is not `.md` or `.markdown` is an error naming the file. |
+| `<input.md…>` | One or more markdown files, composed in the order given, each recorded in the tree under its own name. An extension that is not `.md` or `.markdown` is an error naming the file. |
 | `-o`, `--output` | Where the PDF goes. Required, except under `--dump-tree`. The path is written whole and nothing is created alongside it. |
 | `-c`, `--css` | An author stylesheet. Repeatable. Sheets parse in the order given and cascade in that order, all of them over the built-in user-agent sheet. With no `-c`, the built-in sheet does all the styling. |
 | `-s`, `--split` | Where a markdown file's sections begin. A level of 1 to 6 opens a section at every heading of that level or shallower. `none` opens none, so the file is one section. Default 1. |
@@ -53,7 +53,7 @@ Exit 2 means the command line is wrong. Exit 1 means the input is. A book that l
 
 ## stderr
 
-The run writes everything to stderr. stdout carries only what `--version`, `--help` and `--dump-tree` print.
+The run writes everything to stderr. stdout is only what `--version`, `--help` and `--dump-tree` print.
 
 A summary comes first:
 

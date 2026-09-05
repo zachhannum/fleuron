@@ -41,8 +41,8 @@ pub use sheet::{Origin, Source};
 use element::{ElementTree, PseudoElement};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
-/// The defaults, as a stylesheet. Nothing in the engine carries a
-/// style constant; this file is where the trade paperback lives.
+/// The defaults, as a stylesheet. There are no style constants in the
+/// engine; this file is where the trade paperback lives.
 pub const USER_AGENT_CSS: &str = include_str!("style/ua.css");
 
 /// Resolves `@font-face` sources to font bytes.
@@ -312,8 +312,8 @@ fn resolve_page(
         .filter(|(_, rule)| selects(rule, query))
         .collect();
     // `@page` cascades like any other rule: origin first, then
-    // specificity. Source order already holds, and a stable sort
-    // leaves the later of two equal rules on top.
+    // specificity. The rules are already in source order, and a stable
+    // sort leaves the later of two equal rules on top.
     matching.sort_by_key(|(level, rule)| (*level, rule.specificity()));
 
     let root_size = root.font_size;
@@ -422,7 +422,7 @@ impl Stylesheets {
     /// family the sheet gave it rather than the one inside the file:
     /// a stylesheet's name for a face is the one its selectors use.
     ///
-    /// Run this before compiling — a face the registry does not hold
+    /// Run this before compiling — a face the registry does not have
     /// is a face no computed style can resolve to.
     pub fn load_fonts(&mut self, registry: &mut FontRegistry, loader: &dyn FontLoader) {
         for sheet in &self.sheets {
@@ -437,8 +437,7 @@ impl Stylesheets {
         &self.warnings
     }
 
-    /// Compiles one book's styling against the faces the registry
-    /// holds.
+    /// Compiles one book's styling against the faces in the registry.
     pub fn compile(&self, book: &Book, registry: &FontRegistry) -> StyleTree {
         cascade(book, &self.sheets, registry, self.warnings.clone())
     }
@@ -496,7 +495,7 @@ fn register_face(
 
 /// What a `@font-face` declared its source to be. A sheet that
 /// declares neither slope nor weight is naming a family, not a cut,
-/// and leaves the file to say which cuts it holds.
+/// and the file names the cuts.
 fn declared(face: &FontFace) -> Option<FaceAttributes> {
     let (style, weight) = (face.style, face.weight);
     (style.is_some() || weight.is_some()).then(|| FaceAttributes {
@@ -712,10 +711,10 @@ fn report(warnings: &mut Vec<Warning>, warning: Option<Warning>) {
     }
 }
 
-/// The face a computed style shapes with: the first family the
-/// registry holds, at the nearest slope and weight it has.
+/// The face a computed style shapes with: the first family in the
+/// registry, at the nearest slope and weight it has.
 ///
-/// A family the registry does not hold is skipped — that is what a
+/// A family the registry does not have is skipped — that is what a
 /// font stack is for — but a stack that resolves nothing, or a
 /// family with no cut at the slope asked for, falls back to a face
 /// that is visibly not the one requested. Both say so.
@@ -864,10 +863,10 @@ mod tests {
         nth(tree, element, 0)
     }
 
-    /// The built-in sheet carries what the constants used to: body,
-    /// chapter and folio styles, and the trade-paperback page.
+    /// The built-in sheet sets the body, chapter and folio styles, and
+    /// the trade-paperback page.
     #[test]
-    fn the_built_in_sheet_carries_the_defaults() {
+    fn the_built_in_sheet_sets_the_defaults() {
         let book = sample();
         let tree = defaults(&book, registry());
 
@@ -1120,7 +1119,7 @@ mod tests {
     }
 
     /// The `@page` grammar: named pages, sheet sizes, margins, and a
-    /// margin box carrying a literal.
+    /// margin box set to a literal.
     #[test]
     fn page_grammar_sets_size_margins_and_margin_boxes() {
         let book = sample();
@@ -1147,7 +1146,7 @@ mod tests {
         });
         let ornament = opening
             .margin_box(MarginBox::TopCenter)
-            .expect("the opening page carries an ornament");
+            .expect("the opening page has an ornament");
         assert_eq!(ornament.content, Content::Text("❦".into()));
         assert_eq!(ornament.style.font_size, 14.0);
         // An unnamed page never picked up the named rule's margin.
@@ -1298,7 +1297,7 @@ mod tests {
     }
 
     /// Generic families resolve through the registry's bindings, and
-    /// slope and weight pick the nearest face a family holds.
+    /// slope and weight pick the nearest face in a family.
     #[test]
     fn families_resolve_through_the_registry() {
         let book = sample();
@@ -1384,7 +1383,7 @@ mod tests {
         assert_eq!(quote.margin.left, 2.0 * quote.font_size);
         assert_eq!(quote.margin.right, 2.0 * quote.font_size);
         assert_eq!(quote.margin.top, quote.font_size);
-        // The paragraph inside carries no indent of its own: the
+        // The paragraph inside has no indent of its own: the
         // quotation's box is what moves it.
         assert_eq!(nth(&tree, "p", 1).margin.left, 0.0);
     }

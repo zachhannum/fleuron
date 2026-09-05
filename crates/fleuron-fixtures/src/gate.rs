@@ -8,8 +8,8 @@
 //! best-of-N, and it reports the same numbers natively and under wasm.
 //!
 //! Budgets are absolute ceilings, not comparisons against a stored
-//! baseline: run-to-run comparison needs a baseline that has held
-//! still for a while, and a CI runner's timings have not.
+//! baseline: run-to-run comparison needs a baseline that has been
+//! steady for a while, and a CI runner's timings have not.
 
 use std::fmt;
 use std::hint::black_box;
@@ -48,10 +48,10 @@ pub mod budget {
     /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
-    /// Bytes a book-scale layout may hold at its peak, over what the
+    /// Bytes a book-scale layout may allocate at its peak, over what the
     /// content tree already costs. The display structure is the floor —
     /// every glyph of every page is retained — and a section's lines
-    /// are the only thing held above it, so the ceiling sits at about
+    /// are the only thing above it, so the ceiling sits at about
     /// twice the floor. Allocation counts are identical on every
     /// machine, which is why this one is a hard failure.
     pub const LAYOUT_PEAK: u64 = 32 * 1024 * 1024;
@@ -89,7 +89,8 @@ impl Target {
         }
     }
 
-    /// What the target is timed on, and the ceiling it is held to.
+    /// What the target is timed on, and the ceiling it is measured
+    /// against.
     /// Natively that is the whole pipeline; in the worker it is
     /// layout, which is all the reader is waiting for.
     pub fn time_budget(self) -> (&'static str, Duration) {
@@ -108,7 +109,8 @@ impl Target {
     }
 }
 
-/// One book measured: the stages, end to end, plus what the run held.
+/// One book measured: the stages, end to end, plus what the run
+/// allocated.
 #[derive(Debug, Clone)]
 pub struct Report {
     /// The book measured.
@@ -134,13 +136,13 @@ pub struct Report {
     /// What those bytes hash to. Layout is deterministic and the wire
     /// is positional, so this number is the same on every target that
     /// agrees about the book, which is how a run under wasm and a
-    /// run natively are held to producing the same page.
+    /// run natively must produce the same page.
     pub wire_digest: u64,
     /// display structure to PDF bytes.
     pub pdf: Duration,
     /// Size of the PDF the run wrote.
     pub pdf_bytes: usize,
-    /// Bytes held at the peak of the layout call, over the content
+    /// Bytes allocated at the peak of the layout call, over the content
     /// tree it was given.
     pub layout_peak: u64,
     /// A style-only re-render over a retained session, measured with
@@ -157,7 +159,7 @@ impl Report {
         self.parse + self.style + self.layout + self.pdf
     }
 
-    /// The budgets this report is held to on `target`.
+    /// The budgets this report is checked against on `target`.
     pub fn checks(&self, target: Target) -> Vec<Check> {
         let (label, ceiling) = target.time_budget();
         let measured = match target {
@@ -206,7 +208,7 @@ pub struct Check {
     pub label: &'static str,
     /// What this run measured.
     pub measured: f64,
-    /// The budget it is held to.
+    /// The budget it is checked against.
     pub ceiling: f64,
     /// The unit both are in.
     pub unit: &'static str,

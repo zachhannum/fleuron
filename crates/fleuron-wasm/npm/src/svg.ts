@@ -2,9 +2,9 @@
  * The preview painter: one page of the display structure, as SVG.
  *
  * The engine has already shaped and broken the text, so the browser
- * is given no room to do either. Every run is one `<text>` carrying
- * an x for each character it holds, taken from the glyph the shaper
- * put there, and the face is the file the engine shaped with, pinned
+ * is given no room to do either. Every run is one `<text>` with an x
+ * for each of its characters, taken from the glyph the shaper put
+ * there, and the face is the file the engine shaped with, pinned
  * to the instance it shaped at. A preview that disagrees with the
  * export about where a glyph sits therefore has a bug here, and
  * nowhere else.
@@ -146,7 +146,7 @@ function style(entry: FontRefEntry | undefined): string {
   const settings = (entry?.variations ?? [])
     .map((axis) => `"${axis.tag}" ${num(axis.value)}`)
     .join(', ');
-  // Runs carry the spaces the line was justified around, and SVG
+  // A run includes the spaces the line was justified around, and SVG
   // collapses them by default, which would slide every character
   // after the first space one position along the x list.
   return `white-space: pre` + (settings === '' ? '' : `; font-variation-settings: ${settings}`);
@@ -157,7 +157,7 @@ function style(entry: FontRefEntry | undefined): string {
  * there.
  *
  * SVG positions characters, and the display structure positions glyphs,
- * so the run's text is the join between them: each glyph carries the
+ * so the run's text is the join between them: each glyph names the
  * byte range it stands for, and its x lands on the character that
  * range starts at. A character inside a ligature's range has no
  * glyph of its own and is spaced evenly across it, which is what the
@@ -173,8 +173,8 @@ function positions(item: TextItem): number[] {
     if (at === undefined) {
       continue;
     }
-    const held = xs[at];
-    if (held === undefined || glyph.x < held) {
+    const seen = xs[at];
+    if (seen === undefined || glyph.x < seen) {
       xs[at] = glyph.x;
     }
   }
@@ -218,12 +218,12 @@ function fill(xs: (number | undefined)[], left: number): number[] {
     return [left];
   }
   const out: number[] = [];
-  let held = left;
+  let previous = left;
   for (let at = 0; at <= last; at += 1) {
     const x = xs[at];
     const to = ahead[at] ?? -1;
-    held = x ?? held + ((xs[to] ?? held) - held) / (to - at + 1);
-    out.push(held);
+    previous = x ?? previous + ((xs[to] ?? previous) - previous) / (to - at + 1);
+    out.push(previous);
   }
   return out;
 }

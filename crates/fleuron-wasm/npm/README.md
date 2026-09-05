@@ -31,8 +31,8 @@ session, fetches the fonts the book was set in, and paints a page as
 SVG. The encoded buffer, the worker messages and the display structure
 are handled internally, and all three stay exported.
 
-`fleuron-react` is the same thing as a component, and holds no engine
-logic of its own.
+`fleuron-react` is the same thing as a component, with no engine logic
+of its own.
 
 ## In a worker
 
@@ -103,12 +103,12 @@ const pdf = renderPdf(markdown, css);
 ## The display structure
 
 `client.preview` hands back pages of text runs, rules and images, in
-points, origin top left. Each text run carries the string it was shaped
+points, origin top left. Each text run has the string it was shaped
 from and each glyph a byte range into it, which is what a painter needs
 for selection and copy-and-paste.
 
 `paintPage` draws one of them as SVG. Each run becomes one `<text>`
-carrying an x for every character in it, so the browser places the
+with an x for every character in it, so the browser places the
 glyphs where the engine put them instead of working out positions of
 its own. `exportPdf` writes the same pages as PDF.
 

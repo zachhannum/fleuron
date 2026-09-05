@@ -3,7 +3,7 @@
  *
  * A request is an edit plus, sometimes, a render: inputs travel when
  * they change rather than once per frame, and the module keeps every
- * stage between them. Each request carries a generation, which the
+ * stage between them. Each request names a generation, which the
  * worker echoes back untouched. The host raises it whenever the
  * input goes stale, and a reply that comes back behind the current
  * one is dropped rather than painted.
@@ -23,7 +23,7 @@ export interface Metadata {
   title?: string;
   /** Author, for the title page. */
   author?: string;
-  /** Anything else a frontend carries, such as `language`. */
+  /** Anything else a frontend read, such as `language`. */
   extra?: Record<string, string>;
 }
 
@@ -121,7 +121,7 @@ export interface Failed {
 /** What comes back for a request. */
 export type Response = Rendered | Applied | Superseded | Failed;
 
-/** Whether a reply carries bytes. */
+/** Whether a reply came back with bytes. */
 export function isRendered(response: Response): response is Rendered {
   return 'bytes' in response;
 }

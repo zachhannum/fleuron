@@ -18,11 +18,11 @@ pub struct LayoutOutput {
 }
 ```
 
-`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry carries the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
+`fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry names the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
 
 `assets` is the table `Image.asset` indexes. An entry is the url the content tree named the image by and what its header reported: pixel dimensions and resolution. That is all layout read.
 
-`warnings` holds the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
+`warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
 ## `Page`
 
@@ -39,7 +39,7 @@ pub struct Page {
 
 `number` is the folio, counting from 1. `side` is `recto` or `verso`; books open on a right-hand page, so odd numbers are recto. `width` and `height` are the trim, in points, per page, because a book may change page size at a named page.
 
-`sections` names the content-tree sections whose content the page holds, in the order their content appears on it. A chapter that ends mid-page is followed there by the next one opening, so the page names both. A blank leaf names none.
+`sections` names the content-tree sections that appear on the page, in the order their content appears on it. A chapter that ends mid-page is followed there by the next one opening, so the page names both. A blank leaf names none.
 
 Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this.
 

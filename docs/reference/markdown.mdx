@@ -29,7 +29,7 @@ The two arrangements produce the same book. A single file split at its chapter h
 
 A source's frontmatter belongs to that source. What it means depends on whether the source is the book or a chapter of one.
 
-`frontmatter` reads the `---` block at the top of a source. `title` and `author` are the named fields. Every other scalar joins `extra`, which the engine carries and style may read. Values are scalars: a line that is not `key: value` is not metadata.
+`frontmatter` reads the `---` block at the top of a source. `title` and `author` are the named fields. Every other scalar joins `extra`, which the engine passes through and style may read. Values are scalars: a line that is not `key: value` is not metadata.
 
 ```markdown
 ---
@@ -39,11 +39,11 @@ year: 1813
 ---
 ```
 
-A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out yet. It is carried through the tree.
+A source read whole is one chapter, so its `title:` becomes that section's `title` rather than the book's. Nothing lays a section title out yet. It stays in the tree unused.
 
 That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows and the CLI passes what its flags named. The frontend never takes the book's title from whichever file came first.
 
-A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is carried for whoever wants it.
+A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is passed through for whoever wants it.
 
 ## Several sources
 
@@ -77,7 +77,7 @@ let book = assemble(
 );
 ```
 
-`assemble` numbers the whole tree, so it runs once over every section rather than once per file. Node ids are document-order over the book, and a file read on its own carries no position in it.
+`assemble` numbers the whole tree, so it runs once over every section rather than once per file. Node ids are document-order over the book, and a file read on its own has no position in it.
 
 Warnings accumulate the same way, and each one already names the file it came from.
 
@@ -91,7 +91,7 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
 
-An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph that held it, alt text and all. Moving it changes the page, so it warns.
+An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
 
 The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
 
@@ -109,7 +109,7 @@ A line wrapped in the source is a space in the tree. The shaper never sees the m
 
 ## What warns
 
-The manuscript below uses every construct in the tables above, the ones with no counterpart included. Constructs the content tree holds are laid out. The rest is laid out as prose and reported under the page.
+The manuscript below uses every construct in the tables above, the ones with no counterpart included. Constructs the content tree has a node for are laid out. The rest is laid out as prose and reported under the page.
 
 <Playground
   demo="mapping"
@@ -130,7 +130,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | strikethrough, superscript, subscript | plain text |
 | math | plain text |
 | an image among prose | a block after the paragraph |
-| html, a footnote reference, a task marker | nothing; they carry no prose |
+| html, a footnote reference, a task marker | nothing; there is no prose in them |
 
 ## Dialects
 
@@ -149,6 +149,6 @@ A switch that is off turns its syntax into prose rather than an error. `[[Anothe
 
 ## Reading a source twice
 
-`Cache` holds a source's sections against its name and a hash of its bytes, which is what a host re-rendering on every keystroke wants. The key is the name and the hash, not a node id: ids are assigned in document order over the whole book and renumber whenever a section is added or removed.
+`Cache` keys a source's sections by its name and a hash of its bytes, which is what a host re-rendering on every keystroke wants. The key is the name and the hash, not a node id: ids are assigned in document order over the whole book and renumber whenever a section is added or removed.
 
 Parsing is deterministic, so two readings of the same bytes give the same tree.

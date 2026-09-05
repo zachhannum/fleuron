@@ -49,10 +49,10 @@ pub enum PdfError {
 /// Writes one laid-out book as PDF bytes.
 ///
 /// Fonts resolve through the registry that shaped the run and images
-/// through the table that sized them: the display structure carries
-/// indexes, the tables own the files, and so the embedded subset
-/// holds the outlines the shaper measured and the embedded image is
-/// the file the header was read from.
+/// through the table that sized them: the display structure names
+/// indexes, the tables own the files, and so the embedded subset has
+/// the outlines the shaper measured and the embedded image is the
+/// file the header was read from.
 ///
 /// A book with no images passes [`Assets::none`].
 pub fn write(
@@ -460,7 +460,7 @@ mod tests {
     }
 
     /// The page's trim size is the media box: krilla is told the size
-    /// the display structure carries, not a default.
+    /// the display structure gives, not a default.
     #[test]
     fn page_trim_becomes_the_media_box() {
         let pdf = readable(&page_of(Vec::new(), 432.0, 648.0), &Metadata::default());
@@ -472,7 +472,7 @@ mod tests {
 
     /// Glyphs show where layout put them. A run whose second glyph
     /// sits a hair off its font advance must come out as one showing
-    /// op carrying that offset — 1000ths of an em, positive leftwards
+    /// op with that offset in it — 1000ths of an em, positive leftwards
     /// — not as two runs and not as font-advance spacing.
     #[test]
     fn glyphs_show_at_the_positions_layout_gave_them() {
@@ -507,7 +507,7 @@ mod tests {
         );
     }
 
-    /// Rules paint as filled paths at the coordinates they carry.
+    /// Rules paint as filled paths at the coordinates layout gave them.
     #[test]
     fn rect_items_paint_as_filled_paths() {
         let items = vec![DrawItem::Rect {
@@ -533,7 +533,7 @@ mod tests {
             .expect("no subset-tagged BaseFont");
         assert!(
             pdf[tag - 6..tag].chars().all(|c| c.is_ascii_uppercase()),
-            "BaseFont carries no six-letter subset tag"
+            "BaseFont has no six-letter subset tag"
         );
         assert!(pdf.contains("/FontFile2"), "no embedded font program");
         assert!(

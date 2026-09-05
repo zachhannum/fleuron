@@ -2,8 +2,8 @@
 //!
 //! Both the shaper and every painter resolve glyphs through this one
 //! table, which is what makes preview equal export. The registry is
-//! the sole owner of font bytes; nothing else in the engine holds a
-//! `FontRef` lifetime.
+//! the sole owner of font bytes; nothing else in the engine keeps a
+//! `FontRef` lifetime alive.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -87,7 +87,7 @@ impl FaceAttributes {
 /// One axis of a variable face, pinned: the tag and the user-space
 /// coordinate this face sits at.
 ///
-/// A face at its family's default location carries none — there is
+/// A face at its family's default location has none — there is
 /// nothing to pin, and an instanced subset of the default is just
 /// the default.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -179,7 +179,7 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
-/// A font's identity, as carried in the engine's output.
+/// A font's identity in the engine's output.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FontRefEntry {
     /// Family for matching (lowercase).
@@ -398,7 +398,7 @@ impl FontRegistry {
 
     /// The advance widths of a run of glyphs, in font units.
     ///
-    /// Shaped output carries glyph ids; measuring them must not
+    /// Shaped output is glyph ids; measuring them must not
     /// re-decode the font per glyph, so this batches.
     pub fn advance_widths(&self, id: u16, glyphs: &[u32]) -> Option<Vec<u16>> {
         let face = self.faces.get(id as usize)?;
@@ -646,7 +646,7 @@ mod tests {
     }
 
     /// Bytes enter, sequential ids come out, and the registry counts
-    /// what it holds.
+    /// what it registered.
     #[test]
     fn registration_assigns_sequential_ids() {
         let mut registry = FontRegistry::new();
@@ -898,7 +898,7 @@ mod tests {
         );
     }
 
-    /// Clusters index the shaped string: ligatures carry their first
+    /// Clusters index the shaped string: a ligature takes its first
     /// cluster, and clusters are monotone even where glyphs merge.
     #[test]
     fn clusters_index_the_input_text() {

@@ -1,8 +1,8 @@
 /**
  * The size budget: what a host downloads to lay out a book.
  *
- * The module carries its own text face, its own hyphenation
- * patterns and its own segmentation data, because the engine reads
+ * The module ships its own text face, its own hyphenation patterns
+ * and its own segmentation data, because the engine reads
  * no files and asks the host for nothing. That is a fair trade at a
  * few megabytes and a bad one at ten, so the number is checked
  * rather than watched.

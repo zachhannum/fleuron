@@ -1,6 +1,6 @@
 [package]
 name = "fleuron-markdown"
-description = "Markdown frontend for fleuron: source text in, content tree out, with the constructs the vocabulary cannot hold reported rather than dropped"
+description = "Markdown frontend for fleuron: source text in, content tree out, with the constructs the vocabulary cannot express reported rather than dropped"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

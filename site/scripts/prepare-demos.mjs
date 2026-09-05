@@ -40,8 +40,8 @@ if (missing) {
 
 const { Session, decodeDisplayList, initWasm, paintPage } = await import('fleuron');
 
-// The module, and one session per demo: a session holds the whole
-// pipeline, and two demos with different stylesheets have nothing to
+// The module, and one session per demo: a session keeps the whole
+// pipeline open, and two demos with different stylesheets have nothing to
 // share.
 await initWasm({ module_or_path: readFileSync(module_) });
 
@@ -66,9 +66,9 @@ for (const id of Object.keys(DEMOS)) {
     }
   }
   // The images cross the wall before the manuscript, so the first
-  // layout already knows how much room each one takes.
-  const held = new Map(images.map((url) => [url, bytes(url)]));
-  for (const [url, pixels] of held) {
+  // layout already accounts for the room each one takes.
+  const pictures = new Map(images.map((url) => [url, bytes(url)]));
+  for (const [url, pixels] of pictures) {
     session.addImage(url, pixels);
   }
   session.setMarkdown(name, markdown);
@@ -102,7 +102,7 @@ for (const id of Object.keys(DEMOS)) {
     ink: 'currentColor',
     // A poster is markup in a document rather than a page fetching
     // its own files, so an image travels inside it.
-    asset: (asset) => inline(held.get(asset.url)),
+    asset: (asset) => inline(pictures.get(asset.url)),
   });
   writeFileSync(new URL(`${id}.svg`, posters), `${lighter(svg)}\n`);
 
@@ -141,7 +141,7 @@ if (wrong > 0) {
 }
 console.log('demos prepared: the module, the bench corpus, and a poster each');
 
-/** One image as a data url, for a poster that carries its own. */
+/** One image as a data url, for a poster that embeds its own. */
 function inline(pixels) {
   if (pixels === undefined) {
     return null;
@@ -195,7 +195,7 @@ function attributes(text) {
   );
 }
 
-/** Every glyph of a page, held against the x the painter wrote. */
+/** Every glyph of a page, checked against the x the painter wrote. */
 function displaced(page, svg, slack = 0) {
   const painted = [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map((element) => ({
     x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),

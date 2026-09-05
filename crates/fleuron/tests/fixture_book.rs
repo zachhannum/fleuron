@@ -38,8 +38,7 @@ fn lay_out(book: &Book) -> (StyleTree, LayoutOutput) {
     (styles, output)
 }
 
-/// The folio one page carries: the text painted below its content
-/// box.
+/// The folio on one page: the text painted below its content box.
 fn folio(page: &Page, styles: &StyleTree) -> Option<String> {
     let geometry = styles
         .page(PageQuery {
@@ -55,7 +54,7 @@ fn folio(page: &Page, styles: &StyleTree) -> Option<String> {
 }
 
 /// The fixture paginates, and its font table is the registry's —
-/// every cut, indexed by the id a run carries.
+/// every cut, indexed by the id a run names.
 #[test]
 fn the_fixture_manuscript_paginates() {
     let (_, output) = lay_out(&fixture());
@@ -63,10 +62,10 @@ fn the_fixture_manuscript_paginates() {
     assert_eq!(output.fonts.len(), registry().len());
 }
 
-/// The fixture carries folios: the e2e path exercises page furniture,
+/// The fixture sets folios: the e2e path exercises page furniture,
 /// not just content flow.
 #[test]
-fn the_fixture_manuscript_carries_folios() {
+fn the_fixture_manuscript_sets_folios() {
     let (styles, output) = lay_out(&fixture());
     let with_folios = output
         .pages
@@ -75,7 +74,7 @@ fn the_fixture_manuscript_carries_folios() {
         .count();
     assert!(
         with_folios >= output.pages.len() - 2,
-        "only {with_folios} of {} fixture pages carry folios",
+        "only {with_folios} of {} fixture pages have folios",
         output.pages.len(),
     );
     for page in &output.pages {
@@ -86,7 +85,7 @@ fn the_fixture_manuscript_carries_folios() {
 }
 
 /// The excerpt is the corpus the pipeline is checked against, so it
-/// has to hold the constructs the vocabulary does: headings, a
+/// has to use every construct in the vocabulary: headings, a
 /// quotation of more than one paragraph, and prose that opens italic.
 #[test]
 fn the_fixture_manuscript_exercises_the_vocabulary() {
@@ -124,7 +123,7 @@ fn with_css(book: &Book, css: &str) -> LayoutOutput {
 }
 
 /// The baselines of one page, each with the right edge of the last
-/// glyph painted on it. Runs carry no advances, so the edge comes
+/// glyph painted on it. A run has no advances in it, so the edge comes
 /// back out of the face the glyph was shaped in.
 fn line_ends(page: &Page, body_size: f32) -> Vec<f32> {
     let mut ends: Vec<(f32, f32)> = Vec::new();
@@ -147,7 +146,7 @@ fn line_ends(page: &Page, body_size: f32) -> Vec<f32> {
         let advance = registry().advance_width(*font_id, last.id).unwrap_or(0) as f32;
         let edge = last.x + advance / upem * size;
         match ends.iter_mut().find(|(at, _)| at == y) {
-            Some(held) => held.1 = held.1.max(edge),
+            Some(seen) => seen.1 = seen.1.max(edge),
             None => ends.push((*y, edge)),
         }
     }

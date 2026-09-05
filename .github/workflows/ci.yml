@@ -33,7 +33,7 @@ jobs:
 
   # Warns, does not fail: a shared runner's clock is evidence of a trend,
   # not of a regression. `--strict` is the switch to throw once the
-  # numbers have held still. The memory ceiling is a hard failure — the
+  # numbers have settled. The memory ceiling is a hard failure — the
   # allocator counts the same bytes on every machine.
   perf:
     runs-on: ubuntu-latest
@@ -60,7 +60,7 @@ jobs:
           echo "$PWD/wasmtime-${WASMTIME_VERSION}-x86_64-linux" >> "$GITHUB_PATH"
       # A standalone runtime, not a browser: the worker's real engine is
       # someone else's, and this is the closest reproducible proxy. Both
-      # books, as natively — the constrained target is where a curve
+      # books, the same as natively — the constrained target is where a curve
       # that has stopped being linear shows up first.
       - name: Worker budgets
         run: |

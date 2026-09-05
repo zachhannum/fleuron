@@ -10,7 +10,7 @@ a JFIF density of 100dpi so that its intrinsic size is a plate-sized
 
 `fleuron.png` and `fleuron.webp` are the ❦ of EB Garamond, the face
 the engine bundles, rendered at 128px on a transparent ground with a
-`pHYs` of 300dpi. The two carry the same pixels in the two raster
+`pHYs` of 300dpi. The two are the same pixels in the two raster
 formats the PDF writer decodes.
 
 Between them they cover what the writer does with an image: a JPEG

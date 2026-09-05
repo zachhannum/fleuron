@@ -131,7 +131,7 @@ const description =
             <h2>Paged media</h2>
             <p>
               A built-in stylesheet sets the defaults and yours overrides
-              whatever you want to change. fleuron understands a <a
+              whatever you want to change. fleuron supports a <a
                 href={`${base}/css-subset/`}>subset of CSS</a>, and reports
               what it does not. Use CSS to configure all the furnishings of
               a professionally typeset novel: trim size, drop caps, page numbers,
@@ -529,8 +529,8 @@ const description =
     align-items: start;
   }
 
-  /* The column holds a code block that scrolls, which needs a track
-     free to be narrower than the code in it. */
+  /* The column has a code block in it that scrolls, which needs a
+     track free to be narrower than the code in it. */
   .two-up > * {
     min-width: 0;
   }

@@ -9,7 +9,7 @@
 //! trim, mirrored margins, a head and a folio on the opening page —
 //! and the PDF that comes back is checked for all of it.
 //!
-//! The book carries a map and an ornament, so the same run covers
+//! The book has a map and an ornament in it, so the same run covers
 //! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
 //! transparency kept as a soft mask, and `qpdf --check` clean over
 //! both.
@@ -48,7 +48,7 @@ const ORNAMENT: &str = "\u{2766}";
 ///
 /// The display structure rather than the PDF, because a PDF's object
 /// numbering is the writer's own. krilla orders its font objects by
-/// a hash that carries the build's dependency graph in it, so one
+/// a hash taken over the build's dependency graph, so one
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
@@ -150,8 +150,8 @@ fn the_styled_pdf_takes_its_trim_from_at_page() {
     assert_eq!(size, STYLED_TRIM, "the trim is not the sheet's");
 }
 
-/// The page masters paint what the sheet asked: the opening page
-/// carries its own folio, which the built-in sheet blinds.
+/// The page masters paint what the sheet asked: the opening page gets
+/// its own folio, which the built-in sheet blinds.
 #[test]
 fn page_masters_paint_what_the_author_asked() {
     let (styled, _) = render("styled-masters", &[&styled_sheet()]);
@@ -204,7 +204,7 @@ fn running_heads_and_roman_folios_reach_the_pdf() {
         assert_eq!(
             squeeze(first),
             chapter,
-            "page {} carries no running head",
+            "page {} has no running head",
             index + 1,
         );
     }
@@ -670,8 +670,8 @@ fn fixture_display_list() -> Vec<u8> {
     fleuron::wire::encode(&output).expect("a display structure encodes")
 }
 
-/// Image urls, as the CLI resolves them: against the directory the
-/// manuscript was read from.
+/// Image urls resolved the way the CLI resolves them: against the
+/// directory the manuscript was read from.
 struct Beside;
 
 impl ImageLoader for Beside {
@@ -680,7 +680,7 @@ impl ImageLoader for Beside {
     }
 }
 
-/// The digest the fixture PDF is held to, lowercase hex.
+/// The digest the fixture PDF is checked against, lowercase hex.
 fn sha256(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes)
@@ -712,8 +712,8 @@ fn pages_of(text: &str) -> Vec<&str> {
     pages
 }
 
-/// The folio one extracted page carries: its last non-empty line,
-/// when that line is only digits.
+/// The folio on one extracted page: its last non-empty line, when
+/// that line is only digits.
 fn folio_of(page: &str) -> Option<String> {
     let last = page.lines().rfind(|line| !line.trim().is_empty())?;
     let last = last.trim();
@@ -791,7 +791,7 @@ fn strip_furniture(text: &str, head: Option<&str>) -> String {
 
 /// Everything the engine lays out, in reading order: headings,
 /// paragraphs, the blocks a blockquote nests, and the ornament the
-/// built-in sheet sets a thematic break in. Images carry no text.
+/// built-in sheet sets a thematic break in. An image has no text.
 fn laid_out_text(book: &Book) -> String {
     let mut text = String::new();
     for section in &book.sections {

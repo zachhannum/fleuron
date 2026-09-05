@@ -4,7 +4,7 @@
  * The tarball npm would publish, into an empty directory that has
  * never seen this repository, and the fixture book out of it. The
  * render runs in its own process with nothing on the resolution path
- * but `node_modules`, so anything the package forgot to carry (the
+ * but `node_modules`, so anything the package forgot to ship (the
  * module above all) fails here rather than in someone's plugin.
  */
 
@@ -67,13 +67,13 @@ const packed = JSON.parse(
     encoding: 'utf8',
   }),
 )[0];
-const carried: string[] = packed.files.map((file: { path: string }) => file.path);
+const packedFiles: string[] = packed.files.map((file: { path: string }) => file.path);
 
 console.log(`  ${packed.filename}, ${(packed.size / 1024 / 1024).toFixed(2)} MiB over the wire\n`);
 
 const needed = ['wasm/fleuron_bg.wasm', 'wasm/fleuron.js', 'wasm/fleuron.d.ts', 'dist/index.js', 'dist/worker.js'];
-const missing = needed.filter((file) => !carried.includes(file));
-check('the tarball carries the module and the glue beside it', missing.length === 0, missing.join(', '));
+const missing = needed.filter((file) => !packedFiles.includes(file));
+check('the tarball ships the module and the glue beside it', missing.length === 0, missing.join(', '));
 
 // An empty directory: a package.json, the book, and the package.
 const home = join(where, 'host');
@@ -96,7 +96,7 @@ execFileSync('npm', ['install', '--no-audit', '--no-fund', join(where, packed.fi
 const said = JSON.parse(execFileSync(process.execPath, ['render.mjs'], { cwd: home, encoding: 'utf8' }));
 
 check('the installed package sets the fixture book', said.pages > 1, `${said.pages} pages`);
-check('every page of it carries something to paint', said.bare === 0, `${said.bare} empty`);
+check('every page of it has something to paint', said.bare === 0, `${said.bare} empty`);
 check('the pictures the host handed over are placed', said.images === 2, `${said.images} images`);
 check('the prose is all there', said.characters > 10000, `${said.characters} characters`);
 check(

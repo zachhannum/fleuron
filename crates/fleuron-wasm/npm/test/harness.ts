@@ -1,6 +1,6 @@
 /**
  * The headless acceptance run: the fixture book through the module,
- * in a real worker thread, held against what the CLI makes of the
+ * in a real worker thread, checked against what the CLI makes of the
  * same manuscript.
  *
  * The CLI is the reference because its output is already validated
@@ -75,7 +75,10 @@ function info(pdf: Uint8Array): string | null {
   return run.status === 0 ? run.stdout : null;
 }
 
-/** What the CLI makes of some markdown: the run this one is held to. */
+/**
+ * What the CLI makes of some markdown: the run this one is checked
+ * against.
+ */
 function reference(inputs: string[] = [fixture], named: string[] = []): {
   pages: number;
   pdf: Uint8Array;
@@ -109,7 +112,7 @@ function open(): { client: Client; worker: Worker } {
 }
 
 const markdown = readFileSync(fixture, 'utf8');
-/** The images the fixture book refers to, as the CLI resolves them. */
+/** The images the fixture book refers to, resolved the way the CLI does. */
 const pictures: [string, Uint8Array][] = ['images/plate.jpg', 'images/fleuron.png'].map((url) => [
   url,
   new Uint8Array(readFileSync(join(root, 'fixtures', url))),
@@ -138,11 +141,11 @@ check(
   `worker ${preview.pages.length}, CLI ${cli.pages}`,
 );
 check(
-  'every page carries something to paint',
+  'every page has something to paint',
   preview.pages.every((page) => page.items.length > 0),
 );
 check(
-  'glyphs carry the text they were shaped from',
+  'a glyph names the text it was shaped from',
   preview.pages.some((page) =>
     page.items.some(
       (item) => item.kind === 'text' && item.text.length > 0 && item.glyphs.length > 0,
@@ -190,7 +193,7 @@ function characterAt(text: string, byte: number): number {
   return [...Buffer.from(text, 'utf8').subarray(0, byte).toString('utf8')].length;
 }
 
-/** Every glyph of a page, held against the x the painter wrote. */
+/** Every glyph of a page, checked against the x the painter wrote. */
 function misplaced(page: Page, output: LayoutOutput): string | null {
   const painted = texts(paintPage(page, { fonts: output.fonts }));
   const runs = page.items.filter((item): item is TextItem => item.kind === 'text');
@@ -258,7 +261,7 @@ check(
 // The export path. The bytes are not compared to the CLI's byte for
 // byte: the PDF writer orders its font objects by a hash that is not
 // the same width on a 32-bit target as on a 64-bit one, so the two
-// files carry the same objects under swapped numbers. What the book
+// files have the same objects under swapped numbers. What the book
 // is, its length and its pages and its text, is compared instead, and
 // the display structure above, which is the engine's own output, already
 // matches to the byte.
@@ -371,15 +374,15 @@ check(
 
 // Which section a page came out of crosses with it: a host that wants
 // a contents page or a page range per chapter reads it back here.
-const held = assembled?.pages.flatMap((page) => page.sections) ?? [];
+const sectionIds = assembled?.pages.flatMap((page) => page.sections) ?? [];
 check(
-  'a page says which sections it holds content from',
-  new Set(held).size >= sources.length &&
-    held.every((id, at) => at === 0 || id >= (held[at - 1] as number)),
-  `${new Set(held).size} sections over ${assembled?.pages.length} pages`,
+  'a page names the sections whose content is on it',
+  new Set(sectionIds).size >= sources.length &&
+    sectionIds.every((id, at) => at === 0 || id >= (sectionIds[at - 1] as number)),
+  `${new Set(sectionIds).size} sections over ${assembled?.pages.length} pages`,
 );
 check(
-  'a leaf that holds nobody\'s content names no section',
+  'a leaf with nobody\'s content on it names no section',
   assembled?.pages.every((page) => page.sections.length > 0 || page.items.length === 0) ?? false,
 );
 

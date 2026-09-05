@@ -2,7 +2,7 @@
 import { Code } from 'astro:components';
 
 // Tabs without JavaScript: a radio group, and the panels are chosen by
-// :checked. Native radios carry the keyboard and screen-reader
+// :checked. Native radios come with the keyboard and screen-reader
 // behaviour a hand-rolled tablist would have to reimplement.
 const rust = `let markdown = std::fs::read_to_string("manuscript.md")?;
 let (sections, warnings) =

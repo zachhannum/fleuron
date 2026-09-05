@@ -24,14 +24,14 @@
 //!
 //! `NodeId` is engine-assigned, never frontend-supplied: input can't
 //! collide ids or forge diagnostic origins. Every node's `id` field is
-//! `#[serde(skip)]`, so a serialized tree carries none. A tree built by
-//! hand holds `NodeId::UNASSIGNED` until `Book::assign_node_ids`
+//! `#[serde(skip)]`, so a serialized tree has none. The ids in a tree
+//! built by hand are `NodeId::UNASSIGNED` until `Book::assign_node_ids`
 //! assigns dense ids from 1 in document order (pre-order: a node before
 //! its children, sections in reading order).
 //!
 //! # Source positions
 //!
-//! Every node carries an optional 1-based line/column into the markdown
+//! Every node has an optional 1-based line/column into the markdown
 //! source the frontend read it from; the section's `source` names the
 //! file. `origin` formats the pair for diagnostics
 //! (`chapter-01.md:12:3`). A missing position never fails a run.
@@ -48,7 +48,7 @@ use serde::{Deserialize, Serialize};
 pub struct NodeId(u32);
 
 impl NodeId {
-    /// What every node holds before assignment.
+    /// What every node's id is before assignment.
     pub const UNASSIGNED: NodeId = NodeId(0);
 
     /// The raw id. Monotonic in document order within one book.
@@ -196,7 +196,7 @@ pub enum Block {
     },
 }
 
-/// A heading level, 1–6, as markdown defines them.
+/// A heading level: 1 to 6, the range markdown defines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(into = "u8", try_from = "u8")]
 pub enum HeadingLevel {
@@ -297,7 +297,8 @@ pub enum Inline {
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
     },
-    /// A hyperlink. The text lays out; the url is for painters that can carry one.
+    /// A hyperlink. The text lays out; the url is for painters that can
+    /// express one.
     Link {
         /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
@@ -528,7 +529,7 @@ mod tests {
         assert_eq!(once, serde_json::to_string_pretty(&book).unwrap());
     }
 
-    /// A serialized tree carries no ids: the tree is authoritative,
+    /// A serialized tree has no ids: the tree is authoritative,
     /// and identity is the engine's to hand out.
     #[test]
     fn ids_are_never_serialized() {

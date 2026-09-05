@@ -8,7 +8,7 @@
  * catches the day those two stop agreeing.
  */
 
-/** The encoding this reader understands. */
+/** The encoding this reader reads. */
 export const WIRE_VERSION = 4;
 
 /** Which side of the spread a page falls on. */
@@ -114,8 +114,8 @@ export interface Page {
   /** Trimmed page height in points. */
   height: number;
   /**
-   * The content-tree node ids of the sections this page holds content
-   * from, in the order their content appears on it. A chapter that
+   * The content-tree node ids of the sections whose content appears on
+   * this page, in the order their content appears on it. A chapter that
    * ends mid-page is followed there by the next one opening, so the
    * page names both. A blank leaf names none.
    */
@@ -140,7 +140,7 @@ export interface FaceAttributes {
   weight: number;
 }
 
-/** A font's identity, as the display structure indexes it. */
+/** A font's identity in the display structure. */
 export interface FontRefEntry {
   /** Family for matching, lowercase. */
   family: string;
@@ -163,7 +163,7 @@ export interface FontRefEntry {
 export interface Warning {
   /** What went wrong, in one line. */
   message: string;
-  /** Where it was written, when the engine knows. */
+  /** Where it was written, when a position was recorded. */
   origin: string | null;
 }
 
@@ -291,7 +291,7 @@ function item(r: Reader): DrawItem {
         asset: r.varint(),
       };
     default:
-      throw new WireError(`draw item ${variant} is not one this reader knows`);
+      throw new WireError(`draw item ${variant} is not one this reader reads`);
   }
 }
 
@@ -356,7 +356,7 @@ export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
     warnings: r.seq(() => warning(r)),
   };
   if (!r.done()) {
-    throw new WireError('the buffer holds more than one display structure');
+    throw new WireError('the buffer is more than one display structure');
   }
   return output;
 }

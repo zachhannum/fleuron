@@ -10,7 +10,7 @@
 //! The caller orders the sources and decides the metadata, so nothing
 //! here has to arbitrate between two files that both claim a title.
 //!
-//! # What the vocabulary cannot hold
+//! # What the vocabulary cannot express
 //!
 //! The content tree is a book's vocabulary: headings, prose,
 //! blockquotes, scene breaks, images. Markdown is wider than that.

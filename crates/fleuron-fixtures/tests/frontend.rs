@@ -117,8 +117,8 @@ fn one_file_of_chapters_and_a_file_per_chapter_read_alike() {
 }
 
 /// Cuts a manuscript at every chapter heading. The frontmatter leads
-/// and holds no chapter, which is why the first piece contributes no
-/// section.
+/// and has no chapter in it, which is why the first piece contributes
+/// no section.
 fn chapters(markdown: &str) -> Vec<String> {
     let mut pieces = Vec::new();
     let mut current = String::new();

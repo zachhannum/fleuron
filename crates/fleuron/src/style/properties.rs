@@ -11,7 +11,7 @@ use crate::fonts::GenericFamily;
 use crate::lines::HangingPunctuation;
 use crate::pages::Side;
 
-/// A CSS length, before it knows what it is relative to.
+/// A CSS length, before it is resolved against what it is relative to.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Length {
     /// An absolute length, already in points.
@@ -94,8 +94,8 @@ pub enum Hyphens {
     Auto,
 }
 
-/// A fragmentation instruction, as `break-before`, `break-after` and
-/// `break-inside` carry it. `recto` and `verso` are the book's names
+/// A fragmentation instruction: the value of `break-before`,
+/// `break-after` and `break-inside`. `recto` and `verso` are the book's names
 /// for `right` and `left`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -156,7 +156,7 @@ pub struct PageGeometry {
     pub width: f32,
     /// Trimmed page height.
     pub height: f32,
-    /// Margins, as the page's own `margin` resolved them. Mirroring
+    /// Margins, resolved from the page's own `margin`. Mirroring
     /// across the spread is `@page :left` and `@page :right` saying
     /// different things, not a property of its own.
     pub margin: Edges,
@@ -315,8 +315,8 @@ pub enum Content {
     None,
     /// The page's own folio, spelled as the style names.
     Counter(CounterStyle),
-    /// A running string, as it stood at the page's start. A string
-    /// nothing has set yet paints nothing.
+    /// A running string, at the value it stood at when the page began.
+    /// A string nothing has set yet paints nothing.
     String(String),
     /// A literal string.
     Text(String),
@@ -539,7 +539,7 @@ pub struct ComputedStyle {
     pub hyphens: Hyphens,
     /// Lines that must be left at the bottom of a fragment.
     pub orphans: u16,
-    /// Lines that must be carried to the top of the next one.
+    /// Lines that must be moved to the top of the next one.
     pub widows: u16,
     /// The named page this element's pages take, from `page`.
     pub page: Option<String>,
@@ -598,7 +598,7 @@ impl ComputedStyle {
         }
     }
 
-    /// A child's starting point: inherited properties carried over,
+    /// A child's starting point: inherited properties as they stand,
     /// the rest back at their initial values.
     pub fn inherit(&self) -> ComputedStyle {
         ComputedStyle {
@@ -671,7 +671,7 @@ impl ComputedStyle {
 mod tests {
     use super::*;
 
-    /// Folios spell out in every style the subset carries, and a
+    /// Folios spell out in every style the subset supports, and a
     /// value a style has no spelling for falls back to decimal.
     #[test]
     fn counter_styles_spell_their_values() {

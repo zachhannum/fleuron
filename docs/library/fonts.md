@@ -26,7 +26,7 @@ The bundled registry includes EB Garamond, upright and italic, registered as the
 }
 ```
 
-Whatever string you write in `url()` is handed to your `FontLoader` as it is. It never has to be a real URL:
+Whatever string `url()` names is handed to the `FontLoader` unchanged. It never has to be a real URL:
 
 ```rust
 struct Files(PathBuf);
@@ -57,7 +57,7 @@ sheet's selectors always match the name the sheet wrote.
 
 ## Variable files
 
-A variable file registers one face per named instance, so a family declared once holds every style the file names.
+A variable file registers one face per named instance, so one declaration gives the family every style the file names.
 
 Declaring `font-style` or `font-weight` on the `@font-face` rule overrides that, and the source 
 registers as that one style. Use it when a file names instances you do not want, or when you are 
@@ -127,7 +127,7 @@ was found rather than what was asked for, so a caller can see that a family answ
 request for italic with an upright.
 
 Ascender, descender and line gap come from the OS/2 typographic values when the face has 
-them, and hhea otherwise. Descender is negative, as the tables have it. Cap height is zero when the face declares none.
+them, and hhea otherwise. Descender is negative, which is how the tables record it. Cap height is zero when the face declares none.
 
 These are what `line-height: normal` resolves against. A face whose vertical metrics 
 disagree with its optical size sets loose or tight, and the fix is a `line-height` in the stylesheet.

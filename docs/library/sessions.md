@@ -6,7 +6,7 @@ description: A retained pipeline for live preview, re-running only the stages an
 Sessions in fleuron are useful when you want to render and re-render a book multiple times,
 while only changing parts of the input: some of the prose or CSS rules. `layout_book`
 rebuilds every stage on every call. This is useful for a program like the CLI that renders
-and outputs the book once, but a live preview benefits from a session that holds state in between renders.
+and outputs the book once, but a live preview benefits from a session that keeps state in between renders.
 
 A `Session` keeps the output of each stage and works out which stages an edit invalidates.
 

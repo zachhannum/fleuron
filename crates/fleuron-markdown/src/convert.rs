@@ -27,7 +27,7 @@ pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Wa
     (sections, warnings)
 }
 
-/// The dialect, as the parser wants it.
+/// The dialect, translated for the parser.
 fn parser_options(options: &Options) -> ParserOptions {
     let dialect = options.dialect;
     let mut parser = ParserOptions::empty();
@@ -173,8 +173,8 @@ impl<'a> Converter<'a> {
                 self.degrades("a definition list", "one paragraph per entry", at)
             }
             Event::Start(Tag::HtmlBlock) => self.drops("an html block", at),
-            // A tight list item holds its text directly, with no
-            // paragraph around it. The frame catches that text; a
+            // A tight list item has its text directly inside it, with
+            // no paragraph around it. The frame catches that text; a
             // loose item's own paragraph closes first and leaves this
             // one empty.
             Event::Start(
@@ -229,8 +229,8 @@ impl<'a> Converter<'a> {
         self.warn(format!("{what} is set as {becomes}"), at);
     }
 
-    /// Reports a construct that carries no prose, and so leaves
-    /// nothing behind.
+    /// Reports a construct with no prose in it, and so nothing left
+    /// behind.
     fn drops(&mut self, what: &str, at: SourcePos) {
         self.warn(format!("{what} has no counterpart and is dropped"), at);
     }
@@ -298,8 +298,8 @@ impl<'a> Converter<'a> {
                 }
             }
             // The content vocabulary has no inline image: the image
-            // becomes a block, deferred until the paragraph that held
-            // it closes, and its alt text stays with it.
+            // becomes a block, deferred until the paragraph it was
+            // written in closes, and its alt text stays with it.
             InlineFor::Image { url } => self.deferred.push(Block::Image {
                 id: Default::default(),
                 url,
@@ -336,8 +336,8 @@ impl<'a> Converter<'a> {
     /// Reports the images a block is about to be broken around.
     ///
     /// An image is a block in the vocabulary and inline in markdown,
-    /// so one written among prose is set after the prose that held
-    /// it, which is a move worth reporting. An image written on a
+    /// so one written among prose is set after the prose it was
+    /// written in, which is a move worth reporting. An image written on a
     /// line of its own displaces nothing, and reporting every picture
     /// in the book would be noise.
     fn displaced(&mut self, siblings: &[Inline]) {
@@ -478,8 +478,8 @@ mod tests {
     }
 
     /// An image written on its own line displaces no prose, and says
-    /// nothing. One written among prose is set after the paragraph
-    /// that held it, and says so.
+    /// nothing. One written among prose is set after the paragraph it
+    /// was written in, and says so.
     #[test]
     fn only_an_image_among_prose_reports_the_move() {
         let (alone, quiet) = to_sections("![a plate](plate.jpg)\n", "test.md", &Options::default());

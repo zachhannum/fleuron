@@ -3,7 +3,7 @@ title: CSS subset
 description: Every property, at-rule and selector the engine honours, and what it does with the rest.
 ---
 
-fleuron understands the CSS a book needs and reports the rest. Everything below is honoured by the pipeline. Anything outside it becomes a warning naming the line and column it was written at, and the run continues.
+fleuron supports the CSS a book needs and reports the rest. Everything below is honoured by the pipeline. Anything outside it becomes a warning naming the line and column it was written at, and the run continues.
 
 The stylesheet below is written in this vocabulary: mirrored margins, a folio, a running head from `string-set`, and a drop cap from `initial-letter`. Change a rule and the chapter is set again.
 
@@ -17,7 +17,7 @@ The stylesheet below is written in this vocabulary: mirrored margins, a folio, a
 
 Type, universal, descendant, child, adjacent and general sibling. The structural pseudo-classes `:first-child`, `:nth-child()`, `:only-child`, `:empty` and `:root`. Also `:is()`, `:where()`, `:not()` and `:has()`.
 
-Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree carries none, and no interaction pseudo-classes, because nothing here is interactive.
+Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree has none, and no interaction pseudo-classes, because nothing here is interactive.
 
 There is one pseudo-element, `::first-letter`, which is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size.
 
@@ -115,7 +115,7 @@ Page selectors cascade like any other rule: origin first, then specificity, then
 
 All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`, `@top-right` and their `@bottom-` counterparts. A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
 
-A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not carry one. `@page :blank` still gives that leaf its trim and margins.
+A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not get one. `@page :blank` still gives that leaf its trim and margins.
 
 ## `@font-face`
 

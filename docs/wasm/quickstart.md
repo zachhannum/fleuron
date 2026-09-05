@@ -3,7 +3,7 @@ title: WebAssembly quickstart
 description: Installing the package, running layout in a worker, and painting what comes back.
 ---
 
-The engine compiles to WebAssembly and ships as `fleuron`. The package holds the module, a worker, a client, a display-structure reader and an SVG painter.
+The engine compiles to WebAssembly and ships as `fleuron`. The package ships the module, a worker, a client, a display-structure reader and an SVG painter.
 
 ```sh
 npm install fleuron
@@ -35,7 +35,7 @@ Layout belongs off the main thread. A book-scale manuscript is hundreds of milli
 
 The package ships a worker at the `fleuron/worker` export, which is what `Preview` starts. A host that needs nothing else in there can point `new Worker` at that path and skip to the client below.
 
-A worker of your own is worth writing when it has to hold something else, or when the bundler needs to hand the module its bytes rather than let it fetch them:
+A worker of your own is worth writing when something else has to run in there too, or when the bundler needs to hand the module its bytes rather than let it fetch them:
 
 ```js
 // fleuron.worker.js
@@ -83,7 +83,7 @@ Painting a run in the right font takes one more step, since the browser needs th
 
 ### Sending what changed
 
-The module holds a [session](../library/sessions.md) between calls, so the second render of a book pays for the edit rather than for the book.
+The module keeps a [session](../library/sessions.md) open between calls, so the second render of a book pays for the edit rather than for the book.
 
 ```js
 await client.preview([{ op: 'style', css: '@page { margin-bottom: 84pt }' }]);
@@ -150,7 +150,7 @@ wasm-pack build crates/fleuron-wasm --target web --release --no-pack \
 cd crates/fleuron-wasm/npm && npm ci && npm run build
 ```
 
-`npm test` then runs the headless harness: the fixture book through a real worker thread, held against the PDF the CLI writes from the same manuscript. `npm run test:browser` opens the same book in a real browser and holds the painted page against a raster of the PDF the same run exported.
+`npm test` then runs the headless harness: the fixture book through a real worker thread, checked against the PDF the CLI writes from the same manuscript. `npm run test:browser` opens the same book in a real browser and checks the painted page against a raster of the PDF the same run exported.
 
 ## What the host owns
 

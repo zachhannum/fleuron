@@ -13,7 +13,7 @@
 //! stylesheet crosses as CSS text on its own. [`render`] is the
 //! batch case, and it is the same session used once.
 //!
-//! Nothing here knows about generations or workers. A render runs to
+//! Nothing here deals with generations or workers. A render runs to
 //! completion, so a superseded one is dropped by the host that asked
 //! for it rather than interrupted half-way through a stage; the
 //! protocol that does the dropping is in the TypeScript beside this
@@ -40,7 +40,7 @@ pub fn wire_version() -> u16 {
     wire::VERSION
 }
 
-/// A retained pipeline, held in the module between calls.
+/// A retained pipeline, kept in the module between calls.
 ///
 /// The session keeps the content tree, the styling and every stage
 /// between them and the page, so a second render pays for what
@@ -169,7 +169,7 @@ impl Session {
     }
 
     /// Names the book, from JSON: `title`, `author`, and an `extra`
-    /// object for whatever else a frontend carries.
+    /// object for whatever else a frontend read.
     ///
     /// A book read from several sources has no frontmatter of its
     /// own, so this is how it gets a title. Nothing between the
@@ -184,8 +184,9 @@ impl Session {
     }
 
     /// Replaces every section that came from one source, reparsing
-    /// that source alone. A name the book does not carry appends
-    /// instead, which is how a file it has not seen before arrives.
+    /// that source alone. A name the book does not already have
+    /// appends instead, which is how a file it has not seen before
+    /// arrives.
     ///
     /// This is the keystroke path: one file crosses, one file is
     /// read, and every other section keeps the lines it already has.
@@ -225,12 +226,12 @@ impl Session {
     }
 
     /// Registers one image by the url the content tree names it by,
-    /// and returns the index `DrawItem::Image.asset` will carry.
+    /// and returns the index `DrawItem::Image.asset` gets for it.
     /// `undefined` for bytes no probe recognises, which is a
     /// diagnostic on the next display structure and no image.
     ///
     /// The engine opens nothing, and a worker has nothing to open:
-    /// the host fetches the file and hands the bytes over, as it does
+    /// the host fetches the file and hands the bytes over, the same as
     /// with a face. The bytes stay in the module, so an image crosses
     /// once rather than once per render.
     #[wasm_bindgen(js_name = addImage)]

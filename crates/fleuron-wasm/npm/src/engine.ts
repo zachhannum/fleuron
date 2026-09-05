@@ -4,7 +4,7 @@
  *
  * Requests are applied in the order they arrive and renders are not.
  * A render that a later request overtakes before it starts is
- * dropped, and the inputs it carried are applied all the same. So a
+ * dropped, and the inputs it was sent with are applied all the same. So a
  * dropped render leaves no stage half-built, and the render that
  * follows it produces exactly what it would have produced had nobody
  * typed.
@@ -36,7 +36,7 @@ interface Pending {
 /**
  * Loads the module and opens a session over it.
  *
- * One session per worker: it holds the manuscript, the styling and
+ * One session per worker: it keeps the manuscript, the styling and
  * every stage between them, which is what makes the second render of
  * a book cost what changed rather than the book.
  */
