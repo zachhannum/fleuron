@@ -32,9 +32,9 @@ use crate::lines::{InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Break, ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle,
-    FontVariantCaps, Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet,
-    TextAlign, TextJustify, TextTransform,
+    Align, Band, Break, Color, ComputedStyle, Content, CounterStyle, Edge, Edges, Family,
+    FontStyle, FontVariantCaps, Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece,
+    StringSet, TextAlign, TextJustify, TextTransform,
 };
 pub use sheet::{Origin, Source};
 
@@ -1627,6 +1627,75 @@ mod tests {
             "{:?}",
             tree.warnings(),
         );
+    }
+
+    /// `color` reads in each of the four forms the subset takes, and
+    /// a form outside it is a diagnostic rather than a rule.
+    #[test]
+    fn colour_reads_in_every_form_the_subset_takes() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "h1 { color: darkred }
+             p { color: #036 }
+             blockquote { color: #b41e1e }
+             em { color: rgb(0% 20% 100%) }",
+        );
+        assert_eq!(first(&tree, "h1").color, Color::rgb(139, 0, 0));
+        assert_eq!(first(&tree, "p").color, Color::rgb(0, 51, 102));
+        assert_eq!(first(&tree, "blockquote").color, Color::rgb(180, 30, 30));
+        assert_eq!(first(&tree, "em").color, Color::rgb(0, 51, 255));
+        assert_eq!(
+            first(&defaults(&book, registry()), "p").color,
+            Color::BLACK,
+            "a book nothing coloured is set in black",
+        );
+
+        // A name no colour has, and channels written half as
+        // numbers and half as percentages, neither of which CSS
+        // allows.
+        for css in ["p { color: octarine }", "p { color: rgb(10, 20%, 30) }"] {
+            let tree = compile(&book, css);
+            assert!(
+                tree.warnings()
+                    .iter()
+                    .any(|warning| warning.message == "unsupported value for `color`"),
+                "{css}: {:?}",
+                tree.warnings(),
+            );
+        }
+    }
+
+    /// Colour inherits: a rule on the section reaches the prose under
+    /// it, and a rule on the heading beats what it inherited.
+    #[test]
+    fn a_colour_on_a_section_reaches_the_prose_under_it() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "section { color: #444444 }
+             h1 { color: rgb(180 30 30) }",
+        );
+        assert_eq!(first(&tree, "p").color, Color::rgb(68, 68, 68));
+        assert_eq!(first(&tree, "em").color, Color::rgb(68, 68, 68));
+        assert_eq!(first(&tree, "h1").color, Color::rgb(180, 30, 30));
+    }
+
+    /// `color` sets the text of a box. `background-color` fills the
+    /// box behind it and needs a box model, so it warns at the line
+    /// and column it was written at.
+    #[test]
+    fn background_colour_warns_where_it_was_written() {
+        let book = sample();
+        let tree = compile(&book, "p {\n  color: teal;\n  background-color: teal;\n}\n");
+        let warning = tree
+            .warnings()
+            .iter()
+            .find(|warning| warning.message.contains("background-color"))
+            .expect("background-color is outside the subset");
+        assert_eq!(warning.message, "unsupported property `background-color`");
+        assert_eq!(warning.origin.as_deref(), Some("author.css:3:3"));
+        assert_eq!(first(&tree, "p").color, Color::rgb(0, 128, 128));
     }
 
     /// A face with no small capitals of its own is reported once,

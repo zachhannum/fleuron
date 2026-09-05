@@ -330,6 +330,29 @@ check(
   `after ${sha256(painted).slice(0, 16)}…, uncancelled ${sha256(uncancelled).slice(0, 16)}…`,
 );
 
+// Colour: what the sheet names travels with the run, and the painter
+// fills with it. The PDF writer fills from the same field.
+const coloured = await client.preview([{ op: 'style', css: 'h2, h3 { color: #b41e1e }' }]);
+const headed =
+  coloured?.pages.find((page) =>
+    page.items.some((item) => item.kind === 'text' && item.color !== '#000000'),
+  ) ?? null;
+const runs =
+  headed?.items.filter((item): item is TextItem => item.kind === 'text') ?? [];
+check(
+  'a run the sheet coloured carries that colour',
+  runs.some((run) => run.color === '#b41e1e') &&
+    runs.every((run) => run.color === '#b41e1e' || run.color === '#000000'),
+  runs.map((run) => run.color).join(' '),
+);
+const inColour = headed === null ? '' : paintPage(headed, { fonts: coloured?.fonts ?? [] });
+const inRed = runs.filter((run) => run.color === '#b41e1e').length;
+check(
+  'and the painter fills that run with it, leaving the rest to the page ink',
+  inRed > 0 && (inColour.match(/fill="#b41e1e"/g) ?? []).length === inRed,
+  `${inRed} coloured runs on the page`,
+);
+
 // The error channel: what the engine refuses comes back as an error
 // rather than as a silence or a half-built session.
 let refused = '';

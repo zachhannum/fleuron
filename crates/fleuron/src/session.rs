@@ -871,6 +871,10 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         font_size,
         font_style: _,
         font_weight: _,
+        // No line moves for it. The runs the broken lines hold
+        // carry the colour, so a sheet that recolours them has to
+        // break them again.
+        color,
         line_height,
         letter_spacing,
         font_variant_caps,
@@ -894,7 +898,7 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         break_after,
         break_inside,
     } = style;
-    (font_id, font_size.to_bits(), line_height.to_bits()).hash(h);
+    (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
@@ -934,7 +938,7 @@ mod tests {
     use super::*;
     use crate::content::{HeadingLevel, Metadata};
     use crate::pages::DrawItem;
-    use crate::style::{CounterStyle, Source};
+    use crate::style::{Color, CounterStyle, Source};
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -1171,12 +1175,12 @@ mod tests {
     /// display structure is served back as it stands, and only the
     /// diagnostics move.
     #[test]
-    fn a_colour_only_change_runs_no_stage() {
+    fn an_unsupported_property_runs_no_stage() {
         let mut session = three_chapters();
         let before = session.stages();
         let painted = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
 
-        session.set_style(sheets("p { color: rebeccapurple }"));
+        session.set_style(sheets("p { background-color: rebeccapurple }"));
         let (repainted, complained) = {
             let output = session.preview();
             (
@@ -1184,7 +1188,7 @@ mod tests {
                 output
                     .warnings
                     .iter()
-                    .any(|warning| warning.message.contains("`color`")),
+                    .any(|warning| warning.message.contains("`background-color`")),
             )
         };
         let after = session.stages();
@@ -1194,6 +1198,30 @@ mod tests {
         assert_eq!(after.lines, before.lines, "the lines were broken again");
         assert_eq!(after.flow, before.flow, "the pages were fragmented again");
         assert_eq!(after.paint, before.paint, "the furniture was painted again");
+    }
+
+    /// A colour edit breaks the lines again: the runs the broken
+    /// lines hold are what carry the colour.
+    #[test]
+    fn a_colour_edit_breaks_the_lines_again() {
+        let mut session = three_chapters();
+        let before = session.stages();
+        session.preview();
+
+        session.set_style(sheets("p { color: rebeccapurple }"));
+        let coloured = session
+            .preview()
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .any(|item| {
+                matches!(item, DrawItem::Text { color, .. } if *color == Color::rgb(102, 51, 153))
+            });
+        assert!(coloured, "the colour did not reach the page");
+        assert!(
+            session.stages().lines > before.lines,
+            "the lines were served from the break cache in the old colour"
+        );
     }
 
     /// The replaceable unit is the file: a host names one, and only

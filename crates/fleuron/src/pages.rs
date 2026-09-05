@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::content::NodeId;
 use crate::fonts::Features;
+use crate::style::Color;
 
 /// Which side of the spread a page falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -84,6 +85,8 @@ pub enum DrawItem {
         /// characters asks the face for these; one that draws glyphs
         /// has the answer already.
         features: Features,
+        /// What the glyphs are painted in.
+        color: Color,
         /// The glyphs, in visual order.
         glyphs: Vec<Glyph>,
     },
@@ -97,6 +100,8 @@ pub enum DrawItem {
         w: f32,
         /// Height in points.
         h: f32,
+        /// What the rectangle is filled with.
+        color: Color,
     },
     /// Placed image; `asset` indexes the asset table.
     Image {

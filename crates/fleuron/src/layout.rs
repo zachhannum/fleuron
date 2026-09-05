@@ -467,6 +467,7 @@ impl<'a> Paginator<'a> {
                 source: run.source.clone(),
                 source_map: run.source_map.clone(),
                 features: run.features,
+                color: run.color,
                 glyphs,
             });
             x_cursor = glyph_x;

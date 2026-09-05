@@ -10,6 +10,7 @@
 use fleuron::content::NodeId;
 use fleuron::images::{Asset, Assets, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Page, Side};
+use fleuron::style::Color;
 use fleuron::wire;
 use fleuron::{LayoutOutput, Warning};
 use proptest::prelude::*;
@@ -28,6 +29,11 @@ fn glyph() -> impl Strategy<Value = Glyph> {
     })
 }
 
+/// Any colour a sheet can name, black included.
+fn color() -> impl Strategy<Value = Color> {
+    (any::<u8>(), any::<u8>(), any::<u8>()).prop_map(|(r, g, b)| Color::rgb(r, g, b))
+}
+
 fn text_item() -> impl Strategy<Value = DrawItem> {
     (
         coordinate(),
@@ -36,27 +42,37 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         1.0f32..200.0,
         ".{0,40}",
         proptest::collection::vec(glyph(), 0..12),
+        color(),
     )
-        .prop_map(|(x, y, font_id, size, text, glyphs)| DrawItem::Text {
-            x,
-            y,
-            font_id,
-            size,
-            // A run nothing transformed has no source of its
-            // own; one that was is covered where the transform is.
-            source: String::new(),
-            source_map: Vec::new(),
-            features: fleuron::fonts::Features::NONE,
-            text,
-            glyphs,
-        })
+        .prop_map(
+            |(x, y, font_id, size, text, glyphs, color)| DrawItem::Text {
+                x,
+                y,
+                font_id,
+                size,
+                // A run nothing transformed has no source of its
+                // own; one that was is covered where the transform is.
+                source: String::new(),
+                source_map: Vec::new(),
+                features: fleuron::fonts::Features::NONE,
+                color,
+                text,
+                glyphs,
+            },
+        )
 }
 
 fn item() -> impl Strategy<Value = DrawItem> {
     prop_oneof![
         text_item(),
-        (coordinate(), coordinate(), coordinate(), coordinate())
-            .prop_map(|(x, y, w, h)| DrawItem::Rect { x, y, w, h }),
+        (
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            color()
+        )
+            .prop_map(|(x, y, w, h, color)| DrawItem::Rect { x, y, w, h, color }),
         (
             coordinate(),
             coordinate(),

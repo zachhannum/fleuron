@@ -20,7 +20,7 @@ use crate::LayoutOutput;
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 5;
+pub const VERSION: u16 = 6;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -65,6 +65,7 @@ mod tests {
     use crate::fonts::{AxisSetting, FaceAttributes, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
     use crate::pages::{DrawItem, Glyph, Page, Side};
+    use crate::style::Color;
 
     fn output() -> LayoutOutput {
         LayoutOutput {
@@ -84,6 +85,7 @@ mod tests {
                         source: "fi ❦".into(),
                         source_map: vec![0, 1, 2, 3, 4, 5, 6],
                         features: Features { small_caps: true },
+                        color: Color::rgb(180, 30, 30),
                         glyphs: vec![Glyph {
                             id: 42,
                             x: 72.0,
@@ -95,6 +97,7 @@ mod tests {
                         y: 0.0,
                         w: 396.0,
                         h: 0.5,
+                        color: Color::BLACK,
                     },
                     DrawItem::Image {
                         x: 1.0,

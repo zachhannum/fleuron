@@ -15,3 +15,5 @@
 /packages/react/node_modules
 /packages/react/dist
 /packages/react/*.tgz
+# roborev snapshots
+/.roborev/
