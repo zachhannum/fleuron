@@ -86,6 +86,43 @@ fn fixture() -> Book {
     book
 }
 
+/// A measure narrow enough that the emphasised word has to break,
+/// and an emphasis with a colour of its own.
+const HYPHENATED_CSS: &str = r#"
+@page { size: 130pt 200pt; margin: 12pt }
+
+p { hyphens: auto }
+em { color: rgb(180, 30, 30) }
+"#;
+
+/// One paragraph whose every word is emphasised, so a break inside a
+/// word falls inside the colour.
+fn hyphenated() -> Book {
+    let mut book = Book {
+        metadata: Default::default(),
+        sections: vec![Section {
+            id: NodeId::UNASSIGNED,
+            source: None,
+            title: None,
+            blocks: vec![Block::Paragraph {
+                id: NodeId::UNASSIGNED,
+                inlines: vec![Inline::Emphasis {
+                    id: NodeId::UNASSIGNED,
+                    children: vec![text(
+                        "The extraordinarily inconsiderate lamplighter considered \
+                         the incomprehensible correspondence.",
+                    )],
+                    position: None,
+                }],
+                position: None,
+            }],
+            position: None,
+        }],
+    };
+    book.assign_node_ids();
+    book
+}
+
 fn styles(book: &Book, css: &str) -> StyleTree {
     Stylesheets::parse(&[Source::author("colour.css", css)]).compile(book, registry())
 }
@@ -181,6 +218,31 @@ fn every_run_carries_the_colour_its_style_named() {
     assert_eq!(colour_of(&pages, "The wind"), [Color::rgb(68, 68, 68)]);
     assert_eq!(colour_of(&pages, "harbour"), [Color::rgb(72, 61, 139)]);
     assert_eq!(colour_of(&pages, "1"), [Color::rgb(128, 128, 128)]);
+}
+
+/// A hyphen the breaker draws inside a coloured word is the word's
+/// colour. It is set in the paragraph's face, because that is where
+/// its width was charged, and colour costs no width.
+#[test]
+fn a_hyphen_inside_a_coloured_word_takes_the_words_colour() {
+    let book = hyphenated();
+    let styles = styles(&book, HYPHENATED_CSS);
+    let pages = pages(&book, &styles);
+    let hyphens: Vec<Color> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { text, color, .. } if text.ends_with('-') => Some(*color),
+            _ => None,
+        })
+        .collect();
+    assert!(!hyphens.is_empty(), "no line was hyphenated");
+    assert!(
+        hyphens
+            .iter()
+            .all(|color| *color == Color::rgb(180, 30, 30)),
+        "a hyphen came out in {hyphens:?}"
+    );
 }
 
 /// A book whose sheet names no colour is set the way it was set

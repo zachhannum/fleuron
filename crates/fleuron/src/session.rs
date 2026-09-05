@@ -938,7 +938,7 @@ mod tests {
     use super::*;
     use crate::content::{HeadingLevel, Metadata};
     use crate::pages::DrawItem;
-    use crate::style::{CounterStyle, Source};
+    use crate::style::{Color, CounterStyle, Source};
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -1175,7 +1175,7 @@ mod tests {
     /// display structure is served back as it stands, and only the
     /// diagnostics move.
     #[test]
-    fn a_colour_only_change_runs_no_stage() {
+    fn an_unsupported_property_runs_no_stage() {
         let mut session = three_chapters();
         let before = session.stages();
         let painted = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
@@ -1198,6 +1198,31 @@ mod tests {
         assert_eq!(after.lines, before.lines, "the lines were broken again");
         assert_eq!(after.flow, before.flow, "the pages were fragmented again");
         assert_eq!(after.paint, before.paint, "the furniture was painted again");
+    }
+
+    /// A colour edit breaks the lines again. The colour is on the
+    /// runs the broken lines hold, so a sheet that recolours them has
+    /// no shorter way back to a page than breaking them.
+    #[test]
+    fn a_colour_edit_breaks_the_lines_again() {
+        let mut session = three_chapters();
+        let before = session.stages();
+        session.preview();
+
+        session.set_style(sheets("p { color: rebeccapurple }"));
+        let coloured = session
+            .preview()
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .any(|item| {
+                matches!(item, DrawItem::Text { color, .. } if *color == Color::rgb(102, 51, 153))
+            });
+        assert!(coloured, "the colour did not reach the page");
+        assert!(
+            session.stages().lines > before.lines,
+            "the lines were served from the break cache in the old colour"
+        );
     }
 
     /// The replaceable unit is the file: a host names one, and only

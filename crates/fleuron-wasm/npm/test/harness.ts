@@ -347,10 +347,11 @@ check(
   runs.map((run) => run.color).join(' '),
 );
 const inColour = headed === null ? '' : paintPage(headed, { fonts: coloured?.fonts ?? [] });
+const inRed = runs.filter((run) => run.color === '#b41e1e').length;
 check(
   'and the painter fills that run with it, leaving the rest to the page ink',
-  (inColour.match(/fill="#b41e1e"/g) ?? []).length ===
-    runs.filter((run) => run.color === '#b41e1e').length,
+  inRed > 0 && (inColour.match(/fill="#b41e1e"/g) ?? []).length === inRed,
+  `${inRed} coloured runs on the page`,
 );
 
 // The error channel: what the engine refuses comes back as an error

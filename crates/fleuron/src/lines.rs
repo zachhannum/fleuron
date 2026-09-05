@@ -1064,12 +1064,12 @@ impl<'a> LineLayout<'a> {
             .last()
             .map(|run| run.text_start + run.text.len() as u32)
             .unwrap_or_default();
+        // The face is the paragraph's because the charge was read
+        // from it. The colour is the word's: it costs no width, and a
+        // hyphen at the end of a coloured word belongs to the word.
+        let color = line.runs.last().map_or(style.color, |run| run.color);
         match line.runs.last_mut() {
-            Some(run)
-                if run.font_id == style.font_id
-                    && run.size == style.size
-                    && run.color == style.color =>
-            {
+            Some(run) if run.font_id == style.font_id && run.size == style.size => {
                 run.text.push('-');
                 // A hyphen the breaker drew stands for nothing the
                 // author wrote, so it maps to an empty stretch of the
@@ -1095,7 +1095,7 @@ impl<'a> LineLayout<'a> {
                 source_map: Vec::new(),
                 text_start: ending,
                 features: Features::NONE,
-                color: style.color,
+                color,
                 glyphs: vec![ShapedGlyph {
                     id,
                     x_advance: advance,
