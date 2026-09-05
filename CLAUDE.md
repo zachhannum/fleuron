@@ -168,6 +168,7 @@ docs/) and external (README).
 - Write docs as statements of how things are.
 - Run the `humanizer` skill over prose before it lands: comments,
   doc comments, docs/, README, PR and issue bodies.
+- After the `humanizer` skill, run all prose through the style guide in STYLE.md
 
 **DO NOT**
 
