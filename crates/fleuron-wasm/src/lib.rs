@@ -172,10 +172,11 @@ impl Session {
     /// object for whatever else a frontend read.
     ///
     /// A book read from several sources has no frontmatter of its
-    /// own, so this is how it gets a title. Nothing between the
-    /// content tree and the page reads metadata, so a book renamed
-    /// between renders re-runs no stage; the PDF writer is the one
-    /// thing that reads it.
+    /// own, so this is how it gets a title. A book renamed between
+    /// renders re-runs no stage: the PDF writer reads the name, and
+    /// the one field layout reads is `extra.language`, which chooses
+    /// the hyphenation patterns. A book that declares a different
+    /// language is broken into lines again.
     #[wasm_bindgen(js_name = setMetadata)]
     pub fn set_metadata(&mut self, json: &str) -> Result<(), JsError> {
         let metadata: Metadata = serde_json::from_str(json).map_err(js_error)?;

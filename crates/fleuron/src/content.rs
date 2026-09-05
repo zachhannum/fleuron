@@ -102,9 +102,9 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    /// The BCP 47 tag under `extra["language"]`, which the PDF
-    /// records and hyphenation reads its patterns from. A blank tag
-    /// counts as none declared.
+    /// The BCP 47 tag under `extra["language"]`. The PDF records it
+    /// and hyphenation takes its patterns from it. A blank tag counts
+    /// as none declared.
     pub fn language(&self) -> Option<&str> {
         self.extra
             .get("language")

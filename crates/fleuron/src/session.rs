@@ -406,7 +406,7 @@ impl<'a> Session<'a> {
     /// already laid out are otherwise the pages the export writes
     /// under the new name.
     pub fn set_metadata(&mut self, metadata: Metadata) {
-        if Patterns::of(&metadata) != Patterns::of(&self.book.metadata) {
+        if hyphenation(&metadata) != hyphenation(&self.book.metadata) {
             self.stale = self.stale.max(Stale::Break);
         }
         self.book.to_mut().metadata = metadata;
@@ -503,7 +503,7 @@ impl<'a> Session<'a> {
                 &self.styles,
                 against,
                 supplied,
-                Patterns::of(&self.book.metadata),
+                hyphenation(&self.book.metadata),
             );
             let kept = spare
                 .get_mut(&key)
@@ -739,6 +739,16 @@ fn paginated_prose(styles: &[ComputedStyle]) -> bool {
         .any(|style| matches!(style.content, Content::Counter(_) | Content::String(_)))
 }
 
+/// What the book's declared language decides: the patterns its words
+/// break by, and the tag the warning names where there are no
+/// patterns for it. Two languages without patterns break the same
+/// lines and warn about different tags.
+fn hyphenation(metadata: &Metadata) -> (Patterns, Option<&str>) {
+    let patterns = Patterns::of(metadata);
+    let unknown = metadata.language().filter(|_| patterns == Patterns::NONE);
+    (patterns, unknown)
+}
+
 /// What one section's lines were built from: the file it came from,
 /// its content, and the style every node in it resolved to. Node ids
 /// are deliberately absent, because they renumber globally on every
@@ -749,13 +759,13 @@ fn section_key(
     styles: &StyleTree,
     against: Against,
     assets: Option<usize>,
-    patterns: Patterns,
+    hyphenation: (Patterns, Option<&str>),
 ) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
     against.hash_into(h);
     assets.hash(h);
-    patterns.hash(h);
+    hyphenation.hash(h);
     (&section.source, &section.title, section.position).hash(h);
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);
@@ -1107,6 +1117,88 @@ mod tests {
         assert_eq!(
             session.book().metadata.title.as_deref(),
             Some("Gulliver's Travels")
+        );
+    }
+
+    /// A book of one paragraph, declaring `language` or declaring
+    /// none, on a measure narrow enough for hyphenation to decide
+    /// where its lines end.
+    fn hyphenated(language: Option<&str>, prose: &str) -> Session<'static> {
+        let mut session = Session::new(registry());
+        session.set_style(sheets(
+            "@page { size: 45pt 400pt; margin: 12pt } p { hyphens: auto }",
+        ));
+        session.set_content(Book {
+            metadata: Metadata {
+                extra: language
+                    .map(|tag| ("language".to_string(), tag.to_string()))
+                    .into_iter()
+                    .collect(),
+                ..Default::default()
+            },
+            sections: vec![section("one.md", vec![paragraph(prose)])],
+        });
+        session
+    }
+
+    /// The book's declared language, and nothing else named.
+    fn declaring(tag: &str) -> Metadata {
+        Metadata {
+            extra: [("language".to_string(), tag.to_string())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// Every painted run, in the order the pages carry them.
+    fn painted(output: &LayoutOutput) -> Vec<String> {
+        output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .filter_map(|item| match item {
+                DrawItem::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A language that chooses other patterns breaks the lines
+    /// again: the ones the session kept were broken by the patterns
+    /// the old tag chose.
+    #[test]
+    fn a_new_language_re_breaks_the_lines() {
+        let mut session = hyphenated(Some("en"), "Wassermann");
+        let english = painted(session.preview());
+        let before = session.stages();
+
+        session.set_metadata(declaring("de"));
+        let german = painted(session.preview());
+
+        assert!(
+            session.stages().lines > before.lines,
+            "the lines were not broken again"
+        );
+        assert_eq!(english, ["Wasser-", "mann"]);
+        assert_eq!(german, ["Was-", "ser-", "mann"]);
+    }
+
+    /// A tag with no patterns replaced by another warns about the
+    /// new one, though both leave every word whole.
+    #[test]
+    fn a_new_unknown_language_warns_about_itself() {
+        let mut session = hyphenated(Some("xx"), "Wassermann");
+        session.preview();
+        session.set_metadata(declaring("yy"));
+        let warnings = &session.preview().warnings;
+        assert!(
+            warnings.iter().any(|w| w.message.contains("yy")),
+            "warnings: {warnings:?}"
+        );
+        assert!(
+            !warnings.iter().any(|w| w.message.contains("xx")),
+            "the old tag is still complained about: {warnings:?}"
         );
     }
 

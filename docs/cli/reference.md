@@ -32,7 +32,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-c`, `--css` | An author stylesheet. Repeatable. Sheets parse in the order given and cascade in that order, all of them over the built-in user-agent sheet. With no `-c`, the built-in sheet does all the styling. |
 | `-s`, `--split` | Where a markdown file's sections begin. A level of 1 to 6 opens a section at every heading of that level or shallower. `none` opens none, so the file is one section. Default 1. |
 | `-d`, `--dialect` | Which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx). |
-| `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language. |
+| `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language and picks the hyphenation patterns. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
 | `-V`, `--version` | Prints `fleuron <version>` and exits 0, whether or not a job was named. |
 | `-h`, `--help` | Prints the usage above and exits 0, whether or not a job was named. |

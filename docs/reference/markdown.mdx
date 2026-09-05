@@ -43,7 +43,7 @@ A source read whole is one chapter, so its `title:` becomes that section's `titl
 
 That leaves book metadata for the caller. `assemble(metadata, sections)` takes it as an argument, so a library or WASM host passes whatever it already knows and the CLI passes what its flags named. The frontend never takes the book's title from whichever file came first.
 
-A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`. Everything else in `extra` is passed through for whoever wants it.
+A book with no metadata lays out. The engine reads three fields: `title` and `author` reach the PDF's document information, and so does `extra["language"]`, which also chooses the hyphenation patterns. Everything else in `extra` is passed through for whoever wants it.
 
 ## Several sources
 

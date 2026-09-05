@@ -230,13 +230,12 @@ impl<'a> Paginator<'a> {
     }
 
     /// Takes the hyphenation patterns from the language the book
-    /// declares. `paginate` reads them from the book it is handed; a
-    /// caller that builds one section's fragments on its own says
+    /// declares. `paginate` reads them from the book it is handed. A
+    /// caller that builds one section's fragments on its own sets
     /// them here.
     ///
-    /// A tag no pattern set answers to leaves every word whole,
-    /// rather than breaking one language's words at another's
-    /// syllables.
+    /// A language with no patterns leaves every word whole, rather
+    /// than breaking one language's words at another's syllables.
     pub fn language(&self, metadata: &Metadata) {
         if let Some(tag) = metadata
             .language()

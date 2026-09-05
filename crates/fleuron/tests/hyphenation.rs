@@ -106,7 +106,7 @@ fn a_regional_tag_hyphenates_as_its_language() {
     );
 }
 
-/// A tag no pattern set answers to warns, names itself, and leaves
+/// A tag with no patterns behind it warns, names itself, and leaves
 /// every word whole rather than breaking one language's words at
 /// another's syllables.
 #[test]
@@ -157,4 +157,14 @@ fn the_corpus_novel_breaks_the_same_under_english() {
         .compile(&silent, registry());
     let pages = |book: &Book| layout_book(book, &styles, registry(), &Assets::none()).pages;
     assert_eq!(pages(&declared), pages(&silent));
+}
+
+/// A word past the 45 bytes the hyphenator holds inline is
+/// hyphenated all the same. Two dozen Cyrillic letters are 48 bytes,
+/// which an ordinary Russian noun reaches.
+#[test]
+fn a_word_longer_than_the_inline_buffer_hyphenates() {
+    let word = "человеконенавистничество";
+    assert!(word.len() > 45, "the word is {} bytes", word.len());
+    assert!(!lines(&lay_out(&book(Some("ru"), word))).is_empty());
 }

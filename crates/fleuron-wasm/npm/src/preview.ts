@@ -164,8 +164,9 @@ export class Preview {
   }
 
   /**
-   * Names the book. Only the PDF export reads this, so it costs no
-   * layout.
+   * Names the book. The PDF export reads the name, and layout reads
+   * `extra.language`, which chooses the hyphenation patterns, so a
+   * rename alone costs no layout.
    */
   async setMetadata(metadata: Metadata): Promise<void> {
     await this.render([{ op: 'metadata', metadata }]);

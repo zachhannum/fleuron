@@ -218,9 +218,9 @@ impl Patterns {
     /// breaks by.
     pub const ENGLISH: Patterns = Patterns(Some(hypher::Lang::English));
 
-    /// The patterns a book breaks by: those its declared language
-    /// names, English where it declares none, and none at all where
-    /// no set answers to the tag it declares.
+    /// The patterns a book breaks by: the ones its declared
+    /// language names, English where it declares none, and `NONE`
+    /// where there are no patterns for the language it declares.
     pub fn of(metadata: &Metadata) -> Patterns {
         match metadata.language() {
             Some(tag) => Patterns::of_tag(tag).unwrap_or(Patterns::NONE),
@@ -229,8 +229,8 @@ impl Patterns {
     }
 
     /// The patterns a BCP 47 tag names, read from its primary
-    /// subtag, so `fr-CA` is French. `None` where no set answers to
-    /// the tag.
+    /// subtag, so `fr-CA` is French. `None` where there are no
+    /// patterns for that language.
     pub fn of_tag(tag: &str) -> Option<Patterns> {
         let primary = tag.split(['-', '_']).next().unwrap_or_default();
         let code: [u8; 2] = primary.as_bytes().try_into().ok()?;
@@ -1889,7 +1889,7 @@ mod tests {
     }
 
     /// A BCP 47 tag is read by its primary subtag, whatever the
-    /// case and whatever follows it. A tag no pattern set answers to
+    /// case and whatever follows it. A tag with no patterns behind it
     /// resolves to nothing rather than to English.
     #[test]
     fn patterns_come_from_the_primary_subtag() {
@@ -1905,7 +1905,7 @@ mod tests {
     }
 
     /// A book that declares nothing breaks by English, and one that
-    /// declares a language nothing answers to breaks nowhere.
+    /// declares a language with no patterns breaks nowhere.
     #[test]
     fn a_book_without_a_language_breaks_by_english() {
         let declared = |tag: &str| {

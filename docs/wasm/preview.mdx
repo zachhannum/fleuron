@@ -100,7 +100,7 @@ await preview.setMetadata({
 });
 ```
 
-Only the PDF writer reads metadata, so naming a book costs no layout. The pages already on screen are the pages the export writes under the new name.
+Naming a book costs no layout: the pages already on screen are the pages the export writes under the new name. `extra.language` is the one field a stage below the PDF writer reads, and a book that changes it is hyphenated again.
 
 ## When it renders
 

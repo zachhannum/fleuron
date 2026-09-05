@@ -33,9 +33,9 @@ skrifa = "0.46"
 unicode-linebreak = "0.1"
 unicode-bidi = "0.3"
 # Every pattern set, because the book's declared language picks one.
-# `alloc` is hypher's own string joining, which the line breaker
-# doesn't ask for.
-hypher = { version = "0.1", default-features = false, features = ["full"] }
+# `alloc` is the buffer a word longer than 45 bytes is hyphenated
+# through, and without it such a word panics.
+hypher = { version = "0.1", default-features = false, features = ["full", "alloc"] }
 icu_segmenter = "2"
 
 # pdf. `raster-images` is the JPEG, PNG, GIF and WebP paths; the
