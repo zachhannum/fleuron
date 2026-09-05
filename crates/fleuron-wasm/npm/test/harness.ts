@@ -426,6 +426,19 @@ check(
   malformed.includes('sheets'),
   malformed,
 );
+let nameless = '';
+try {
+  await client.preview([
+    { op: 'style', sheets: ['p { color: red }'] } as unknown as Op,
+  ]);
+} catch (error) {
+  nameless = String(error);
+}
+check(
+  'and so does a list of sheets with nothing naming them',
+  nameless.includes('sheets'),
+  nameless,
+);
 const alive = await client.preview([]);
 check('and the session that refused them still renders', alive !== null && alive.pages.length > 0);
 
