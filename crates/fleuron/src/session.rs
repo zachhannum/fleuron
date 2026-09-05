@@ -871,9 +871,9 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         font_size,
         font_style: _,
         font_weight: _,
-        // Nothing about a line moves for it, but the runs carry it,
-        // and the lines a break holds on to are where they carry it
-        // from.
+        // Nothing about a line moves for it. The runs the broken
+        // lines hold carry it, so a sheet that recolours them has to
+        // break them again.
         color,
         line_height,
         letter_spacing,

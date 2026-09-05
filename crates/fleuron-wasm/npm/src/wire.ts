@@ -68,8 +68,7 @@ export interface TextItem {
   features: Features;
   /**
    * What the run is painted in, as `#rrggbb`. Black is what a sheet
-   * that named no colour leaves, and what a painter with an ink of
-   * its own may draw in instead.
+   * that named no colour leaves.
    */
   color: string;
   /** The glyphs, in visual order. */

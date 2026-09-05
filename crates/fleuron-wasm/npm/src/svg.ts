@@ -116,10 +116,9 @@ function rect(item: RectItem): string {
 }
 
 /**
- * What an item is filled with, where that is not what the page is
- * filled with already. Black is where a sheet that named no colour
- * leaves a run, and the page's own ink is what draws it, so a host
- * that prints in a grey still gets one.
+ * An item's own fill, where it has one. Black is what a sheet that
+ * named no colour leaves, and the page's ink draws that, so a host
+ * printing in grey still gets grey.
  */
 function filled(color: string): string {
   return color === '#000000' ? '' : ` fill="${escape(color)}"`;

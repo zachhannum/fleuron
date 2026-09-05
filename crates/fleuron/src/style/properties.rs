@@ -39,11 +39,11 @@ impl Length {
     }
 }
 
-/// A colour, as `color` sets it: three eight-bit channels, and no
-/// alpha, which is what ink on a page has.
+/// A colour, as `color` sets it: three eight-bit channels and no
+/// alpha.
 ///
-/// Serialization has two forms. A format a person reads writes
-/// `#rrggbb`; the wire writes the three bytes.
+/// Serialization has two forms: `#rrggbb` where a person reads it,
+/// and the three bytes on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Color {
     /// Red channel.
@@ -63,8 +63,8 @@ impl Color {
         Color { r, g, b }
     }
 
-    /// The colour as CSS spells it, which is how a painter that takes
-    /// a string asks for it.
+    /// The colour as CSS spells it, which is what a painter that
+    /// takes a string is given.
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }

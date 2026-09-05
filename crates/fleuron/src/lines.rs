@@ -96,8 +96,8 @@ pub struct ParagraphStyle {
     pub caps: FontVariantCaps,
     /// What the text is transformed to before it is shaped.
     pub transform: TextTransform,
-    /// What the run is painted in. Nothing measures it; a run carries
-    /// it from here to the display structure.
+    /// What the run is painted in. Nothing measures it: a run
+    /// carries it from here to the display structure.
     pub color: Color,
 }
 

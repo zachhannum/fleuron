@@ -29,6 +29,7 @@ Text, inherited:
 
 | property | values |
 |---|---|
+| `color` | a colour name, `#rgb`, `#rrggbb`, `rgb()` |
 | `font-family` | family names and `serif` / `sans-serif` / `monospace` |
 | `font-size` | `<length>`, `<percentage>` of the parent |
 | `font-style` | `normal`, `italic`, `oblique` |
@@ -76,6 +77,14 @@ Lines break by total fit over the whole paragraph: every set of breaks is costed
 `font-variant-caps: small-caps` takes the face's `smcp` feature. A face without one draws its lowercase as capitals at four-fifths of the size, and a diagnostic names it, so an author can pick a face that has them.
 
 `text-transform` changes the characters that are shaped. What a painter reads back is the text the author wrote: the run has the source and the shaper's mapping into the transformed form, so a PDF's text extraction, a search over it and copy and paste all return the manuscript. `capitalize` raises the letter a word opens with, where a word continues through letters, digits and the apostrophe inside one.
+
+### Colour
+
+`color` is the ink a run is set in. It inherits, so a colour on `section` reaches the prose under it and a rule on `h1` beats what the heading inherited.
+
+The values are a CSS colour name, `#rgb`, `#rrggbb`, and `rgb()` over numbers or percentages. There is no alpha channel.
+
+The colour travels on the run, so the preview and the PDF fill from the same field.
 
 ### Hanging punctuation
 
@@ -145,6 +154,6 @@ The string in `url()` is handed to the loader unchanged, and does not have to be
 
 ## Not in the subset
 
-Colour, backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
+Backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.

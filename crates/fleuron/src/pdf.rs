@@ -300,8 +300,8 @@ fn paint(
 }
 
 /// What the next item is filled with. Black is what PDF fills with
-/// when nothing says otherwise, so a run in it writes no colour at
-/// all and a page of ordinary prose carries none.
+/// when nothing says otherwise, so a run in black writes no colour at
+/// all.
 fn ink(surface: &mut Surface, color: Color) {
     surface.set_fill((color != Color::BLACK).then(|| Fill {
         paint: rgb::Color::new(color.r, color.g, color.b).into(),

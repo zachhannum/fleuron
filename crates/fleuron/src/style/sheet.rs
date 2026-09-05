@@ -610,7 +610,7 @@ fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, 
     })
 }
 
-/// One channel of `rgb()`: `0`–`255`, or a percentage of it.
+/// One channel of `rgb()`: `0` to `255`, or a percentage of it.
 fn channel<'i>(input: &mut Parser<'i, '_>) -> Result<u8, ParseError<'i, StyleError<'i>>> {
     let value = match input.try_parse(|input| input.expect_percentage()) {
         Ok(percentage) => percentage * 255.0,
@@ -1256,7 +1256,7 @@ fn sources<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Src>, ParseError<'i, St
     })
 }
 
-/// The CSS named colours, sorted so a name is found by halving.
+/// The CSS named colours, sorted for binary search.
 const NAMED: [(&str, Color); 148] = [
     ("aliceblue", Color::rgb(240, 248, 255)),
     ("antiquewhite", Color::rgb(250, 235, 215)),
