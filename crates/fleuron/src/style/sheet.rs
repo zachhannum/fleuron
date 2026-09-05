@@ -594,29 +594,39 @@ fn color(input: &mut Parser<'_, '_>) -> Option<Color> {
 }
 
 /// `rgb(r, g, b)`, with either commas or spaces between the
-/// channels, each of them a number or a percentage.
+/// channels. All three are numbers or all three are percentages, as
+/// CSS asks.
 fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, StyleError<'i>>> {
     input.expect_function_matching("rgb")?;
     input.parse_nested_block(|input| {
-        let red = channel(input)?;
+        let (red, percentages) = channel(input, None)?;
         let commas = input.try_parse(|input| input.expect_comma()).is_ok();
-        let green = channel(input)?;
+        let (green, _) = channel(input, Some(percentages))?;
         if commas {
             input.expect_comma()?;
         }
-        let blue = channel(input)?;
+        let (blue, _) = channel(input, Some(percentages))?;
         input.expect_exhausted()?;
         Ok(Color::rgb(red, green, blue))
     })
 }
 
-/// One channel of `rgb()`: `0` to `255`, or a percentage of it.
-fn channel<'i>(input: &mut Parser<'i, '_>) -> Result<u8, ParseError<'i, StyleError<'i>>> {
-    let value = match input.try_parse(|input| input.expect_percentage()) {
+/// One channel of `rgb()`: `0` to `255`, or a percentage of it, and
+/// which of the two it was. `written` is what the channels before it
+/// were written as, and a channel that disagrees is not a colour.
+fn channel<'i>(
+    input: &mut Parser<'i, '_>,
+    written: Option<bool>,
+) -> Result<(u8, bool), ParseError<'i, StyleError<'i>>> {
+    let percentage = input.try_parse(|input| input.expect_percentage());
+    if written.is_some_and(|percentages| percentages != percentage.is_ok()) {
+        return Err(input.new_error_for_next_token());
+    }
+    let value = match percentage {
         Ok(percentage) => percentage * 255.0,
         Err(_) => input.expect_number()?,
     };
-    Ok(value.round().clamp(0.0, 255.0) as u8)
+    Ok((value.round().clamp(0.0, 255.0) as u8, percentage.is_ok()))
 }
 
 /// The two hex forms. `#abc` is `#aabbcc`: each digit stands for a
@@ -1407,3 +1417,22 @@ const NAMED: [(&str, Color); 148] = [
     ("yellow", Color::rgb(255, 255, 0)),
     ("yellowgreen", Color::rgb(154, 205, 50)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The name table is sorted, which is what the search over it
+    /// depends on, and every name in it reads back.
+    #[test]
+    fn every_colour_name_is_in_order_and_reads_back() {
+        for pair in NAMED.windows(2) {
+            assert!(pair[0].0 < pair[1].0, "{} before {}", pair[0].0, pair[1].0);
+        }
+        for (name, color) in NAMED {
+            assert_eq!(named(name), Some(color), "{name}");
+        }
+        assert_eq!(named("REBECCAPURPLE"), Some(Color::rgb(102, 51, 153)));
+        assert_eq!(named("octarine"), None);
+    }
+}

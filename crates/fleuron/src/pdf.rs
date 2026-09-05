@@ -549,6 +549,23 @@ mod tests {
         crate::layout::layout_book(book, &styles, registry(), &Assets::none())
     }
 
+    /// The page content streams, joined: where the operators are.
+    /// The rest of a PDF is font and image bytes, and a byte pair
+    /// inside a subset is not an operator.
+    fn content(pdf: &str) -> String {
+        // On `\nstream\n` rather than `stream\n`, which cuts
+        // `endstream` in half and takes the terminator with it.
+        let streams: Vec<&str> = pdf
+            .split("\nstream\n")
+            .skip(1)
+            .filter_map(|rest| rest.split_once("\nendstream"))
+            .map(|(body, _)| body)
+            .filter(|body| body.is_ascii() && body.contains(" cm\n"))
+            .collect();
+        assert!(!streams.is_empty(), "no page content stream in:\n{pdf}");
+        streams.join("\n")
+    }
+
     /// The one glyph-positioning offset inside a showing op, in
     /// 1000ths of an em: `[(…) 100 (…)] TJ`.
     fn showing_offset(pdf: &str) -> Option<f32> {
@@ -647,11 +664,11 @@ mod tests {
             })
             .expect("the heading opens the first page");
         assert_eq!(heading, Color::rgb(180, 30, 30));
-        let pdf = readable(&output, &Metadata::default());
+        let painted = content(&readable(&output, &Metadata::default()));
         // Channels as PDF writes them: each over 255.
         assert!(
-            pdf.contains("0.7058824 0.11764706 0.11764706 rg"),
-            "the heading did not fill with the colour its run carries:\n{pdf}"
+            painted.contains("0.7058824 0.11764706 0.11764706 rg"),
+            "the heading did not fill with the colour its run carries:\n{painted}"
         );
 
         let rule = page_of(
@@ -665,13 +682,13 @@ mod tests {
             200.0,
             200.0,
         );
-        let pdf = readable(&rule, &Metadata::default());
+        let painted = content(&readable(&rule, &Metadata::default()));
         assert!(
-            pdf.contains("0 0.2 0.4 rg"),
-            "the rule did not fill with the colour it carries:\n{pdf}"
+            painted.contains("0 0.2 0.4 rg"),
+            "the rule did not fill with the colour it carries:\n{painted}"
         );
 
-        let black = readable(&laid_out(&book), &Metadata::default());
+        let black = content(&readable(&laid_out(&book), &Metadata::default()));
         assert!(
             !black.contains(" rg"),
             "a page in black wrote a colour of its own:\n{black}"

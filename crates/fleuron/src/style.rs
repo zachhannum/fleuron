@@ -1639,26 +1639,30 @@ mod tests {
             "h1 { color: darkred }
              p { color: #036 }
              blockquote { color: #b41e1e }
-             em { color: rgb(10, 20%, 30) }",
+             em { color: rgb(0% 20% 100%) }",
         );
         assert_eq!(first(&tree, "h1").color, Color::rgb(139, 0, 0));
         assert_eq!(first(&tree, "p").color, Color::rgb(0, 51, 102));
         assert_eq!(first(&tree, "blockquote").color, Color::rgb(180, 30, 30));
-        assert_eq!(first(&tree, "em").color, Color::rgb(10, 51, 30));
+        assert_eq!(first(&tree, "em").color, Color::rgb(0, 51, 255));
         assert_eq!(
             first(&defaults(&book, registry()), "p").color,
             Color::BLACK,
             "a book nothing coloured is set in black",
         );
 
-        let tree = compile(&book, "p { color: octarine }");
-        assert!(
-            tree.warnings()
-                .iter()
-                .any(|warning| warning.message == "unsupported value for `color`"),
-            "{:?}",
-            tree.warnings(),
-        );
+        // A name nothing has, and channels written half one way and
+        // half the other, which CSS does not allow either.
+        for css in ["p { color: octarine }", "p { color: rgb(10, 20%, 30) }"] {
+            let tree = compile(&book, css);
+            assert!(
+                tree.warnings()
+                    .iter()
+                    .any(|warning| warning.message == "unsupported value for `color`"),
+                "{css}: {:?}",
+                tree.warnings(),
+            );
+        }
     }
 
     /// Colour inherits: a rule on the section reaches the prose under
