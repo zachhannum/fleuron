@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 5;
+export const WIRE_VERSION = 6;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -66,6 +66,12 @@ export interface TextItem {
    * its own glyphs and sets them at positions measured for others.
    */
   features: Features;
+  /**
+   * What the run is painted in, as `#rrggbb`. Black is what a sheet
+   * that named no colour leaves, and what a painter with an ink of
+   * its own may draw in instead.
+   */
+  color: string;
   /** The glyphs, in visual order. */
   glyphs: Glyph[];
 }
@@ -81,6 +87,8 @@ export interface RectItem {
   w: number;
   /** Height in points. */
   h: number;
+  /** What the rectangle is filled with, as `#rrggbb`. */
+  color: string;
 }
 
 /** An image's own idea of its size, from its header. */
@@ -272,6 +280,23 @@ class Reader {
     return out;
   }
 
+  /** One byte, as a `u8` is written: itself, not a varint. */
+  byte(): number {
+    const value = this.bytes[this.at++];
+    if (value === undefined) {
+      throw new WireError('the buffer ended mid-byte');
+    }
+    return value;
+  }
+
+  /** Three channels, as the `#rrggbb` a painter fills with. */
+  color(): string {
+    const digits = [this.byte(), this.byte(), this.byte()]
+      .map((channel) => channel.toString(16).padStart(2, '0'))
+      .join('');
+    return `#${digits}`;
+  }
+
   /** An `Option<T>`: present or not, and the value when it is. */
   option<T>(item: () => T): T | null {
     return this.varint() === 0 ? null : item();
@@ -304,10 +329,18 @@ function item(r: Reader): DrawItem {
         source: r.string(),
         sourceMap: r.seq(() => r.varint()),
         features: { smallCaps: r.bool() },
+        color: r.color(),
         glyphs: r.seq(() => glyph(r)),
       };
     case 1:
-      return { kind: 'rect', x: r.f32(), y: r.f32(), w: r.f32(), h: r.f32() };
+      return {
+        kind: 'rect',
+        x: r.f32(),
+        y: r.f32(),
+        w: r.f32(),
+        h: r.f32(),
+        color: r.color(),
+      };
     case 2:
       return {
         kind: 'image',

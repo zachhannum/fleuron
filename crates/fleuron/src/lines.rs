@@ -20,7 +20,7 @@ use std::ops::Range;
 use crate::content::{Inline, NodeId};
 use crate::fonts::{Features, FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
-use crate::style::{FontVariantCaps, TextTransform};
+use crate::style::{Color, FontVariantCaps, TextTransform};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 use serde::Serialize;
 use unicode_linebreak::{BreakOpportunity, linebreaks};
@@ -77,8 +77,8 @@ const OVERFULL_DEMERITS: f64 = 1e12;
 /// Hyphenated line ends allowed in a row.
 const MAX_CONSECUTIVE_HYPHENS: u8 = 2;
 
-/// Everything one paragraph's layout depends on. The style tree
-/// compiles down to this.
+/// Everything one paragraph's layout depends on, and the colour its
+/// runs are painted in. The style tree compiles down to this.
 #[derive(Debug, Clone, Copy)]
 pub struct ParagraphStyle {
     /// Face id from the font registry.
@@ -96,6 +96,9 @@ pub struct ParagraphStyle {
     pub caps: FontVariantCaps,
     /// What the text is transformed to before it is shaped.
     pub transform: TextTransform,
+    /// What the run is painted in. Nothing measures it; a run carries
+    /// it from here to the display structure.
+    pub color: Color,
 }
 
 /// Where line layout gets the style of one inline node.
@@ -233,6 +236,8 @@ pub struct ShapedRun {
     pub text_start: u32,
     /// The features the run was shaped with.
     pub features: Features,
+    /// What the run is painted in.
+    pub color: Color,
     /// The glyphs, in visual order.
     pub glyphs: Vec<ShapedGlyph>,
     /// Total advance of the run's glyphs, in font units.
@@ -321,6 +326,7 @@ struct Span {
     /// Extra advance after each cluster, in points.
     tracking: f32,
     features: Features,
+    color: Color,
     /// Byte range in the paragraph's shaped text.
     range: Range<usize>,
 }
@@ -467,6 +473,7 @@ impl FlatParagraph {
             features: Features {
                 small_caps: caps == SmallCaps::Feature,
             },
+            color: style.color,
             range: start..self.text.len(),
         });
     }
@@ -1058,7 +1065,11 @@ impl<'a> LineLayout<'a> {
             .map(|run| run.text_start + run.text.len() as u32)
             .unwrap_or_default();
         match line.runs.last_mut() {
-            Some(run) if run.font_id == style.font_id && run.size == style.size => {
+            Some(run)
+                if run.font_id == style.font_id
+                    && run.size == style.size
+                    && run.color == style.color =>
+            {
                 run.text.push('-');
                 // A hyphen the breaker drew stands for nothing the
                 // author wrote, so it maps to an empty stretch of the
@@ -1084,6 +1095,7 @@ impl<'a> LineLayout<'a> {
                 source_map: Vec::new(),
                 text_start: ending,
                 features: Features::NONE,
+                color: style.color,
                 glyphs: vec![ShapedGlyph {
                     id,
                     x_advance: advance,
@@ -1602,6 +1614,7 @@ fn cut_runs(
             source_map,
             text_start: text_start as u32,
             features: spec.features,
+            color: spec.color,
             glyphs,
             advance,
         });

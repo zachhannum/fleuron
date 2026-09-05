@@ -5,7 +5,8 @@
 //! unit, and `line-height` computes to a unitless multiple of the
 //! font size whatever it was written as.
 
-use serde::Serialize;
+use serde::de::{Error as _, Unexpected};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fonts::GenericFamily;
 use crate::lines::HangingPunctuation;
@@ -34,6 +35,70 @@ impl Length {
             Length::Em(em) => em * relative,
             Length::Rem(rem) => rem * root,
             Length::Percent(percent) => percent / 100.0 * relative,
+        }
+    }
+}
+
+/// A colour, as `color` sets it: three eight-bit channels, and no
+/// alpha, which is what ink on a page has.
+///
+/// Serialization has two forms. A format a person reads writes
+/// `#rrggbb`; the wire writes the three bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Color {
+    /// Red channel.
+    pub r: u8,
+    /// Green channel.
+    pub g: u8,
+    /// Blue channel.
+    pub b: u8,
+}
+
+impl Color {
+    /// What a page is set in until a rule says otherwise.
+    pub const BLACK: Color = Color::rgb(0, 0, 0);
+
+    /// A colour from its three channels.
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Color {
+        Color { r, g, b }
+    }
+
+    /// The colour as CSS spells it, which is how a painter that takes
+    /// a string asks for it.
+    pub fn to_hex(self) -> String {
+        format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
+
+    /// A `#rrggbb` string back, and `None` for anything else.
+    pub fn from_hex(text: &str) -> Option<Color> {
+        let digits = text.strip_prefix('#')?;
+        if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
+        Some(Color::rgb(channel(0)?, channel(2)?, channel(4)?))
+    }
+}
+
+impl Serialize for Color {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&self.to_hex())
+        } else {
+            [self.r, self.g, self.b].serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Color {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Color, D::Error> {
+        if deserializer.is_human_readable() {
+            let hex = String::deserialize(deserializer)?;
+            Color::from_hex(&hex)
+                .ok_or_else(|| D::Error::invalid_value(Unexpected::Str(&hex), &"#rrggbb"))
+        } else {
+            let [r, g, b] = <[u8; 3]>::deserialize(deserializer)?;
+            Ok(Color::rgb(r, g, b))
         }
     }
 }
@@ -502,6 +567,7 @@ pub enum StringPiece {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Declaration {
     FontFamily(Vec<Family>),
+    Color(Color),
     FontSize(Length),
     FontStyle(FontStyle),
     FontWeight(u16),
@@ -575,6 +641,8 @@ pub struct ComputedStyle {
     pub font_style: FontStyle,
     /// Weight on the CSS 1–1000 scale.
     pub font_weight: u16,
+    /// What text and rules are painted in.
+    pub color: Color,
     /// Line height as a unitless multiple of the font size.
     pub line_height: f32,
     /// Extra advance after every glyph, in points, from
@@ -635,6 +703,7 @@ impl ComputedStyle {
             font_size: 12.0,
             font_style: FontStyle::Normal,
             font_weight: 400,
+            color: Color::BLACK,
             line_height: NORMAL_LINE_HEIGHT,
             letter_spacing: 0.0,
             font_variant_caps: FontVariantCaps::Normal,
@@ -685,6 +754,7 @@ impl ComputedStyle {
             }
             Declaration::FontStyle(style) => self.font_style = *style,
             Declaration::FontWeight(weight) => self.font_weight = *weight,
+            Declaration::Color(color) => self.color = *color,
             Declaration::LineHeight(line_height) => {
                 self.line_height = line_height.to_multiple(self.font_size, root_size)
             }
@@ -727,6 +797,7 @@ impl ComputedStyle {
         crate::lines::ParagraphStyle {
             font_id: self.font_id,
             size: self.font_size,
+            color: self.color,
             line_height: self.line_height,
             letter_spacing: self.letter_spacing,
             caps: self.font_variant_caps,

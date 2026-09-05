@@ -871,6 +871,10 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         font_size,
         font_style: _,
         font_weight: _,
+        // Nothing about a line moves for it, but the runs carry it,
+        // and the lines a break holds on to are where they carry it
+        // from.
+        color,
         line_height,
         letter_spacing,
         font_variant_caps,
@@ -894,7 +898,7 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         break_after,
         break_inside,
     } = style;
-    (font_id, font_size.to_bits(), line_height.to_bits()).hash(h);
+    (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
@@ -1176,7 +1180,7 @@ mod tests {
         let before = session.stages();
         let painted = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
 
-        session.set_style(sheets("p { color: rebeccapurple }"));
+        session.set_style(sheets("p { background-color: rebeccapurple }"));
         let (repainted, complained) = {
             let output = session.preview();
             (
@@ -1184,7 +1188,7 @@ mod tests {
                 output
                     .warnings
                     .iter()
-                    .any(|warning| warning.message.contains("`color`")),
+                    .any(|warning| warning.message.contains("`background-color`")),
             )
         };
         let after = session.stages();

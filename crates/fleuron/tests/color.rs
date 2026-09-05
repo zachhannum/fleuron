@@ -9,7 +9,7 @@ use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page};
-use fleuron::style::{Source, StyleTree, Stylesheets};
+use fleuron::style::{Color, Source, StyleTree, Stylesheets};
 
 /// A sheet that sets a page and a heading and names no colour.
 const PLAIN_CSS: &str = r#"
@@ -20,6 +20,20 @@ const PLAIN_CSS: &str = r#"
 }
 
 h1 { font-size: 14pt }
+"#;
+
+/// The same sheet, with the section in a grey the prose inherits, the
+/// heading in a red of its own, and the emphasis in a third colour.
+const COLOURED_CSS: &str = r#"
+@page {
+  size: 240pt 180pt;
+  margin: 24pt;
+  @bottom-center { content: counter(page); font-size: 8pt; color: #808080 }
+}
+
+h1 { font-size: 14pt; color: rgb(180, 30, 30) }
+section { color: #444 }
+em { color: darkslateblue }
 "#;
 
 fn registry() -> &'static FontRegistry {
@@ -94,6 +108,9 @@ fn described(item: &DrawItem) -> String {
             source,
             source_map,
             features,
+            // What every other test here is about; this one is about
+            // everything else standing where it stood.
+            color: _,
             glyphs,
         } => {
             let placed: Vec<String> = glyphs
@@ -112,7 +129,13 @@ fn described(item: &DrawItem) -> String {
                 placed.join(" ")
             )
         }
-        DrawItem::Rect { x, y, w, h } => format!("rect {x:?} {y:?} {w:?} {h:?}"),
+        DrawItem::Rect {
+            x,
+            y,
+            w,
+            h,
+            color: _,
+        } => format!("rect {x:?} {y:?} {w:?} {h:?}"),
         DrawItem::Image { x, y, w, h, asset } => {
             format!("image {x:?} {y:?} {w:?} {h:?} asset {asset}")
         }
@@ -134,6 +157,32 @@ fn description(pages: &[Page]) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// The colour of every run whose text begins with a given word.
+fn colour_of(pages: &[Page], opening: &str) -> Vec<Color> {
+    pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { text, color, .. } if text.starts_with(opening) => Some(*color),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every run carries the colour its own style named: the heading its
+/// own, the prose the section's, the emphasis inside the prose a
+/// third, and the folio what the margin box was given.
+#[test]
+fn every_run_carries_the_colour_its_style_named() {
+    let book = fixture();
+    let styles = styles(&book, COLOURED_CSS);
+    let pages = pages(&book, &styles);
+    assert_eq!(colour_of(&pages, "The Quay"), [Color::rgb(180, 30, 30)]);
+    assert_eq!(colour_of(&pages, "The wind"), [Color::rgb(68, 68, 68)]);
+    assert_eq!(colour_of(&pages, "harbour"), [Color::rgb(72, 61, 139)]);
+    assert_eq!(colour_of(&pages, "1"), [Color::rgb(128, 128, 128)]);
+}
+
 /// A book whose sheet names no colour is set the way it was set
 /// before a sheet could name one: the pages, the runs and every glyph
 /// on them stand where they stood.
@@ -142,5 +191,17 @@ fn a_sheet_that_names_no_colour_sets_the_book_unchanged() {
     let book = fixture();
     let styles = styles(&book, PLAIN_CSS);
     let pages = pages(&book, &styles);
+    let painted: Vec<Color> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .map(|item| match item {
+            DrawItem::Text { color, .. } | DrawItem::Rect { color, .. } => *color,
+            DrawItem::Image { .. } => Color::BLACK,
+        })
+        .collect();
+    assert!(
+        painted.iter().all(|color| *color == Color::BLACK),
+        "something was painted in {painted:?}"
+    );
     insta::assert_json_snapshot!("a_book_no_sheet_coloured", description(&pages));
 }
