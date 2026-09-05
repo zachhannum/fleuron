@@ -25,6 +25,7 @@ import {
   faceFamily,
   initWasm,
   paintPage,
+  styleOp,
   wireVersion,
   type LayoutOutput,
   type Op,
@@ -298,11 +299,10 @@ const broken = client.stages.lines;
 // on and it does not move, so every line already broken is used
 // where the new geometry puts it.
 const warm = await client.preview([
-  {
-    op: 'style',
-    css: '@page :left { margin-left: 54pt; margin-right: 42pt }\n' +
+  styleOp(
+    '@page :left { margin-left: 54pt; margin-right: 42pt }\n' +
       '@page :right { margin-left: 42pt; margin-right: 54pt }\n',
-  },
+  ),
 ]);
 check(
   'a style-only re-render re-fragments over lines it does not break again',
@@ -316,9 +316,9 @@ check(
 
 // Latest wins: a render another overtakes before it starts is
 // dropped, and what runs next is what an uncancelled run produces.
-const uncancelled = await client.render([{ op: 'style', css: 'book { font-size: 12pt }' }], 'preview');
-const cancelled = client.render([{ op: 'style', css: 'book { font-size: 13pt }' }], 'preview');
-const after = client.render([{ op: 'style', css: 'book { font-size: 12pt }' }], 'preview');
+const uncancelled = await client.render([styleOp('book { font-size: 12pt }')], 'preview');
+const cancelled = client.render([styleOp('book { font-size: 13pt }')], 'preview');
+const after = client.render([styleOp('book { font-size: 12pt }')], 'preview');
 const [dropped, painted] = await Promise.all([cancelled, after]);
 if (uncancelled === null || painted === null) {
   throw new Error('the render nothing overtook came back superseded');
@@ -332,7 +332,7 @@ check(
 
 // Colour: what the sheet names travels with the run, and the painter
 // fills with it. The PDF writer fills from the same field.
-const coloured = await client.preview([{ op: 'style', css: 'h2, h3 { color: #b41e1e }' }]);
+const coloured = await client.preview([styleOp('h2, h3 { color: #b41e1e }')]);
 const headed =
   coloured?.pages.find((page) =>
     page.items.some((item) => item.kind === 'text' && item.color !== '#000000'),
@@ -351,6 +351,56 @@ check(
   'and the painter fills that run with it, leaving the rest to the page ink',
   inRed > 0 && (inColour.match(/fill="#b41e1e"/g) ?? []).length === inRed,
   `${inRed} coloured runs on the page`,
+);
+
+// Named sheets. A host that builds its styling out of layers sends
+// the layers, and a warning names the layer it was written in.
+const layers = [
+  { name: 'preset.css', css: 'p { font-size: 12pt }\n' },
+  { name: 'generated.css', css: 'p { color: #222222 }\np { text-rendering: geometricPrecision }\n' },
+  { name: 'overrides.css', css: 'p { font-size: 14pt }\n' },
+];
+const layered = await client.preview([{ op: 'style', sheets: layers }]);
+const inLayers = layered?.warnings.map((warning) => `${warning.origin} ${warning.message}`) ?? [];
+check(
+  'a warning in the second of three sheets names that sheet, at its own line and column',
+  inLayers.length === 1 && (inLayers[0] ?? '').startsWith('generated.css:2:5 '),
+  inLayers.join('; '),
+);
+
+// The same three, concatenated the way a host without this op has to
+// concatenate them: the same complaints, at the positions they hold
+// in the file that concatenating made.
+const concatenated = await client.preview([styleOp(layers.map((sheet) => sheet.css).join(''))]);
+const inOne = concatenated?.warnings.map((warning) => `${warning.origin} ${warning.message}`) ?? [];
+check(
+  'the same three concatenated warn about the same thing at the concatenated position',
+  inOne.length === 1 &&
+    inOne[0] === inLayers[0]?.replace('generated.css:2:', 'author.css:3:'),
+  inOne.join('; '),
+);
+
+// Cascade order is source order, whichever way the sheets arrive.
+const sizesOf = (output: LayoutOutput | null): number[] => [
+  ...new Set(
+    (output?.pages ?? [])
+      .flatMap((page) => page.items)
+      .filter((item): item is TextItem => item.kind === 'text')
+      .map((item) => item.size),
+  ),
+];
+const reversed = await client.preview([
+  { op: 'style', sheets: [...layers].reverse() },
+]);
+check(
+  'the last sheet wins, as it does when the three are one file',
+  sizesOf(layered).includes(14) &&
+    !sizesOf(layered).includes(12) &&
+    sizesOf(concatenated).includes(14) &&
+    sizesOf(reversed).includes(12) &&
+    !sizesOf(reversed).includes(14),
+  `layered ${sizesOf(layered).join(' ')}, concatenated ${sizesOf(concatenated).join(' ')},` +
+    ` reversed ${sizesOf(reversed).join(' ')}`,
 );
 
 // The error channel: what the engine refuses comes back as an error
@@ -385,7 +435,7 @@ const whole = reference(paths, named);
 const assembled = await client.preview([
   // The checks above left author styling on the session, and the
   // CLI is being run without any.
-  { op: 'style', css: '' },
+  styleOp(''),
   { op: 'book', sources },
   { op: 'metadata', metadata: naming },
 ]);

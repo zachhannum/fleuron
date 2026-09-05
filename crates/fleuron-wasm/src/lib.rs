@@ -9,9 +9,10 @@
 //! event a preview is built around is a small change to one input
 //! while the others stand. Inputs cross when they change: a face is
 //! registered once and stays registered, a manuscript crosses once
-//! and a keystroke replaces the one file it touched, and a
-//! stylesheet crosses as CSS text on its own. [`render`] is the
-//! batch case, and it is the same session used once.
+//! and a keystroke replaces the one file it touched, and the
+//! author's styling crosses as named sheets on its own.
+//! [`render`] is the batch case, and it is the same session used
+//! once.
 //!
 //! Nothing here deals with generations or workers. A render runs to
 //! completion, so a superseded one is dropped by the host that asked
@@ -213,17 +214,33 @@ impl Session {
         Ok(())
     }
 
-    /// Sets the author styling from CSS text, cascading over the
-    /// built-in sheet.
+    /// Sets the author styling from named sheets, in cascade order,
+    /// over the built-in one. Later sheets win, and a warning names
+    /// the sheet its declaration was written in.
+    ///
+    /// A host that builds its styling out of layers hands over the
+    /// layers.
     ///
     /// Which stages this costs is the change's own business: a
     /// colour repaints nothing, page geometry re-fragments over the
     /// lines already broken, and only the measure or the face breaks
     /// them again.
     #[wasm_bindgen(js_name = setStyle)]
-    pub fn set_style(&mut self, css: &str) {
-        self.engine
-            .set_style(Stylesheets::parse(&[Source::author("author.css", css)]));
+    pub fn set_style(&mut self, names: Vec<String>, texts: Vec<String>) -> Result<(), JsError> {
+        if names.len() != texts.len() {
+            return Err(JsError::new(&format!(
+                "{} sheets named and {} handed over",
+                names.len(),
+                texts.len()
+            )));
+        }
+        let sources: Vec<Source<'_>> = names
+            .iter()
+            .zip(&texts)
+            .map(|(name, css)| Source::author(name, css))
+            .collect();
+        self.engine.set_style(Stylesheets::parse(&sources));
+        Ok(())
     }
 
     /// Registers one image by the url the content tree names it by,
@@ -315,7 +332,7 @@ fn once(markdown: &str, css: &str) -> Result<Session, JsError> {
     let mut session = Session::new()?;
     session.set_markdown("book.md", markdown);
     if !css.is_empty() {
-        session.set_style(css);
+        session.set_style(vec!["author.css".to_string()], vec![css.to_string()])?;
     }
     Ok(session)
 }

@@ -348,6 +348,44 @@ check('the display-typography book runs past its opening page', typography.pages
 await comparedWithTheExport('a transformed and tracked title', 1);
 await comparedWithTheExport('a small-capital running head', 2);
 
+// The list form, driven: the same sheet as the second of two
+// layers, over a preset it overrides and a declaration the engine
+// does not honour. What the layers set is what the one string set,
+// to the byte, and the complaint names the layer it was written in.
+const layered = await page.evaluate(async () => {
+  const before = await globalThis.preview.exportPdf();
+  const css = await (await fetch('/fixtures/display-typography.css')).text();
+  await globalThis.preview.setStyle([
+    {
+      name: 'preset.css',
+      css: 'book { font-size: 9pt }\np { text-rendering: geometricPrecision }\n',
+    },
+    { name: 'display-typography.css', css },
+  ]);
+  const after = await globalThis.preview.exportPdf();
+  return {
+    pages: globalThis.preview.pages,
+    warnings: globalThis.preview.warnings.map(
+      (warning) => `${warning.origin}: ${warning.message}`,
+    ),
+    same:
+      before !== null &&
+      after !== null &&
+      before.length === after.length &&
+      before.every((byte, at) => byte === after[at]),
+  };
+});
+check(
+  'a sheet sent as layers sets the book the same sheet set as one string',
+  layered.pages === typography.pages && layered.same,
+  `${layered.pages} pages against ${typography.pages}`,
+);
+check(
+  'and a warning in a layer names that layer',
+  layered.warnings.length === 1 && (layered.warnings[0] ?? '').startsWith('preset.css:2:'),
+  layered.warnings.join('; '),
+);
+
 check('nothing threw on the page', broke.length === 0, broke.slice(0, 2).join('; '));
 
 await browser.close();
@@ -361,9 +399,9 @@ declare global {
     pages: number;
     page: number;
     zoom: number;
-    warnings: { message: string }[];
+    warnings: { message: string; origin: string | null }[];
     exportPdf(): Promise<Uint8Array | null>;
-    setStyle(css: string): Promise<void>;
+    setStyle(css: string | { name: string; css: string }[]): Promise<void>;
     setMarkdown(text: string, name?: string): Promise<void>;
   };
 }

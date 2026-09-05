@@ -11,11 +11,11 @@ Inputs are a different contract. [The content tree](../reference/content-tree.md
 
 A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks fields in the order they were written and cannot detect a change to that order. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` rejects an unknown version, and `wireVersion()` is what the module writes.
 
-`WIRE_VERSION` is the shape of the display structure. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest; the two move independently.
+`WIRE_VERSION` is the shape of what crosses: the ops a host sends, and the display structure that comes back. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest; the two move independently.
 
 ## What crosses
 
-In: whatever changed. Markdown source, CSS text, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
+In: whatever changed. Markdown source, stylesheets, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
 
 Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. Transferred rather than copied.
 
@@ -40,8 +40,10 @@ PDF bytes are not identical across builds, though the PDF is the same book, of t
 A request is an edit, a render, a question, or an edit and one of those:
 
 ```js
-{ id, generation, ops: [{ op: 'style', css }], want: 'preview' }
+{ id, generation, ops: [{ op: 'style', sheets: [{ name, css }] }], want: 'preview' }
 ```
+
+The `style` op takes the author's sheets in cascade order, each under a name. A warning names the sheet its declaration was written in, as `preset.css:12:3`, so a host that builds its styling out of layers sends the layers.
 
 Request and response are paired by `id`, and each request has a generation the worker echoes back untouched.
 

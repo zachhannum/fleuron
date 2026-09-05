@@ -18,7 +18,7 @@
  */
 
 import { Client, type Transport } from './client.js';
-import type { Metadata, Op, Response, Source } from './protocol.js';
+import { styleOp, type Metadata, type Op, type Response, type Sheet, type Source } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
 import type { Asset, LayoutOutput, Warning } from './wire.js';
 
@@ -185,9 +185,14 @@ export class Preview {
     await this.render([{ op: 'edit', name, text }]);
   }
 
-  /** Sets the author stylesheet, cascading over the built-in one. */
-  async setStyle(css: string): Promise<void> {
-    await this.render([{ op: 'style', css }]);
+  /**
+   * Sets the author styling, cascading over the built-in sheet:
+   * one sheet as CSS text, or the layers a host built its styling
+   * out of, in cascade order. Later sheets win, and a warning names
+   * the sheet its declaration was written in.
+   */
+  async setStyle(css: string | Sheet[]): Promise<void> {
+    await this.render([styleOp(css)]);
   }
 
   /** Registers a face for the session's life. */

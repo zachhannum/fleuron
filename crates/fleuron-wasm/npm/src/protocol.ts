@@ -17,6 +17,14 @@ export interface Source {
   text: string;
 }
 
+/** One stylesheet: what warnings call it, and its CSS. */
+export interface Sheet {
+  /** The name a warning in this sheet is reported under, as `preset.css:12:3`. */
+  name: string;
+  /** Its CSS. */
+  css: string;
+}
+
 /** What names a book: its title, its author, and whatever else. */
 export interface Metadata {
   /** Title, for the half-title and running heads. */
@@ -53,8 +61,11 @@ export type Op =
   | { op: 'edit'; name: string; text: string }
   /** A content tree, as JSON, for a host with a structured source of its own. */
   | { op: 'content'; json: string }
-  /** The author stylesheet, as CSS text. */
-  | { op: 'style'; css: string };
+  /**
+   * The author styling, as named sheets in cascade order. Later
+   * sheets win, and a warning names the sheet it came from.
+   */
+  | { op: 'style'; sheets: Sheet[] };
 
 /**
  * What a request wants back, if anything: a display structure, a PDF, or
@@ -129,4 +140,13 @@ export function isRendered(response: Response): response is Rendered {
 /** Whether a reply is the engine reporting trouble. */
 export function isFailed(response: Response): response is Failed {
   return 'error' in response;
+}
+
+/**
+ * The style op, written either way: one sheet as CSS text, which the
+ * engine calls `author.css`, or the layers a host built its styling
+ * out of, in cascade order.
+ */
+export function styleOp(css: string | Sheet[]): Op {
+  return { op: 'style', sheets: typeof css === 'string' ? [{ name: 'author.css', css }] : css };
 }

@@ -58,7 +58,7 @@ The host side keeps a `Client`, which pairs replies with calls and decides which
 
 ```js
 // the host
-import { Client, paintPage } from 'fleuron';
+import { Client, paintPage, styleOp } from 'fleuron';
 
 const worker = new Worker(new URL('./fleuron.worker.js', import.meta.url), {
   type: 'module',
@@ -70,7 +70,7 @@ worker.onmessage = ({ data }) => client.receive(data);
 
 const output = await client.preview([
   { op: 'markdown', name: 'manuscript.md', text: markdown },
-  { op: 'style', css },
+  styleOp(css),
 ]);
 if (output !== null) {
   element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts });
@@ -86,7 +86,7 @@ Painting a run in the right font takes one more step, since the browser needs th
 The module keeps a [session](../library/sessions.md) open between calls, so the second render of a book pays for the edit rather than for the book.
 
 ```js
-await client.preview([{ op: 'style', css: '@page { margin-bottom: 84pt }' }]);
+await client.preview([styleOp('@page { margin-bottom: 84pt }')]);
 await client.preview([{ op: 'edit', name: 'ch03.md', text }]);
 await client.apply([{ op: 'font', bytes: face }]);
 ```
@@ -105,13 +105,32 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `remove` | one source dropped, the rest of the book left standing |
 | `metadata` | title, author and a frontend's own fields |
 | `content` | a content tree as JSON, for a host with a structured source of its own |
-| `style` | the author stylesheet, as CSS text |
+| `style` | the author's stylesheets, named, in cascade order |
 | `font` | font bytes, registered for the session's life |
 | `image` | one image's bytes, by the url the manuscript names it by |
 | `dialect` | `commonmark`, `gfm` or `obsidian` |
 | `split` | the heading level a section begins at, or `0` for one section per file |
 
 A book of one source takes its title and author from that source's frontmatter. A book of several has no frontmatter of its own, so `metadata` is how it gets a name. Only the PDF writer reads it, so sending it costs no layout.
+
+### Styling in layers
+
+The `style` op takes a list of named sheets, in cascade order. Later sheets win, and a warning names the sheet its declaration was written in, as `preset.css:12:3`.
+
+```js
+await client.preview([
+  {
+    op: 'style',
+    sheets: [
+      { name: 'preset.css', css: preset },
+      { name: 'theme.css', css: generated },
+      { name: 'author.css', css },
+    ],
+  },
+]);
+```
+
+`styleOp` writes that op from either form: a list of sheets, or one string, which the engine calls `author.css`.
 
 ### What comes back
 

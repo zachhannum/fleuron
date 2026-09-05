@@ -169,7 +169,10 @@ export class Engine {
         this.session.setContent(op.json);
         break;
       case 'style':
-        this.session.setStyle(op.css);
+        this.session.setStyle(
+          op.sheets.map((sheet) => sheet.name),
+          op.sheets.map((sheet) => sheet.css),
+        );
         break;
     }
   }

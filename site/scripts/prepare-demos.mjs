@@ -67,7 +67,7 @@ for (const id of Object.keys(DEMOS)) {
     session.addImage(url, pixels);
   }
   session.setMarkdown(name, markdown);
-  session.setStyle(css);
+  session.setStyle(['author.css'], [css]);
   const output = decodeDisplayList(session.preview());
   session.free();
 

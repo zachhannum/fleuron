@@ -11,7 +11,7 @@
  * row that ran it.
  */
 
-import { Client, type Op } from 'fleuron';
+import { Client, styleOp, type Op } from 'fleuron';
 import { useEffect, useRef, useState } from 'react';
 
 import { BENCH_CSS, RESTYLE_CSS } from '../../demos/sheets';
@@ -84,7 +84,7 @@ export function Bench(props: BenchProps): React.ReactElement {
       await time('fetch and start the engine', () => client.apply([]));
 
       const setup: Op[] = [
-        { op: 'style', css: BENCH_CSS },
+        styleOp(BENCH_CSS),
         { op: 'markdown', name: 'book.md', text },
       ];
       await time(`lay ${title} out`, async () => {
@@ -92,7 +92,7 @@ export function Bench(props: BenchProps): React.ReactElement {
         setPages(output?.pages.length ?? 0);
       });
       await time('change one declaration', () =>
-        client.preview([{ op: 'style', css: RESTYLE_CSS }]),
+        client.preview([styleOp(RESTYLE_CSS)]),
       );
       await time('write the PDF', () => client.exportPdf());
       spawned.terminate();
