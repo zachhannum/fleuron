@@ -26,7 +26,7 @@ export interface PaintOptions {
   zoom?: number;
   /** What the page is printed on; `null` leaves it transparent. */
   paper?: string | null;
-  /** What it is printed in. */
+  /** What a run the sheet gave no colour of its own is printed in. */
   ink?: string;
   /**
    * Where an image's pixels come from: any url an `<img>` would
@@ -102,13 +102,27 @@ function text(item: TextItem, options: PaintOptions): string {
     ` font-weight="${entry?.attributes.weight ?? 400}"` +
     ` font-style="${entry?.attributes.italic === true ? 'italic' : 'normal'}"` +
     ` style="${escape(style(entry, item))}" xml:space="preserve"` +
+    filled(item.color) +
     (entry === undefined ? ` data-missing-font="${item.fontId}"` : '') +
     `>${escape(item.text)}</text>`
   );
 }
 
 function rect(item: RectItem): string {
-  return `<rect x="${num(item.x)}" y="${num(item.y)}" width="${num(item.w)}" height="${num(item.h)}"/>`;
+  return (
+    `<rect x="${num(item.x)}" y="${num(item.y)}"` +
+    ` width="${num(item.w)}" height="${num(item.h)}"${filled(item.color)}/>`
+  );
+}
+
+/**
+ * What an item is filled with, where that is not what the page is
+ * filled with already. Black is where a sheet that named no colour
+ * leaves a run, and the page's own ink is what draws it, so a host
+ * that prints in a grey still gets one.
+ */
+function filled(color: string): string {
+  return color === '#000000' ? '' : ` fill="${escape(color)}"`;
 }
 
 /**

@@ -10,10 +10,12 @@
 //! each run was shaped from travels with it, so the writer can build
 //! the glyph-to-character map that makes the text selectable.
 
+use krilla::color::rgb;
 use krilla::geom::{PathBuilder, Point, Rect, Size, Transform};
 use krilla::image::Image;
 use krilla::metadata::{DateTime, Metadata as PdfMetadata};
 use krilla::page::PageSettings;
+use krilla::paint::Fill;
 use krilla::surface::Surface;
 use krilla::text::{Font, GlyphId, KrillaGlyph, Tag};
 use krilla::{Document, SerializeSettings};
@@ -23,6 +25,7 @@ use crate::content::Metadata;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::pages::{DrawItem, Glyph, Page};
+use crate::style::Color;
 
 /// What can go wrong turning the display structure into a PDF.
 #[derive(Debug, thiserror::Error)]
@@ -241,8 +244,10 @@ fn paint(
             // The glyphs are here; the features that chose them are
             // for a painter that has to choose its own.
             features: _,
+            color,
             glyphs,
         } => {
+            ink(surface, *color);
             let font = fonts
                 .get(*font_id as usize)
                 .ok_or_else(|| PdfError::Font(font_id.to_string()))?;
@@ -260,7 +265,8 @@ fn paint(
                 false,
             );
         }
-        DrawItem::Rect { x, y, w, h } => {
+        DrawItem::Rect { x, y, w, h, color } => {
+            ink(surface, *color);
             let rect = Rect::from_xywh(*x, *y, *w, *h).ok_or(PdfError::Geometry {
                 number: page.number,
                 kind: "a rectangle",
@@ -291,6 +297,16 @@ fn paint(
         }
     }
     Ok(())
+}
+
+/// What the next item is filled with. Black is what PDF fills with
+/// when nothing says otherwise, so a run in it writes no colour at
+/// all and a page of ordinary prose carries none.
+fn ink(surface: &mut Surface, color: Color) {
+    surface.set_fill((color != Color::BLACK).then(|| Fill {
+        paint: rgb::Color::new(color.r, color.g, color.b).into(),
+        ..Fill::default()
+    }));
 }
 
 /// Display-structure glyphs as krilla glyphs.
@@ -393,7 +409,7 @@ fn clamp_range(range: std::ops::Range<u32>, text: &str) -> std::ops::Range<usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Block, Book, Inline, Section};
+    use crate::content::{Block, Book, HeadingLevel, Inline, Section};
     use crate::fonts::{BUNDLED_FONT, Features, bundled_registry};
     use crate::pages::{Glyph, Side};
 
@@ -431,6 +447,40 @@ mod tests {
                     }],
                     position: None,
                 }],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// A book that opens with a heading: what a sheet colours to see
+    /// the colour through style, layout and the writer.
+    fn chapter() -> Book {
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                blocks: vec![
+                    Block::Heading {
+                        id: Default::default(),
+                        level: HeadingLevel::H1,
+                        inlines: vec![Inline::Text {
+                            id: Default::default(),
+                            value: "Chapter One".into(),
+                            position: None,
+                        }],
+                        position: None,
+                    },
+                    Block::Paragraph {
+                        id: Default::default(),
+                        inlines: vec![Inline::Text {
+                            id: Default::default(),
+                            value: "The wind came off the water.".into(),
+                            position: None,
+                        }],
+                        position: None,
+                    },
+                ],
                 ..Default::default()
             }],
         };
@@ -534,6 +584,7 @@ mod tests {
             source: String::new(),
             source_map: Vec::new(),
             features: Features::NONE,
+            color: Color::BLACK,
             glyphs: vec![
                 Glyph {
                     id: d,
@@ -565,11 +616,65 @@ mod tests {
             y: 100.0,
             w: 324.0,
             h: 0.5,
+            color: Color::BLACK,
         }];
         let pdf = readable(&page_of(items, 432.0, 648.0), &Metadata::default());
         assert!(
             pdf.contains("54 100 m") && pdf.contains("378 100 l") && pdf.contains("\nf\n"),
             "rect did not paint as a filled path:\n{pdf}"
+        );
+    }
+
+    /// Colour reaches the page: a heading the sheet coloured fills
+    /// with the colour its run carries, a rule fills with its own,
+    /// and a page in black writes no colour at all, which is what a
+    /// PDF fills with anyway.
+    #[test]
+    fn items_fill_with_the_colour_they_carry() {
+        let book = chapter();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "colour.css",
+            "h1 { color: #b41e1e }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let heading = output.pages[0]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                DrawItem::Text { text, color, .. } if text.starts_with("Chapter") => Some(*color),
+                _ => None,
+            })
+            .expect("the heading opens the first page");
+        assert_eq!(heading, Color::rgb(180, 30, 30));
+        let pdf = readable(&output, &Metadata::default());
+        // Channels as PDF writes them: each over 255.
+        assert!(
+            pdf.contains("0.7058824 0.11764706 0.11764706 rg"),
+            "the heading did not fill with the colour its run carries:\n{pdf}"
+        );
+
+        let rule = page_of(
+            vec![DrawItem::Rect {
+                x: 10.0,
+                y: 40.0,
+                w: 100.0,
+                h: 0.5,
+                color: Color::rgb(0, 51, 102),
+            }],
+            200.0,
+            200.0,
+        );
+        let pdf = readable(&rule, &Metadata::default());
+        assert!(
+            pdf.contains("0 0.2 0.4 rg"),
+            "the rule did not fill with the colour it carries:\n{pdf}"
+        );
+
+        let black = readable(&laid_out(&book), &Metadata::default());
+        assert!(
+            !black.contains(" rg"),
+            "a page in black wrote a colour of its own:\n{black}"
         );
     }
 
@@ -628,6 +733,7 @@ mod tests {
                     y: 0.0,
                     w: 432.0,
                     h: 648.0,
+                    color: Color::BLACK,
                 },
                 DrawItem::Image {
                     x: 200.0,
