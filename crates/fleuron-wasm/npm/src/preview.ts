@@ -276,7 +276,7 @@ export class Preview {
     await this.load();
     this.paint();
     this.notify();
-    void this.prefetchNeighbours();
+    this.prefetchNeighbours().catch(() => undefined);
   }
 
   /** How many pages the book set to. */
@@ -291,12 +291,17 @@ export class Preview {
 
   set page(number: number) {
     const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
-    if (clamped === this.showing) {
-      // Assigning the page already on screen is a no-op: a render
-      // already painted and notified for it, and a host that
-      // re-assigns the same page on every one of its own re-renders
-      // (a React effect keyed on the page it reads back, say) must
-      // not see that turn into an endless one of its own.
+    if (clamped === this.showing && this.held.has(clamped)) {
+      // Assigning the page already on screen, once it has actually
+      // landed, is a no-op: a render already painted and notified
+      // for it, and a host that re-assigns the same page on every
+      // one of its own re-renders (a React effect keyed on the page
+      // it reads back, say) must not see that turn into an endless
+      // one of its own. `held` is checked rather than just the
+      // number, so a jump that never landed (the worker answered
+      // with an error, say) is still retried by asking again for the
+      // page already pinned into `showing`, rather than stuck with
+      // no way back short of navigating off it and back.
       return;
     }
     this.showing = clamped;
@@ -308,10 +313,14 @@ export class Preview {
       this.notify();
     } else {
       // Not held: the frame stays as it is until the page asked for
-      // arrives, rather than blank in the meantime.
-      void this.jumpTo(clamped);
+      // arrives, rather than blank in the meantime. Errors are
+      // swallowed here the way a missing face is elsewhere: nothing
+      // downstream of a fire-and-forget call can catch one, and the
+      // frame simply stays as it was, retried the next time this
+      // page is asked for.
+      this.jumpTo(clamped).catch(() => undefined);
     }
-    void this.prefetchNeighbours();
+    this.prefetchNeighbours().catch(() => undefined);
   }
 
   /** Points to CSS pixels. */
