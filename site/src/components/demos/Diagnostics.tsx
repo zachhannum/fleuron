@@ -77,7 +77,7 @@ export function Diagnostics(props: DiagnosticsProps): React.ReactElement {
         )}
         {status === 'live' && (
           <p className="d-note">
-            {output?.pages.length ?? 0} page{output?.pages.length === 1 ? '' : 's'}, laid out
+            {output?.bookPages ?? 0} page{output?.bookPages === 1 ? '' : 's'}, laid out
             anyway. A warning is a book that set.
           </p>
         )}
