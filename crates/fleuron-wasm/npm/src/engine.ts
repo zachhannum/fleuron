@@ -101,7 +101,7 @@ export class Engine {
         reply({ id, generation, applied: true }, []);
         return;
       }
-      if (!render && request.want !== 'font') {
+      if (!render && !isQuestion(request)) {
         reply({ id, generation, superseded: true }, []);
         return;
       }
@@ -129,7 +129,7 @@ export class Engine {
       case 'font':
         return this.session.fontBytes(request.font ?? 0);
       default:
-        return this.session.preview();
+        return this.session.preview(request.first, request.count);
     }
   }
 
@@ -188,15 +188,32 @@ export class Engine {
 }
 
 /**
+ * Whether a request is a question rather than a render: asking for a
+ * face's bytes, or asking which pages of the book as it stands fall
+ * in a range. Neither overtakes a render nor is overtaken by one, or
+ * by a sibling question, since neither says what the last edit
+ * produced.
+ */
+function isQuestion(request: Request): boolean {
+  return (
+    request.want === 'font' ||
+    (request.want === 'preview' && request.first !== undefined && request.count !== undefined)
+  );
+}
+
+/**
  * Which request in a batch is the one whose render still matters.
  *
- * A question is not a render: asking for a face's bytes neither
- * overtakes a render nor is overtaken by one.
+ * A question is not a render, so it is never the answer here and
+ * never marked superseded for losing to one: see {@link isQuestion}.
  */
 function lastRenderIn(batch: Pending[]): number {
   for (let index = batch.length - 1; index >= 0; index -= 1) {
-    const want = batch[index]?.request.want;
-    if (want === 'preview' || want === 'pdf') {
+    const request = batch[index]?.request;
+    if (request === undefined || isQuestion(request)) {
+      continue;
+    }
+    if (request.want === 'preview' || request.want === 'pdf') {
       return index;
     }
   }

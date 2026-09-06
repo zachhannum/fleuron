@@ -168,6 +168,54 @@ check(
     pictures.length,
 );
 
+// A range: the pages nobody asked for stay off the wire, but the book's
+// own length and its tables ride whole regardless of how much of it was
+// asked for.
+const paged = await client.preview([], { first: 4, count: 1 });
+check(
+  '`pages` still reports the book, from a reply that carried one page',
+  paged !== null && paged.bookPages === preview.pages.length,
+  `carried ${paged?.pages.length}, bookPages ${paged?.bookPages}, whole book ${preview.pages.length}`,
+);
+check('a ranged reply names where its slice begins', paged?.first === 4);
+check(
+  'a ranged reply carries exactly the page it asked for',
+  paged !== null &&
+    paged.pages.length === 1 &&
+    JSON.stringify(paged.pages[0]) === JSON.stringify(preview.pages[4]),
+);
+check(
+  'the font table and the warnings ride a ranged reply whole',
+  paged !== null &&
+    JSON.stringify(paged.fonts) === JSON.stringify(preview.fonts) &&
+    JSON.stringify(paged.warnings) === JSON.stringify(preview.warnings),
+);
+
+const overrun = await client.preview([], { first: preview.pages.length + 5, count: 3 });
+check(
+  'a range past the end of the book clamps rather than erroring',
+  overrun !== null && overrun.pages.length === 0 && overrun.bookPages === preview.pages.length,
+);
+
+// Two range fetches asked for together are two different questions
+// about the same book, not two renders competing for the one answer a
+// render gets: both come back, each with its own page.
+const [first, third] = await Promise.all([
+  client.preview([], { first: 0, count: 1 }),
+  client.preview([], { first: 2, count: 1 }),
+]);
+check(
+  'a range fetch does not supersede a sibling range fetch',
+  first !== null && third !== null,
+);
+check(
+  'and each carries the page it actually asked for',
+  first !== null &&
+    third !== null &&
+    JSON.stringify(first.pages[0]) === JSON.stringify(preview.pages[0]) &&
+    JSON.stringify(third.pages[0]) === JSON.stringify(preview.pages[2]),
+);
+
 // The painter. Every page is painted, and every glyph the display
 // list placed is checked against the x the SVG puts that character
 // at — mechanically, over the draw items, with the byte-to-character
