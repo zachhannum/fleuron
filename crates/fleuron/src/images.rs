@@ -264,6 +264,7 @@ impl Assets {
                                     url: url.clone(),
                                     intrinsic,
                                 });
+                                self.hashes.push(content_hash(&bytes));
                                 self.files.push(bytes);
                             }
                             None => self.refuse(url, origin),
@@ -681,5 +682,46 @@ mod tests {
         assert_eq!(assets.lookup("missing.png"), None);
         assert_eq!(assets.warnings().len(), 1);
         assert!(assets.warnings()[0].message.contains("missing.png"));
+    }
+
+    /// An asset probed through a loader hashes the same as one pushed
+    /// through `add`: registering it again, with the bytes it already
+    /// has or with different ones, does not panic and answers the
+    /// same way either door would have.
+    #[test]
+    fn probed_and_pushed_assets_share_one_hash_table() {
+        struct One;
+        impl ImageLoader for One {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "a.png").then(|| png_bytes(96, 48, None))
+            }
+        }
+
+        let image = |url: &str| Block::Image {
+            id: crate::content::NodeId::UNASSIGNED,
+            url: url.into(),
+            alt: String::new(),
+            position: None,
+        };
+        let mut book = Book {
+            metadata: Default::default(),
+            sections: vec![crate::content::Section {
+                blocks: vec![image("a.png")],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        let mut assets = Assets::probe(&book, &One);
+
+        assert_eq!(
+            assets.add("a.png", png_bytes(96, 48, None)),
+            Added::Unchanged(0),
+            "the same bytes probed and pushed hash the same"
+        );
+        let resized = assets.add("a.png", png_bytes(200, 100, None));
+        assert!(
+            matches!(resized, Added::Replaced { index: 0, .. }),
+            "different bytes replaced the probed asset in place: {resized:?}"
+        );
     }
 }
