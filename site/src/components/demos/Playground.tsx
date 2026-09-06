@@ -99,9 +99,11 @@ export function Playground(props: PlaygroundProps): React.ReactElement {
     images,
     fonts,
   });
-  const pages = output?.pages.length ?? 0;
+  // `output` is the reply behind the page on screen: `pages` is that
+  // page alone, and `bookPages` is the book's own length.
+  const pages = output?.bookPages ?? 0;
   const warnings = output?.warnings ?? [];
-  const showing = output?.pages[Math.min(page, Math.max(pages, 1)) - 1];
+  const showing = output?.pages[0];
   const shows = (which: 'markdown' | 'css'): boolean =>
     editors === which || editors === 'both';
 

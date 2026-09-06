@@ -168,17 +168,99 @@ check(
     pictures.length,
 );
 
+// A range: the pages nobody asked for stay off the wire, but the book's
+// own length and its tables ride whole regardless of how much of it was
+// asked for.
+const paged = await client.preview([], { first: 4, count: 1 });
+check(
+  '`pages` still reports the book, from a reply that carried one page',
+  paged !== null && paged.bookPages === preview.pages.length,
+  `carried ${paged?.pages.length}, bookPages ${paged?.bookPages}, whole book ${preview.pages.length}`,
+);
+check('a ranged reply names where its slice begins', paged?.first === 4);
+check(
+  'a ranged reply carries exactly the page it asked for',
+  paged !== null &&
+    paged.pages.length === 1 &&
+    JSON.stringify(paged.pages[0]) === JSON.stringify(preview.pages[4]),
+);
+check(
+  'the font table and the warnings ride a ranged reply whole',
+  paged !== null &&
+    JSON.stringify(paged.fonts) === JSON.stringify(preview.fonts) &&
+    JSON.stringify(paged.warnings) === JSON.stringify(preview.warnings),
+);
+
+const overrun = await client.preview([], { first: preview.pages.length + 5, count: 3 });
+check(
+  'a range past the end of the book clamps rather than erroring',
+  overrun !== null && overrun.pages.length === 0 && overrun.bookPages === preview.pages.length,
+);
+
+// Two range fetches asked for together are two different questions
+// about the same book, not two renders competing for the one answer a
+// render gets: both come back, each with its own page.
+const [first, third] = await Promise.all([
+  client.preview([], { first: 0, count: 1 }),
+  client.preview([], { first: 2, count: 1 }),
+]);
+check(
+  'a range fetch does not supersede a sibling range fetch',
+  first !== null && third !== null,
+);
+check(
+  'and each carries the page it actually asked for',
+  first !== null &&
+    third !== null &&
+    JSON.stringify(first.pages[0]) === JSON.stringify(preview.pages[0]) &&
+    JSON.stringify(third.pages[0]) === JSON.stringify(preview.pages[2]),
+);
+
+// A range fetch is only exempt from supersession among requests that
+// leave the generation where it found it. An edit fired while one is
+// in flight still raises the generation, so the range fetch answers a
+// book that no longer stands and comes back stale, same as any other
+// reply behind the current generation. Re-setting the same markdown
+// is edit enough to raise the generation without re-transferring the
+// image bytes `book` already handed over once.
+const racedRangeFetch = client.preview([], { first: 1, count: 1 });
+const racedEdit = await client.preview([
+  { op: 'markdown', name: 'gulliver-excerpt.md', text: markdown },
+]);
+check('an edit racing a range fetch still produces its own render', racedEdit !== null);
+check(
+  'and the range fetch it raced comes back stale rather than painting the old book',
+  (await racedRangeFetch) === null,
+);
+
 // The painter. Every page is painted, and every glyph the display
 // list placed is checked against the x the SVG puts that character
 // at — mechanically, over the draw items, with the byte-to-character
 // mapping recomputed here rather than borrowed from the painter.
 
-/** The `<text>` elements of a painted page, in paint order. */
+/**
+ * The glyph layer's `<text>` elements of a painted page, in paint
+ * order. The selection layer's own `<text data-selection-line>` is a
+ * second, later `<text>` per line rather than per run, and is not
+ * this: {@link selectionLines} reads that one back.
+ */
 function texts(svg: string): { x: string[]; content: string }[] {
-  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map((element) => ({
-    x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
-    content: unescape_(element[2] ?? ''),
-  }));
+  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
+    .filter((element) => !(element[1] ?? '').includes('data-selection-line'))
+    .map((element) => ({
+      x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+      content: unescape_(element[2] ?? ''),
+    }));
+}
+
+/** The selection layer's own `<text>` elements, one per line. */
+function selectionLines(svg: string): { x: string[]; content: string }[] {
+  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
+    .filter((element) => (element[1] ?? '').includes('data-selection-line'))
+    .map((element) => ({
+      x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+      content: unescape_(element[2] ?? ''),
+    }));
 }
 
 function unescape_(markup: string): string {
@@ -217,8 +299,48 @@ function misplaced(page: Page, output: LayoutOutput): string | null {
   return null;
 }
 
+/**
+ * Every selection line checked against the runs it groups: text runs
+ * sharing a baseline, grouped independently of the painter here, read
+ * back in the manuscript's own casing rather than what was shaped,
+ * and joined in paint order.
+ */
+function misplacedSelection(page: Page, output: LayoutOutput): string | null {
+  const lines = selectionLines(paintPage(page, { fonts: output.fonts }));
+  const runs = page.items.filter((item): item is TextItem => item.kind === 'text');
+  const grouped: TextItem[][] = [];
+  for (const run of runs) {
+    const last = grouped[grouped.length - 1];
+    const first = last?.[0];
+    if (first !== undefined && Math.abs(first.y - run.y) < 0.01) {
+      last?.push(run);
+    } else {
+      grouped.push([run]);
+    }
+  }
+  if (lines.length !== grouped.length) {
+    return `page ${page.number} groups into ${grouped.length} lines and paints ${lines.length}`;
+  }
+  for (const [at, group] of grouped.entries()) {
+    const expected = group.map((run) => (run.sourceMap.length > 0 ? run.source : run.text)).join('');
+    const element = lines[at];
+    if (element === undefined || element.content !== expected) {
+      return `page ${page.number} line ${at} reads back ${JSON.stringify(element?.content)}, not ${JSON.stringify(expected)}`;
+    }
+  }
+  return null;
+}
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
+const wrongSelection = preview.pages
+  .map((page) => misplacedSelection(page, preview))
+  .find((bad) => bad !== null);
+check(
+  "the selection layer's own lines read back every run in the manuscript's own casing",
+  wrongSelection === undefined,
+  wrongSelection ?? '',
+);
 check(
   'every page paints',
   preview.pages.every((page) => {
@@ -328,6 +450,43 @@ check(
   'the render after a cancelled one is byte-identical to an uncancelled one',
   sha256(painted) === sha256(uncancelled),
   `after ${sha256(painted).slice(0, 16)}…, uncancelled ${sha256(uncancelled).slice(0, 16)}…`,
+);
+
+// Latest wins over an edit that also names a range: this is the shape
+// Preview.render sends on every edit, fetching the one page it
+// changed rather than the whole book, and a range does not make it a
+// question — it still says what that edit produced. The client
+// discarding a stale reply is not proof of this on its own, since
+// that happens by generation regardless of what the worker did with
+// it; what is checked here is the raw protocol message, over the
+// worker's own shoulder, for the `superseded` the worker sends only
+// when it never ran the older one at all.
+const rawReplies: Response[] = [];
+const tap = (response: Response): void => {
+  rawReplies.push(response);
+};
+worker.on('message', tap);
+const rangedCancelled = client.preview(
+  [styleOp('book { font-size: 13pt }')],
+  { first: 0, count: 1 },
+);
+const rangedAfter = client.preview(
+  [styleOp('book { font-size: 12pt }')],
+  { first: 0, count: 1 },
+);
+const [rangedDropped, rangedPainted] = await Promise.all([rangedCancelled, rangedAfter]);
+worker.off('message', tap);
+if (rangedPainted === null) {
+  throw new Error('the render nothing overtook came back superseded');
+}
+check(
+  'a cancelled ranged render is discarded on the client',
+  rangedDropped === null,
+);
+check(
+  'and the worker itself never ran it: it is superseded on the wire, not merely stale by generation',
+  rawReplies.some((response) => 'superseded' in response && response.superseded),
+  rawReplies.map((response) => ('superseded' in response ? 'superseded' : 'kind' in response ? response.kind : '?')).join(', '),
 );
 
 // Colour: what the sheet names travels with the run, and the painter

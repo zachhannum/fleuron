@@ -137,6 +137,17 @@ fn warning() -> impl Strategy<Value = Warning> {
         .prop_map(|(message, origin)| Warning { message, origin })
 }
 
+/// A reply as a `LayoutOutput`, sound for re-encoding whenever the
+/// reply is a whole book.
+fn as_output(reply: wire::Reply) -> LayoutOutput {
+    LayoutOutput {
+        pages: reply.pages,
+        fonts: reply.fonts,
+        assets: reply.assets,
+        warnings: reply.warnings,
+    }
+}
+
 fn output() -> impl Strategy<Value = LayoutOutput> {
     (
         proptest::collection::vec(page(), 0..6),
@@ -161,8 +172,13 @@ proptest! {
     fn the_wire_round_trips(output in output()) {
         let bytes = wire::encode(&output).expect("a display structure encodes");
         let read = wire::decode(&bytes).expect("what the engine wrote, the engine reads");
-        prop_assert_eq!(&read, &output);
-        prop_assert_eq!(wire::encode(&read).expect("and encodes again"), bytes);
+        prop_assert_eq!(&read.pages, &output.pages);
+        prop_assert_eq!(&read.fonts, &output.fonts);
+        prop_assert_eq!(&read.assets, &output.assets);
+        prop_assert_eq!(&read.warnings, &output.warnings);
+        prop_assert_eq!(read.first, 0);
+        prop_assert_eq!(read.book_pages, output.pages.len());
+        prop_assert_eq!(wire::encode(&as_output(read)).expect("and encodes again"), bytes);
     }
 
     /// The version leads every buffer, so a host can refuse one it
@@ -171,6 +187,28 @@ proptest! {
     fn the_version_leads_every_buffer(output in output()) {
         let bytes = wire::encode(&output).expect("a display structure encodes");
         prop_assert_eq!(wire::version(&bytes).expect("the version reads"), wire::VERSION);
+    }
+
+    /// Whatever `(first, count)` a host asks for, a range decodes to
+    /// exactly that slice of the book, clamped rather than out of
+    /// bounds, with the tables and the book's own length intact.
+    #[test]
+    fn a_range_decodes_to_exactly_its_own_slice(
+        output in output(),
+        first in 0usize..8,
+        count in 0usize..8,
+    ) {
+        let bytes = wire::encode_range(&output, first, count).expect("a range encodes");
+        let read = wire::decode(&bytes).expect("and decodes");
+        let book_pages = output.pages.len();
+        let clamped_first = first.min(book_pages);
+        let clamped_end = clamped_first.saturating_add(count).min(book_pages);
+        prop_assert_eq!(&read.pages, &output.pages[clamped_first..clamped_end]);
+        prop_assert_eq!(read.first, clamped_first);
+        prop_assert_eq!(read.book_pages, book_pages);
+        prop_assert_eq!(&read.fonts, &output.fonts);
+        prop_assert_eq!(&read.assets, &output.assets);
+        prop_assert_eq!(&read.warnings, &output.warnings);
     }
 }
 
@@ -193,6 +231,14 @@ fn a_laid_out_book_round_trips() {
 
     let bytes = wire::encode(&laid_out).expect("a laid-out book encodes");
     let read = wire::decode(&bytes).expect("and reads back");
-    assert_eq!(read, laid_out);
-    assert_eq!(wire::encode(&read).expect("and encodes again"), bytes);
+    assert_eq!(read.first, 0);
+    assert_eq!(read.book_pages, laid_out.pages.len());
+    assert_eq!(read.fonts, laid_out.fonts);
+    assert_eq!(read.assets, laid_out.assets);
+    assert_eq!(read.warnings, laid_out.warnings);
+    assert_eq!(read.pages, laid_out.pages);
+    assert_eq!(
+        wire::encode(&as_output(read)).expect("and encodes again"),
+        bytes
+    );
 }

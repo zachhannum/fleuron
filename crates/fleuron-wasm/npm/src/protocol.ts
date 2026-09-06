@@ -89,6 +89,19 @@ export interface Request {
   want?: Want;
   /** Which face `want: 'font'` is asking for. */
   font?: number;
+  /**
+   * With `count`, which pages of `want: 'preview'`'s answer to send:
+   * `first` pages counting from 0, `count` of them. Leaving either
+   * out asks for the whole book.
+   *
+   * A ranged preview is a question rather than a render: it answers
+   * "what is on this page" of whatever the book already is, not "what
+   * did this edit produce", so it neither overtakes nor is overtaken
+   * by another render or range in the same batch.
+   */
+  first?: number;
+  /** See {@link Request.first}. */
+  count?: number;
 }
 
 /** The bytes a request produced: a display structure, a PDF, or a font file. */

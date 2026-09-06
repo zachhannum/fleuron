@@ -27,7 +27,14 @@ import {
   type Source,
 } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
-import type { Asset, LayoutOutput, Warning } from './wire.js';
+import type { Asset, FontRefEntry, LayoutOutput, Page, Warning } from './wire.js';
+
+/**
+ * How many pages either side of the one on screen a preview keeps
+ * decoded. A page turn within this radius paints from what is
+ * already held; one past it asks the worker.
+ */
+const HOLD_RADIUS = 1;
 
 /** How a preview is set up. */
 export interface PreviewOptions {
@@ -81,7 +88,13 @@ export interface PreviewOptions {
    * {@link PreviewOptions.images} supplied.
    */
   asset?: (asset: Asset, index: number) => string | null | undefined;
-  /** Called after every render that reached the screen. */
+  /**
+   * Called after every render that reached the screen, with the
+   * reply the page on screen came from. `output.pages` is that page
+   * alone, not the whole book: `output.bookPages` is the book's own
+   * length, and `output.fonts`/`output.assets`/`output.warnings` are
+   * the whole run's regardless.
+   */
   onRender?: (output: LayoutOutput) => void;
 }
 
@@ -99,9 +112,55 @@ export class Preview {
   private readonly client: Client;
   private readonly options: PreviewOptions;
   private readonly faces = new Map<number, FontFace>();
-  /** A blob url per image the host handed over, by its own url. */
+  /**
+   * Every image's own bytes, by url, kept independent of the transfer
+   * that moved the ones sent across the wall: a copy taken before the
+   * op went out, since the buffer handed to the engine is empty on
+   * this side afterwards.
+   */
+  private readonly imageBytes = new Map<string, Uint8Array>();
+  /**
+   * A blob url per image currently drawn by a held page, by its own
+   * url. Built and revoked by {@link syncAssetCache}: a book with
+   * more images than are ever on screen at once does not keep a blob
+   * open, and its decode, for every one of them.
+   */
   private readonly pixels = new Map<string, string>();
-  private output: LayoutOutput | null = null;
+  /**
+   * The pages this preview currently keeps decoded, by folio. Bounded
+   * to a window around the page on screen rather than the whole
+   * book: what makes a page turn instant is prefetching a neighbour
+   * before it is asked for, not holding every page there is.
+   */
+  private readonly held = new Map<number, Page>();
+  /**
+   * The generation `held` was built under. A reply for a different
+   * generation means an edit landed, and drops whatever was held
+   * before inserting: a page from the book before the edit is not
+   * one to paint over it.
+   */
+  private heldGeneration = -1;
+  /**
+   * Pages currently being asked for from the worker, whether the
+   * page turned to or a background prefetch of a neighbour, to the
+   * generation they were asked for under. Asking again for one
+   * already here — including a page left and come back to before its
+   * first request landed — joins it rather than opening a second
+   * request for the same page.
+   *
+   * Keyed on generation, not just the folio, so a fetch left over
+   * from the generation before an edit cannot clear the marker a
+   * fresh fetch for the same folio placed under the new one when the
+   * old one finally lands and finds itself answering a book that no
+   * longer stands.
+   */
+  private readonly pending = new Map<number, number>();
+  /** The whole run's tables and diagnostics, which ride every reply
+   * regardless of which pages it carried. */
+  private fonts: FontRefEntry[] = [];
+  private assets: Asset[] = [];
+  private bookWarnings: Warning[] = [];
+  private bookPages = 0;
   private showing: number;
   private scale: number;
 
@@ -121,6 +180,7 @@ export class Preview {
     worker.addEventListener('message', (event) =>
       this.client.receive((event as MessageEvent<Response>).data),
     );
+    this.element.addEventListener('copy', this.onCopy);
   }
 
   /**
@@ -218,21 +278,39 @@ export class Preview {
     await this.render([this.keepImage(url, bytes)]);
   }
 
-  /** Lays the book out again and repaints. */
+  /**
+   * Lays the book out again and repaints, asking only for the page on
+   * screen rather than the whole book. An edit drops whatever pages
+   * were held, since the book they came from no longer stands.
+   */
   async render(ops: Op[] = []): Promise<void> {
-    const output = await this.client.preview(ops);
-    if (output === null) {
+    const generation = this.client.generationFor(ops);
+    const target = Math.max(this.showing, 1);
+    const reply = await this.client.preview(ops, { first: target - 1, count: 1 });
+    if (reply === null) {
       return;
     }
-    this.output = output;
-    await this.load(output);
+    this.absorb(reply, generation);
+    this.showing = Math.min(Math.max(this.showing, 1), Math.max(this.bookPages, 1));
+    if (!this.held.has(this.showing)) {
+      // The edit changed how many pages the book has, and the page
+      // that was asked for clamped to one this reply did not carry.
+      const fix = await this.client.preview([], { first: this.showing - 1, count: 1 });
+      if (fix !== null && generation === this.heldGeneration) {
+        this.absorb(fix, generation);
+      }
+    }
+    this.prune();
+    this.syncAssetCache();
+    await this.load();
     this.paint();
-    this.options.onRender?.(output);
+    this.notify();
+    this.prefetchNeighbours();
   }
 
   /** How many pages the book set to. */
   get pages(): number {
-    return this.output?.pages.length ?? 0;
+    return this.bookPages;
   }
 
   /** The page on screen, counting from 1. */
@@ -241,8 +319,38 @@ export class Preview {
   }
 
   set page(number: number) {
-    this.showing = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
-    this.paint();
+    const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
+    if (clamped === this.showing && this.held.has(clamped)) {
+      // Already on screen and painted: a render already notified for
+      // it, and a host that re-assigns the same page on every one of
+      // its own re-renders (a React effect keyed on the page it
+      // reads back, say) must not see that turn into a render of its
+      // own. `held` is checked rather than just the number, so a
+      // jump that failed outright (the worker answered with an
+      // error, say) — holding nothing — is still retried by asking
+      // again, rather than stuck with no way back short of
+      // navigating off the page and back.
+      return;
+    }
+    this.showing = clamped;
+    if (this.held.has(clamped)) {
+      // Already decoded, from an earlier prefetch or an edit that
+      // requested it directly: paints without asking the worker.
+      this.prune();
+      this.syncAssetCache();
+      this.paint();
+      this.notify();
+    } else {
+      // Not held: the frame stays as it is until the page asked for
+      // arrives, rather than blank in the meantime. `fetchPage` joins
+      // a request already in flight for it — a page left and come
+      // back to before its own request landed, or one already asked
+      // for as a neighbour's prefetch — and paints it once it lands,
+      // since by then it may be the page on screen whichever request
+      // brought it in.
+      this.fetchPage(clamped);
+    }
+    this.prefetchNeighbours();
   }
 
   /** Points to CSS pixels. */
@@ -267,15 +375,15 @@ export class Preview {
 
   /** Everything the run had to complain about. */
   get warnings(): Warning[] {
-    return this.output?.warnings ?? [];
+    return this.bookWarnings;
   }
 
   /**
-   * The markup on screen, or a page that is not on screen. Empty
-   * before the first render.
+   * The markup on screen, or a page that is not held. Empty before
+   * the first render, and for a page outside the held window.
    */
   svg(number = this.showing): string {
-    const page = this.output?.pages[number - 1];
+    const page = this.held.get(number);
     return page === undefined ? '' : paintPage(page, this.painting());
   }
 
@@ -289,6 +397,7 @@ export class Preview {
 
   /** Closes the worker and gives the element back. */
   destroy(): void {
+    this.element.removeEventListener('copy', this.onCopy);
     for (const face of this.faces.values()) {
       this.element.ownerDocument.fonts.delete(face);
     }
@@ -297,35 +406,265 @@ export class Preview {
       URL.revokeObjectURL(url);
     }
     this.pixels.clear();
+    this.imageBytes.clear();
+    this.held.clear();
     this.element.replaceChildren();
     this.worker.terminate();
   }
 
   /**
-   * Keeps a blob url over an image's bytes and hands the same bytes
-   * to the engine.
+   * Keeps a copy of an image's bytes and hands the original to the
+   * engine.
    *
-   * The blob is made before the op is sent, because the bytes move
+   * The copy is taken before the op is sent, because the bytes move
    * across the wall rather than being copied and the buffer is empty
-   * on this side afterwards.
+   * on this side afterwards. No blob is made here: {@link
+   * syncAssetCache} makes one only once a held page actually draws
+   * this url, which for most images in a book-sized manuscript is
+   * never at the same time as every other one.
    */
   private keepImage(url: string, bytes: Uint8Array): Op {
     const previous = this.pixels.get(url);
     if (previous !== undefined) {
+      // Stale bytes replaced: the blob over them answers for an
+      // image that no longer exists, so it goes now rather than
+      // waiting on a page that may never come held again to notice.
       URL.revokeObjectURL(previous);
+      this.pixels.delete(url);
     }
-    this.pixels.set(url, URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })));
+    this.imageBytes.set(url, bytes.slice());
     return { op: 'image', url, bytes };
+  }
+
+  /**
+   * Fetches one page not already pending, absorbing it and painting
+   * it if it is — or by the time it lands, has become — the page on
+   * screen. Shared by a page turn and a neighbour prefetch, so
+   * whichever of them asks first, the other joins it rather than
+   * opening a second request for the same page: what the request was
+   * *for* is decided when it lands, by whether `showing` still names
+   * it, not by which caller happened to start it.
+   *
+   * Errors are swallowed the way a missing face is elsewhere:
+   * nothing here is awaited by a caller that could catch one, and the
+   * frame simply stays as it was, retried the next time this page is
+   * asked for.
+   */
+  private fetchPage(target: number): void {
+    if (this.pending.has(target)) {
+      return;
+    }
+    const generation = this.heldGeneration;
+    this.pending.set(target, generation);
+    this.client
+      .preview([], { first: target - 1, count: 1 })
+      .then(async (reply) => {
+        if (reply === null || generation !== this.heldGeneration) {
+          return;
+        }
+        this.absorb(reply, generation);
+        // Pruned whether or not this is the page on screen: `showing`
+        // may have moved on again while this was in flight, and its
+        // own window is what a page fetched for a target that far
+        // away landed outside of.
+        this.prune();
+        this.syncAssetCache();
+        if (this.showing !== target) {
+          return;
+        }
+        await this.load();
+        this.paint();
+        this.notify();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        // Only clears the marker this fetch itself placed: a
+        // generation change may have cleared `pending` outright and
+        // let a fresh fetch for the same folio claim it under the
+        // new generation, which this must not remove out from under
+        // it.
+        if (this.pending.get(target) === generation) {
+          this.pending.delete(target);
+        }
+      });
+  }
+
+  /**
+   * Warms the pages either side of the one on screen, so a page turn
+   * in either direction paints from what is already held rather than
+   * asking the worker.
+   */
+  private prefetchNeighbours(): void {
+    for (const target of [this.showing - 1, this.showing + 1]) {
+      if (target >= 1 && target <= this.bookPages && !this.held.has(target)) {
+        this.fetchPage(target);
+      }
+    }
+  }
+
+  /**
+   * Folds a reply into the held pages, keyed by folio rather than by
+   * its position in the reply. A reply for a generation `held` was
+   * not built under drops whatever was held before inserting: an
+   * edit is not undone by a page fetched against the book before it.
+   */
+  private absorb(reply: LayoutOutput, generation: number): void {
+    if (generation !== this.heldGeneration) {
+      this.held.clear();
+      // A fetch still in flight for the generation before this one
+      // is answering a question about a book that no longer stands;
+      // its own generation check will discard the reply, but leaving
+      // its target `pending` until then would dedupe away a fresh
+      // fetch for the same folio in this generation, silently
+      // skipping it rather than prefetching it anew.
+      this.pending.clear();
+      this.heldGeneration = generation;
+    }
+    this.fonts = reply.fonts;
+    this.assets = reply.assets;
+    this.bookWarnings = reply.warnings;
+    this.bookPages = reply.bookPages;
+    reply.pages.forEach((page, index) => {
+      this.held.set(reply.first + index + 1, page);
+    });
+  }
+
+  /** Drops whatever is held outside the window around the page on screen. */
+  private prune(): void {
+    const low = this.showing - HOLD_RADIUS;
+    const high = this.showing + HOLD_RADIUS;
+    for (const folio of this.held.keys()) {
+      if (folio < low || folio > high) {
+        this.held.delete(folio);
+      }
+    }
+  }
+
+  /**
+   * Blobs every image a held page draws that does not have one yet,
+   * and revokes every blob no held page draws any more. Run after
+   * {@link prune}, over `held` as a whole rather than page by page:
+   * an asset two held pages share is not revoked for one of them
+   * dropping out while the other still stands.
+   *
+   * A url the host has not supplied bytes for is simply absent from
+   * `imageBytes`, the same gap the painter's asset resolver already
+   * falls back from — this adds no failure mode of its own, only an
+   * eviction of what was already optional.
+   */
+  private syncAssetCache(): void {
+    const needed = new Set<string>();
+    for (const page of this.held.values()) {
+      for (const item of page.items) {
+        if (item.kind === 'image') {
+          const url = this.assets[item.asset]?.url;
+          if (url !== undefined) {
+            needed.add(url);
+          }
+        }
+      }
+    }
+    for (const url of needed) {
+      if (!this.pixels.has(url)) {
+        const bytes = this.imageBytes.get(url);
+        if (bytes !== undefined) {
+          this.pixels.set(
+            url,
+            URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })),
+          );
+        }
+      }
+    }
+    for (const [url, blobUrl] of this.pixels) {
+      if (!needed.has(url)) {
+        URL.revokeObjectURL(blobUrl);
+        this.pixels.delete(url);
+      }
+    }
   }
 
   private paint(): void {
     this.frame.innerHTML = this.svg();
   }
 
+  /**
+   * Copies the selection layer's own text, reconstructed from the
+   * range's own boundaries rather than trusted to the browser's
+   * default serialization across `<text>` siblings — SVG text
+   * elements are not block boxes, and nothing guarantees a browser
+   * puts a line break between two of them the way it would between
+   * paragraphs. This is the pdf.js pattern: the layer under the
+   * pointer draws nothing, and copy answers from what it holds.
+   */
+  private readonly onCopy = (event: Event): void => {
+    const text = this.selectedText();
+    if (text === null) {
+      return;
+    }
+    (event as ClipboardEvent).clipboardData?.setData('text/plain', text);
+    event.preventDefault();
+  };
+
+  /**
+   * The selection's own text, one line's slice per line it touches,
+   * joined in reading order. `null` for a selection with nothing in
+   * it, or one that lies outside this preview altogether — a host's
+   * own text elsewhere on the page is not this preview's to answer
+   * for.
+   */
+  private selectedText(): string | null {
+    const selection = this.element.ownerDocument.getSelection();
+    if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+      return null;
+    }
+    const range = selection.getRangeAt(0);
+    if (!this.frame.contains(range.commonAncestorContainer)) {
+      return null;
+    }
+    const lines = [...this.frame.querySelectorAll('text[data-selection-line]')] as SVGTextElement[];
+    const parts: string[] = [];
+    for (const line of lines) {
+      if (!range.intersectsNode(line)) {
+        continue;
+      }
+      const full = line.textContent ?? '';
+      const start = line.contains(range.startContainer)
+        ? boundaryOffset(line, range.startContainer, range.startOffset)
+        : 0;
+      const end = line.contains(range.endContainer)
+        ? boundaryOffset(line, range.endContainer, range.endOffset)
+        : full.length;
+      parts.push(full.slice(start, end));
+    }
+    return parts.length === 0 ? null : parts.join('\n');
+  }
+
+  /**
+   * Calls {@link PreviewOptions.onRender}, if the page on screen is
+   * held: built fresh from `held` and the run's tables rather than
+   * threaded through from whichever fetch put it there, so a host
+   * hears about every page that reaches the screen the same way,
+   * cached or just arrived.
+   */
+  private notify(): void {
+    const page = this.held.get(this.showing);
+    if (page === undefined) {
+      return;
+    }
+    this.options.onRender?.({
+      pages: [page],
+      first: this.showing - 1,
+      bookPages: this.bookPages,
+      fonts: this.fonts,
+      assets: this.assets,
+      warnings: this.bookWarnings,
+    });
+  }
+
   private painting() {
     return {
-      fonts: this.output?.fonts ?? [],
-      assets: this.output?.assets ?? [],
+      fonts: this.fonts,
+      assets: this.assets,
       zoom: this.scale,
       ...(this.options.paper === undefined ? {} : { paper: this.options.paper }),
       ...(this.options.ink === undefined ? {} : { ink: this.options.ink }),
@@ -334,8 +673,8 @@ export class Preview {
   }
 
   /**
-   * Loads the faces the run drew with, from the same files the
-   * engine shaped with.
+   * Loads the faces the held pages draw with, from the same files
+   * the engine shaped with.
    *
    * The bundled face is why this asks the module rather than the
    * network: it is inside the module, and there is no URL to fetch
@@ -343,12 +682,12 @@ export class Preview {
    * the painter's fallback stack is what the reader sees instead of
    * a blank page. `faces: 'host'` is that stack on purpose.
    */
-  private async load(output: LayoutOutput): Promise<void> {
+  private async load(): Promise<void> {
     if (this.options.faces === 'host') {
       return;
     }
     const used = new Set<number>();
-    for (const page of output.pages) {
+    for (const page of this.held.values()) {
       for (const item of page.items) {
         if (item.kind === 'text') {
           used.add(item.fontId);
@@ -365,7 +704,7 @@ export class Preview {
       // Registered as what it is, so that asking for it by that
       // slope and weight is an exact match and the browser
       // synthesises nothing over the cut the engine shaped with.
-      const attributes = this.output?.fonts[id]?.attributes;
+      const attributes = this.fonts[id]?.attributes;
       const face = new FontFace(faceFamily(id), bytes.buffer as ArrayBuffer, {
         style: attributes?.italic === true ? 'italic' : 'normal',
         weight: String(attributes?.weight ?? 400),
@@ -378,6 +717,18 @@ export class Preview {
       // from, which is visible on the page and needs no throw here.
     }
   }
+}
+
+/**
+ * A range boundary's offset into one selection line's text, whichever
+ * kind of node it landed on. Inside the line's own text node the
+ * offset is already a character index; on the `<text>` element
+ * itself — which has exactly that one child — it is a child index, 0
+ * before it and 1 after, so it becomes the two ends of the line's own
+ * text rather than a stray zero.
+ */
+function boundaryOffset(line: SVGTextElement, container: Node, offset: number): number {
+  return container === line.firstChild ? offset : offset === 0 ? 0 : (line.textContent ?? '').length;
 }
 
 /**

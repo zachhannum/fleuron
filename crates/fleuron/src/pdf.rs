@@ -508,7 +508,7 @@ mod tests {
     fn assets(files: &[(&str, &[u8])]) -> Assets {
         let mut assets = Assets::none();
         for (url, bytes) in files {
-            assets.add(url, bytes.to_vec()).expect("the header reads");
+            assets.add(url, bytes.to_vec());
         }
         assets
     }

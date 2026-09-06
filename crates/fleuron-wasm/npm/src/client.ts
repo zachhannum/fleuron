@@ -19,6 +19,14 @@ export interface Transport {
 /** A render that was overtaken: nothing came back, and nothing should be painted. */
 export const SUPERSEDED = null;
 
+/** A slice of the book's pages: `count` of them, starting at `first`. */
+export interface Range {
+  /** The first page to send, counting from 0. */
+  first: number;
+  /** How many pages to send. */
+  count: number;
+}
+
 /**
  * A client over one worker.
  *
@@ -47,9 +55,19 @@ export class Client {
     settle(response);
   }
 
-  /** The generation the next render goes out under. */
+  /** The current generation. Raised only by a render whose `ops` is non-empty. */
   get current(): number {
     return this.generation;
+  }
+
+  /**
+   * The generation a call to {@link Client.render}/{@link Client.preview}
+   * with these `ops` will be answered under, without sending anything.
+   * A caller that tags what it fetches with a generation of its own
+   * asks here rather than mirror the rule this raises it by.
+   */
+  generationFor(ops: Op[]): number {
+    return ops.length > 0 ? this.generation + 1 : this.generation;
   }
 
   /**
@@ -63,12 +81,20 @@ export class Client {
   }
 
   /**
-   * Applies inputs and asks for a display structure. Resolves to `null`
+   * Applies inputs and asks for a display structure, `range` naming
+   * which pages of it rather than the whole book. Resolves to `null`
    * when a later render overtook this one, or when its reply came
    * back behind the current generation.
+   *
+   * A ranged request (both `ops` empty and `range` given) is a
+   * question about the book as it stands, not a render: within the
+   * generation it was asked under, it never overtakes, and is never
+   * overtaken by, another render or range. An edit still raises the
+   * generation, and a range asked for before one arrives resolves to
+   * `null` once it lands, the same as any other stale reply.
    */
-  async preview(ops: Op[] = []): Promise<LayoutOutput | null> {
-    const bytes = await this.render(ops, 'preview');
+  async preview(ops: Op[] = [], range?: Range): Promise<LayoutOutput | null> {
+    const bytes = await this.render(ops, 'preview', range);
     return bytes === SUPERSEDED ? SUPERSEDED : decodeDisplayList(bytes);
   }
 
@@ -102,10 +128,16 @@ export class Client {
    * Applies inputs and asks for bytes: the display structure as the
    * engine encoded it, or a PDF. `null` when this render was
    * overtaken.
+   *
+   * The generation only raises when `ops` changed something. A range
+   * fetch with nothing to apply asks about the current generation
+   * rather than opening a new one, so it cannot be outrun by, or
+   * outrun, a sibling range fetch that shares it — only a real edit
+   * moves the generation such requests are answering against.
    */
-  async render(ops: Op[], want: Want): Promise<Uint8Array | null> {
-    this.generation += 1;
-    const response = await this.send({ ops, want, generation: this.generation });
+  async render(ops: Op[], want: Want, range?: Range): Promise<Uint8Array | null> {
+    this.generation = this.generationFor(ops);
+    const response = await this.send({ ops, want, generation: this.generation, ...range });
     if (!isRendered(response)) {
       return SUPERSEDED;
     }
@@ -124,6 +156,8 @@ export class Client {
     want?: Want;
     generation?: number;
     font?: number;
+    first?: number;
+    count?: number;
   }): Promise<Response> {
     this.id += 1;
     const request: Request = {
@@ -132,6 +166,8 @@ export class Client {
       ops: what.ops,
       ...(what.want === undefined ? {} : { want: what.want }),
       ...(what.font === undefined ? {} : { font: what.font }),
+      ...(what.first === undefined ? {} : { first: what.first }),
+      ...(what.count === undefined ? {} : { count: what.count }),
     };
     const transfer = request.ops
       .filter((op) => op.op === 'font' || op.op === 'image')

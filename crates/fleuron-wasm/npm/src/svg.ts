@@ -12,6 +12,15 @@
  * The coordinate system is the display structure's: points, origin top
  * left, on a `viewBox` the size of the trim. Zoom is the width and
  * height the element is given, and moves nothing inside it.
+ *
+ * A second, invisible layer sits over the glyphs: one `<text>` per
+ * line, in the manuscript's own casing rather than what a
+ * `text-transform` or small capitals drew, and marked so a host can
+ * find it and read it back. It is what a drag actually selects — the
+ * glyph layer below takes no pointer events — so what native
+ * selection highlights lines up with what is on screen, and what
+ * copy yields is what the author wrote, in reading order, the pdf.js
+ * pattern over glyphs rather than a canvas.
  */
 
 import type { Asset, DrawItem, FontRefEntry, ImageItem, Page, RectItem, TextItem } from './wire.js';
@@ -63,6 +72,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   const zoom = options.zoom ?? 1;
   const paper = options.paper === undefined ? '#ffffff' : options.paper;
   const body = page.items.map((item) => paint(item, options)).join('');
+  const overlay = selectionOverlay(page.items);
   const ground =
     paper === null
       ? ''
@@ -73,7 +83,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
     ` width="${num(page.width * zoom)}" height="${num(page.height * zoom)}"` +
     ` fill="${escape(options.ink ?? '#000000')}"` +
     ` data-page="${page.number}" data-side="${page.side}">` +
-    `${ground}${body}</svg>`
+    `${ground}${body}${overlay}</svg>`
   );
 }
 
@@ -162,7 +172,11 @@ function style(entry: FontRefEntry | undefined, item: TextItem): string {
   // A run includes the spaces the line was justified around, and SVG
   // collapses them by default, which would slide every character
   // after the first space one position along the x list.
-  const rules = ['white-space: pre'];
+  //
+  // The selection overlay is what a drag is meant to hit, not this:
+  // its own glyphs take no pointer events, so a click always reaches
+  // the overlay's line rather than a glyph.
+  const rules = ['white-space: pre', 'pointer-events: none'];
   if (settings !== '') {
     rules.push(`font-variation-settings: ${settings}`);
   }
@@ -251,6 +265,104 @@ function fill(xs: (number | undefined)[], left: number): number[] {
     out.push(previous);
   }
   return out;
+}
+
+/**
+ * What a run reads back as, over what it was shaped from: the
+ * manuscript's own casing where `text-transform` or small capitals
+ * drew something else, the shaped text where they drew nothing
+ * different. Mirrors the PDF writer's own `extracted`, since the two
+ * painters draw from the same run and neither is the one the other
+ * corrects against.
+ */
+function readText(item: TextItem): string {
+  return item.sourceMap.length > 0 ? item.source : item.text;
+}
+
+/**
+ * An x for each character of {@link readText}, the same technique as
+ * {@link positions} but through {@link TextItem.sourceMap}: a glyph's
+ * range is in the shaped text's bytes, and the map carries a byte
+ * there to the source's own, which is the string this positions.
+ */
+function readPositions(item: TextItem): number[] {
+  const transformed = item.sourceMap.length > 0;
+  const read = readText(item);
+  const starts = characters(read);
+  const index = new Map(starts.map((byte, at) => [byte, at]));
+  const xs: (number | undefined)[] = new Array<number | undefined>(starts.length);
+  for (const glyph of item.glyphs) {
+    const mapped = transformed ? (item.sourceMap[glyph.range[0]] ?? byteLength(read)) : glyph.range[0];
+    const at = index.get(mapped);
+    if (at === undefined) {
+      continue;
+    }
+    const seen = xs[at];
+    if (seen === undefined || glyph.x < seen) {
+      xs[at] = glyph.x;
+    }
+  }
+  return fill(xs, item.x);
+}
+
+/** How many UTF-8 bytes a string is, the unit {@link TextItem.sourceMap} counts in. */
+function byteLength(text: string): number {
+  let bytes = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
+/**
+ * The page's text runs, grouped into the lines a reader thinks in:
+ * consecutive runs sharing one baseline. What breaks a run in two —
+ * a mid-line style change — does not break a line, so a selection
+ * dragged across it still reads as one.
+ */
+function lineGroups(items: DrawItem[]): TextItem[][] {
+  const lines: TextItem[][] = [];
+  for (const item of items) {
+    if (item.kind !== 'text') {
+      continue;
+    }
+    const last = lines[lines.length - 1]?.[0];
+    if (last !== undefined && Math.abs(last.y - item.y) < 0.01) {
+      lines[lines.length - 1]?.push(item);
+    } else {
+      lines.push([item]);
+    }
+  }
+  return lines;
+}
+
+/**
+ * The invisible layer a selection actually drags over: one `<text>`
+ * per line, in reading order, holding what {@link readText} reads
+ * back for every run on it. Transparent, but not `display: none` —
+ * the browser selects and copies from what is on screen, not what is
+ * painted, so hiding it this way would hide it from that too.
+ */
+function selectionOverlay(items: DrawItem[]): string {
+  const body = lineGroups(items)
+    .map((runs) => selectionLine(runs))
+    .join('');
+  return body === '' ? '' : `<g data-selection-layer="true">${body}</g>`;
+}
+
+function selectionLine(runs: TextItem[]): string {
+  const y = runs[0]?.y ?? 0;
+  const text = runs.map((run) => readText(run)).join('');
+  const xs = runs.flatMap((run) => readPositions(run));
+  if (text === '') {
+    return '';
+  }
+  return (
+    `<text x="${xs.map(num).join(' ')}" y="${num(y)}"` +
+    ` fill="transparent" style="pointer-events: all; white-space: pre" xml:space="preserve"` +
+    ` data-selection-line="true">${escape(text)}</text>`
+  );
 }
 
 /**

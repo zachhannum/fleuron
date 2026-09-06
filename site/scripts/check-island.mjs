@@ -102,7 +102,7 @@ check('the engine runs in the browser and the island paints what it was sent', t
 const state = await page.evaluate(() => {
   const svg = document.querySelector('.d-live svg');
   return {
-    pages: globalThis.fleuron.get('playground').output.pages.length,
+    pages: globalThis.fleuron.get('playground').output.bookPages,
     showing: svg?.getAttribute('data-page') ?? null,
     live: getComputedStyle(document.querySelector('.d-poster')).display,
   };
@@ -150,11 +150,22 @@ const misplaced = await page.evaluate(async () => {
       wait();
     });
 
+  // `entry.output.pages` is the page on screen alone, so this walks
+  // the book by turning through it rather than by reading a book's
+  // worth of pages out of one reply.
   const wrong = [];
-  for (const [index, sheet] of entry.output.pages.entries()) {
-    const svg =
-      index === 0 ? document.querySelector('.d-live svg') : await turn(sheet.number);
-    const painted = [...svg.querySelectorAll('text')];
+  const total = entry.output.bookPages;
+  for (let number = 1; number <= total; number += 1) {
+    const svg = number === 1 ? document.querySelector('.d-live svg') : await turn(number);
+    const sheet = entry.output.pages[0];
+    if (sheet?.number !== number) {
+      wrong.push(`expected page ${number}, the output named ${sheet?.number}`);
+      continue;
+    }
+    // The selection layer is a second, later `<text>` per line rather
+    // than per run, over the manuscript's own casing rather than the
+    // glyphs this checks; excluded here the same way.
+    const painted = [...svg.querySelectorAll('text:not([data-selection-line])')];
     const runs = sheet.items.filter((item) => item.kind === 'text');
     if (painted.length !== runs.length) {
       wrong.push(`page ${sheet.number}: ${runs.length} runs, ${painted.length} <text>`);
@@ -224,20 +235,20 @@ check(
 // Typed the way a reader types it, through the controls the page
 // actually offers.
 const before = await page.evaluate(
-  () => globalThis.fleuron.get('playground').output.pages.length,
+  () => globalThis.fleuron.get('playground').output.bookPages,
 );
 await page.getByRole('tab', { name: 'Stylesheet' }).click();
 const editor = page.locator('.d-area');
 await editor.fill(`${await editor.inputValue()}\nbook { font-size: 18pt; }\n`);
 await page
   .waitForFunction(
-    (was) => globalThis.fleuron.get('playground').output.pages.length !== was,
+    (was) => globalThis.fleuron.get('playground').output.bookPages !== was,
     before,
     { timeout: 60_000 },
   )
   .catch(() => undefined);
 const after = await page.evaluate(
-  () => globalThis.fleuron.get('playground').output.pages.length,
+  () => globalThis.fleuron.get('playground').output.bookPages,
 );
 check(
   'an edit to the stylesheet lays the book out again',
@@ -256,7 +267,7 @@ await reopened.waitForFunction(
   { timeout: 180_000 },
 );
 const restored = await reopened.evaluate(
-  () => globalThis.fleuron.get('playground').output.pages.length,
+  () => globalThis.fleuron.get('playground').output.bookPages,
 );
 check(
   'and a link to it opens the book that was shared',

@@ -84,18 +84,172 @@ page.on('pageerror', (error) => broke.push(String(error)));
 await page.goto(`http://127.0.0.1:${port}/examples/preview/`, { waitUntil: 'load' });
 await page.waitForSelector('body[data-ready="yes"]', { timeout: 120_000 });
 
+// Most of what follows turns to a page and reads its markup back:
+// installed once here rather than duplicated at every call site.
+await page.evaluate(() => {
+  globalThis.__settledOnPage = async (folio, limit = 200) => {
+    for (
+      let waited = 0;
+      document.querySelector('#preview svg')?.getAttribute('data-page') !== String(folio) &&
+      waited < limit;
+      waited += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
+});
+
 const pages = await page.evaluate(() => globalThis.preview.pages as number);
 console.log(`  the harness sets the fixture book in ${pages} pages\n`);
 check('the fixture book reaches the browser', pages > 0);
 
+// Virtualization: a page turn to a neighbour the last turn already
+// prefetched paints synchronously, with nothing awaited in between; a
+// jump past the held window does not paint at once, and only lands
+// once the worker answers.
+const roundTrips = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  const showing = (): string | null => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
+  // A page away from the mount's own opening cascade of renders
+  // (each image and the stylesheet is its own render, and every one
+  // fires its own prefetch), settled and given a further beat for
+  // its own neighbour prefetch to land before anything is measured.
+  preview.page = 10;
+  await globalThis.__settledOnPage(10);
+  for (let waited = 0; waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  preview.page = 11;
+  const immediatelyOnNeighbour = showing();
+  preview.page = 25;
+  const immediatelyOnJump = showing();
+  await globalThis.__settledOnPage(25);
+  return { immediatelyOnNeighbour, immediatelyOnJump, landed: showing() };
+});
+check(
+  'a page turn to an already-prefetched neighbour paints at once',
+  roundTrips.immediatelyOnNeighbour === '11',
+  `showed page ${roundTrips.immediatelyOnNeighbour} right after the turn`,
+);
+check(
+  'jumping past the held window does not paint until the worker answers',
+  roundTrips.immediatelyOnJump !== '25',
+  `showed page ${roundTrips.immediatelyOnJump} right after the jump`,
+);
+check(
+  'and it paints the page asked for once the answer arrives',
+  roundTrips.landed === '25',
+  `landed on page ${roundTrips.landed}`,
+);
+
+// A host that reads the page back off onRender and re-assigns it on
+// every one of its own re-renders (a React effect keyed on the
+// output it just received, say) must not see that turn into a render
+// of its own: reassigning the page already on screen is a no-op.
+const idempotent = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 5;
+  await globalThis.__settledOnPage(5);
+  const folio = document.getElementById('folio');
+  let mutations = 0;
+  const observer = new MutationObserver(() => {
+    mutations += 1;
+  });
+  observer.observe(folio as Node, { childList: true, characterData: true, subtree: true });
+  for (let i = 0; i < 5; i += 1) {
+    preview.page = preview.page;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  observer.disconnect();
+  return mutations;
+});
+check(
+  'reassigning the page already on screen does not itself trigger another render',
+  idempotent === 0,
+  `${idempotent} mutation(s) observed`,
+);
+
+// The same host pattern, but for a jump still in flight rather than
+// one already landed: repeating an identical assignment while it is
+// pending joins the request already on its way instead of opening a
+// second one for the same page.
+const deduped = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  let sent = 0;
+  const original = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function counted(this: Worker, ...args: unknown[]) {
+    sent += 1;
+    return (original as (...rest: unknown[]) => void).apply(this, args);
+  } as typeof Worker.prototype.postMessage;
+  try {
+    preview.page = 20;
+    const afterFirst = sent;
+    preview.page = 20;
+    preview.page = 20;
+    const afterRepeats = sent;
+    await globalThis.__settledOnPage(20);
+    return {
+      afterFirst,
+      afterRepeats,
+      landed: document.querySelector('#preview svg')?.getAttribute('data-page'),
+    };
+  } finally {
+    Worker.prototype.postMessage = original;
+  }
+});
+check(
+  'reassigning an in-flight jump target opens no request beyond the one already sent for it',
+  deduped.afterRepeats === deduped.afterFirst,
+  `${deduped.afterFirst} message(s) for the jump, ${deduped.afterRepeats} after two repeats`,
+);
+check('and the jump it joined still lands', deduped.landed === '20');
+
+// A target left and come back to before its own request landed is
+// still in flight, not merely the most recently asked-for one: this
+// is the same join as an immediate repeat, just by a different route.
+const awayAndBack = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  let sent = 0;
+  const original = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function counted(this: Worker, ...args: unknown[]) {
+    sent += 1;
+    return (original as (...rest: unknown[]) => void).apply(this, args);
+  } as typeof Worker.prototype.postMessage;
+  try {
+    preview.page = 30;
+    preview.page = 31;
+    const away = sent;
+    preview.page = 30;
+    const back = sent;
+    await globalThis.__settledOnPage(30);
+    return { away, back, landed: document.querySelector('#preview svg')?.getAttribute('data-page') };
+  } finally {
+    Worker.prototype.postMessage = original;
+  }
+});
+check(
+  'a target left and returned to before it landed opens no request beyond what leaving it already sent',
+  awayAndBack.back === awayAndBack.away,
+  `${awayAndBack.away} message(s) leaving page 30, ${awayAndBack.back} coming back to it`,
+);
+check('and it still lands', awayAndBack.landed === '30');
+
 // Every page, painted and on screen: the page is turned to each in
 // turn and the element that lands is the one the display structure asked
-// for, with text on it.
+// for, with text on it. Most of these pages are outside the window
+// the preview holds, so turning to one asks the worker for it; this
+// waits for that reply rather than reading the element the turn
+// before it left behind.
 const painted = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
   const wrong: string[] = [];
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
+    await globalThis.__settledOnPage(number);
     const svg = document.querySelector('#preview svg');
     const runs = svg?.querySelectorAll('text').length ?? 0;
     if (svg?.getAttribute('data-page') !== String(number) || runs === 0) {
@@ -134,17 +288,76 @@ check('a missing face falls back visibly rather than painting nothing', fallback
 // made at the same zoom, so a pixel is a pixel on either side.
 // The images the harness handed over are on the page, drawn from the
 // same files the engine sized them by.
-const drawn = await page.evaluate((count: number) => {
+const drawn = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
   let drawn = 0;
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
+    await globalThis.__settledOnPage(number);
     drawn += document.querySelectorAll('#preview svg image').length;
   }
   preview.page = 1;
   return drawn;
 }, pages);
 check('the images the host handed over are painted, not outlined', drawn === 2, `${drawn} drawn`);
+
+// Asset cache: leaving an image's page far enough behind revokes the
+// blob url it painted from, and returning to that page paints it
+// again from one freshly made rather than leaving it outlined for
+// good.
+const assetCache = await page.evaluate(async (count: number) => {
+  const preview = globalThis.preview;
+  let imagePage = -1;
+  for (let number = 1; number <= count && imagePage === -1; number += 1) {
+    preview.page = number;
+    await globalThis.__settledOnPage(number);
+    if (document.querySelectorAll('#preview svg image').length > 0) {
+      imagePage = number;
+    }
+  }
+  if (imagePage === -1) {
+    return { imagePage };
+  }
+  let created = 0;
+  let revoked = 0;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = function counted(...args: unknown[]) {
+    created += 1;
+    return (originalCreate as (...rest: unknown[]) => string).apply(URL, args);
+  } as typeof URL.createObjectURL;
+  URL.revokeObjectURL = function counted(...args: unknown[]) {
+    revoked += 1;
+    return (originalRevoke as (...rest: unknown[]) => void).apply(URL, args);
+  } as typeof URL.revokeObjectURL;
+  try {
+    const away = Math.min(imagePage + 20, count);
+    preview.page = away;
+    await globalThis.__settledOnPage(away);
+    const revokedAfterLeaving = revoked;
+    preview.page = imagePage;
+    await globalThis.__settledOnPage(imagePage);
+    return {
+      imagePage,
+      revokedAfterLeaving,
+      createdAfterReturn: created,
+      drawnAgain: document.querySelectorAll('#preview svg image').length,
+    };
+  } finally {
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+}, pages);
+check(
+  'an image no held page draws any more has its blob url revoked',
+  assetCache.imagePage !== -1 && (assetCache.revokedAfterLeaving ?? 0) > 0,
+  JSON.stringify(assetCache),
+);
+check(
+  'and returning to its page paints it again from one freshly made',
+  (assetCache.createdAfterReturn ?? 0) > 0 && (assetCache.drawnAgain ?? 0) > 0,
+  JSON.stringify(assetCache),
+);
 
 /**
  * One page compared with the export: the preview photographed in the
@@ -160,9 +373,13 @@ check('the images the host handed over are painted, not outlined', drawn === 2, 
  * over.
  */
 async function comparedWithTheExport(what: string, compared: number): Promise<void> {
-  await page.evaluate(([zoom, number]: [number, number]) => {
+  await page.evaluate(async ([zoom, number]: [number, number]) => {
     globalThis.preview.zoom = zoom;
     globalThis.preview.page = number;
+    // A page this far from the one the harness opened on is not one
+    // the preview already held: wait for the worker's reply rather
+    // than photograph the page the turn before this one left up.
+    await globalThis.__settledOnPage(number);
     // The harness's own chrome puts the sheet at a fractional pixel,
     // and a screenshot of a fractional box is every glyph blurred
     // half a pixel sideways. The page under it is untouched.
@@ -348,6 +565,71 @@ check('the display-typography book runs past its opening page', typography.pages
 await comparedWithTheExport('a transformed and tracked title', 1);
 await comparedWithTheExport('a small-capital running head', 2);
 
+// Selection overlay: a drag over the invisible layer selects it, not
+// the glyphs underneath, so what copy yields is the manuscript's own
+// casing rather than what a `text-transform` drew — and a selection
+// spanning two lines joins them in reading order, with nothing
+// duplicated or dropped.
+const selection = await page.evaluate(async () => {
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  const doc = document;
+  const frame = doc.querySelector('[data-fleuron="preview"]');
+  const lines = [...doc.querySelectorAll('#preview svg text[data-selection-line]')] as SVGTextElement[];
+
+  const copy = (range: Range): string | null => {
+    const sel = doc.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    const data = new DataTransfer();
+    const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+    frame?.dispatchEvent(event);
+    sel?.removeAllRanges();
+    return event.defaultPrevented ? data.getData('text/plain') : null;
+  };
+
+  const title = lines.find((line) => line.textContent === 'A Voyage to Lilliput');
+  let titleCopy: string | null = null;
+  if (title !== undefined) {
+    const range = doc.createRange();
+    range.selectNodeContents(title);
+    titleCopy = copy(range);
+  }
+
+  const firstIndex = lines.findIndex((line) => (line.textContent ?? '').includes('Nottinghamshire'));
+  let crossLine: { copied: string | null; expected: string } | null = null;
+  if (firstIndex !== -1 && firstIndex + 1 < lines.length) {
+    const first = lines[firstIndex] as SVGTextElement;
+    const second = lines[firstIndex + 1] as SVGTextElement;
+    const firstText = first.firstChild;
+    const secondText = second.firstChild;
+    if (firstText !== null && secondText !== null) {
+      const firstContent = firstText.textContent ?? '';
+      const secondContent = secondText.textContent ?? '';
+      const cut = Math.min(10, secondContent.length);
+      const range = doc.createRange();
+      range.setStart(firstText, 3);
+      range.setEnd(secondText, cut);
+      crossLine = {
+        copied: copy(range),
+        expected: `${firstContent.slice(3)}\n${secondContent.slice(0, cut)}`,
+      };
+    }
+  }
+
+  return { lineCount: lines.length, titleCopy, crossLine };
+});
+check(
+  "selecting the transformed title's own overlay copies the manuscript's own casing",
+  selection.titleCopy === 'A Voyage to Lilliput',
+  `${selection.lineCount} selection line(s); copied ${JSON.stringify(selection.titleCopy)}`,
+);
+check(
+  'a selection spanning two lines joins them in reading order with nothing duplicated or dropped',
+  selection.crossLine !== null && selection.crossLine.copied === selection.crossLine.expected,
+  JSON.stringify(selection.crossLine),
+);
+
 // The list form, driven: the same sheet as the second of two
 // layers, over a preset it overrides and a declaration the engine
 // does not honour. What the layers set is what the one string set,
@@ -386,6 +668,28 @@ check(
   layered.warnings.join('; '),
 );
 
+// An edit that shrinks the book past the page on screen: the fetch
+// for the page that was showing comes back empty once the book no
+// longer has it, and a second fetch lands the preview on a page the
+// shorter book actually has, rather than a blank frame.
+const shrunk = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  const showing = () => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
+  preview.page = preview.pages;
+  await globalThis.__settledOnPage(preview.pages);
+  const before = preview.pages;
+  await preview.setMarkdown('# Short\n\nOne short paragraph is all there is now.\n', 'shrunk.md');
+  return { before, after: preview.pages, page: preview.page, landed: showing() };
+});
+check(
+  'an edit that shrinks the book past the page on screen still lands on a real page',
+  shrunk.after < shrunk.before &&
+    shrunk.page >= 1 &&
+    shrunk.page <= shrunk.after &&
+    shrunk.landed === String(shrunk.page),
+  `${shrunk.before} pages showing page ${shrunk.before}, then ${shrunk.after} pages, landed on ${shrunk.landed}`,
+);
+
 check('nothing threw on the page', broke.length === 0, broke.slice(0, 2).join('; '));
 
 await browser.close();
@@ -404,4 +708,6 @@ declare global {
     setStyle(css: string | { name: string; css: string }[]): Promise<void>;
     setMarkdown(text: string, name?: string): Promise<void>;
   };
+  /** Waits until `#preview svg`'s `data-page` reads `folio`, or gives up after `limit` ticks. */
+  var __settledOnPage: (folio: number, limit?: number) => Promise<void>;
 }

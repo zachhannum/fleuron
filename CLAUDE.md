@@ -74,12 +74,6 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 
 - Commit as you go. Do not wait until the feature is done to commit
   everything; a commit is a small testable chunk.
-- After committing, run `roborev wait` in the background to block on
-  the review the post-commit hook enqueued. On findings, `roborev
-  show`, fix, commit, repeat. Surface only what you can't resolve.
-  After major changes, also run `roborev review --branch --wait` in
-  the background for branch-level findings.
-- If roborev reviews are not working, stop and don't do anything else.
 
 ## Perf harness
 
