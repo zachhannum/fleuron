@@ -238,12 +238,29 @@ check(
 // at — mechanically, over the draw items, with the byte-to-character
 // mapping recomputed here rather than borrowed from the painter.
 
-/** The `<text>` elements of a painted page, in paint order. */
+/**
+ * The glyph layer's `<text>` elements of a painted page, in paint
+ * order. The selection layer's own `<text data-selection-line>` is a
+ * second, later `<text>` per line rather than per run, and is not
+ * this: {@link selectionLines} reads that one back.
+ */
 function texts(svg: string): { x: string[]; content: string }[] {
-  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map((element) => ({
-    x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
-    content: unescape_(element[2] ?? ''),
-  }));
+  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
+    .filter((element) => !(element[1] ?? '').includes('data-selection-line'))
+    .map((element) => ({
+      x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+      content: unescape_(element[2] ?? ''),
+    }));
+}
+
+/** The selection layer's own `<text>` elements, one per line. */
+function selectionLines(svg: string): { x: string[]; content: string }[] {
+  return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
+    .filter((element) => (element[1] ?? '').includes('data-selection-line'))
+    .map((element) => ({
+      x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+      content: unescape_(element[2] ?? ''),
+    }));
 }
 
 function unescape_(markup: string): string {
@@ -282,8 +299,48 @@ function misplaced(page: Page, output: LayoutOutput): string | null {
   return null;
 }
 
+/**
+ * Every selection line checked against the runs it groups: text runs
+ * sharing a baseline, grouped independently of the painter here, read
+ * back in the manuscript's own casing rather than what was shaped,
+ * and joined in paint order.
+ */
+function misplacedSelection(page: Page, output: LayoutOutput): string | null {
+  const lines = selectionLines(paintPage(page, { fonts: output.fonts }));
+  const runs = page.items.filter((item): item is TextItem => item.kind === 'text');
+  const grouped: TextItem[][] = [];
+  for (const run of runs) {
+    const last = grouped[grouped.length - 1];
+    const first = last?.[0];
+    if (first !== undefined && Math.abs(first.y - run.y) < 0.01) {
+      last?.push(run);
+    } else {
+      grouped.push([run]);
+    }
+  }
+  if (lines.length !== grouped.length) {
+    return `page ${page.number} groups into ${grouped.length} lines and paints ${lines.length}`;
+  }
+  for (const [at, group] of grouped.entries()) {
+    const expected = group.map((run) => (run.sourceMap.length > 0 ? run.source : run.text)).join('');
+    const element = lines[at];
+    if (element === undefined || element.content !== expected) {
+      return `page ${page.number} line ${at} reads back ${JSON.stringify(element?.content)}, not ${JSON.stringify(expected)}`;
+    }
+  }
+  return null;
+}
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
+const wrongSelection = preview.pages
+  .map((page) => misplacedSelection(page, preview))
+  .find((bad) => bad !== null);
+check(
+  "the selection layer's own lines read back every run in the manuscript's own casing",
+  wrongSelection === undefined,
+  wrongSelection ?? '',
+);
 check(
   'every page paints',
   preview.pages.every((page) => {

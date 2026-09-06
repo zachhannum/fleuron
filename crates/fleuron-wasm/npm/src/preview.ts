@@ -180,6 +180,7 @@ export class Preview {
     worker.addEventListener('message', (event) =>
       this.client.receive((event as MessageEvent<Response>).data),
     );
+    this.element.addEventListener('copy', this.onCopy);
   }
 
   /**
@@ -396,6 +397,7 @@ export class Preview {
 
   /** Closes the worker and gives the element back. */
   destroy(): void {
+    this.element.removeEventListener('copy', this.onCopy);
     for (const face of this.faces.values()) {
       this.element.ownerDocument.fonts.delete(face);
     }
@@ -586,6 +588,58 @@ export class Preview {
   }
 
   /**
+   * Copies the selection layer's own text, reconstructed from the
+   * range's own boundaries rather than trusted to the browser's
+   * default serialization across `<text>` siblings — SVG text
+   * elements are not block boxes, and nothing guarantees a browser
+   * puts a line break between two of them the way it would between
+   * paragraphs. This is the pdf.js pattern: the layer under the
+   * pointer draws nothing, and copy answers from what it holds.
+   */
+  private readonly onCopy = (event: Event): void => {
+    const text = this.selectedText();
+    if (text === null) {
+      return;
+    }
+    (event as ClipboardEvent).clipboardData?.setData('text/plain', text);
+    event.preventDefault();
+  };
+
+  /**
+   * The selection's own text, one line's slice per line it touches,
+   * joined in reading order. `null` for a selection with nothing in
+   * it, or one that lies outside this preview altogether — a host's
+   * own text elsewhere on the page is not this preview's to answer
+   * for.
+   */
+  private selectedText(): string | null {
+    const selection = this.element.ownerDocument.getSelection();
+    if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+      return null;
+    }
+    const range = selection.getRangeAt(0);
+    if (!this.frame.contains(range.commonAncestorContainer)) {
+      return null;
+    }
+    const lines = [...this.frame.querySelectorAll('text[data-selection-line]')] as SVGTextElement[];
+    const parts: string[] = [];
+    for (const line of lines) {
+      if (!range.intersectsNode(line)) {
+        continue;
+      }
+      const full = line.textContent ?? '';
+      const start = line.contains(range.startContainer)
+        ? boundaryOffset(line, range.startContainer, range.startOffset)
+        : 0;
+      const end = line.contains(range.endContainer)
+        ? boundaryOffset(line, range.endContainer, range.endOffset)
+        : full.length;
+      parts.push(full.slice(start, end));
+    }
+    return parts.length === 0 ? null : parts.join('\n');
+  }
+
+  /**
    * Calls {@link PreviewOptions.onRender}, if the page on screen is
    * held: built fresh from `held` and the run's tables rather than
    * threaded through from whichever fetch put it there, so a host
@@ -663,6 +717,18 @@ export class Preview {
       // from, which is visible on the page and needs no throw here.
     }
   }
+}
+
+/**
+ * A range boundary's offset into one selection line's text, whichever
+ * kind of node it landed on. Inside the line's own text node the
+ * offset is already a character index; on the `<text>` element
+ * itself — which has exactly that one child — it is a child index, 0
+ * before it and 1 after, so it becomes the two ends of the line's own
+ * text rather than a stray zero.
+ */
+function boundaryOffset(line: SVGTextElement, container: Node, offset: number): number {
+  return container === line.firstChild ? offset : offset === 0 ? 0 : (line.textContent ?? '').length;
 }
 
 /**

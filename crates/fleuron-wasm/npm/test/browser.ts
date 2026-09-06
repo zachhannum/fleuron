@@ -565,6 +565,71 @@ check('the display-typography book runs past its opening page', typography.pages
 await comparedWithTheExport('a transformed and tracked title', 1);
 await comparedWithTheExport('a small-capital running head', 2);
 
+// Selection overlay: a drag over the invisible layer selects it, not
+// the glyphs underneath, so what copy yields is the manuscript's own
+// casing rather than what a `text-transform` drew — and a selection
+// spanning two lines joins them in reading order, with nothing
+// duplicated or dropped.
+const selection = await page.evaluate(async () => {
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  const doc = document;
+  const frame = doc.querySelector('[data-fleuron="preview"]');
+  const lines = [...doc.querySelectorAll('#preview svg text[data-selection-line]')] as SVGTextElement[];
+
+  const copy = (range: Range): string | null => {
+    const sel = doc.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    const data = new DataTransfer();
+    const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+    frame?.dispatchEvent(event);
+    sel?.removeAllRanges();
+    return event.defaultPrevented ? data.getData('text/plain') : null;
+  };
+
+  const title = lines.find((line) => line.textContent === 'A Voyage to Lilliput');
+  let titleCopy: string | null = null;
+  if (title !== undefined) {
+    const range = doc.createRange();
+    range.selectNodeContents(title);
+    titleCopy = copy(range);
+  }
+
+  const firstIndex = lines.findIndex((line) => (line.textContent ?? '').includes('Nottinghamshire'));
+  let crossLine: { copied: string | null; expected: string } | null = null;
+  if (firstIndex !== -1 && firstIndex + 1 < lines.length) {
+    const first = lines[firstIndex] as SVGTextElement;
+    const second = lines[firstIndex + 1] as SVGTextElement;
+    const firstText = first.firstChild;
+    const secondText = second.firstChild;
+    if (firstText !== null && secondText !== null) {
+      const firstContent = firstText.textContent ?? '';
+      const secondContent = secondText.textContent ?? '';
+      const cut = Math.min(10, secondContent.length);
+      const range = doc.createRange();
+      range.setStart(firstText, 3);
+      range.setEnd(secondText, cut);
+      crossLine = {
+        copied: copy(range),
+        expected: `${firstContent.slice(3)}\n${secondContent.slice(0, cut)}`,
+      };
+    }
+  }
+
+  return { lineCount: lines.length, titleCopy, crossLine };
+});
+check(
+  "selecting the transformed title's own overlay copies the manuscript's own casing",
+  selection.titleCopy === 'A Voyage to Lilliput',
+  `${selection.lineCount} selection line(s); copied ${JSON.stringify(selection.titleCopy)}`,
+);
+check(
+  'a selection spanning two lines joins them in reading order with nothing duplicated or dropped',
+  selection.crossLine !== null && selection.crossLine.copied === selection.crossLine.expected,
+  JSON.stringify(selection.crossLine),
+);
+
 // The list form, driven: the same sheet as the second of two
 // layers, over a preset it overrides and a declaration the engine
 // does not honour. What the layers set is what the one string set,
