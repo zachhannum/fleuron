@@ -450,6 +450,15 @@ pub enum CounterStyle {
 }
 
 impl CounterStyle {
+    /// Every style, in the order the subset lists them.
+    pub const ALL: [CounterStyle; 5] = [
+        CounterStyle::Decimal,
+        CounterStyle::LowerRoman,
+        CounterStyle::UpperRoman,
+        CounterStyle::LowerAlpha,
+        CounterStyle::UpperAlpha,
+    ];
+
     /// The CSS keyword.
     pub fn keyword(self) -> &'static str {
         match self {
@@ -464,15 +473,9 @@ impl CounterStyle {
     /// Parses one of the keywords, or `None` for a style outside the
     /// subset.
     pub fn parse(keyword: &str) -> Option<CounterStyle> {
-        [
-            CounterStyle::Decimal,
-            CounterStyle::LowerRoman,
-            CounterStyle::UpperRoman,
-            CounterStyle::LowerAlpha,
-            CounterStyle::UpperAlpha,
-        ]
-        .into_iter()
-        .find(|style| style.keyword().eq_ignore_ascii_case(keyword))
+        CounterStyle::ALL
+            .into_iter()
+            .find(|style| style.keyword().eq_ignore_ascii_case(keyword))
     }
 
     /// One value as this style spells it. A value the style has no

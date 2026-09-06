@@ -16,6 +16,7 @@
 mod element;
 mod properties;
 mod sheet;
+pub mod subset;
 
 use std::collections::BTreeMap;
 
@@ -1285,6 +1286,22 @@ mod tests {
         assert_eq!(paragraph.hyphens, Hyphens::Auto);
         assert_eq!(paragraph.margin.left, 0.0);
         assert_eq!(first(&tree, "section").margin.left, 20.0);
+    }
+
+    /// The `inherited` flag on each row of the property table is what
+    /// the cascade does: set on `section`, an inherited property
+    /// reaches the paragraph under it and a box property does not.
+    #[test]
+    fn the_property_table_says_what_inherits() {
+        let book = sample();
+        let baseline = first(&compile(&book, ""), "p");
+        for spec in sheet::PROPERTIES {
+            let reached = spec.examples.iter().any(|example| {
+                let css = format!("section {{ {}: {example} }}", spec.name);
+                first(&compile(&book, &css), "p") != baseline
+            });
+            assert_eq!(reached, spec.inherited, "{}", spec.name);
+        }
     }
 
     /// `text-justify` and `hanging-punctuation` read as CSS writes

@@ -19,6 +19,8 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
                        is the one the PDF writer reads
   --dump-tree          write the content tree the frontend read to
                        stdout as JSON, and lay nothing out
+  --css-subset         write the CSS the engine accepts to stdout as
+                       JSON, and read nothing
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 ```
@@ -34,6 +36,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-d`, `--dialect` | Which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx). |
 | `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language and picks the hyphenation patterns. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
+| `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. A host pins the file for the version it embeds. |
 | `-V`, `--version` | Prints `fleuron <version>` and exits 0, whether or not a job was named. |
 | `-h`, `--help` | Prints the usage above and exits 0, whether or not a job was named. |
 
@@ -53,7 +56,7 @@ Exit 2 means the command line is wrong. Exit 1 means the input is. A book that l
 
 ## stderr
 
-The run writes everything to stderr. stdout is only what `--version`, `--help` and `--dump-tree` print.
+The run writes everything to stderr. stdout is only what `--version`, `--help`, `--dump-tree` and `--css-subset` print.
 
 A summary comes first:
 

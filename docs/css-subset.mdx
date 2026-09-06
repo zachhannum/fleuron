@@ -15,52 +15,74 @@ The stylesheet below is written in this vocabulary: mirrored margins, a folio, a
 
 ## Selectors
 
-Type, universal, descendant, child, adjacent and general sibling. The structural pseudo-classes `:first-child`, `:nth-child()`, `:only-child`, `:empty` and `:root`. Also `:is()`, `:where()`, `:not()` and `:has()`.
+{/* generated: selectors */}
 
-Element names are the markdown vocabulary: `book`, `section`, `h1`–`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`, `a`. There are no classes, ids, attributes or namespaces, because the content tree has none, and no interaction pseudo-classes, because nothing here is interactive.
+Element names are the markdown vocabulary: `book`, `section`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `p`, `blockquote`, `hr`, `img`, `code`, `em`, `strong` and `a`.
 
-There is one pseudo-element, `::first-letter`, which is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size.
+A compound is `<element>` (`p`) or `*` (`section > *`), with any of the pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:empty`, `:root`, `:is()`, `:where()`, `:not()` and `:has()`.
+
+Compounds join by the descendant (`section p`), child (`section > p`), next-sibling (`h1 + p`) and subsequent-sibling (`h1 ~ p`) combinators, and selectors list with `,` (`h1, h2`).
+
+The pseudo-element `::first-letter`.
+
+{/* end generated */}
+
+There are no classes, ids, attributes or namespaces, because the content tree has none, and no interaction pseudo-classes, because nothing here is interactive.
+
+`::first-letter` is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size.
 
 Text runs are not elements. They take the style of the inline or block around them, and never count towards `:first-child`.
 
 ## Properties
 
+{/* generated: properties */}
+
+A declaration is `<property>: <value> !important?`.
+
 Text, inherited:
 
 | property | values |
 |---|---|
-| `color` | a colour name, `#rgb`, `#rrggbb`, `rgb()` |
-| `font-family` | family names and `serif` / `sans-serif` / `monospace` |
-| `font-size` | `<length>`, `<percentage>` of the parent |
-| `font-style` | `normal`, `italic`, `oblique` |
-| `font-weight` | `normal`, `bold`, `1`–`1000` |
-| `line-height` | `normal`, `<number>`, `<length>`, `<percentage>` |
-| `letter-spacing` | `normal`, `<length>` |
-| `font-variant-caps` | `normal`, `small-caps` |
-| `text-transform` | `none`, `uppercase`, `lowercase`, `capitalize` |
-| `text-align` | `left`, `right`, `center`, `justify`, `start`, `end` |
-| `text-justify` | `auto`, `inter-word`, `inter-character`, `distribute` |
-| `text-indent` | `<length>` |
-| `hyphens` | `none`, `manual`, `auto` |
-| `hanging-punctuation` | `none`, or any of `first`, `force-end`, `allow-end`, `last` |
+| `font-family` | `[ <family-name> \| serif \| sans-serif \| monospace ]#` |
+| `font-size` | `<length> \| <percentage>` |
+| `font-style` | `normal \| italic \| oblique` |
+| `font-weight` | `normal \| bold \| <number [1,1000]>` |
+| `color` | `<color>` |
+| `line-height` | `normal \| <number> \| <length> \| <percentage>` |
+| `letter-spacing` | `normal \| <length>` |
+| `font-variant-caps` | `normal \| small-caps` |
+| `text-transform` | `none \| uppercase \| lowercase \| capitalize` |
+| `text-align` | `left \| right \| center \| justify \| start \| end` |
+| `text-justify` | `auto \| inter-word \| inter-character \| distribute` |
+| `text-indent` | `<length> \| <percentage>` |
+| `hanging-punctuation` | `none \| [ first \|\| [ force-end \| allow-end ] \|\| last ]` |
+| `hyphens` | `none \| manual \| auto` |
 | `orphans`, `widows` | `<integer>` |
-| `page` | a page name, or `auto` |
+| `page` | `auto \| <name>` |
 
 Block box, not inherited:
 
 | property | values |
 |---|---|
-| `content` | `none` or a `<string>`, the ornament a thematic break is set in |
-| `string-set` | `none`, or `<name> [content() \| <string>]+`, comma-separated |
-| `counter-reset` | `none`, or `page <integer>` |
-| `initial-letter` | `<integer>` lines to sink an initial letter over, on `::first-letter` |
-| `margin` | one to four `<length>`s |
-| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length>` |
-| `break-before`, `break-after`, `break-inside` | `auto`, `avoid`, `page`, `left`, `right`, `recto`, `verso` |
+| `content` | `none \| <string>` |
+| `string-set` | `none \| [ <name> [ content() \| <string> ]+ ]#` |
+| `counter-reset` | `none \| page <integer>?` |
+| `initial-letter` | `<integer>` |
+| `margin` | `[ <length> \| <percentage> ]{1,4}` |
+| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length> \| <percentage>` |
+| `break-before`, `break-after`, `break-inside` | `auto \| avoid \| avoid-page \| page \| always \| left \| right \| recto \| verso` |
 
-`recto` and `verso` are the book's names for `right` and `left`.
+{/* end generated */}
 
-Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em`, `rem`, and everything computes to points. `em` in `font-size` is a multiple of the parent's size and elsewhere of the element's own. `rem` is always a multiple of the root's.
+`recto` and `verso` are the book's names for `right` and `left`. `content` on `hr` is the ornament a thematic break is set in.
+
+{/* generated: units */}
+
+Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em` and `rem`, and everything computes to points.
+
+{/* end generated */}
+
+`em` in `font-size` is a multiple of the parent's size and elsewhere of the element's own. `rem` is always a multiple of the root's.
 
 ### Setting the measure
 
@@ -116,18 +138,32 @@ An initial letter is sized from the sink rather than from `font-size`. Its cap h
 
 ## `@page`
 
+{/* generated: page */}
+
 ```css
-@page <name>? [:first | :blank | :left | :right]* {
-  size: <length>{1,2} | a3 | a4 | a5 | b4 | b5 | letter | legal | ledger [portrait | landscape]?;
-  margin: ...;
+@page <name>? [ :first | :blank | :left | :right ]* {
+  size: <length>{1,2} | <page-size> [ portrait | landscape ]?;
+  margin: [ <length> | <percentage> ]{1,4};
+  margin-top: <length> | <percentage>;
+  margin-right: <length> | <percentage>;
+  margin-bottom: <length> | <percentage>;
+  margin-left: <length> | <percentage>;
   @<margin-box> {
-    content: none | counter(page[, <counter-style>]) | string(<name>) | <string>;
+    content: none | <string> | counter(page) | counter(page, <counter-style>) | string(<name>);
     /* text properties */
   }
 }
 ```
 
-`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` or `upper-alpha`. A number the style cannot express falls back to decimal.
+`<page-size>` is `a3`, `a4`, `a5`, `b4`, `b5`, `letter`, `legal` and `ledger`, portrait unless `landscape` follows.
+
+`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` and `upper-alpha`.
+
+The margin boxes that paint are `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center` and `@bottom-right`. `@top-left-corner`, `@top-right-corner`, `@left-top`, `@left-middle`, `@left-bottom`, `@right-top`, `@right-middle`, `@right-bottom`, `@bottom-left-corner` and `@bottom-right-corner` parse and paint nothing.
+
+{/* end generated */}
+
+A number the counter style cannot express falls back to decimal.
 
 `string(<name>)` reads a running string as it stood when the page opened, not as the first element on the page set it, so a chapter opening halfway down a page does not retitle the page it opened on. A string nothing has set yet paints nothing.
 
@@ -135,7 +171,7 @@ A page group begins wherever a section opens a page, so `:first` selects a chapt
 
 Page selectors cascade like any other rule: origin first, then specificity, then source order. The name outweighs `:first` and `:blank`, which outweigh `:left` and `:right`.
 
-All sixteen margin boxes parse. Six paint: `@top-left`, `@top-center`, `@top-right` and their `@bottom-` counterparts. A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
+A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
 
 A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not get one. `@page :blank` still gives that leaf its trim and margins.
 
@@ -150,6 +186,17 @@ A page the flow put nothing on paints no margin boxes at all, so a page whose on
 }
 ```
 
+{/* generated: font-face */}
+
+| descriptor | values |
+|---|---|
+| `font-family` | `<family-name>` |
+| `font-style` | `normal \| italic \| oblique` |
+| `font-weight` | `normal \| bold \| <number [1,1000]>` |
+| `src` | `[ <url> format(<string>)? \| local(<string>) ]#` |
+
+{/* end generated */}
+
 The string in `url()` is handed to the loader unchanged, and does not have to be a real URL. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
 
 `font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. No slope or weight is synthesised. See [fonts](library/fonts.md) for the full matching rules and how variable files register.
@@ -159,3 +206,7 @@ The string in `url()` is handed to the loader unchanged, and does not have to be
 Backgrounds, borders, padding, floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.
+
+## The subset as data
+
+`fleuron --css-subset` writes this page's vocabulary as JSON: every selector, property, value and at-rule, with the engine version it came from. A host that embeds the engine pins the file for that version and drives its own editor from it. The same description is `fleuron::style::subset::Subset::describe()` in the library, and the tables on this page are rendered from it.

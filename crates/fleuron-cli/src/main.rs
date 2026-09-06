@@ -8,6 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use fleuron::Warning;
 use fleuron::content::{Book, HeadingLevel, Metadata};
 use fleuron::images::{Assets, ImageLoader};
+use fleuron::style::subset::Subset;
 use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::{Dialect, Options, Sections};
 
@@ -27,6 +28,8 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
                        patterns
   --dump-tree          write the content tree the frontend read to
                        stdout as JSON, and lay nothing out
+  --css-subset         write the CSS the engine accepts to stdout as
+                       JSON, and read nothing
   -V, --version        print the version and exit
   -h, --help           print this message and exit
 
@@ -80,6 +83,8 @@ enum Command {
         metadata: Metadata,
         reading: Options,
     },
+    /// Write the CSS subset this engine accepts, for a host to pin.
+    Subset,
     Version,
     Help,
 }
@@ -94,6 +99,16 @@ fn dispatch(args: impl IntoIterator<Item = String>) -> Status {
             println!("{USAGE}");
             Status::Ok
         }
+        Ok(Command::Subset) => match serde_json::to_string_pretty(&Subset::describe()) {
+            Ok(json) => {
+                println!("{json}");
+                Status::Ok
+            }
+            Err(e) => {
+                eprintln!("fleuron: {e:#}");
+                Status::Failure
+            }
+        },
         Ok(Command::Render {
             inputs,
             output,
@@ -141,6 +156,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
         match arg.as_str() {
             "-V" | "--version" => return Ok(Command::Version),
             "-h" | "--help" => return Ok(Command::Help),
+            "--css-subset" => return Ok(Command::Subset),
             "-o" | "--output" => output = Some(PathBuf::from(value()?)),
             "-c" | "--css" => css.push(PathBuf::from(value()?)),
             "--title" => metadata.title = Some(value()?),
@@ -580,6 +596,16 @@ mod tests {
         // Asking for them is not a usage error, even with no job named.
         assert_eq!(dispatch(args(&["--version"])), Status::Ok);
         assert_eq!(dispatch(args(&["--help"])), Status::Ok);
+    }
+
+    /// The subset needs no input: it is the engine describing itself.
+    #[test]
+    fn the_css_subset_is_a_command_of_its_own() {
+        assert_eq!(parse(args(&["--css-subset"])).unwrap(), Command::Subset);
+        assert_eq!(dispatch(args(&["--css-subset"])), Status::Ok);
+        let json = serde_json::to_string_pretty(&Subset::describe()).unwrap();
+        let read: Subset = serde_json::from_str(&json).unwrap();
+        assert_eq!(read.version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

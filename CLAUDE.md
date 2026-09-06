@@ -30,6 +30,9 @@ wins and the quick fix waits for its own PR.
 - "Not in the subset" in `docs/css-subset.mdx` says what the engine
   does not support yet, not what it refuses. A property listed there
   is a candidate for an issue, not a closed door.
+- The tables on that page are rendered from the parser's own tables.
+  After changing what the parser accepts, regenerate them with
+  `FLEURON_UPDATE_DOCS=1 cargo test -p fleuron --test css_subset`.
 - Work is tracked in GitHub issues, grouped by the v0.1 epic (#13). An
   issue's acceptance checkboxes are its definition of done.
 
