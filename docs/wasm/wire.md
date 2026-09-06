@@ -19,6 +19,8 @@ In: whatever changed. Markdown source, stylesheets, font bytes, a content tree. 
 
 Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. Transferred rather than copied.
 
+A `preview` reply need not carry the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0, and the reply's `pages` is that slice: `first` says where it begins and `bookPages` says how many pages the book has, so a reply carrying one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
+
 ## The display structure
 
 The [display structure reference](../reference/display-structure.mdx) has the full shape. Three things about it matter to a host in particular.
@@ -47,7 +49,9 @@ The `style` op takes the author's sheets in cascade order, each under a name. A 
 
 Request and response are paired by `id`, and each request has a generation the worker echoes back untouched.
 
-`want: 'font'` is the question: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. Nothing overtakes it and it overtakes nothing, since a face keeps its id for the session's life and the answer cannot go stale.
+Two kinds of request are questions rather than renders, and neither overtakes a render or is overtaken by one. `want: 'font'` is one: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. A face keeps its id for the session's life, so the answer cannot go stale.
+
+A `want: 'preview'` naming `first` and `count` with no `ops` of its own is the other: it asks what a page of the book already is rather than what an edit produced. An edit that also names a range, fetching the one page it changed rather than the whole book, is still a render for supersession's sake, since it does say what that edit produced.
 
 The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or a new manuscript. A response whose generation is behind the current one is dropped without painting.
 

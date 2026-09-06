@@ -3,7 +3,7 @@ title: The preview
 description: Painting the display structure as SVG, mounting it in an element, and the harness that pages a book through it.
 ---
 
-The engine's output is a display structure: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG, with one `<text>` element per run of text and an explicit x for every character in it.
+The engine's output is a display structure: a book's worth of glyph positions, rules and image boxes. Turning that into pixels is a painter's job, and the package ships one. It draws a page as SVG: the glyphs, one `<text>` element per run with an explicit x for every character, and an invisible layer over them, one `<text>` per line, for a reader to select and copy from.
 
 ## Mounting
 
@@ -71,7 +71,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
 | `warnings` | [what the run warned about](../library/diagnostics.mdx) |
-| `svg(page?)` | the markup for a page, painted but not mounted |
+| `svg(page?)` | the markup for a held page, painted but not mounted; empty for one that is not |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |
 
@@ -111,6 +111,20 @@ The worker lets everything the host has already posted arrive before it renders 
 Nothing is interrupted to make that happen. A render occupies the worker from start to finish, so the collapsing happens in the gap before one begins. A render already running finishes, its output is dropped as stale, and the next one runs. A superseded render is one that never started, not one abandoned half-way, which is what keeps the session's caches sound.
 
 The effect is a debounce whose delay is the last render's duration: a long book waits behind its own slow render, and a short one repaints at once. A host that wants a fixed delay puts it in front of these calls.
+
+## Turning pages
+
+`Preview` fetches one page at a time, not the whole book: the page on screen and the one either side of it. Assigning to `page` inside that reach paints at once, from what is already held. A page further off asks the worker and paints once the reply lands, the frame staying as it was until then. `pages` reports how many pages the book has regardless of how much of it has crossed.
+
+An edit drops whatever pages were held, since the book they came from no longer stands, and fetches the page on screen fresh against the book the edit produced.
+
+`onRender` is called after every render that reaches the screen, with the reply behind the page on screen: `output.pages` holds that page alone, `output.bookPages` is the book's own length, and `output.fonts`, `output.assets` and `output.warnings` are the whole run's.
+
+```js
+const preview = await Preview.mount(element, {
+  onRender: (output) => console.log(`page ${output.first + 1} of ${output.bookPages}`),
+});
+```
 
 ## In React
 
@@ -161,6 +175,14 @@ So the painter leaves the browser nothing to work out. Each `<text>` sets an x f
 Where `text-transform` or small capitals changed the characters, the run has both. The painter draws what was shaped; beside it is what the author wrote, which is what selection and copy and paste return.
 
 The PDF writer reads the same display structure, so the two painters draw the same numbers, glyph for glyph.
+
+## Selection and copy
+
+A drag over the page selects text from the invisible layer, one `<text>` per line rather than per run, laid over the glyphs. The glyph layer beneath takes no pointer events, so the drag always lands on the line rather than a glyph.
+
+Copy answers from that layer's own selection rather than the browser's default serialization across it: a selection spanning several lines joins them in reading order, with nothing duplicated or dropped.
+
+A selection stays within one page: there is no boundary between two of them to drag across.
 
 ## Fonts
 
