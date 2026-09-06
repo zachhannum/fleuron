@@ -291,6 +291,14 @@ export class Preview {
 
   set page(number: number) {
     const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
+    if (clamped === this.showing) {
+      // Assigning the page already on screen is a no-op: a render
+      // already painted and notified for it, and a host that
+      // re-assigns the same page on every one of its own re-renders
+      // (a React effect keyed on the page it reads back, say) must
+      // not see that turn into an endless one of its own.
+      return;
+    }
     this.showing = clamped;
     if (this.held.has(clamped)) {
       // Already decoded, from an earlier prefetch or an edit that

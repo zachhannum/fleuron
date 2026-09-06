@@ -84,6 +84,21 @@ page.on('pageerror', (error) => broke.push(String(error)));
 await page.goto(`http://127.0.0.1:${port}/examples/preview/`, { waitUntil: 'load' });
 await page.waitForSelector('body[data-ready="yes"]', { timeout: 120_000 });
 
+// Most of what follows turns to a page and reads its markup back:
+// installed once here rather than duplicated at every call site.
+await page.evaluate(() => {
+  globalThis.__settledOnPage = async (folio, limit = 200) => {
+    for (
+      let waited = 0;
+      document.querySelector('#preview svg')?.getAttribute('data-page') !== String(folio) &&
+      waited < limit;
+      waited += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
+});
+
 const pages = await page.evaluate(() => globalThis.preview.pages as number);
 console.log(`  the harness sets the fixture book in ${pages} pages\n`);
 check('the fixture book reaches the browser', pages > 0);
@@ -95,17 +110,12 @@ check('the fixture book reaches the browser', pages > 0);
 const roundTrips = await page.evaluate(async () => {
   const preview = globalThis.preview;
   const showing = (): string | null => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
-  const settle = async (folio: number): Promise<void> => {
-    preview.page = folio;
-    for (let waited = 0; showing() !== String(folio) && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-  };
   // A page away from the mount's own opening cascade of renders
   // (each image and the stylesheet is its own render, and every one
   // fires its own prefetch), settled and given a further beat for
   // its own neighbour prefetch to land before anything is measured.
-  await settle(10);
+  preview.page = 10;
+  await globalThis.__settledOnPage(10);
   for (let waited = 0; waited < 200; waited += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
@@ -113,9 +123,7 @@ const roundTrips = await page.evaluate(async () => {
   const immediatelyOnNeighbour = showing();
   preview.page = 25;
   const immediatelyOnJump = showing();
-  for (let waited = 0; showing() !== '25' && waited < 200; waited += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+  await globalThis.__settledOnPage(25);
   return { immediatelyOnNeighbour, immediatelyOnJump, landed: showing() };
 });
 check(
@@ -134,6 +142,33 @@ check(
   `landed on page ${roundTrips.landed}`,
 );
 
+// A host that reads the page back off onRender and re-assigns it on
+// every one of its own re-renders (a React effect keyed on the
+// output it just received, say) must not see that turn into a render
+// of its own: reassigning the page already on screen is a no-op.
+const idempotent = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 5;
+  await globalThis.__settledOnPage(5);
+  const folio = document.getElementById('folio');
+  let mutations = 0;
+  const observer = new MutationObserver(() => {
+    mutations += 1;
+  });
+  observer.observe(folio as Node, { childList: true, characterData: true, subtree: true });
+  for (let i = 0; i < 5; i += 1) {
+    preview.page = preview.page;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  observer.disconnect();
+  return mutations;
+});
+check(
+  'reassigning the page already on screen does not itself trigger another render',
+  idempotent === 0,
+  `${idempotent} mutation(s) observed`,
+);
+
 // Every page, painted and on screen: the page is turned to each in
 // turn and the element that lands is the one the display structure asked
 // for, with text on it. Most of these pages are outside the window
@@ -145,9 +180,7 @@ const painted = await page.evaluate(async (count: number) => {
   const wrong: string[] = [];
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
-    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await globalThis.__settledOnPage(number);
     const svg = document.querySelector('#preview svg');
     const runs = svg?.querySelectorAll('text').length ?? 0;
     if (svg?.getAttribute('data-page') !== String(number) || runs === 0) {
@@ -191,9 +224,7 @@ const drawn = await page.evaluate(async (count: number) => {
   let drawn = 0;
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
-    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await globalThis.__settledOnPage(number);
     drawn += document.querySelectorAll('#preview svg image').length;
   }
   preview.page = 1;
@@ -221,9 +252,7 @@ async function comparedWithTheExport(what: string, compared: number): Promise<vo
     // A page this far from the one the harness opened on is not one
     // the preview already held: wait for the worker's reply rather
     // than photograph the page the turn before this one left up.
-    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await globalThis.__settledOnPage(number);
     // The harness's own chrome puts the sheet at a fractional pixel,
     // and a screenshot of a fractional box is every glyph blurred
     // half a pixel sideways. The page under it is untouched.
@@ -455,9 +484,7 @@ const shrunk = await page.evaluate(async () => {
   const preview = globalThis.preview;
   const showing = () => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
   preview.page = preview.pages;
-  for (let waited = 0; showing() !== String(preview.pages) && waited < 200; waited += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+  await globalThis.__settledOnPage(preview.pages);
   const before = preview.pages;
   await preview.setMarkdown('# Short\n\nOne short paragraph is all there is now.\n', 'shrunk.md');
   return { before, after: preview.pages, page: preview.page, landed: showing() };
@@ -489,4 +516,6 @@ declare global {
     setStyle(css: string | { name: string; css: string }[]): Promise<void>;
     setMarkdown(text: string, name?: string): Promise<void>;
   };
+  /** Waits until `#preview svg`'s `data-page` reads `folio`, or gives up after `limit` ticks. */
+  var __settledOnPage: (folio: number, limit?: number) => Promise<void>;
 }
