@@ -28,18 +28,13 @@ fn rule(prelude: &str, declaration: &str) -> String {
     format!("{prelude} {{\n  {declaration};\n}}")
 }
 
+/// As `warns_on_line_two`, pinned to the column `rule` writes a
+/// declaration at.
 fn warns_at_line_two(css: &str, naming: &str) {
-    let warnings = warnings(css);
-    let hit = warnings
-        .iter()
-        .find(|warning| warning.message.contains(naming));
-    let Some(hit) = hit else {
-        panic!("{css}\ndid not warn naming `{naming}`: {warnings:?}");
-    };
     assert_eq!(
-        hit.origin.as_deref(),
-        Some("sheet.css:2:3"),
-        "{css}\nwarned without the position: {hit:?}"
+        warns_on_line_two(css, naming),
+        3,
+        "{css}\nwarned at the wrong column"
     );
 }
 
@@ -221,8 +216,8 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
 }
 
 /// A warning naming `naming` on line 2, at whichever column the
-/// construct sits.
-fn warns_on_line_two(css: &str, naming: &str) {
+/// construct sits. Returns the column.
+fn warns_on_line_two(css: &str, naming: &str) -> u32 {
     let warnings = warnings(css);
     let hit = warnings
         .iter()
@@ -230,15 +225,11 @@ fn warns_on_line_two(css: &str, naming: &str) {
     let Some(hit) = hit else {
         panic!("{css}\ndid not warn naming `{naming}`: {warnings:?}");
     };
-    let column = hit
-        .origin
+    hit.origin
         .as_deref()
         .and_then(|origin| origin.strip_prefix("sheet.css:2:"))
-        .and_then(|column| column.parse::<u32>().ok());
-    assert!(
-        column.is_some(),
-        "{css}\nwarned without the position: {hit:?}"
-    );
+        .and_then(|column| column.parse::<u32>().ok())
+        .unwrap_or_else(|| panic!("{css}\nwarned without the position: {hit:?}"))
 }
 
 /// A property the engine reads is in the description: every property
