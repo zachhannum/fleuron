@@ -447,6 +447,30 @@ check(
   layered.warnings.join('; '),
 );
 
+// An edit that shrinks the book past the page on screen: the fetch
+// for the page that was showing comes back empty once the book no
+// longer has it, and a second fetch lands the preview on a page the
+// shorter book actually has, rather than a blank frame.
+const shrunk = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  const showing = () => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
+  preview.page = preview.pages;
+  for (let waited = 0; showing() !== String(preview.pages) && waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const before = preview.pages;
+  await preview.setMarkdown('# Short\n\nOne short paragraph is all there is now.\n', 'shrunk.md');
+  return { before, after: preview.pages, page: preview.page, landed: showing() };
+});
+check(
+  'an edit that shrinks the book past the page on screen still lands on a real page',
+  shrunk.after < shrunk.before &&
+    shrunk.page >= 1 &&
+    shrunk.page <= shrunk.after &&
+    shrunk.landed === String(shrunk.page),
+  `${shrunk.before} pages showing page ${shrunk.before}, then ${shrunk.after} pages, landed on ${shrunk.landed}`,
+);
+
 check('nothing threw on the page', broke.length === 0, broke.slice(0, 2).join('; '));
 
 await browser.close();

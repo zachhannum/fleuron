@@ -256,7 +256,7 @@ export class Preview {
    * were held, since the book they came from no longer stands.
    */
   async render(ops: Op[] = []): Promise<void> {
-    const generation = ops.length > 0 ? this.client.current + 1 : this.client.current;
+    const generation = this.client.generationFor(ops);
     const target = Math.max(this.showing, 1);
     const reply = await this.client.preview(ops, { first: target - 1, count: 1 });
     if (reply === null) {

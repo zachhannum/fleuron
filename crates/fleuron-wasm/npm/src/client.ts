@@ -55,9 +55,19 @@ export class Client {
     settle(response);
   }
 
-  /** The generation the next render goes out under. */
+  /** The current generation. Raised only by a render whose `ops` is non-empty. */
   get current(): number {
     return this.generation;
+  }
+
+  /**
+   * The generation a call to {@link Client.render}/{@link Client.preview}
+   * with these `ops` will be answered under, without sending anything.
+   * A caller that tags what it fetches with a generation of its own
+   * asks here rather than mirror the rule this raises it by.
+   */
+  generationFor(ops: Op[]): number {
+    return ops.length > 0 ? this.generation + 1 : this.generation;
   }
 
   /**
@@ -126,9 +136,7 @@ export class Client {
    * moves the generation such requests are answering against.
    */
   async render(ops: Op[], want: Want, range?: Range): Promise<Uint8Array | null> {
-    if (ops.length > 0) {
-      this.generation += 1;
-    }
+    this.generation = this.generationFor(ops);
     const response = await this.send({ ops, want, generation: this.generation, ...range });
     if (!isRendered(response)) {
       return SUPERSEDED;
