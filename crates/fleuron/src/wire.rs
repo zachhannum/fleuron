@@ -80,6 +80,10 @@ pub fn encode(output: &LayoutOutput) -> Result<Vec<u8>, WireError> {
 /// past the end of the book is clamped rather than refused: an edit
 /// that shortens the book while a page past its new end is still
 /// being asked for gets back whatever is left, not a panic.
+///
+/// `first` and the book's page count travel as `u32`, the same as
+/// every other count on the wire; a book past four billion pages is
+/// not one this format is sized for.
 pub fn encode_range(
     output: &LayoutOutput,
     first: usize,

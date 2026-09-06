@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 7;
+export const WIRE_VERSION = 8;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -198,10 +198,23 @@ export interface Warning {
   origin: string | null;
 }
 
-/** Everything one run produced: pages, the fonts they index, diagnostics. */
+/**
+ * What one reply carried, and where it falls in the book.
+ *
+ * `pages` need not be the whole book: a request that named a range
+ * gets back that slice alone, `first` says where it begins (counting
+ * from 0), and `bookPages` is how many pages the book has, so a reply
+ * carrying page 12 alone still answers "page 12 of 337". `fonts`,
+ * `assets` and `warnings` are never sliced, since none of them is per
+ * page.
+ */
 export interface LayoutOutput {
-  /** The typeset pages, in reading order. */
+  /** The pages this reply carries, in reading order. */
   pages: Page[];
+  /** The index of `pages[0]` in the book. Zero for a whole-book reply. */
+  first: number;
+  /** How many pages the book has. */
+  bookPages: number;
   /** The fonts this run used, indexed by `fontId`. */
   fonts: FontRefEntry[];
   /** The images this run placed, indexed by `ImageItem.asset`. */
@@ -408,11 +421,15 @@ export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
   if (version !== WIRE_VERSION) {
     throw new WireError(`wire version ${version}, expected ${WIRE_VERSION}`);
   }
+  const first = r.varint();
+  const bookPages = r.varint();
   const output: LayoutOutput = {
-    pages: r.seq(() => page(r)),
+    first,
+    bookPages,
     fonts: r.seq(() => font(r)),
     assets: r.seq(() => asset(r)),
     warnings: r.seq(() => warning(r)),
+    pages: r.seq(() => page(r)),
   };
   if (!r.done()) {
     throw new WireError('the buffer is more than one display structure');

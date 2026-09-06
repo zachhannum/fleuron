@@ -275,8 +275,19 @@ impl Session {
     }
 
     /// The display structure, postcard-encoded, version first.
-    pub fn preview(&mut self) -> Result<Vec<u8>, JsError> {
-        wire::encode(self.engine.preview()).map_err(js_error)
+    ///
+    /// `first` and `count` ask for a slice of the book's pages rather
+    /// than all of them; leaving either out answers with the whole
+    /// book, same as before ranges existed.
+    pub fn preview(&mut self, first: Option<u32>, count: Option<u32>) -> Result<Vec<u8>, JsError> {
+        let output = self.engine.preview();
+        match (first, count) {
+            (Some(first), Some(count)) => {
+                wire::encode_range(output, first as usize, count as usize)
+            }
+            _ => wire::encode(output),
+        }
+        .map_err(js_error)
     }
 
     /// The same run as PDF bytes. Both painters read the stages the
@@ -319,7 +330,7 @@ impl Session {
 /// case, over the same session a live preview keeps.
 #[wasm_bindgen]
 pub fn render(markdown: &str, css: &str) -> Result<Vec<u8>, JsError> {
-    once(markdown, css)?.preview()
+    once(markdown, css)?.preview(None, None)
 }
 
 /// The same, as PDF bytes.
