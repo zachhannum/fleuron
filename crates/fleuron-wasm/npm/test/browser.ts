@@ -88,14 +88,66 @@ const pages = await page.evaluate(() => globalThis.preview.pages as number);
 console.log(`  the harness sets the fixture book in ${pages} pages\n`);
 check('the fixture book reaches the browser', pages > 0);
 
+// Virtualization: a page turn to a neighbour the last turn already
+// prefetched paints synchronously, with nothing awaited in between; a
+// jump past the held window does not paint at once, and only lands
+// once the worker answers.
+const roundTrips = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  const showing = (): string | null => document.querySelector('#preview svg')?.getAttribute('data-page') ?? null;
+  const settle = async (folio: number): Promise<void> => {
+    preview.page = folio;
+    for (let waited = 0; showing() !== String(folio) && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
+  // A page away from the mount's own opening cascade of renders
+  // (each image and the stylesheet is its own render, and every one
+  // fires its own prefetch), settled and given a further beat for
+  // its own neighbour prefetch to land before anything is measured.
+  await settle(10);
+  for (let waited = 0; waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  preview.page = 11;
+  const immediatelyOnNeighbour = showing();
+  preview.page = 25;
+  const immediatelyOnJump = showing();
+  for (let waited = 0; showing() !== '25' && waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return { immediatelyOnNeighbour, immediatelyOnJump, landed: showing() };
+});
+check(
+  'a page turn to an already-prefetched neighbour paints at once',
+  roundTrips.immediatelyOnNeighbour === '11',
+  `showed page ${roundTrips.immediatelyOnNeighbour} right after the turn`,
+);
+check(
+  'jumping past the held window does not paint until the worker answers',
+  roundTrips.immediatelyOnJump !== '25',
+  `showed page ${roundTrips.immediatelyOnJump} right after the jump`,
+);
+check(
+  'and it paints the page asked for once the answer arrives',
+  roundTrips.landed === '25',
+  `landed on page ${roundTrips.landed}`,
+);
+
 // Every page, painted and on screen: the page is turned to each in
 // turn and the element that lands is the one the display structure asked
-// for, with text on it.
+// for, with text on it. Most of these pages are outside the window
+// the preview holds, so turning to one asks the worker for it; this
+// waits for that reply rather than reading the element the turn
+// before it left behind.
 const painted = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
   const wrong: string[] = [];
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
+    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     const svg = document.querySelector('#preview svg');
     const runs = svg?.querySelectorAll('text').length ?? 0;
     if (svg?.getAttribute('data-page') !== String(number) || runs === 0) {
@@ -134,11 +186,14 @@ check('a missing face falls back visibly rather than painting nothing', fallback
 // made at the same zoom, so a pixel is a pixel on either side.
 // The images the harness handed over are on the page, drawn from the
 // same files the engine sized them by.
-const drawn = await page.evaluate((count: number) => {
+const drawn = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
   let drawn = 0;
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
+    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     drawn += document.querySelectorAll('#preview svg image').length;
   }
   preview.page = 1;
@@ -160,9 +215,15 @@ check('the images the host handed over are painted, not outlined', drawn === 2, 
  * over.
  */
 async function comparedWithTheExport(what: string, compared: number): Promise<void> {
-  await page.evaluate(([zoom, number]: [number, number]) => {
+  await page.evaluate(async ([zoom, number]: [number, number]) => {
     globalThis.preview.zoom = zoom;
     globalThis.preview.page = number;
+    // A page this far from the one the harness opened on is not one
+    // the preview already held: wait for the worker's reply rather
+    // than photograph the page the turn before this one left up.
+    for (let waited = 0; document.querySelector('#preview svg')?.getAttribute('data-page') !== String(number) && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     // The harness's own chrome puts the sheet at a fractional pixel,
     // and a screenshot of a fractional box is every glyph blurred
     // half a pixel sideways. The page under it is untouched.

@@ -27,7 +27,14 @@ import {
   type Source,
 } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
-import type { Asset, LayoutOutput, Warning } from './wire.js';
+import type { Asset, FontRefEntry, LayoutOutput, Page, Warning } from './wire.js';
+
+/**
+ * How many pages either side of the one on screen a preview keeps
+ * decoded. A page turn within this radius paints from what is
+ * already held; one past it asks the worker.
+ */
+const HOLD_RADIUS = 1;
 
 /** How a preview is set up. */
 export interface PreviewOptions {
@@ -81,7 +88,13 @@ export interface PreviewOptions {
    * {@link PreviewOptions.images} supplied.
    */
   asset?: (asset: Asset, index: number) => string | null | undefined;
-  /** Called after every render that reached the screen. */
+  /**
+   * Called after every render that reached the screen, with the
+   * reply the page on screen came from. `output.pages` is that page
+   * alone, not the whole book: `output.bookPages` is the book's own
+   * length, and `output.fonts`/`output.assets`/`output.warnings` are
+   * the whole run's regardless.
+   */
   onRender?: (output: LayoutOutput) => void;
 }
 
@@ -101,7 +114,26 @@ export class Preview {
   private readonly faces = new Map<number, FontFace>();
   /** A blob url per image the host handed over, by its own url. */
   private readonly pixels = new Map<string, string>();
-  private output: LayoutOutput | null = null;
+  /**
+   * The pages this preview currently keeps decoded, by folio. Bounded
+   * to a window around the page on screen rather than the whole
+   * book: what makes a page turn instant is prefetching a neighbour
+   * before it is asked for, not holding every page there is.
+   */
+  private readonly held = new Map<number, Page>();
+  /**
+   * The generation `held` was built under. A reply for a different
+   * generation means an edit landed, and drops whatever was held
+   * before inserting: a page from the book before the edit is not
+   * one to paint over it.
+   */
+  private heldGeneration = -1;
+  /** The whole run's tables and diagnostics, which ride every reply
+   * regardless of which pages it carried. */
+  private fonts: FontRefEntry[] = [];
+  private assets: Asset[] = [];
+  private bookWarnings: Warning[] = [];
+  private bookPages = 0;
   private showing: number;
   private scale: number;
 
@@ -218,21 +250,38 @@ export class Preview {
     await this.render([this.keepImage(url, bytes)]);
   }
 
-  /** Lays the book out again and repaints. */
+  /**
+   * Lays the book out again and repaints, asking only for the page on
+   * screen rather than the whole book. An edit drops whatever pages
+   * were held, since the book they came from no longer stands.
+   */
   async render(ops: Op[] = []): Promise<void> {
-    const output = await this.client.preview(ops);
-    if (output === null) {
+    const generation = ops.length > 0 ? this.client.current + 1 : this.client.current;
+    const target = Math.max(this.showing, 1);
+    const reply = await this.client.preview(ops, { first: target - 1, count: 1 });
+    if (reply === null) {
       return;
     }
-    this.output = output;
-    await this.load(output);
+    this.absorb(reply, generation);
+    this.showing = Math.min(Math.max(this.showing, 1), Math.max(this.bookPages, 1));
+    if (!this.held.has(this.showing)) {
+      // The edit changed how many pages the book has, and the page
+      // that was asked for clamped to one this reply did not carry.
+      const fix = await this.client.preview([], { first: this.showing - 1, count: 1 });
+      if (fix !== null && generation === this.heldGeneration) {
+        this.absorb(fix, generation);
+      }
+    }
+    this.prune();
+    await this.load();
     this.paint();
-    this.options.onRender?.(output);
+    this.notify();
+    void this.prefetchNeighbours();
   }
 
   /** How many pages the book set to. */
   get pages(): number {
-    return this.output?.pages.length ?? 0;
+    return this.bookPages;
   }
 
   /** The page on screen, counting from 1. */
@@ -241,8 +290,20 @@ export class Preview {
   }
 
   set page(number: number) {
-    this.showing = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
-    this.paint();
+    const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
+    this.showing = clamped;
+    if (this.held.has(clamped)) {
+      // Already decoded, from an earlier prefetch or an edit that
+      // requested it directly: paints without asking the worker.
+      this.prune();
+      this.paint();
+      this.notify();
+    } else {
+      // Not held: the frame stays as it is until the page asked for
+      // arrives, rather than blank in the meantime.
+      void this.jumpTo(clamped);
+    }
+    void this.prefetchNeighbours();
   }
 
   /** Points to CSS pixels. */
@@ -267,15 +328,15 @@ export class Preview {
 
   /** Everything the run had to complain about. */
   get warnings(): Warning[] {
-    return this.output?.warnings ?? [];
+    return this.bookWarnings;
   }
 
   /**
-   * The markup on screen, or a page that is not on screen. Empty
-   * before the first render.
+   * The markup on screen, or a page that is not held. Empty before
+   * the first render, and for a page outside the held window.
    */
   svg(number = this.showing): string {
-    const page = this.output?.pages[number - 1];
+    const page = this.held.get(number);
     return page === undefined ? '' : paintPage(page, this.painting());
   }
 
@@ -297,6 +358,7 @@ export class Preview {
       URL.revokeObjectURL(url);
     }
     this.pixels.clear();
+    this.held.clear();
     this.element.replaceChildren();
     this.worker.terminate();
   }
@@ -318,14 +380,110 @@ export class Preview {
     return { op: 'image', url, bytes };
   }
 
+  /**
+   * Fetches a page not currently held, and paints it on arrival if it
+   * is still the one on screen and the book has not moved on under
+   * it in the meantime.
+   */
+  private async jumpTo(target: number): Promise<void> {
+    const generation = this.heldGeneration;
+    const reply = await this.client.preview([], { first: target - 1, count: 1 });
+    if (reply === null || generation !== this.heldGeneration) {
+      return;
+    }
+    this.absorb(reply, generation);
+    if (this.showing !== target) {
+      return;
+    }
+    this.prune();
+    await this.load();
+    this.paint();
+    this.notify();
+  }
+
+  /**
+   * Warms the pages either side of the one on screen, so a page turn
+   * in either direction paints from what is already held rather than
+   * asking the worker.
+   */
+  private async prefetchNeighbours(): Promise<void> {
+    const generation = this.heldGeneration;
+    const targets = [this.showing - 1, this.showing + 1].filter(
+      (candidate) => candidate >= 1 && candidate <= this.bookPages && !this.held.has(candidate),
+    );
+    await Promise.all(
+      targets.map(async (target) => {
+        const reply = await this.client.preview([], { first: target - 1, count: 1 });
+        if (reply !== null && generation === this.heldGeneration) {
+          this.absorb(reply, generation);
+          this.prune();
+          await this.load();
+        }
+      }),
+    );
+  }
+
+  /**
+   * Folds a reply into the held pages, keyed by folio rather than by
+   * its position in the reply. A reply for a generation `held` was
+   * not built under drops whatever was held before inserting: an
+   * edit is not undone by a page fetched against the book before it.
+   */
+  private absorb(reply: LayoutOutput, generation: number): void {
+    if (generation !== this.heldGeneration) {
+      this.held.clear();
+      this.heldGeneration = generation;
+    }
+    this.fonts = reply.fonts;
+    this.assets = reply.assets;
+    this.bookWarnings = reply.warnings;
+    this.bookPages = reply.bookPages;
+    reply.pages.forEach((page, index) => {
+      this.held.set(reply.first + index + 1, page);
+    });
+  }
+
+  /** Drops whatever is held outside the window around the page on screen. */
+  private prune(): void {
+    const low = this.showing - HOLD_RADIUS;
+    const high = this.showing + HOLD_RADIUS;
+    for (const folio of this.held.keys()) {
+      if (folio < low || folio > high) {
+        this.held.delete(folio);
+      }
+    }
+  }
+
   private paint(): void {
     this.frame.innerHTML = this.svg();
   }
 
+  /**
+   * Calls {@link PreviewOptions.onRender}, if the page on screen is
+   * held: built fresh from `held` and the run's tables rather than
+   * threaded through from whichever fetch put it there, so a host
+   * hears about every page that reaches the screen the same way,
+   * cached or just arrived.
+   */
+  private notify(): void {
+    const page = this.held.get(this.showing);
+    if (page === undefined) {
+      return;
+    }
+    this.options.onRender?.({
+      pages: [page],
+      first: this.showing - 1,
+      bookPages: this.bookPages,
+      fonts: this.fonts,
+      assets: this.assets,
+      warnings: this.bookWarnings,
+    });
+  }
+
   private painting() {
     return {
-      fonts: this.output?.fonts ?? [],
-      assets: this.output?.assets ?? [],
+      fonts: this.fonts,
+      assets: this.assets,
       zoom: this.scale,
       ...(this.options.paper === undefined ? {} : { paper: this.options.paper }),
       ...(this.options.ink === undefined ? {} : { ink: this.options.ink }),
@@ -334,8 +492,8 @@ export class Preview {
   }
 
   /**
-   * Loads the faces the run drew with, from the same files the
-   * engine shaped with.
+   * Loads the faces the held pages draw with, from the same files
+   * the engine shaped with.
    *
    * The bundled face is why this asks the module rather than the
    * network: it is inside the module, and there is no URL to fetch
@@ -343,12 +501,12 @@ export class Preview {
    * the painter's fallback stack is what the reader sees instead of
    * a blank page. `faces: 'host'` is that stack on purpose.
    */
-  private async load(output: LayoutOutput): Promise<void> {
+  private async load(): Promise<void> {
     if (this.options.faces === 'host') {
       return;
     }
     const used = new Set<number>();
-    for (const page of output.pages) {
+    for (const page of this.held.values()) {
       for (const item of page.items) {
         if (item.kind === 'text') {
           used.add(item.fontId);
@@ -365,7 +523,7 @@ export class Preview {
       // Registered as what it is, so that asking for it by that
       // slope and weight is an exact match and the browser
       // synthesises nothing over the cut the engine shaped with.
-      const attributes = this.output?.fonts[id]?.attributes;
+      const attributes = this.fonts[id]?.attributes;
       const face = new FontFace(faceFamily(id), bytes.buffer as ArrayBuffer, {
         style: attributes?.italic === true ? 'italic' : 'normal',
         weight: String(attributes?.weight ?? 400),
