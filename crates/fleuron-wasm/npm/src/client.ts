@@ -77,8 +77,11 @@ export class Client {
    * back behind the current generation.
    *
    * A ranged request (both `ops` empty and `range` given) is a
-   * question about the book as it stands, not a render: it never
-   * overtakes, and is never overtaken by, another render or range.
+   * question about the book as it stands, not a render: within the
+   * generation it was asked under, it never overtakes, and is never
+   * overtaken by, another render or range. An edit still raises the
+   * generation, and a range asked for before one arrives resolves to
+   * `null` once it lands, the same as any other stale reply.
    */
   async preview(ops: Op[] = [], range?: Range): Promise<LayoutOutput | null> {
     const bytes = await this.render(ops, 'preview', range);

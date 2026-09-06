@@ -216,6 +216,23 @@ check(
     JSON.stringify(third.pages[0]) === JSON.stringify(preview.pages[2]),
 );
 
+// A range fetch is only exempt from supersession among requests that
+// leave the generation where it found it. An edit fired while one is
+// in flight still raises the generation, so the range fetch answers a
+// book that no longer stands and comes back stale, same as any other
+// reply behind the current generation. Re-setting the same markdown
+// is edit enough to raise the generation without re-transferring the
+// image bytes `book` already handed over once.
+const racedRangeFetch = client.preview([], { first: 1, count: 1 });
+const racedEdit = await client.preview([
+  { op: 'markdown', name: 'gulliver-excerpt.md', text: markdown },
+]);
+check('an edit racing a range fetch still produces its own render', racedEdit !== null);
+check(
+  'and the range fetch it raced comes back stale rather than painting the old book',
+  (await racedRangeFetch) === null,
+);
+
 // The painter. Every page is painted, and every glyph the display
 // list placed is checked against the x the SVG puts that character
 // at — mechanically, over the draw items, with the byte-to-character
