@@ -130,12 +130,19 @@ export class Preview {
   private heldGeneration = -1;
   /**
    * Pages currently being asked for from the worker, whether the
-   * page turned to or a background prefetch of a neighbour. Asking
-   * again for one already here — including a page left and come back
-   * to before its first request landed — joins it rather than
-   * opening a second request for the same page.
+   * page turned to or a background prefetch of a neighbour, to the
+   * generation they were asked for under. Asking again for one
+   * already here — including a page left and come back to before its
+   * first request landed — joins it rather than opening a second
+   * request for the same page.
+   *
+   * Keyed on generation, not just the folio, so a fetch left over
+   * from the generation before an edit cannot clear the marker a
+   * fresh fetch for the same folio placed under the new one when the
+   * old one finally lands and finds itself answering a book that no
+   * longer stands.
    */
-  private readonly pending = new Set<number>();
+  private readonly pending = new Map<number, number>();
   /** The whole run's tables and diagnostics, which ride every reply
    * regardless of which pages it carried. */
   private fonts: FontRefEntry[] = [];
@@ -423,8 +430,8 @@ export class Preview {
     if (this.pending.has(target)) {
       return;
     }
-    this.pending.add(target);
     const generation = this.heldGeneration;
+    this.pending.set(target, generation);
     this.client
       .preview([], { first: target - 1, count: 1 })
       .then(async (reply) => {
@@ -446,7 +453,14 @@ export class Preview {
       })
       .catch(() => undefined)
       .finally(() => {
-        this.pending.delete(target);
+        // Only clears the marker this fetch itself placed: a
+        // generation change may have cleared `pending` outright and
+        // let a fresh fetch for the same folio claim it under the
+        // new generation, which this must not remove out from under
+        // it.
+        if (this.pending.get(target) === generation) {
+          this.pending.delete(target);
+        }
       });
   }
 
