@@ -169,6 +169,43 @@ check(
   `${idempotent} mutation(s) observed`,
 );
 
+// The same host pattern, but for a jump still in flight rather than
+// one already landed: repeating an identical assignment while it is
+// pending joins the request already on its way instead of opening a
+// second one for the same page.
+const deduped = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  let sent = 0;
+  const original = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function counted(this: Worker, ...args: unknown[]) {
+    sent += 1;
+    return (original as (...rest: unknown[]) => void).apply(this, args);
+  } as typeof Worker.prototype.postMessage;
+  try {
+    preview.page = 20;
+    const afterFirst = sent;
+    preview.page = 20;
+    preview.page = 20;
+    const afterRepeats = sent;
+    await globalThis.__settledOnPage(20);
+    return {
+      afterFirst,
+      afterRepeats,
+      landed: document.querySelector('#preview svg')?.getAttribute('data-page'),
+    };
+  } finally {
+    Worker.prototype.postMessage = original;
+  }
+});
+check(
+  'reassigning an in-flight jump target opens no request beyond the one already sent for it',
+  deduped.afterRepeats === deduped.afterFirst,
+  `${deduped.afterFirst} message(s) for the jump, ${deduped.afterRepeats} after two repeats`,
+);
+check('and the jump it joined still lands', deduped.landed === '20');
+
 // Every page, painted and on screen: the page is turned to each in
 // turn and the element that lands is the one the display structure asked
 // for, with text on it. Most of these pages are outside the window

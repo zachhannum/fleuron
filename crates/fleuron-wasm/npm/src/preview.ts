@@ -128,6 +128,12 @@ export class Preview {
    * one to paint over it.
    */
   private heldGeneration = -1;
+  /**
+   * The target of a jump already in flight, if any. A repeat of the
+   * same target while it is pending joins it rather than starting a
+   * second worker request for the same page.
+   */
+  private pendingJump: number | null = null;
   /** The whole run's tables and diagnostics, which ride every reply
    * regardless of which pages it carried. */
   private fonts: FontRefEntry[] = [];
@@ -291,17 +297,19 @@ export class Preview {
 
   set page(number: number) {
     const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
-    if (clamped === this.showing && this.held.has(clamped)) {
-      // Assigning the page already on screen, once it has actually
-      // landed, is a no-op: a render already painted and notified
-      // for it, and a host that re-assigns the same page on every
-      // one of its own re-renders (a React effect keyed on the page
-      // it reads back, say) must not see that turn into an endless
-      // one of its own. `held` is checked rather than just the
-      // number, so a jump that never landed (the worker answered
-      // with an error, say) is still retried by asking again for the
-      // page already pinned into `showing`, rather than stuck with
-      // no way back short of navigating off it and back.
+    if (clamped === this.showing && (this.held.has(clamped) || this.pendingJump === clamped)) {
+      // Already on screen, or already on its way: a render already
+      // painted and notified for a landed page, and a jump already
+      // in flight will do the same once it lands. Either way, a host
+      // that re-assigns the same page on every one of its own
+      // re-renders (a React effect keyed on the page it reads back,
+      // say) must not see that turn into a render of its own or a
+      // second worker request for a page already being asked for.
+      // `held` is checked rather than just the number, so a jump
+      // that failed outright (the worker answered with an error,
+      // say) — pending nothing, holding nothing — is still retried by
+      // asking again, rather than stuck with no way back short of
+      // navigating off the page and back.
       return;
     }
     this.showing = clamped;
@@ -318,7 +326,14 @@ export class Preview {
       // downstream of a fire-and-forget call can catch one, and the
       // frame simply stays as it was, retried the next time this
       // page is asked for.
-      this.jumpTo(clamped).catch(() => undefined);
+      this.pendingJump = clamped;
+      this.jumpTo(clamped)
+        .catch(() => undefined)
+        .finally(() => {
+          if (this.pendingJump === clamped) {
+            this.pendingJump = null;
+          }
+        });
     }
     this.prefetchNeighbours().catch(() => undefined);
   }
