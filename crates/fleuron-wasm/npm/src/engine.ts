@@ -189,15 +189,23 @@ export class Engine {
 
 /**
  * Whether a request is a question rather than a render: asking for a
- * face's bytes, or asking which pages of the book as it stands fall
- * in a range. Neither overtakes a render nor is overtaken by one, or
- * by a sibling question, since neither says what the last edit
- * produced.
+ * face's bytes, or asking which pages of the book as it stands — no
+ * `ops` of its own — fall in a range. Neither overtakes a render nor
+ * is overtaken by one, or by a sibling question, since neither says
+ * what the last edit produced.
+ *
+ * A range alone does not make a question: an edit that also names a
+ * range, to fetch the one page it changed rather than the whole
+ * book, still says what that edit produced and is a render like any
+ * other for supersession's sake.
  */
 function isQuestion(request: Request): boolean {
   return (
     request.want === 'font' ||
-    (request.want === 'preview' && request.first !== undefined && request.count !== undefined)
+    (request.want === 'preview' &&
+      request.ops.length === 0 &&
+      request.first !== undefined &&
+      request.count !== undefined)
   );
 }
 

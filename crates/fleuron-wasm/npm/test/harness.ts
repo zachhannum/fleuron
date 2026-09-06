@@ -395,6 +395,43 @@ check(
   `after ${sha256(painted).slice(0, 16)}…, uncancelled ${sha256(uncancelled).slice(0, 16)}…`,
 );
 
+// Latest wins over an edit that also names a range: this is the shape
+// Preview.render sends on every edit, fetching the one page it
+// changed rather than the whole book, and a range does not make it a
+// question — it still says what that edit produced. The client
+// discarding a stale reply is not proof of this on its own, since
+// that happens by generation regardless of what the worker did with
+// it; what is checked here is the raw protocol message, over the
+// worker's own shoulder, for the `superseded` the worker sends only
+// when it never ran the older one at all.
+const rawReplies: Response[] = [];
+const tap = (response: Response): void => {
+  rawReplies.push(response);
+};
+worker.on('message', tap);
+const rangedCancelled = client.preview(
+  [styleOp('book { font-size: 13pt }')],
+  { first: 0, count: 1 },
+);
+const rangedAfter = client.preview(
+  [styleOp('book { font-size: 12pt }')],
+  { first: 0, count: 1 },
+);
+const [rangedDropped, rangedPainted] = await Promise.all([rangedCancelled, rangedAfter]);
+worker.off('message', tap);
+if (rangedPainted === null) {
+  throw new Error('the render nothing overtook came back superseded');
+}
+check(
+  'a cancelled ranged render is discarded on the client',
+  rangedDropped === null,
+);
+check(
+  'and the worker itself never ran it: it is superseded on the wire, not merely stale by generation',
+  rawReplies.some((response) => 'superseded' in response && response.superseded),
+  rawReplies.map((response) => ('superseded' in response ? 'superseded' : 'kind' in response ? response.kind : '?')).join(', '),
+);
+
 // Colour: what the sheet names travels with the run, and the painter
 // fills with it. The PDF writer fills from the same field.
 const coloured = await client.preview([styleOp('h2, h3 { color: #b41e1e }')]);
