@@ -206,6 +206,38 @@ check(
 );
 check('and the jump it joined still lands', deduped.landed === '20');
 
+// A target left and come back to before its own request landed is
+// still in flight, not merely the most recently asked-for one: this
+// is the same join as an immediate repeat, just by a different route.
+const awayAndBack = await page.evaluate(async () => {
+  const preview = globalThis.preview;
+  preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  let sent = 0;
+  const original = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function counted(this: Worker, ...args: unknown[]) {
+    sent += 1;
+    return (original as (...rest: unknown[]) => void).apply(this, args);
+  } as typeof Worker.prototype.postMessage;
+  try {
+    preview.page = 30;
+    preview.page = 31;
+    const away = sent;
+    preview.page = 30;
+    const back = sent;
+    await globalThis.__settledOnPage(30);
+    return { away, back, landed: document.querySelector('#preview svg')?.getAttribute('data-page') };
+  } finally {
+    Worker.prototype.postMessage = original;
+  }
+});
+check(
+  'a target left and returned to before it landed opens no request beyond what leaving it already sent',
+  awayAndBack.back === awayAndBack.away,
+  `${awayAndBack.away} message(s) leaving page 30, ${awayAndBack.back} coming back to it`,
+);
+check('and it still lands', awayAndBack.landed === '30');
+
 // Every page, painted and on screen: the page is turned to each in
 // turn and the element that lands is the one the display structure asked
 // for, with text on it. Most of these pages are outside the window

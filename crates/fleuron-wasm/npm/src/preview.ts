@@ -129,11 +129,13 @@ export class Preview {
    */
   private heldGeneration = -1;
   /**
-   * The target of a jump already in flight, if any. A repeat of the
-   * same target while it is pending joins it rather than starting a
-   * second worker request for the same page.
+   * Pages currently being asked for from the worker, whether the
+   * page turned to or a background prefetch of a neighbour. Asking
+   * again for one already here — including a page left and come back
+   * to before its first request landed — joins it rather than
+   * opening a second request for the same page.
    */
-  private pendingJump: number | null = null;
+  private readonly pending = new Set<number>();
   /** The whole run's tables and diagnostics, which ride every reply
    * regardless of which pages it carried. */
   private fonts: FontRefEntry[] = [];
@@ -282,7 +284,7 @@ export class Preview {
     await this.load();
     this.paint();
     this.notify();
-    this.prefetchNeighbours().catch(() => undefined);
+    this.prefetchNeighbours();
   }
 
   /** How many pages the book set to. */
@@ -297,18 +299,15 @@ export class Preview {
 
   set page(number: number) {
     const clamped = Math.min(Math.max(Math.round(number), 1), Math.max(this.pages, 1));
-    if (clamped === this.showing && (this.held.has(clamped) || this.pendingJump === clamped)) {
-      // Already on screen, or already on its way: a render already
-      // painted and notified for a landed page, and a jump already
-      // in flight will do the same once it lands. Either way, a host
-      // that re-assigns the same page on every one of its own
-      // re-renders (a React effect keyed on the page it reads back,
-      // say) must not see that turn into a render of its own or a
-      // second worker request for a page already being asked for.
-      // `held` is checked rather than just the number, so a jump
-      // that failed outright (the worker answered with an error,
-      // say) — pending nothing, holding nothing — is still retried by
-      // asking again, rather than stuck with no way back short of
+    if (clamped === this.showing && this.held.has(clamped)) {
+      // Already on screen and painted: a render already notified for
+      // it, and a host that re-assigns the same page on every one of
+      // its own re-renders (a React effect keyed on the page it
+      // reads back, say) must not see that turn into a render of its
+      // own. `held` is checked rather than just the number, so a
+      // jump that failed outright (the worker answered with an
+      // error, say) — holding nothing — is still retried by asking
+      // again, rather than stuck with no way back short of
       // navigating off the page and back.
       return;
     }
@@ -321,21 +320,15 @@ export class Preview {
       this.notify();
     } else {
       // Not held: the frame stays as it is until the page asked for
-      // arrives, rather than blank in the meantime. Errors are
-      // swallowed here the way a missing face is elsewhere: nothing
-      // downstream of a fire-and-forget call can catch one, and the
-      // frame simply stays as it was, retried the next time this
-      // page is asked for.
-      this.pendingJump = clamped;
-      this.jumpTo(clamped)
-        .catch(() => undefined)
-        .finally(() => {
-          if (this.pendingJump === clamped) {
-            this.pendingJump = null;
-          }
-        });
+      // arrives, rather than blank in the meantime. `fetchPage` joins
+      // a request already in flight for it — a page left and come
+      // back to before its own request landed, or one already asked
+      // for as a neighbour's prefetch — and paints it once it lands,
+      // since by then it may be the page on screen whichever request
+      // brought it in.
+      this.fetchPage(clamped);
     }
-    this.prefetchNeighbours().catch(() => undefined);
+    this.prefetchNeighbours();
   }
 
   /** Points to CSS pixels. */
@@ -413,24 +406,44 @@ export class Preview {
   }
 
   /**
-   * Fetches a page not currently held, and paints it on arrival if it
-   * is still the one on screen and the book has not moved on under
-   * it in the meantime.
+   * Fetches one page not already pending, absorbing it and painting
+   * it if it is — or by the time it lands, has become — the page on
+   * screen. Shared by a page turn and a neighbour prefetch, so
+   * whichever of them asks first, the other joins it rather than
+   * opening a second request for the same page: what the request was
+   * *for* is decided when it lands, by whether `showing` still names
+   * it, not by which caller happened to start it.
+   *
+   * Errors are swallowed the way a missing face is elsewhere:
+   * nothing here is awaited by a caller that could catch one, and the
+   * frame simply stays as it was, retried the next time this page is
+   * asked for.
    */
-  private async jumpTo(target: number): Promise<void> {
+  private fetchPage(target: number): void {
+    if (this.pending.has(target)) {
+      return;
+    }
+    this.pending.add(target);
     const generation = this.heldGeneration;
-    const reply = await this.client.preview([], { first: target - 1, count: 1 });
-    if (reply === null || generation !== this.heldGeneration) {
-      return;
-    }
-    this.absorb(reply, generation);
-    if (this.showing !== target) {
-      return;
-    }
-    this.prune();
-    await this.load();
-    this.paint();
-    this.notify();
+    this.client
+      .preview([], { first: target - 1, count: 1 })
+      .then(async (reply) => {
+        if (reply === null || generation !== this.heldGeneration) {
+          return;
+        }
+        this.absorb(reply, generation);
+        if (this.showing !== target) {
+          return;
+        }
+        this.prune();
+        await this.load();
+        this.paint();
+        this.notify();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.pending.delete(target);
+      });
   }
 
   /**
@@ -438,21 +451,12 @@ export class Preview {
    * in either direction paints from what is already held rather than
    * asking the worker.
    */
-  private async prefetchNeighbours(): Promise<void> {
-    const generation = this.heldGeneration;
-    const targets = [this.showing - 1, this.showing + 1].filter(
-      (candidate) => candidate >= 1 && candidate <= this.bookPages && !this.held.has(candidate),
-    );
-    await Promise.all(
-      targets.map(async (target) => {
-        const reply = await this.client.preview([], { first: target - 1, count: 1 });
-        if (reply !== null && generation === this.heldGeneration) {
-          this.absorb(reply, generation);
-          this.prune();
-          await this.load();
-        }
-      }),
-    );
+  private prefetchNeighbours(): void {
+    for (const target of [this.showing - 1, this.showing + 1]) {
+      if (target >= 1 && target <= this.bookPages && !this.held.has(target)) {
+        this.fetchPage(target);
+      }
+    }
   }
 
   /**
