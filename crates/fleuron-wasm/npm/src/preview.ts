@@ -432,10 +432,14 @@ export class Preview {
           return;
         }
         this.absorb(reply, generation);
+        // Pruned whether or not this is the page on screen: `showing`
+        // may have moved on again while this was in flight, and its
+        // own window is what a page fetched for a target that far
+        // away landed outside of.
+        this.prune();
         if (this.showing !== target) {
           return;
         }
-        this.prune();
         await this.load();
         this.paint();
         this.notify();
@@ -468,6 +472,13 @@ export class Preview {
   private absorb(reply: LayoutOutput, generation: number): void {
     if (generation !== this.heldGeneration) {
       this.held.clear();
+      // A fetch still in flight for the generation before this one
+      // is answering a question about a book that no longer stands;
+      // its own generation check will discard the reply, but leaving
+      // its target `pending` until then would dedupe away a fresh
+      // fetch for the same folio in this generation, silently
+      // skipping it rather than prefetching it anew.
+      this.pending.clear();
       this.heldGeneration = generation;
     }
     this.fonts = reply.fonts;
