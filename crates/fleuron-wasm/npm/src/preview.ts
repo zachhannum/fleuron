@@ -112,7 +112,19 @@ export class Preview {
   private readonly client: Client;
   private readonly options: PreviewOptions;
   private readonly faces = new Map<number, FontFace>();
-  /** A blob url per image the host handed over, by its own url. */
+  /**
+   * Every image's own bytes, by url, kept independent of the transfer
+   * that moved the ones sent across the wall: a copy taken before the
+   * op went out, since the buffer handed to the engine is empty on
+   * this side afterwards.
+   */
+  private readonly imageBytes = new Map<string, Uint8Array>();
+  /**
+   * A blob url per image currently drawn by a held page, by its own
+   * url. Built and revoked by {@link syncAssetCache}: a book with
+   * more images than are ever on screen at once does not keep a blob
+   * open, and its decode, for every one of them.
+   */
   private readonly pixels = new Map<string, string>();
   /**
    * The pages this preview currently keeps decoded, by folio. Bounded
@@ -288,6 +300,7 @@ export class Preview {
       }
     }
     this.prune();
+    this.syncAssetCache();
     await this.load();
     this.paint();
     this.notify();
@@ -323,6 +336,7 @@ export class Preview {
       // Already decoded, from an earlier prefetch or an edit that
       // requested it directly: paints without asking the worker.
       this.prune();
+      this.syncAssetCache();
       this.paint();
       this.notify();
     } else {
@@ -390,25 +404,33 @@ export class Preview {
       URL.revokeObjectURL(url);
     }
     this.pixels.clear();
+    this.imageBytes.clear();
     this.held.clear();
     this.element.replaceChildren();
     this.worker.terminate();
   }
 
   /**
-   * Keeps a blob url over an image's bytes and hands the same bytes
-   * to the engine.
+   * Keeps a copy of an image's bytes and hands the original to the
+   * engine.
    *
-   * The blob is made before the op is sent, because the bytes move
+   * The copy is taken before the op is sent, because the bytes move
    * across the wall rather than being copied and the buffer is empty
-   * on this side afterwards.
+   * on this side afterwards. No blob is made here: {@link
+   * syncAssetCache} makes one only once a held page actually draws
+   * this url, which for most images in a book-sized manuscript is
+   * never at the same time as every other one.
    */
   private keepImage(url: string, bytes: Uint8Array): Op {
     const previous = this.pixels.get(url);
     if (previous !== undefined) {
+      // Stale bytes replaced: the blob over them answers for an
+      // image that no longer exists, so it goes now rather than
+      // waiting on a page that may never come held again to notice.
       URL.revokeObjectURL(previous);
+      this.pixels.delete(url);
     }
-    this.pixels.set(url, URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })));
+    this.imageBytes.set(url, bytes.slice());
     return { op: 'image', url, bytes };
   }
 
@@ -444,6 +466,7 @@ export class Preview {
         // own window is what a page fetched for a target that far
         // away landed outside of.
         this.prune();
+        this.syncAssetCache();
         if (this.showing !== target) {
           return;
         }
@@ -511,6 +534,49 @@ export class Preview {
     for (const folio of this.held.keys()) {
       if (folio < low || folio > high) {
         this.held.delete(folio);
+      }
+    }
+  }
+
+  /**
+   * Blobs every image a held page draws that does not have one yet,
+   * and revokes every blob no held page draws any more. Run after
+   * {@link prune}, over `held` as a whole rather than page by page:
+   * an asset two held pages share is not revoked for one of them
+   * dropping out while the other still stands.
+   *
+   * A url the host has not supplied bytes for is simply absent from
+   * `imageBytes`, the same gap the painter's asset resolver already
+   * falls back from — this adds no failure mode of its own, only an
+   * eviction of what was already optional.
+   */
+  private syncAssetCache(): void {
+    const needed = new Set<string>();
+    for (const page of this.held.values()) {
+      for (const item of page.items) {
+        if (item.kind === 'image') {
+          const url = this.assets[item.asset]?.url;
+          if (url !== undefined) {
+            needed.add(url);
+          }
+        }
+      }
+    }
+    for (const url of needed) {
+      if (!this.pixels.has(url)) {
+        const bytes = this.imageBytes.get(url);
+        if (bytes !== undefined) {
+          this.pixels.set(
+            url,
+            URL.createObjectURL(new Blob([bytes.slice()], { type: mediaType(bytes) })),
+          );
+        }
+      }
+    }
+    for (const [url, blobUrl] of this.pixels) {
+      if (!needed.has(url)) {
+        URL.revokeObjectURL(blobUrl);
+        this.pixels.delete(url);
       }
     }
   }

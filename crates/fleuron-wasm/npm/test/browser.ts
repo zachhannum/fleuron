@@ -301,6 +301,64 @@ const drawn = await page.evaluate(async (count: number) => {
 }, pages);
 check('the images the host handed over are painted, not outlined', drawn === 2, `${drawn} drawn`);
 
+// Asset cache: leaving an image's page far enough behind revokes the
+// blob url it painted from, and returning to that page paints it
+// again from one freshly made rather than leaving it outlined for
+// good.
+const assetCache = await page.evaluate(async (count: number) => {
+  const preview = globalThis.preview;
+  let imagePage = -1;
+  for (let number = 1; number <= count && imagePage === -1; number += 1) {
+    preview.page = number;
+    await globalThis.__settledOnPage(number);
+    if (document.querySelectorAll('#preview svg image').length > 0) {
+      imagePage = number;
+    }
+  }
+  if (imagePage === -1) {
+    return { imagePage };
+  }
+  let created = 0;
+  let revoked = 0;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = function counted(...args: unknown[]) {
+    created += 1;
+    return (originalCreate as (...rest: unknown[]) => string).apply(URL, args);
+  } as typeof URL.createObjectURL;
+  URL.revokeObjectURL = function counted(...args: unknown[]) {
+    revoked += 1;
+    return (originalRevoke as (...rest: unknown[]) => void).apply(URL, args);
+  } as typeof URL.revokeObjectURL;
+  try {
+    const away = Math.min(imagePage + 20, count);
+    preview.page = away;
+    await globalThis.__settledOnPage(away);
+    const revokedAfterLeaving = revoked;
+    preview.page = imagePage;
+    await globalThis.__settledOnPage(imagePage);
+    return {
+      imagePage,
+      revokedAfterLeaving,
+      createdAfterReturn: created,
+      drawnAgain: document.querySelectorAll('#preview svg image').length,
+    };
+  } finally {
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+}, pages);
+check(
+  'an image no held page draws any more has its blob url revoked',
+  assetCache.imagePage !== -1 && (assetCache.revokedAfterLeaving ?? 0) > 0,
+  JSON.stringify(assetCache),
+);
+check(
+  'and returning to its page paints it again from one freshly made',
+  (assetCache.createdAfterReturn ?? 0) > 0 && (assetCache.drawnAgain ?? 0) > 0,
+  JSON.stringify(assetCache),
+);
+
 /**
  * One page compared with the export: the preview photographed in the
  * browser, and the same page of the PDF the same run wrote rastered
