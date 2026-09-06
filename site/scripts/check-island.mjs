@@ -162,7 +162,10 @@ const misplaced = await page.evaluate(async () => {
       wrong.push(`expected page ${number}, the output named ${sheet?.number}`);
       continue;
     }
-    const painted = [...svg.querySelectorAll('text')];
+    // The selection layer is a second, later `<text>` per line rather
+    // than per run, over the manuscript's own casing rather than the
+    // glyphs this checks; excluded here the same way.
+    const painted = [...svg.querySelectorAll('text:not([data-selection-line])')];
     const runs = sheet.items.filter((item) => item.kind === 'text');
     if (painted.length !== runs.length) {
       wrong.push(`page ${sheet.number}: ${runs.length} runs, ${painted.length} <text>`);

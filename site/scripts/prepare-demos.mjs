@@ -90,15 +90,17 @@ for (const id of Object.keys(DEMOS)) {
   if (sheet === undefined) {
     throw new Error(`demo ${id} set no pages`);
   }
-  const svg = paintPage(sheet, {
-    fonts: output.fonts,
-    assets: output.assets,
-    paper: null,
-    ink: 'currentColor',
-    // A poster is markup in a document rather than a page fetching
-    // its own files, so an image travels inside it.
-    asset: (asset) => inline(pictures.get(asset.url)),
-  });
+  const svg = unselectable(
+    paintPage(sheet, {
+      fonts: output.fonts,
+      assets: output.assets,
+      paper: null,
+      ink: 'currentColor',
+      // A poster is markup in a document rather than a page fetching
+      // its own files, so an image travels inside it.
+      asset: (asset) => inline(pictures.get(asset.url)),
+    }),
+  );
   writeFileSync(new URL(`${id}.svg`, posters), `${lighter(svg)}\n`);
 
   const misplaced = displaced(sheet, svg) ?? displaced(sheet, lighter(svg), 0.051);
@@ -135,6 +137,15 @@ if (wrong > 0) {
   process.exit(1);
 }
 console.log('demos prepared: the module, the bench corpus, and a poster each');
+
+/**
+ * A poster with no selection layer: nothing here is live DOM a
+ * reader drags over, so the invisible lines a real preview overlays
+ * for that are markup a poster only pays bytes for.
+ */
+function unselectable(svg) {
+  return svg.replace(/<g data-selection-layer="true">[\s\S]*?<\/g>/, '');
+}
 
 /** One image as a data url, for a poster that embeds its own. */
 function inline(pixels) {
