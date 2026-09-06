@@ -536,7 +536,7 @@ impl<D> Spec<D> {
     }
 
     /// Reads a declaration of this property.
-    fn read<'i>(
+    pub(crate) fn read<'i>(
         &self,
         name: &CowRcStr<'i>,
         input: &mut Parser<'i, '_>,
@@ -681,14 +681,14 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         name: "orphans",
         inherited: true,
         syntax: "<integer>",
-        examples: &["2"],
+        examples: &["3"],
         read: |name, input| longhand(name, input, count, Declaration::Orphans),
     },
     Spec {
         name: "widows",
         inherited: true,
         syntax: "<integer>",
-        examples: &["2"],
+        examples: &["3"],
         read: |name, input| longhand(name, input, count, Declaration::Widows),
     },
     Spec {
@@ -1318,6 +1318,16 @@ pub(crate) const PSEUDO_CLASSES: &[(&str, &str)] = &[
     (":has()", "p:has(em)"),
 ];
 
+/// What a compound selector is made of besides pseudo-classes, with
+/// one use of each that parses.
+pub(crate) const COMPOUNDS: &[(&str, &str)] = &[("<element>", "p"), ("*", "section > *")];
+
+/// How selectors join in a list, with one use that parses.
+pub(crate) const SELECTOR_LIST: (&str, &str) = (",", "h1, h2");
+
+/// The shape of one declaration.
+pub(crate) const DECLARATION: &str = "<property>: <value> !important?";
+
 /// The combinators between two compounds, by their CSS names, with
 /// one use of each that parses.
 pub(crate) const COMBINATORS: &[(&str, &str)] = &[
@@ -1572,12 +1582,20 @@ fn font_face(input: &mut Parser<'_, '_>, sheet: &str) -> (FontFace, Vec<Warning>
     };
     let mut warnings = Vec::new();
     for result in collected {
-        match result {
-            Ok(FaceDeclaration::Family(family)) => face.family = family,
-            Ok(FaceDeclaration::Style(style)) => face.style = Some(style),
-            Ok(FaceDeclaration::Weight(weight)) => face.weight = Some(weight),
-            Ok(FaceDeclaration::Src(src)) => face.src = src,
-            Err(error) => warnings.push(warning(sheet, &error)),
+        let declarations = match result {
+            Ok(declarations) => declarations,
+            Err(error) => {
+                warnings.push(warning(sheet, &error));
+                continue;
+            }
+        };
+        for declaration in declarations {
+            match declaration {
+                FaceDeclaration::Family(family) => face.family = family,
+                FaceDeclaration::Style(style) => face.style = Some(style),
+                FaceDeclaration::Weight(weight) => face.weight = Some(weight),
+                FaceDeclaration::Src(src) => face.src = src,
+            }
         }
     }
     (face, warnings)
@@ -1640,7 +1658,7 @@ pub(crate) enum FaceDeclaration {
 }
 
 impl<'i> DeclarationParser<'i> for FontFaceBody {
-    type Declaration = FaceDeclaration;
+    type Declaration = Vec<FaceDeclaration>;
     type Error = StyleError<'i>;
 
     fn parse_value<'t>(
@@ -1653,28 +1671,26 @@ impl<'i> DeclarationParser<'i> for FontFaceBody {
             let Some(spec) = Spec::find(FONT_FACE_DESCRIPTORS, &name) else {
                 return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone())));
             };
-            let mut declarations = spec.read(&name, input)?;
+            let declarations = spec.read(&name, input)?;
             input.expect_exhausted()?;
-            Ok(declarations
-                .pop()
-                .expect("a descriptor reads one declaration"))
+            Ok(declarations)
         })(input)
     }
 }
 
 impl<'i> AtRuleParser<'i> for FontFaceBody {
     type Prelude = ();
-    type AtRule = FaceDeclaration;
+    type AtRule = Vec<FaceDeclaration>;
     type Error = StyleError<'i>;
 }
 
 impl<'i> QualifiedRuleParser<'i> for FontFaceBody {
     type Prelude = ();
-    type QualifiedRule = FaceDeclaration;
+    type QualifiedRule = Vec<FaceDeclaration>;
     type Error = StyleError<'i>;
 }
 
-impl<'i> RuleBodyItemParser<'i, FaceDeclaration, StyleError<'i>> for FontFaceBody {
+impl<'i> RuleBodyItemParser<'i, Vec<FaceDeclaration>, StyleError<'i>> for FontFaceBody {
     fn parse_declarations(&self) -> bool {
         true
     }

@@ -9,16 +9,18 @@
 //!
 //! The `syntax` strings use CSS value-definition syntax. A bare word
 //! is a keyword, `<name>` is a type, `name()` is a function. The
-//! keywords are also extracted for a host that would rather not parse
-//! the grammar.
+//! keywords are also listed on their own, for a host that would
+//! rather complete them than parse the grammar; where one stands in
+//! the grammar is still the grammar's to say.
 
 use serde::{Deserialize, Serialize};
 
 use crate::style::element::ELEMENTS;
 use crate::style::properties::{CounterStyle, MarginBox};
 use crate::style::sheet::{
-    COMBINATORS, FONT_FACE_DESCRIPTORS, MARGIN_BOX_PROPERTIES, NAMED, PAGE_PROPERTIES,
-    PAGE_SELECTORS, PAGE_SIZES, PROPERTIES, PSEUDO_CLASSES, PSEUDO_ELEMENTS, Spec, UNITS,
+    COMBINATORS, COMPOUNDS, DECLARATION, FONT_FACE_DESCRIPTORS, MARGIN_BOX_PROPERTIES, NAMED,
+    PAGE_PROPERTIES, PAGE_SELECTORS, PAGE_SIZES, PROPERTIES, PSEUDO_CLASSES, PSEUDO_ELEMENTS,
+    SELECTOR_LIST, Spec, UNITS,
 };
 
 /// What the engine accepts, from the version that produced it.
@@ -28,6 +30,8 @@ pub struct Subset {
     pub version: String,
     /// What a style rule may select.
     pub selectors: Selectors,
+    /// The shape of one declaration, in value-definition syntax.
+    pub declaration: String,
     /// The properties a style rule may declare.
     pub properties: Vec<Property>,
     /// The `@page` rule.
@@ -45,8 +49,12 @@ pub struct Subset {
 pub struct Selectors {
     /// The element names, as the content tree produces them.
     pub elements: Vec<String>,
+    /// What a compound is made of besides pseudo-classes.
+    pub compounds: Vec<Selector>,
     /// The combinators between two compounds.
     pub combinators: Vec<Selector>,
+    /// How selectors join in a list.
+    pub list: Selector,
     /// The pseudo-classes, functional ones with their parentheses.
     pub pseudo_classes: Vec<Selector>,
     /// The pseudo-elements.
@@ -71,7 +79,9 @@ pub struct Property {
     pub inherited: bool,
     /// The values it accepts, in CSS value-definition syntax.
     pub syntax: String,
-    /// The keywords in `syntax`.
+    /// The keywords in `syntax`, wherever they stand in it. One that
+    /// only follows another value, like `landscape` after a page
+    /// size, is not a value on its own.
     pub keywords: Vec<String>,
     /// Values that parse.
     pub examples: Vec<String>,
@@ -84,7 +94,7 @@ pub struct Descriptor {
     pub name: String,
     /// The values it accepts, in CSS value-definition syntax.
     pub syntax: String,
-    /// The keywords in `syntax`.
+    /// The keywords in `syntax`, wherever they stand in it.
     pub keywords: Vec<String>,
     /// Values that parse.
     pub examples: Vec<String>,
@@ -93,6 +103,9 @@ pub struct Descriptor {
 /// The `@page` rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Page {
+    /// What follows `@page`, in value-definition syntax: a page name,
+    /// then any of the page selectors.
+    pub prelude: String,
     /// The page selectors, without their colon.
     pub selectors: Vec<String>,
     /// The properties a page body may declare.
@@ -143,12 +156,26 @@ impl Subset {
             version: env!("CARGO_PKG_VERSION").to_string(),
             selectors: Selectors {
                 elements: strings(&ELEMENTS),
+                compounds: selectors(COMPOUNDS),
                 combinators: selectors(COMBINATORS),
+                list: Selector {
+                    name: SELECTOR_LIST.0.to_string(),
+                    example: SELECTOR_LIST.1.to_string(),
+                },
                 pseudo_classes: selectors(PSEUDO_CLASSES),
                 pseudo_elements: selectors(PSEUDO_ELEMENTS),
             },
+            declaration: DECLARATION.to_string(),
             properties: properties(PROPERTIES),
             page: Page {
+                prelude: format!(
+                    "<name>? [ {} ]*",
+                    PAGE_SELECTORS
+                        .iter()
+                        .map(|(name, _)| format!(":{name}"))
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                ),
                 selectors: PAGE_SELECTORS
                     .iter()
                     .map(|(name, _)| name.to_string())
@@ -270,7 +297,9 @@ fn keywords(syntax: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::style::element::ElementTree;
-    use crate::style::{Source, Stylesheets};
+    use crate::style::properties::{Declaration, Edge};
+    use crate::style::sheet::{FaceDeclaration, MarginDeclaration, PageDeclaration};
+    use cssparser::{CowRcStr, Parser, ParserInput};
     use std::collections::BTreeSet;
 
     #[test]
@@ -312,23 +341,94 @@ mod tests {
         assert_eq!(read, subset);
     }
 
-    /// Every example a spec names reads back as a declaration of that
-    /// property, so the examples the description carries are ones the
-    /// reader in the same row accepts.
+    /// Every example a row names reads, through that row, into a
+    /// declaration of the property the row names: a shorthand into
+    /// its longhands, a longhand into itself.
     #[test]
-    fn examples_parse_to_their_own_property() {
-        for spec in PROPERTIES {
-            for example in spec.examples {
-                let css = format!("p {{ {}: {}; }}", spec.name, example);
-                let sheets = Stylesheets::parse(&[Source::author("sheet.css", &css)]);
-                assert!(
-                    sheets.warnings().is_empty(),
-                    "{}: {} warned: {:?}",
-                    spec.name,
-                    example,
-                    sheets.warnings()
-                );
+    fn examples_read_into_their_own_property() {
+        fn check<D>(specs: &[Spec<D>], property_of: fn(&D) -> &'static str) {
+            for spec in specs {
+                for example in spec.examples {
+                    let mut input = ParserInput::new(example);
+                    let mut parser = Parser::new(&mut input);
+                    let name = CowRcStr::from(spec.name);
+                    let declarations = spec
+                        .read(&name, &mut parser)
+                        .unwrap_or_else(|error| panic!("{}: {example}: {error:?}", spec.name));
+                    assert!(
+                        parser.expect_exhausted().is_ok(),
+                        "{}: {example} left input unread",
+                        spec.name
+                    );
+                    assert!(!declarations.is_empty(), "{}: {example}", spec.name);
+                    for declaration in &declarations {
+                        let read = property_of(declaration);
+                        let longhand_of = |shorthand: &str| {
+                            read.strip_prefix(shorthand)
+                                .is_some_and(|rest| rest.starts_with('-'))
+                        };
+                        assert!(
+                            read == spec.name || longhand_of(spec.name),
+                            "{}: {example} read as {read}",
+                            spec.name
+                        );
+                    }
+                }
             }
+        }
+        check(PROPERTIES, property_of);
+        check(PAGE_PROPERTIES, |declaration| match declaration {
+            PageDeclaration::Size(..) => "size",
+            PageDeclaration::Margin(edge, _) => margin_of(*edge),
+        });
+        check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
+            MarginDeclaration::Content(_) => "content",
+            MarginDeclaration::Style(declaration) => property_of(declaration),
+        });
+        check(FONT_FACE_DESCRIPTORS, |declaration| match declaration {
+            FaceDeclaration::Family(_) => "font-family",
+            FaceDeclaration::Style(_) => "font-style",
+            FaceDeclaration::Weight(_) => "font-weight",
+            FaceDeclaration::Src(_) => "src",
+        });
+    }
+
+    fn margin_of(edge: Edge) -> &'static str {
+        match edge {
+            Edge::Top => "margin-top",
+            Edge::Right => "margin-right",
+            Edge::Bottom => "margin-bottom",
+            Edge::Left => "margin-left",
+        }
+    }
+
+    fn property_of(declaration: &Declaration) -> &'static str {
+        match declaration {
+            Declaration::FontFamily(_) => "font-family",
+            Declaration::Color(_) => "color",
+            Declaration::FontSize(_) => "font-size",
+            Declaration::FontStyle(_) => "font-style",
+            Declaration::FontWeight(_) => "font-weight",
+            Declaration::LineHeight(_) => "line-height",
+            Declaration::LetterSpacing(_) => "letter-spacing",
+            Declaration::FontVariantCaps(_) => "font-variant-caps",
+            Declaration::TextTransform(_) => "text-transform",
+            Declaration::TextAlign(_) => "text-align",
+            Declaration::TextJustify(_) => "text-justify",
+            Declaration::TextIndent(_) => "text-indent",
+            Declaration::HangingPunctuation(_) => "hanging-punctuation",
+            Declaration::Hyphens(_) => "hyphens",
+            Declaration::Orphans(_) => "orphans",
+            Declaration::Widows(_) => "widows",
+            Declaration::Page(_) => "page",
+            Declaration::Content(_) => "content",
+            Declaration::StringSet(_) => "string-set",
+            Declaration::CounterReset(_) => "counter-reset",
+            Declaration::InitialLetter(_) => "initial-letter",
+            Declaration::Margin(edge, _) => margin_of(*edge),
+            Declaration::BreakBefore(_) => "break-before",
+            Declaration::BreakAfter(_) => "break-after",
+            Declaration::BreakInside(_) => "break-inside",
         }
     }
 
