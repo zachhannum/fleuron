@@ -129,6 +129,28 @@ impl SelectorImpl for Fleuron {
     type PseudoElement = PseudoElement;
 }
 
+/// Every element name the tree can hold, in the order the content
+/// tree introduces them. A selector names one of these or matches
+/// nothing.
+pub const ELEMENTS: [&str; 16] = [
+    "book",
+    "section",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "blockquote",
+    "hr",
+    "img",
+    "code",
+    "em",
+    "strong",
+    "a",
+];
+
 /// One element: a name, an identity in the content tree, and the
 /// links a selector walks.
 #[derive(Debug)]

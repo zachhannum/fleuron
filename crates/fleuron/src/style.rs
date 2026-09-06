@@ -16,6 +16,7 @@
 mod element;
 mod properties;
 mod sheet;
+pub mod subset;
 
 use std::collections::BTreeMap;
 

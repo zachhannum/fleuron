@@ -370,13 +370,13 @@ fn page_selector<'i>(
     while !input.is_exhausted() {
         input.expect_colon()?;
         let pseudo = input.expect_ident()?.clone();
-        match_ignore_ascii_case! { &pseudo,
-            "first" => rule.first = true,
-            "blank" => rule.blank = true,
-            "left" => rule.side = Some(Side::Verso),
-            "right" => rule.side = Some(Side::Recto),
-            _ => return Err(input.new_custom_error(StyleError::UnsupportedPageSelector)),
-        }
+        let Some((_, narrow)) = PAGE_SELECTORS
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(&pseudo))
+        else {
+            return Err(input.new_custom_error(StyleError::UnsupportedPageSelector));
+        };
+        narrow(&mut rule);
     }
     Ok(rule)
 }
@@ -502,48 +502,316 @@ impl<'i> RuleBodyItemParser<'i, Longhands, StyleError<'i>> for Properties {
     }
 }
 
+/// One property the parser reads: the name it matches, what the
+/// value may be, and the reader that turns the value into
+/// declarations. The tables of these are the whole of what the
+/// engine claims to understand, and the description in `subset` is
+/// read off them.
+///
+/// `syntax` is CSS value-definition syntax. A bare word in it is a
+/// keyword, `<name>` a type, `name()` a function. `examples` are
+/// values that parse, one for each form the syntax allows.
+pub(crate) struct Spec<D> {
+    pub name: &'static str,
+    /// Whether a child starts from the parent's value.
+    pub inherited: bool,
+    pub syntax: &'static str,
+    pub examples: &'static [&'static str],
+    read: Reader<D>,
+}
+
+/// Reads one declaration's value, from after the colon to the end of
+/// the declaration.
+type Reader<D> = for<'i, 't> fn(
+    &CowRcStr<'i>,
+    &mut Parser<'i, 't>,
+) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>>;
+
+impl<D> Spec<D> {
+    /// The spec for `name`, whatever case it was written in.
+    pub(crate) fn find<'a>(specs: &'a [Spec<D>], name: &str) -> Option<&'a Spec<D>> {
+        specs
+            .iter()
+            .find(|spec| spec.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Reads a declaration of this property.
+    fn read<'i>(
+        &self,
+        name: &CowRcStr<'i>,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>> {
+        (self.read)(name, input)
+    }
+}
+
+/// Reads one longhand: `parse` for the value, `wrap` for the
+/// declaration it becomes.
+fn longhand<'i, T, D>(
+    name: &CowRcStr<'i>,
+    input: &mut Parser<'i, '_>,
+    parse: fn(&mut Parser<'i, '_>) -> Option<T>,
+    wrap: fn(T) -> D,
+) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>> {
+    let value = keyword_or(input, parse, || StyleError::UnsupportedValue(name.clone()))?;
+    Ok(vec![wrap(value)])
+}
+
+/// Reads the `margin` shorthand into its four longhands.
+fn margins<'i, D>(
+    name: &CowRcStr<'i>,
+    input: &mut Parser<'i, '_>,
+    wrap: fn(Edge, Length) -> D,
+) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>> {
+    let edges = edges(input)
+        .ok_or_else(|| input.new_custom_error(StyleError::UnsupportedValue(name.clone())))?;
+    Ok(edges
+        .into_iter()
+        .map(|(edge, length)| wrap(edge, length))
+        .collect())
+}
+
+/// The properties of a style rule.
+pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
+    Spec {
+        name: "font-family",
+        inherited: true,
+        syntax: "[ <family-name> | serif | sans-serif | monospace ]#",
+        examples: &["\"Author Serif\", serif", "Times New Roman"],
+        read: |_, input| Ok(vec![Declaration::FontFamily(families(input)?)]),
+    },
+    Spec {
+        name: "font-size",
+        inherited: true,
+        syntax: "<length> | <percentage>",
+        examples: &["11pt", "1.5em", "120%"],
+        read: |name, input| longhand(name, input, length, Declaration::FontSize),
+    },
+    Spec {
+        name: "font-style",
+        inherited: true,
+        syntax: "normal | italic | oblique",
+        examples: &["italic"],
+        read: |name, input| longhand(name, input, font_style, Declaration::FontStyle),
+    },
+    Spec {
+        name: "font-weight",
+        inherited: true,
+        syntax: "normal | bold | <number [1,1000]>",
+        examples: &["bold", "600"],
+        read: |name, input| longhand(name, input, weight, Declaration::FontWeight),
+    },
+    Spec {
+        name: "color",
+        inherited: true,
+        syntax: "<color>",
+        examples: &[
+            "darkslategray",
+            "#369",
+            "#336699",
+            "rgb(51, 102, 153)",
+            "rgb(20% 40% 60%)",
+        ],
+        read: |name, input| longhand(name, input, color, Declaration::Color),
+    },
+    Spec {
+        name: "line-height",
+        inherited: true,
+        syntax: "normal | <number> | <length> | <percentage>",
+        examples: &["normal", "1.4", "14pt", "140%"],
+        read: |name, input| longhand(name, input, line_height, Declaration::LineHeight),
+    },
+    Spec {
+        name: "letter-spacing",
+        inherited: true,
+        syntax: "normal | <length>",
+        examples: &["normal", "0.05em"],
+        read: |name, input| longhand(name, input, letter_spacing, Declaration::LetterSpacing),
+    },
+    Spec {
+        name: "font-variant-caps",
+        inherited: true,
+        syntax: "normal | small-caps",
+        examples: &["small-caps"],
+        read: |name, input| longhand(name, input, variant_caps, Declaration::FontVariantCaps),
+    },
+    Spec {
+        name: "text-transform",
+        inherited: true,
+        syntax: "none | uppercase | lowercase | capitalize",
+        examples: &["uppercase"],
+        read: |name, input| longhand(name, input, text_transform, Declaration::TextTransform),
+    },
+    Spec {
+        name: "text-align",
+        inherited: true,
+        syntax: "left | right | center | justify | start | end",
+        examples: &["justify"],
+        read: |name, input| longhand(name, input, text_align, Declaration::TextAlign),
+    },
+    Spec {
+        name: "text-justify",
+        inherited: true,
+        syntax: "auto | inter-word | inter-character | distribute",
+        examples: &["inter-character"],
+        read: |name, input| longhand(name, input, text_justify, Declaration::TextJustify),
+    },
+    Spec {
+        name: "text-indent",
+        inherited: true,
+        syntax: "<length> | <percentage>",
+        examples: &["1.2em", "5%"],
+        read: |name, input| longhand(name, input, length, Declaration::TextIndent),
+    },
+    Spec {
+        name: "hanging-punctuation",
+        inherited: true,
+        syntax: "none | [ first || [ force-end | allow-end ] || last ]",
+        examples: &["none", "first", "first allow-end last", "force-end"],
+        read: |name, input| longhand(name, input, hanging, Declaration::HangingPunctuation),
+    },
+    Spec {
+        name: "hyphens",
+        inherited: true,
+        syntax: "none | manual | auto",
+        examples: &["auto"],
+        read: |name, input| longhand(name, input, hyphens, Declaration::Hyphens),
+    },
+    Spec {
+        name: "orphans",
+        inherited: true,
+        syntax: "<integer>",
+        examples: &["2"],
+        read: |name, input| longhand(name, input, count, Declaration::Orphans),
+    },
+    Spec {
+        name: "widows",
+        inherited: true,
+        syntax: "<integer>",
+        examples: &["2"],
+        read: |name, input| longhand(name, input, count, Declaration::Widows),
+    },
+    Spec {
+        name: "page",
+        inherited: true,
+        syntax: "auto | <name>",
+        examples: &["auto", "chapter"],
+        read: |name, input| longhand(name, input, page_name, Declaration::Page),
+    },
+    Spec {
+        name: "content",
+        inherited: false,
+        syntax: "none | <string>",
+        examples: &["none", "\"\\2766\""],
+        read: |name, input| longhand(name, input, ornament, Declaration::Content),
+    },
+    Spec {
+        name: "string-set",
+        inherited: false,
+        syntax: "none | [ <name> [ content() | <string> ]+ ]#",
+        examples: &[
+            "none",
+            "chapter content()",
+            "part \"Part \" content(), chapter content()",
+        ],
+        read: |name, input| longhand(name, input, string_set, Declaration::StringSet),
+    },
+    Spec {
+        name: "counter-reset",
+        inherited: false,
+        syntax: "none | page <integer>?",
+        examples: &["none", "page", "page 1"],
+        read: |name, input| longhand(name, input, counter_reset, Declaration::CounterReset),
+    },
+    Spec {
+        name: "initial-letter",
+        inherited: false,
+        syntax: "<integer>",
+        examples: &["3"],
+        read: |name, input| longhand(name, input, count, Declaration::InitialLetter),
+    },
+    Spec {
+        name: "margin",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,4}",
+        examples: &["1em", "1em 2em", "1em 2em 0", "54pt 42pt 54pt 54pt"],
+        read: |name, input| margins(name, input, Declaration::Margin),
+    },
+    Spec {
+        name: "margin-top",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["1em"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Margin(Edge::Top, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-right",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["1em"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Margin(Edge::Right, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-bottom",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["1em"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Margin(Edge::Bottom, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-left",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["1em"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Margin(Edge::Left, length)
+            })
+        },
+    },
+    Spec {
+        name: "break-before",
+        inherited: false,
+        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        examples: &["recto"],
+        read: |name, input| longhand(name, input, break_value, Declaration::BreakBefore),
+    },
+    Spec {
+        name: "break-after",
+        inherited: false,
+        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        examples: &["avoid"],
+        read: |name, input| longhand(name, input, break_value, Declaration::BreakAfter),
+    },
+    Spec {
+        name: "break-inside",
+        inherited: false,
+        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        examples: &["avoid"],
+        read: |name, input| longhand(name, input, break_value, Declaration::BreakInside),
+    },
+];
+
 /// One declaration of the novel subset, expanded to longhands.
 fn property<'i>(
     name: &CowRcStr<'i>,
     input: &mut Parser<'i, '_>,
 ) -> Result<Vec<Declaration>, ParseError<'i, StyleError<'i>>> {
-    let bad = || StyleError::UnsupportedValue(name.clone());
-    let one = |declaration| Ok(vec![declaration]);
-    match_ignore_ascii_case! { name,
-        "font-family" => one(Declaration::FontFamily(families(input)?)),
-        "font-size" => one(Declaration::FontSize(keyword_or(input, length, bad)?)),
-        "font-style" => one(Declaration::FontStyle(keyword_or(input, font_style, bad)?)),
-        "font-weight" => one(Declaration::FontWeight(keyword_or(input, weight, bad)?)),
-        "color" => one(Declaration::Color(keyword_or(input, color, bad)?)),
-        "line-height" => one(Declaration::LineHeight(keyword_or(input, line_height, bad)?)),
-        "letter-spacing" => one(Declaration::LetterSpacing(keyword_or(input, letter_spacing, bad)?)),
-        "font-variant-caps" => one(Declaration::FontVariantCaps(keyword_or(input, variant_caps, bad)?)),
-        "text-transform" => one(Declaration::TextTransform(keyword_or(input, text_transform, bad)?)),
-        "text-align" => one(Declaration::TextAlign(keyword_or(input, text_align, bad)?)),
-        "text-justify" => one(Declaration::TextJustify(keyword_or(input, text_justify, bad)?)),
-        "text-indent" => one(Declaration::TextIndent(keyword_or(input, length, bad)?)),
-        "hanging-punctuation" => one(Declaration::HangingPunctuation(keyword_or(input, hanging, bad)?)),
-        "hyphens" => one(Declaration::Hyphens(keyword_or(input, hyphens, bad)?)),
-        "orphans" => one(Declaration::Orphans(keyword_or(input, count, bad)?)),
-        "widows" => one(Declaration::Widows(keyword_or(input, count, bad)?)),
-        "page" => one(Declaration::Page(keyword_or(input, page_name, bad)?)),
-        "content" => one(Declaration::Content(keyword_or(input, ornament, bad)?)),
-        "string-set" => one(Declaration::StringSet(keyword_or(input, string_set, bad)?)),
-        "counter-reset" => one(Declaration::CounterReset(keyword_or(input, counter_reset, bad)?)),
-        "initial-letter" => one(Declaration::InitialLetter(keyword_or(input, count, bad)?)),
-        "margin" => Ok(edges(input)
-            .ok_or_else(|| input.new_custom_error(bad()))?
-            .into_iter()
-            .map(|(edge, length)| Declaration::Margin(edge, length))
-            .collect()),
-        "margin-top" => one(Declaration::Margin(Edge::Top, keyword_or(input, length, bad)?)),
-        "margin-right" => one(Declaration::Margin(Edge::Right, keyword_or(input, length, bad)?)),
-        "margin-bottom" => one(Declaration::Margin(Edge::Bottom, keyword_or(input, length, bad)?)),
-        "margin-left" => one(Declaration::Margin(Edge::Left, keyword_or(input, length, bad)?)),
-        "break-before" => one(Declaration::BreakBefore(keyword_or(input, break_value, bad)?)),
-        "break-after" => one(Declaration::BreakAfter(keyword_or(input, break_value, bad)?)),
-        "break-inside" => one(Declaration::BreakInside(keyword_or(input, break_value, bad)?)),
-        _ => Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))),
+    match Spec::find(PROPERTIES, name) {
+        Some(spec) => spec.read(name, input),
+        None => Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))),
     }
 }
 
@@ -882,22 +1150,32 @@ fn length(input: &mut Parser<'_, '_>) -> Option<Length> {
         Token::Percentage { unit_value, .. } => Some(Length::Percent(unit_value * 100.0)),
         Token::Dimension { value, unit, .. } => {
             let value = *value;
-            match_ignore_ascii_case! { unit,
-                "pt" => Some(Length::Points(value)),
-                "px" => Some(Length::Points(value * 0.75)),
-                "pc" => Some(Length::Points(value * 12.0)),
-                "in" => Some(Length::Points(value * 72.0)),
-                "cm" => Some(Length::Points(value * 72.0 / 2.54)),
-                "mm" => Some(Length::Points(value * 72.0 / 25.4)),
-                "q" => Some(Length::Points(value * 72.0 / 101.6)),
-                "em" => Some(Length::Em(value)),
-                "rem" => Some(Length::Rem(value)),
-                _ => None,
-            }
+            UNITS
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(unit))
+                .map(|(_, convert)| convert(value))
         }
         _ => None,
     }
 }
+
+/// One unit's conversion into a `Length`.
+type Convert = fn(f32) -> Length;
+
+/// The units a `<length>` may carry, each with its conversion. The
+/// absolute ones become points; the font-relative ones stay relative
+/// until the cascade knows the font size.
+pub(crate) const UNITS: &[(&str, Convert)] = &[
+    ("pt", Length::Points),
+    ("px", |value| Length::Points(value * 0.75)),
+    ("pc", |value| Length::Points(value * 12.0)),
+    ("in", |value| Length::Points(value * 72.0)),
+    ("cm", |value| Length::Points(value * 72.0 / 2.54)),
+    ("mm", |value| Length::Points(value * 72.0 / 25.4)),
+    ("q", |value| Length::Points(value * 72.0 / 101.6)),
+    ("em", Length::Em),
+    ("rem", Length::Rem),
+];
 
 /// A `font-family` list: quoted names, bare names, generic keywords.
 fn families<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Family>, ParseError<'i, StyleError<'i>>> {
@@ -917,6 +1195,141 @@ fn families<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Family>, ParseError<'i
         })
     })
 }
+
+/// The declarations of a `@page` body.
+pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
+    Spec {
+        name: "size",
+        inherited: false,
+        syntax: "<length>{1,2} | <page-size> [ portrait | landscape ]?",
+        examples: &[
+            "432pt 648pt",
+            "148mm",
+            "a5",
+            "letter landscape",
+            "b5 portrait",
+        ],
+        read: |name, input| {
+            longhand(name, input, size, |(width, height)| {
+                PageDeclaration::Size(width, height)
+            })
+        },
+    },
+    Spec {
+        name: "margin",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,4}",
+        examples: &["54pt", "54pt 42pt", "54pt 42pt 54pt 54pt"],
+        read: |name, input| margins(name, input, PageDeclaration::Margin),
+    },
+    Spec {
+        name: "margin-top",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["54pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                PageDeclaration::Margin(Edge::Top, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-right",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["42pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                PageDeclaration::Margin(Edge::Right, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-bottom",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["54pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                PageDeclaration::Margin(Edge::Bottom, length)
+            })
+        },
+    },
+    Spec {
+        name: "margin-left",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["54pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                PageDeclaration::Margin(Edge::Left, length)
+            })
+        },
+    },
+];
+
+/// The declarations of a margin box that are its own. Every property
+/// of a style rule parses in one too.
+pub(crate) const MARGIN_BOX_PROPERTIES: &[Spec<MarginDeclaration>] = &[Spec {
+    name: "content",
+    inherited: false,
+    syntax: "none | <string> | counter(page) | counter(page, <counter-style>) | string(<name>)",
+    examples: &[
+        "none",
+        "\"Chapter\"",
+        "counter(page)",
+        "counter(page, lower-roman)",
+        "string(chapter)",
+    ],
+    read: |name, input| longhand(name, input, content, MarginDeclaration::Content),
+}];
+
+/// What one page selector narrows a rule to.
+type Narrow = fn(&mut PageRule);
+
+/// The `@page` selectors, and what each one narrows the rule to.
+pub(crate) const PAGE_SELECTORS: &[(&str, Narrow)] = &[
+    ("first", |rule| rule.first = true),
+    ("blank", |rule| rule.blank = true),
+    ("left", |rule| rule.side = Some(Side::Verso)),
+    ("right", |rule| rule.side = Some(Side::Recto)),
+];
+
+/// The pseudo-classes a selector may use, as they are written, with
+/// one use of each that parses. The selector parser is the
+/// `selectors` crate's, so this table is checked against it rather
+/// than read by it.
+pub(crate) const PSEUDO_CLASSES: &[(&str, &str)] = &[
+    (":first-child", "p:first-child"),
+    (":last-child", "p:last-child"),
+    (":only-child", "p:only-child"),
+    (":nth-child()", "p:nth-child(2n+1)"),
+    (":nth-last-child()", "p:nth-last-child(2)"),
+    (":first-of-type", "p:first-of-type"),
+    (":last-of-type", "p:last-of-type"),
+    (":only-of-type", "p:only-of-type"),
+    (":nth-of-type()", "p:nth-of-type(2)"),
+    (":nth-last-of-type()", "p:nth-last-of-type(2)"),
+    (":empty", "p:empty"),
+    (":root", ":root"),
+    (":is()", ":is(h1, h2)"),
+    (":where()", ":where(h1, h2)"),
+    (":not()", "p:not(:first-child)"),
+    (":has()", "p:has(em)"),
+];
+
+/// The combinators between two compounds, by their CSS names, with
+/// one use of each that parses.
+pub(crate) const COMBINATORS: &[(&str, &str)] = &[
+    ("descendant", "section p"),
+    ("child", "section > p"),
+    ("next-sibling", "h1 + p"),
+    ("subsequent-sibling", "h1 ~ p"),
+];
+
+/// The pseudo-elements, as they are written, with one use of each
+/// that parses.
+pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[("::first-letter", "p::first-letter")];
 
 /// The body of one `@page` rule: page declarations and margin boxes.
 struct PageBody {
@@ -941,23 +1354,10 @@ impl<'i> DeclarationParser<'i> for PageBody {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
-            let bad = || StyleError::UnsupportedValue(name.clone());
-            let items = match_ignore_ascii_case! { &name,
-                "size" => {
-                    let (width, height) = keyword_or(input, size, bad)?;
-                    vec![PageDeclaration::Size(width, height)]
-                },
-                "margin" => edges(input)
-                    .ok_or_else(|| input.new_custom_error(bad()))?
-                    .into_iter()
-                    .map(|(edge, value)| PageDeclaration::Margin(edge, value))
-                    .collect(),
-                "margin-top" => vec![PageDeclaration::Margin(Edge::Top, keyword_or(input, length, bad)?)],
-                "margin-right" => vec![PageDeclaration::Margin(Edge::Right, keyword_or(input, length, bad)?)],
-                "margin-bottom" => vec![PageDeclaration::Margin(Edge::Bottom, keyword_or(input, length, bad)?)],
-                "margin-left" => vec![PageDeclaration::Margin(Edge::Left, keyword_or(input, length, bad)?)],
-                _ => return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))),
+            let Some(spec) = Spec::find(PAGE_PROPERTIES, &name) else {
+                return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone())));
             };
+            let items = spec.read(&name, input)?;
             input.expect_exhausted()?;
             Ok(items.into_iter().map(PageItem::Declaration).collect())
         })(input)
@@ -1030,14 +1430,12 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
-            let bad = || StyleError::UnsupportedValue(name.clone());
-            let declarations = if name.eq_ignore_ascii_case("content") {
-                vec![MarginDeclaration::Content(keyword_or(input, content, bad)?)]
-            } else {
-                property(&name, input)?
+            let declarations = match Spec::find(MARGIN_BOX_PROPERTIES, &name) {
+                Some(spec) => spec.read(&name, input)?,
+                None => property(&name, input)?
                     .into_iter()
                     .map(MarginDeclaration::Style)
-                    .collect()
+                    .collect(),
             };
             input.expect_exhausted()?;
             Ok(declarations)
@@ -1134,20 +1532,31 @@ fn size(input: &mut Parser<'_, '_>) -> Option<(f32, f32)> {
 
 /// The sheet sizes CSS names, portrait, in points.
 fn named_size(keyword: &str) -> Option<(f32, f32)> {
-    let mm = |value: f32| value * 72.0 / 25.4;
-    let inch = |value: f32| value * 72.0;
-    match_ignore_ascii_case! { keyword,
-        "a3" => Some((mm(297.0), mm(420.0))),
-        "a4" => Some((mm(210.0), mm(297.0))),
-        "a5" => Some((mm(148.0), mm(210.0))),
-        "b4" => Some((mm(250.0), mm(353.0))),
-        "b5" => Some((mm(176.0), mm(250.0))),
-        "letter" => Some((inch(8.5), inch(11.0))),
-        "legal" => Some((inch(8.5), inch(14.0))),
-        "ledger" => Some((inch(11.0), inch(17.0))),
-        _ => None,
-    }
+    PAGE_SIZES
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(keyword))
+        .map(|(_, size)| *size)
 }
+
+const fn mm(value: f32) -> f32 {
+    value * 72.0 / 25.4
+}
+
+const fn inch(value: f32) -> f32 {
+    value * 72.0
+}
+
+/// The sheet sizes `size` accepts by name, portrait, in points.
+pub(crate) const PAGE_SIZES: &[(&str, (f32, f32))] = &[
+    ("a3", (mm(297.0), mm(420.0))),
+    ("a4", (mm(210.0), mm(297.0))),
+    ("a5", (mm(148.0), mm(210.0))),
+    ("b4", (mm(250.0), mm(353.0))),
+    ("b5", (mm(176.0), mm(250.0))),
+    ("letter", (inch(8.5), inch(11.0))),
+    ("legal", (inch(8.5), inch(14.0))),
+    ("ledger", (inch(11.0), inch(17.0))),
+];
 
 /// One `@font-face` body.
 fn font_face(input: &mut Parser<'_, '_>, sheet: &str) -> (FontFace, Vec<Warning>) {
@@ -1174,11 +1583,56 @@ fn font_face(input: &mut Parser<'_, '_>, sheet: &str) -> (FontFace, Vec<Warning>
     (face, warnings)
 }
 
+/// The descriptors of an `@font-face` rule.
+pub(crate) const FONT_FACE_DESCRIPTORS: &[Spec<FaceDeclaration>] = &[
+    Spec {
+        name: "font-family",
+        inherited: false,
+        syntax: "<family-name>",
+        examples: &["\"Author Serif\"", "Author Serif"],
+        read: |name, input| {
+            let family = match families(input)?.first() {
+                Some(Family::Named(family)) => family.clone(),
+                Some(Family::Generic(generic)) => generic.keyword().to_string(),
+                None => {
+                    return Err(input.new_custom_error(StyleError::UnsupportedValue(name.clone())));
+                }
+            };
+            Ok(vec![FaceDeclaration::Family(family)])
+        },
+    },
+    Spec {
+        name: "font-style",
+        inherited: false,
+        syntax: "normal | italic | oblique",
+        examples: &["italic"],
+        read: |name, input| longhand(name, input, font_style, FaceDeclaration::Style),
+    },
+    Spec {
+        name: "font-weight",
+        inherited: false,
+        syntax: "normal | bold | <number [1,1000]>",
+        examples: &["bold", "600"],
+        read: |name, input| longhand(name, input, weight, FaceDeclaration::Weight),
+    },
+    Spec {
+        name: "src",
+        inherited: false,
+        syntax: "[ <url> format(<string>)? | local(<string>) ]#",
+        examples: &[
+            "url(fonts/serif.otf)",
+            "url(\"fonts/serif.woff2\") format(\"woff2\")",
+            "local(\"Author Serif\"), url(fonts/serif.otf)",
+        ],
+        read: |_, input| Ok(vec![FaceDeclaration::Src(sources(input)?)]),
+    },
+];
+
 /// The body of one `@font-face`.
 struct FontFaceBody;
 
 /// One `@font-face` descriptor.
-enum FaceDeclaration {
+pub(crate) enum FaceDeclaration {
     Family(String),
     Style(FontStyle),
     Weight(u16),
@@ -1196,20 +1650,14 @@ impl<'i> DeclarationParser<'i> for FontFaceBody {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
-            let bad = || StyleError::UnsupportedValue(name.clone());
-            let declaration = match_ignore_ascii_case! { &name,
-                "font-family" => FaceDeclaration::Family(match families(input)?.first() {
-                    Some(Family::Named(family)) => family.clone(),
-                    Some(Family::Generic(generic)) => generic.keyword().to_string(),
-                    None => return Err(input.new_custom_error(bad())),
-                }),
-                "font-style" => FaceDeclaration::Style(keyword_or(input, font_style, bad)?),
-                "font-weight" => FaceDeclaration::Weight(keyword_or(input, weight, bad)?),
-                "src" => FaceDeclaration::Src(sources(input)?),
-                _ => return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))),
+            let Some(spec) = Spec::find(FONT_FACE_DESCRIPTORS, &name) else {
+                return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone())));
             };
+            let mut declarations = spec.read(&name, input)?;
             input.expect_exhausted()?;
-            Ok(declaration)
+            Ok(declarations
+                .pop()
+                .expect("a descriptor reads one declaration"))
         })(input)
     }
 }
@@ -1266,7 +1714,7 @@ fn sources<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Src>, ParseError<'i, St
 }
 
 /// The CSS named colours, sorted for binary search.
-const NAMED: [(&str, Color); 148] = [
+pub(crate) const NAMED: [(&str, Color); 148] = [
     ("aliceblue", Color::rgb(240, 248, 255)),
     ("antiquewhite", Color::rgb(250, 235, 215)),
     ("aqua", Color::rgb(0, 255, 255)),
