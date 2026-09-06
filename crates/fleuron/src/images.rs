@@ -13,6 +13,7 @@
 //! bytes.
 
 use std::collections::BTreeSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
@@ -90,11 +91,45 @@ pub struct Assets {
     /// Layout read the header out of these; the PDF writer embeds
     /// them.
     files: Vec<Vec<u8>>,
+    /// A hash of each file, in the same order: what tells a url
+    /// registered again with the same bytes from one registered
+    /// again with different ones.
+    hashes: Vec<u64>,
     /// Urls that were offered and could not be sized, so that a url
     /// nothing has ever answered for can be told apart from one
     /// already complained about.
     refused: BTreeSet<String>,
     warnings: Vec<Warning>,
+}
+
+/// What registering an image did.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Added {
+    /// The bytes already registered at this url, unchanged.
+    Unchanged(u32),
+    /// New bytes at this index: the url's first registration, or
+    /// different bytes replacing what was there. `previous` is the
+    /// intrinsic size that answered for it before, `None` for a
+    /// fresh url — what a session reads to decide whether the box an
+    /// image takes moved.
+    Replaced {
+        /// The index the bytes answer for.
+        index: u32,
+        /// What the same index reported before, if anything did.
+        previous: Option<Intrinsic>,
+        /// What it reports now.
+        current: Intrinsic,
+    },
+    /// The bytes did not probe: no size could be read from them.
+    Refused,
+}
+
+/// What one file hashes to, for telling a registration of the same
+/// bytes from one of different bytes at the same url.
+fn content_hash(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
 }
 
 impl Assets {
@@ -114,16 +149,43 @@ impl Assets {
         assets
     }
 
-    /// Registers one image the host handed over, and the index it
-    /// answers to. `None` for bytes no probe recognises, which is a
-    /// diagnostic and no asset.
+    /// Registers one image the host handed over, and what that did:
+    /// the same bytes it already had, new bytes at a fresh or
+    /// existing index, or bytes no probe recognises.
     ///
     /// This is the door for a host that pushes: a worker has no
     /// loader to reach back through, so images cross the wall the
-    /// way font files do.
-    pub fn add(&mut self, url: &str, bytes: Vec<u8>) -> Option<u32> {
-        if let Some((index, _)) = self.lookup(url) {
-            return Some(index);
+    /// way font files do. A url pushed again with the bytes it
+    /// already answers for costs nothing; pushed again with
+    /// different bytes, it replaces them in place, keeping the index
+    /// `DrawItem::Image.asset` already names.
+    pub fn add(&mut self, url: &str, bytes: Vec<u8>) -> Added {
+        let hash = content_hash(&bytes);
+        if let Some(index) = self.assets.iter().position(|asset| asset.url == url) {
+            if self.hashes[index] == hash {
+                return Added::Unchanged(index as u32);
+            }
+            return match probe(&bytes) {
+                Some(intrinsic) => {
+                    let previous = self.assets[index].intrinsic;
+                    self.assets[index] = Asset {
+                        url: url.to_string(),
+                        intrinsic,
+                    };
+                    self.files[index] = bytes;
+                    self.hashes[index] = hash;
+                    self.refused.remove(url);
+                    Added::Replaced {
+                        index: index as u32,
+                        previous: Some(previous),
+                        current: intrinsic,
+                    }
+                }
+                None => {
+                    self.refuse(url, None);
+                    Added::Refused
+                }
+            };
         }
         match probe(&bytes) {
             Some(intrinsic) => {
@@ -133,11 +195,16 @@ impl Assets {
                     intrinsic,
                 });
                 self.files.push(bytes);
-                Some(self.assets.len() as u32 - 1)
+                self.hashes.push(hash);
+                Added::Replaced {
+                    index: self.assets.len() as u32 - 1,
+                    previous: None,
+                    current: intrinsic,
+                }
             }
             None => {
                 self.refuse(url, None);
-                None
+                Added::Refused
             }
         }
     }
@@ -491,21 +558,81 @@ mod tests {
     fn pushed_images_are_probed_and_kept() {
         let mut assets = Assets::none();
         let png = png_bytes(96, 48, None);
-        assert_eq!(assets.add("a.png", png.clone()), Some(0));
-        assert_eq!(assets.add("b.jpg", jpeg_bytes(200, 100, None)), Some(1));
-        // The same url twice is the same asset, not a second copy.
-        assert_eq!(assets.add("a.png", png.clone()), Some(0));
+        let a = assets.add("a.png", png.clone());
+        assert!(matches!(
+            a,
+            Added::Replaced {
+                index: 0,
+                previous: None,
+                ..
+            }
+        ));
+        let b = assets.add("b.jpg", jpeg_bytes(200, 100, None));
+        assert!(matches!(
+            b,
+            Added::Replaced {
+                index: 1,
+                previous: None,
+                ..
+            }
+        ));
+        // The same url and the same bytes twice is the same asset,
+        // not a second copy, and costs nothing.
+        assert_eq!(assets.add("a.png", png.clone()), Added::Unchanged(0));
         assert_eq!(assets.bytes(0), Some(png.as_slice()));
         assert_eq!(assets.lookup("a.png").map(|(index, _)| index), Some(0));
 
-        assert_eq!(assets.add("c.txt", b"not an image".to_vec()), None);
+        assert_eq!(
+            assets.add("c.txt", b"not an image".to_vec()),
+            Added::Refused
+        );
         assert!(assets.probed("c.txt"), "a refusal counts as probed");
         assert!(!assets.probed("d.png"), "a url nobody offered does not");
         assert_eq!(assets.warnings().len(), 1);
         assert!(assets.warnings()[0].message.contains("c.txt"));
         // Offered twice, complained about once.
-        assert_eq!(assets.add("c.txt", b"still not".to_vec()), None);
+        assert_eq!(assets.add("c.txt", b"still not".to_vec()), Added::Refused);
         assert_eq!(assets.warnings().len(), 1);
+    }
+
+    /// The same url registered again with different bytes replaces
+    /// them in place, keeping the index `DrawItem::Image.asset`
+    /// already names, and says what the size was before so a caller
+    /// can tell whether the box an image takes moved.
+    #[test]
+    fn different_bytes_at_the_same_url_replace_it_in_place() {
+        let mut assets = Assets::none();
+        assets.add("a.png", png_bytes(96, 48, None));
+
+        let same_size = assets.add("a.png", png_bytes(96, 48, Some(150)));
+        let Added::Replaced {
+            index,
+            previous,
+            current,
+        } = same_size
+        else {
+            panic!("different bytes at a registered url did not replace it: {same_size:?}");
+        };
+        assert_eq!(index, 0, "the index moved");
+        assert_eq!(previous.map(|i| (i.width, i.height)), Some((96, 48)));
+        assert_eq!((current.width, current.height), (96, 48));
+        assert_eq!(
+            assets.bytes(0),
+            Some(png_bytes(96, 48, Some(150)).as_slice())
+        );
+
+        let resized = assets.add("a.png", png_bytes(200, 100, None));
+        let Added::Replaced {
+            index,
+            previous,
+            current,
+        } = resized
+        else {
+            panic!("a resize did not replace the asset: {resized:?}");
+        };
+        assert_eq!(index, 0);
+        assert_eq!(previous.map(|i| (i.width, i.height)), Some((96, 48)));
+        assert_eq!((current.width, current.height), (200, 100));
     }
 
     /// The book's images are probed once each, in document order,

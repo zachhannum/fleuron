@@ -36,7 +36,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
-use crate::images::Assets;
+use crate::images::{Added, Assets};
 use crate::layout::{Fragment, PageInfo, Paginator, font_table, no_assets};
 use crate::lines::Patterns;
 use crate::pdf::{self, PdfError};
@@ -351,26 +351,43 @@ impl<'a> Session<'a> {
     /// gets for it. `None` for bytes no probe recognises,
     /// which is a diagnostic on the next display structure and no asset.
     ///
-    /// The header decides how much room the image takes, so the
-    /// lines are broken again. Only a session that owns its asset
-    /// table has one to add to; one that borrowed it says so
-    /// instead.
+    /// A url registered again with the bytes it already answers for
+    /// costs nothing. Registered again with different bytes, it
+    /// replaces them in place: the box the image takes is re-broken
+    /// only if the header now reports a different size, since the
+    /// PDF writer reads the asset table fresh on every export and
+    /// needs no invalidation to see new pixels at an unchanged size.
+    /// Only a session that owns its asset table has one to add to;
+    /// one that borrowed it says so instead.
     pub fn add_image(&mut self, url: &str, bytes: Vec<u8>) -> Result<Option<u32>, AddImageError> {
-        if let Some((index, _)) = self.assets.get().lookup(url) {
-            // A url already registered is the image the pages were
-            // laid out around, and re-registering it costs nothing.
-            return Ok(Some(index));
-        }
-        let index = self
+        let added = self
             .assets
             .get_mut()
             .ok_or(AddImageError::Borrowed)?
             .add(url, bytes);
-        // The table is built with the output and never patched, so
-        // the output goes rather than outlive the indexes it names.
-        self.output = None;
-        self.stale = Stale::Break;
-        Ok(index)
+        Ok(match added {
+            Added::Unchanged(index) => Some(index),
+            Added::Replaced {
+                index,
+                previous,
+                current,
+            } => {
+                if previous != Some(current) {
+                    // The table is built with the output and never
+                    // patched, so the output goes rather than
+                    // outlive the indexes it names. A size that
+                    // moved is a box line-breaking reserved
+                    // differently, so the section-local cache — keyed
+                    // on the url and not on what it resolves to — is
+                    // dropped rather than trusted to notice.
+                    self.output = None;
+                    self.lines.clear();
+                    self.stale = Stale::Break;
+                }
+                Some(index)
+            }
+            Added::Refused => None,
+        })
     }
 
     /// The display structure, brought up to date.
@@ -1016,6 +1033,116 @@ mod tests {
             output.warnings.is_empty(),
             "a supplied image still complains: {:?}",
             output.warnings,
+        );
+    }
+
+    /// A GIF's minimal header: the signature and a logical screen
+    /// descriptor, which is all `probe` reads for the format.
+    /// Anything after it is ignored, which is what lets two of these
+    /// with the same declared size still hash to different bytes.
+    fn gif(width: u16, height: u16, tag: u8) -> Vec<u8> {
+        let mut bytes = b"GIF89a".to_vec();
+        bytes.extend(width.to_le_bytes());
+        bytes.extend(height.to_le_bytes());
+        bytes.push(tag);
+        bytes
+    }
+
+    /// A book with one image, for the replacement tests below.
+    fn book_with_image(url: &str) -> Book {
+        let mut book = Book {
+            sections: vec![Section {
+                blocks: vec![Block::Image {
+                    id: NodeId::UNASSIGNED,
+                    url: url.into(),
+                    alt: "a picture".into(),
+                    position: None,
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// The size the first placed image on the page reports, if there
+    /// is one.
+    fn placed_image_size(output: &LayoutOutput) -> Option<(f32, f32)> {
+        output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Image { w, h, .. } => Some((*w, *h)),
+                _ => None,
+            })
+    }
+
+    /// Registering the same url with the same bytes again costs
+    /// nothing: no stage runs again, since neither the asset nor the
+    /// box it takes changed.
+    #[test]
+    fn identical_bytes_at_a_registered_url_cost_nothing() {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book_with_image("pic.gif"));
+        session.add_image("pic.gif", gif(64, 32, 0)).unwrap();
+        session.preview();
+        let before = session.stages();
+
+        assert_eq!(
+            session.add_image("pic.gif", gif(64, 32, 0)).unwrap(),
+            Some(0)
+        );
+        session.preview();
+        assert_eq!(session.stages(), before, "identical bytes cost a stage");
+    }
+
+    /// Different bytes at a registered url that probe to the same
+    /// size replace the asset without re-breaking anything: the box
+    /// an image takes did not move.
+    #[test]
+    fn a_same_size_replacement_breaks_nothing() {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book_with_image("pic.gif"));
+        session.add_image("pic.gif", gif(64, 32, 0)).unwrap();
+        session.preview();
+        let before = session.stages();
+
+        assert_eq!(
+            session.add_image("pic.gif", gif(64, 32, 1)).unwrap(),
+            Some(0)
+        );
+        session.preview();
+        assert_eq!(
+            session.stages().lines,
+            before.lines,
+            "a same-size replacement broke lines it did not need to"
+        );
+    }
+
+    /// A different size at a registered url re-breaks the lines
+    /// around it, and the new size reaches the page.
+    #[test]
+    fn a_resized_replacement_re_breaks_and_reaches_the_page() {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book_with_image("pic.gif"));
+        session.add_image("pic.gif", gif(64, 32, 0)).unwrap();
+        let before_size = placed_image_size(session.preview());
+        let before_stages = session.stages();
+
+        assert_eq!(
+            session.add_image("pic.gif", gif(640, 320, 0)).unwrap(),
+            Some(0)
+        );
+        let after_size = placed_image_size(session.preview());
+        assert!(
+            session.stages().lines > before_stages.lines,
+            "a resize did not re-break the lines around it"
+        );
+        assert_ne!(
+            after_size, before_size,
+            "the new size did not reach the page"
         );
     }
 
