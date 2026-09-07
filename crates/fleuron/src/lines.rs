@@ -104,8 +104,8 @@ pub struct ParagraphStyle {
 /// What `::first-line` changes about the paragraph it opens.
 ///
 /// A field is set where the pseudo-element's style differs from the
-/// element's own, so the overlay reaches an emphasis or a link on the
-/// opening line without flattening the rest of its style.
+/// element's own, so what it changes reaches an emphasis or a link on
+/// the opening line without replacing the rest of their style.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct FirstLine {
     /// `font-size`, in points.
@@ -578,13 +578,12 @@ impl FlatParagraph {
         self.spans.push(span);
     }
 
-    /// Joins the spans from `from` on where two adjacent ones are set
-    /// the same way. Text written a character at a time is one run of
-    /// one style as much as text written in a stretch, and a run
-    /// shapes as a whole: kerning and ligatures do not reach across a
-    /// span.
+    /// Joins two adjacent spans set the same way, from `from` to the
+    /// end. Text written a character at a time is one run of one
+    /// style as much as text written in a stretch, and a run shapes
+    /// as a whole: kerning and ligatures do not reach across a span.
     fn merge_from(&mut self, from: usize) {
-        let mut at = from.max(1);
+        let mut at = from + 1;
         while at < self.spans.len() {
             let joins = self.spans[at - 1].range.end == self.spans[at].range.start
                 && self.spans[at - 1].same_style(&self.spans[at]);
@@ -821,10 +820,10 @@ impl<'a> LineLayout<'a> {
     /// holds. The first run sets the paragraph's leading run in the
     /// opening style to the end and breaks the whole of it. The
     /// second sets as far as the extent that break gave and breaks
-    /// again with the opening line pinned there, so the text the
-    /// style covers is the text the line ships with. The count is
-    /// fixed at two, because a line count that depended on how long a
-    /// paragraph took to settle would not be deterministic.
+    /// again with the opening line ending there, so the style covers
+    /// the text the line comes to hold. The count is fixed at two,
+    /// because a line count that depended on how long a paragraph
+    /// took to settle would not be deterministic.
     fn broken(
         &self,
         inlines: &[Inline],
@@ -861,8 +860,8 @@ impl<'a> LineLayout<'a> {
     /// One run of the breaker: the paragraph's lines, and where the
     /// first of them ended in the shaped text.
     ///
-    /// `first` is the opening style and how far it reaches, in bytes
-    /// of that text.
+    /// `opening` is the style the paragraph opens in and how far it
+    /// reaches, in bytes of that text.
     fn break_once(
         &self,
         inlines: &[Inline],

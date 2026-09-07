@@ -539,8 +539,9 @@ await comparedWithTheExport('running text', COMPARED);
 // The display-typography book, whose every page is set in the three
 // properties that change which glyphs a run is shaped from. The
 // opening page sets a title transformed to capitals and tracked,
-// a chapter title in the face's own small capitals, and tracked
-// prose; the page after it sets a small-capital running head.
+// a chapter title and the chapter's opening line in the face's own
+// small capitals, and tracked prose; the page after it sets a
+// small-capital running head.
 // A painter that drew the characters the manuscript spells, or asked
 // the face for none of its features, parts company with the export
 // here.

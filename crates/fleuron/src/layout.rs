@@ -2601,9 +2601,9 @@ mod tests {
     /// Acceptance: `h3 + p::first-line { font-variant-caps:
     /// small-caps }` draws the opening line in small capitals and the
     /// rest of the paragraph in the letters the author wrote. The
-    /// change stops at the break the paragraph ships with: the last
-    /// run of the first line is small capitals and the first run of
-    /// the second is not.
+    /// change stops at the break the paragraph came to: the last run
+    /// of the first line is small capitals and the first run of the
+    /// second is not.
     #[test]
     fn a_first_line_of_small_capitals_stops_where_the_line_does() {
         let prose = "my father had a small estate in nottinghamshire ".repeat(6);
