@@ -14,7 +14,7 @@
 
 use std::process::ExitCode;
 
-use fleuron_fixtures::gate::{self, Target};
+use fleuron_fixtures::gate::{self, Division, Target};
 use fleuron_fixtures::{Corpus, alloc, registry};
 
 /// The gate is the one place the tracker belongs: a binary imposes a
@@ -47,19 +47,30 @@ fn main() -> ExitCode {
 
     let mut over = 0;
     for corpus in books {
-        let report = gate::measure(*corpus, registry(), runs);
-        println!("\n{report}");
-        // Only the gate book has budgets. The big book is there to
-        // show the curve, and a book four times the size failing a
-        // book-scale ceiling would say nothing.
-        if *corpus != Corpus::GATE {
-            continue;
-        }
-        println!();
-        for check in report.checks(target) {
-            println!("  {check}");
-            if !check.passed() {
-                over += 1;
+        // The gate book is measured on both page boxes: the budgets
+        // are ceilings on the whole pipeline, and dividing the
+        // content box has to leave them met. The big book shows the
+        // curve, which one page box is enough for.
+        let divisions: &[Division] = if *corpus == Corpus::GATE {
+            &Division::ALL
+        } else {
+            &[Division::Undivided]
+        };
+        for division in divisions {
+            let report = gate::measure_on(*corpus, *division, registry(), runs);
+            println!("\n{report}");
+            // Only the gate book has budgets. The big book is there to
+            // show the curve, and a book four times the size failing a
+            // book-scale ceiling would say nothing.
+            if *corpus != Corpus::GATE {
+                continue;
+            }
+            println!();
+            for check in report.checks(target) {
+                println!("  {check}");
+                if !check.passed() {
+                    over += 1;
+                }
             }
         }
     }

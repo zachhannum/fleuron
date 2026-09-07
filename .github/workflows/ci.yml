@@ -70,11 +70,12 @@ jobs:
       # The wire is positional and layout is deterministic, so the
       # structured output a worker builds is the one a native run builds,
       # to the byte. The digest is how that is checked rather than
-      # assumed.
+      # assumed — one per book and page box the gate measured.
       - name: Same structured output, both targets
         run: |
-          native=$(grep -o 'digest [0-9a-f]*' reports/native.txt | head -1)
-          wasm=$(grep -o 'digest [0-9a-f]*' reports/wasm.txt | head -1)
+          digests() { grep -o 'digest [0-9a-f]*' "$1" | sed 's/digest //' | tr '\n' ' '; }
+          native=$(digests reports/native.txt)
+          wasm=$(digests reports/wasm.txt)
           echo "native $native, wasm $wasm"
           if [ "$native" != "$wasm" ]; then
             echo "the two targets laid out different books" >&2
