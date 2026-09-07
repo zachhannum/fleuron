@@ -53,6 +53,16 @@ const ZOOM = 2;
  * the glyphs are.
  */
 const COMPARED = 3;
+/**
+ * And the page the box model is compared on: the excerpt's inventory
+ * of the man-mountain's pockets, which `fixtures/styled.css` sets in
+ * a bordered, padded, tinted box carried over a page turn.
+ *
+ * A background is the one thing a painter lays under the text rather
+ * than over it, so a painter that got the order wrong parts company
+ * with the export here.
+ */
+const BOXED = 22;
 
 let failures = 0;
 
@@ -535,6 +545,7 @@ async function comparedWithTheExport(what: string, compared: number): Promise<vo
 }
 
 await comparedWithTheExport('running text', COMPARED);
+await comparedWithTheExport('a bordered and tinted quotation', BOXED);
 
 // The display-typography book, whose every page is set in the three
 // properties that change which glyphs a run is shaped from. The

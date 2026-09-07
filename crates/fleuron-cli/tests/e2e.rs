@@ -24,6 +24,8 @@ use std::process::{Command, Output};
 
 use fleuron::content::{Block, Book, Inline};
 use fleuron::images::{Assets, ImageLoader};
+use fleuron::pages::{DrawItem, Page};
+use fleuron::style::Color;
 use fleuron_markdown::Options;
 
 /// The fixture is checked in and layout is deterministic, so the page
@@ -32,7 +34,7 @@ const EXPECTED_PAGES: usize = 23;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 35;
+const STYLED_PAGES: usize = 36;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
@@ -315,6 +317,154 @@ fn the_display_typography_book_extracts_as_it_was_written() {
             first_difference(&expected, &rendered)
         );
     }
+}
+
+/// The box model through the fixture book: `fixtures/styled.css`
+/// puts the excerpt's inventory of the man-mountain's pockets in a
+/// bordered, padded, tinted box, and a rule under every chapter
+/// title.
+///
+/// The quotation is long enough to carry over a page turn, so the
+/// box is resolved on more than one page: each piece paints over the
+/// fragments its own page holds, and `box-decoration-break: clone`
+/// closes the rule across the break.
+#[test]
+fn the_styled_book_paints_a_box_around_its_quotation() {
+    const TINT: Color = Color::rgb(0xf4, 0xf1, 0xea);
+    const INK: Color = Color::rgb(0x8a, 0x7a, 0x5c);
+
+    let pages = styled_pages();
+    let tinted: Vec<usize> = pages
+        .iter()
+        .enumerate()
+        .filter(|(_, page)| fills(page, TINT).next().is_some())
+        .map(|(index, _)| index)
+        .collect();
+    assert!(
+        tinted.len() >= 2,
+        "the quotation has to carry over a page turn: it is on {tinted:?}",
+    );
+
+    for index in &tinted {
+        let page = &pages[*index];
+        let (x, y, w, h, _) = fills(page, TINT).next().expect("the tint was found");
+        // The tint is painted before the text it sits behind, and the
+        // text sits inside it.
+        let first = page
+            .items
+            .iter()
+            .position(|item| matches!(item, DrawItem::Text { .. }));
+        let tint = page
+            .items
+            .iter()
+            .position(|item| matches!(item, DrawItem::Rect { color, .. } if *color == TINT));
+        assert!(tint < first, "page {index}: the tint paints over the text");
+        let inside = page.items.iter().any(|item| match item {
+            DrawItem::Text {
+                x: at, y: baseline, ..
+            } => *at > x && *at < x + w && *baseline > y && *baseline < y + h,
+            _ => false,
+        });
+        assert!(inside, "page {index}: nothing is set inside the box");
+
+        // `clone` closes the rule on both pieces: four edges, whether
+        // the page holds the whole quotation or a piece of it.
+        let edges = fills(page, INK)
+            .filter(|(rect_x, rect_y, rect_w, rect_h, _)| {
+                *rect_x >= x - 1.0
+                    && *rect_x + *rect_w <= x + w + 1.0
+                    && *rect_y >= y - 1.0
+                    && *rect_y + *rect_h <= y + h + 1.0
+            })
+            .count();
+        assert_eq!(edges, 4, "page {index}: the box is not closed");
+    }
+
+    // The rule under a chapter title sits below its baseline and
+    // above the prose the padding under it moved down.
+    let opening = &pages[0];
+    let title = opening
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Text { y, text, .. } if text.contains("CHAPTER") => Some(*y),
+            _ => None,
+        })
+        .expect("the chapter opens with its title");
+    let rule = fills(opening, INK)
+        .find(|(_, rule_y, rule_w, rule_h, _)| *rule_y > title && rule_w > rule_h)
+        .expect("a rule under the chapter title");
+    assert_eq!(rule.3, 1.0, "the rule is the width the sheet asked for");
+
+    // And the same ink reaches the PDF: the tint behind the quotation
+    // and the rule around it are both filled there.
+    let (pdf, _) = render("box", &[&styled_sheet()]);
+    let Some(filled) = fill_colours(&pdf) else {
+        return;
+    };
+    for color in [TINT, INK] {
+        let written = format!(
+            "{} {} {} rg",
+            channel(color.r),
+            channel(color.g),
+            channel(color.b)
+        );
+        assert!(
+            filled.contains(&written),
+            "the PDF fills nothing in {}: {filled}",
+            color.to_hex(),
+        );
+    }
+}
+
+/// One channel as a PDF writes it: krilla's own rounding of a byte
+/// into the unit interval.
+fn channel(value: u8) -> String {
+    format!("{}", (f64::from(value) / 255.0) as f32)
+}
+
+/// A PDF's content streams, uncompressed, or `None` when `qpdf` is
+/// not installed.
+fn fill_colours(pdf: &Path) -> Option<String> {
+    let expanded = pdf.with_extension("qdf.pdf");
+    let run = tool(
+        "qpdf",
+        &[
+            "--qdf".as_ref(),
+            "--object-streams=disable".as_ref(),
+            pdf.as_os_str(),
+            expanded.as_os_str(),
+        ],
+    )?;
+    assert!(run.status.success(), "qpdf --qdf failed");
+    let bytes = std::fs::read(&expanded).expect("qpdf wrote its output");
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Every filled rect of one colour on a page, in paint order.
+fn fills(page: &Page, wanted: Color) -> impl Iterator<Item = (f32, f32, f32, f32, Color)> {
+    page.items.iter().filter_map(move |item| match item {
+        DrawItem::Rect { x, y, w, h, color } if *color == wanted => Some((*x, *y, *w, *h, *color)),
+        _ => None,
+    })
+}
+
+/// The fixture book laid out under `fixtures/styled.css`, the way the
+/// CLI lays it out.
+fn styled_pages() -> Vec<Page> {
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let book = fixture_book();
+    let css = std::fs::read_to_string(styled_sheet()).expect("the sheet is checked in");
+    let sheets =
+        fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("styled.css", &css)]);
+    let styles = sheets.compile(&book, &registry);
+    assert!(
+        styles.warnings().is_empty(),
+        "the sheet is in the subset: {:?}",
+        styles.warnings(),
+    );
+    let assets = Assets::probe(&book, &Beside);
+    fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
 /// The heading the fixture book's one chapter opens with, which the
