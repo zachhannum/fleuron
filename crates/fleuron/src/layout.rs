@@ -1877,15 +1877,23 @@ mod tests {
     }
 
     /// The page box one sheet computes for a chapter page, which is
-    /// the master the fixture sections resolve to.
-    fn styled_geometry(css: &str) -> crate::style::PageGeometry {
+    /// the master the fixture sections resolve to. The situation is
+    /// the page's own: mirrored margins put the columns of a verso
+    /// page at different offsets from a recto's.
+    fn styled_geometry(css: &str, situation: Situation) -> crate::style::PageGeometry {
         let book = book_of(vec![section(vec![heading("H"), paragraph("prose")])]);
         styled(css, &book)
             .page(PageQuery {
                 name: Some("chapter"),
-                situation: Situation::First(Side::Recto),
+                situation,
             })
             .geometry
+    }
+
+    /// The same for the page a flow put at `index`, which is where a
+    /// test that walks a book reads its columns from.
+    fn page_geometry(css: &str, page: &Page) -> crate::style::PageGeometry {
+        styled_geometry(css, Situation::Body(page.side))
     }
 
     /// Prose enough to break over several lines.
@@ -1917,7 +1925,7 @@ mod tests {
             TWO_COLUMNS,
             vec![section((0..12).map(|_| prose()).collect())],
         );
-        let geometry = styled_geometry(TWO_COLUMNS);
+        let geometry = styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto));
         let measure = geometry.measure();
         let (left, top) = geometry.content_origin();
         let second = geometry.column_origin(1).0;
@@ -1950,6 +1958,172 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The lines of one page grouped by the column they were set
+    /// in, first column first: the tagged first word of each line,
+    /// the way `tagged_lines` reads a page.
+    fn tagged_columns(page: &Page, geometry: crate::style::PageGeometry) -> Vec<Vec<String>> {
+        let mut columns = vec![Vec::new(); geometry.column_count() as usize];
+        for (_, runs) in content_lines(page) {
+            let x = runs[0].0;
+            let column = (0..geometry.column_count())
+                .rev()
+                .find(|column| x >= geometry.column_origin(*column).0 - 1e-3)
+                .unwrap_or(0);
+            columns[column as usize].push(
+                runs[0]
+                    .2
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        }
+        columns
+    }
+
+    /// The page ends after its last column: a book that spills onto a
+    /// second page filled both columns of the first, each of them to
+    /// within a line of its foot.
+    #[test]
+    fn a_page_ends_when_its_last_column_does() {
+        let pages = paginate_styled(
+            TWO_COLUMNS,
+            vec![section((0..40).map(|_| prose()).collect())],
+        );
+        assert!(pages.len() > 1, "the book spills onto a second page");
+        let (_, top) = styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto)).content_origin();
+        let foot = top
+            + styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto))
+                .content_size()
+                .1;
+        let line = body_size() * ua().root().line_height;
+        for (index, page) in pages[..pages.len() - 1].iter().enumerate() {
+            let geometry = page_geometry(TWO_COLUMNS, page);
+            for (column, lines) in tagged_columns(page, geometry).iter().enumerate() {
+                assert!(
+                    !lines.is_empty(),
+                    "page {}: column {column} is empty",
+                    index + 1
+                );
+            }
+            let last = content_lines(page)
+                .last()
+                .expect("a filled page has lines")
+                .0;
+            assert!(
+                last > foot - 2.0 * line,
+                "page {}: the last column stopped {} short of the foot",
+                index + 1,
+                foot - last
+            );
+        }
+    }
+
+    /// `break-before: column` on a heading opens the next column. The
+    /// page it opens on is the same one, and the prose before it is
+    /// still in the column it was set in.
+    #[test]
+    fn break_before_column_opens_a_column_rather_than_a_page() {
+        let sections = || vec![section(vec![prose(), heading("Second"), prose(), prose()])];
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-before: column }}"),
+            sections(),
+        );
+        assert_eq!(pages.len(), 1, "a column break does not turn the page");
+        let geometry = page_geometry(TWO_COLUMNS, &pages[0]);
+        let columns = tagged_columns(&pages[0], geometry);
+        assert_eq!(columns[1].first().map(String::as_str), Some("Second"));
+        assert!(!columns[0].iter().any(|line| line == "Second"));
+    }
+
+    /// The same heading with `break-before: page` still turns the
+    /// page, so the column break is the weaker of the two rather than
+    /// the only one left.
+    #[test]
+    fn break_before_page_still_turns_the_page_on_a_divided_box() {
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-before: page }}"),
+            vec![section(vec![prose(), heading("Second"), prose()])],
+        );
+        assert_eq!(pages.len(), 2);
+        let geometry = page_geometry(TWO_COLUMNS, &pages[1]);
+        let columns = tagged_columns(&pages[1], geometry);
+        assert_eq!(columns[0].first().map(String::as_str), Some("Second"));
+    }
+
+    /// Acceptance: orphans and widows hold at a column boundary the
+    /// way they hold at a page boundary — a line that would stand
+    /// alone at the head of a column takes its paragraph with it.
+    #[test]
+    fn orphans_and_widows_hold_at_every_column_boundary() {
+        let pages = paginate_styled(TWO_COLUMNS, vec![section(tagged_prose(60))]);
+        let columns: Vec<Vec<String>> = pages
+            .iter()
+            .flat_map(|page| tagged_columns(page, page_geometry(TWO_COLUMNS, page)))
+            .collect();
+        assert_orphans_and_widows_over(&columns, "column", 2, 2);
+    }
+
+    /// A rule paints down the gutter, centred in it, from the top of
+    /// the content box to the foot of the columns it divides.
+    #[test]
+    fn a_column_rule_paints_centred_in_the_gutter() {
+        let css =
+            format!("{TWO_COLUMNS} @page {{ column-rule-style: solid; column-rule-width: 1pt }}");
+        let pages = paginate_styled(&css, vec![section((0..12).map(|_| prose()).collect())]);
+        let geometry = page_geometry(&css, &pages[0]);
+        let rects = rects(&pages[0]);
+        assert_eq!(rects.len(), 1, "two columns, one gutter, one rule");
+        let (x, y, w, h, color) = rects[0];
+        assert_eq!(w, 1.0);
+        assert_eq!(color, ua().root().color);
+        let gutter = geometry.column_origin(1).0 - geometry.columns.gap;
+        assert_eq!(x + w / 2.0, gutter + geometry.columns.gap / 2.0);
+        let (_, top) = geometry.content_origin();
+        assert_eq!(y, top);
+        let last = content_lines(&pages[0])
+            .last()
+            .expect("the page has lines")
+            .0;
+        assert!(y + h >= last - 1e-3, "the rule reaches the last line");
+        assert!(y + h <= top + geometry.content_size().1 + 1e-3);
+    }
+
+    /// A page the flow left in one column divides nothing, and paints
+    /// no rule.
+    #[test]
+    fn a_one_column_page_paints_no_rule() {
+        let css = format!("{TWO_COLUMNS} @page {{ column-rule-style: solid }}");
+        let short = paginate_styled(&css, vec![section(vec![paragraph("One short line.")])]);
+        assert!(rects(&short[0]).is_empty());
+        let undivided = paginate_styled(
+            "@page { column-rule-style: solid; column-rule-width: 1pt }",
+            vec![section((0..12).map(|_| prose()).collect())],
+        );
+        assert!(rects(&undivided[0]).is_empty());
+    }
+
+    /// Furniture belongs to the page: the folio of a two-column page
+    /// sits where the folio of the same page undivided does.
+    #[test]
+    fn columns_leave_the_furniture_where_it_was() {
+        let sections = || vec![section((0..40).map(|_| prose()).collect())];
+        let folio = |pages: &[Page], index: usize| {
+            pages[index]
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { x, y, size, .. } if *size == folio_size() => Some((*x, *y)),
+                    _ => None,
+                })
+                .expect("a body page carries a folio")
+        };
+        let divided = paginate_styled(TWO_COLUMNS, sections());
+        let undivided = paginate(sections());
+        assert!(divided.len() > 1 && undivided.len() > 1);
+        assert_eq!(folio(&divided, 1), folio(&undivided, 1));
     }
 
     /// A quotation set with padding on all four edges and a rule down
@@ -2752,6 +2926,17 @@ mod tests {
     /// the bottom.
     fn assert_orphans_and_widows(pages: &[Page], orphans: usize, widows: usize) {
         let tagged: Vec<Vec<String>> = pages.iter().map(tagged_lines).collect();
+        assert_orphans_and_widows_over(&tagged, "page", orphans, widows);
+    }
+
+    /// The same over whatever the flow filled in order, which is
+    /// pages on an undivided page box and columns on a divided one.
+    fn assert_orphans_and_widows_over(
+        tagged: &[Vec<String>],
+        what: &str,
+        orphans: usize,
+        widows: usize,
+    ) {
         let mut boundaries = 0;
         for (index, lines) in tagged.iter().enumerate() {
             let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
@@ -2761,7 +2946,7 @@ mod tests {
                 let carried = lines.iter().take_while(|token| *token == first).count();
                 assert!(
                     carried >= widows,
-                    "page {}: {carried} line(s) of {first} carried over, widows is {widows}",
+                    "{what} {}: {carried} line(s) of {first} carried over, widows is {widows}",
                     index + 1,
                 );
                 boundaries += 1;
@@ -2774,7 +2959,7 @@ mod tests {
                     .count();
                 assert!(
                     left >= orphans,
-                    "page {}: {left} line(s) of {last} left behind, orphans is {orphans}",
+                    "{what} {}: {left} line(s) of {last} left behind, orphans is {orphans}",
                     index + 1,
                 );
                 boundaries += 1;
