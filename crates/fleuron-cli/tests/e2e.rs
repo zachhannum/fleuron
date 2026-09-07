@@ -650,6 +650,137 @@ fn the_document_info_names_the_fixture_book() {
     assert_eq!(field("Producer"), "fleuron");
 }
 
+/// A page box divided in two, with a rule down the gutter: the
+/// column properties the same book is set under, checked the same
+/// three ways.
+const COLUMNS_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n";
+
+/// Pages the fixture book sets in two columns.
+const COLUMN_PAGES: usize = 25;
+
+/// The fixture book in two columns: structurally sound, every word of
+/// it still there, and the page count the layout settled.
+#[test]
+fn a_two_column_book_reaches_the_pdf() {
+    let sheet = write_sheet("columns", COLUMNS_CSS);
+    let (pdf, stderr) = render("columns", &[&sheet]);
+    assert!(
+        !stderr.contains("warning"),
+        "the column sheet is in the subset: {stderr}",
+    );
+    assert!(
+        stderr.contains(&format!("{COLUMN_PAGES} pages")),
+        "the run did not report its page count: {stderr}",
+    );
+    assert_ne!(
+        COLUMN_PAGES, EXPECTED_PAGES,
+        "dividing the page box should change the pagination",
+    );
+    if let Some(text) = extract_reading_order(&pdf) {
+        assert_eq!(pages_of(&text).len(), COLUMN_PAGES);
+        // Reading order joins the halves of a word a line broke at a
+        // hyphen and drops the hyphen with it, so the comparison is
+        // over text with none.
+        let rendered = unhyphenated(&strip_folios(&text));
+        let expected = unhyphenated(&laid_out_text(&fixture_book()));
+        if rendered != expected {
+            panic!(
+                "the two-column PDF's prose is not the book's: {}",
+                first_difference(&expected, &rendered)
+            );
+        }
+    }
+    let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
+        return;
+    };
+    assert!(
+        check.status.success(),
+        "qpdf --check: {}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+}
+
+/// The rule down the gutter is in the display structure the preview
+/// paints and in the PDF the export writes: one rect per filled
+/// gutter, and the same ink filled in the PDF.
+#[test]
+fn the_column_rule_reaches_both_painters() {
+    let pages = column_pages();
+    let filled = pages
+        .iter()
+        .filter(|page| {
+            page.items
+                .iter()
+                .any(|item| matches!(item, DrawItem::Rect { .. }))
+        })
+        .count();
+    assert!(
+        filled > 1,
+        "only {filled} page(s) of the two-column book paint a rule",
+    );
+    for (index, page) in pages.iter().enumerate() {
+        let rules: Vec<_> = fills(page, Color::BLACK).collect();
+        assert!(
+            rules.len() <= 1,
+            "page {index} paints {} rules",
+            rules.len()
+        );
+        let Some((x, y, w, h, _)) = rules.first().copied() else {
+            continue;
+        };
+        assert_eq!(w, 0.5, "page {index}: the rule is not the width asked for");
+        // The rule divides: something is set on either side of it.
+        let sides = |left: bool| {
+            page.items.iter().any(|item| match item {
+                DrawItem::Text {
+                    x: at, y: baseline, ..
+                } => (*at < x) == left && *baseline >= y && *baseline <= y + h,
+                _ => false,
+            })
+        };
+        assert!(
+            sides(true) && sides(false),
+            "page {index}: the rule divides nothing"
+        );
+    }
+    // The export paints the same rect: the PDF fills a path that
+    // starts at the corner the display structure put the rule at.
+    let sheet = write_sheet("columns-rule", COLUMNS_CSS);
+    let (pdf, _) = render("columns-rule", &[&sheet]);
+    let Some(written) = fill_colours(&pdf) else {
+        return;
+    };
+    let (x, y, ..) = pages
+        .iter()
+        .find_map(|page| fills(page, Color::BLACK).next())
+        .expect("a page paints a rule");
+    let corner = format!("{x} {y} m");
+    assert!(
+        written.contains(&corner),
+        "the PDF paints no rule at {corner}",
+    );
+}
+
+/// The fixture book laid out in two columns, the way the CLI lays it
+/// out under the same sheet.
+fn column_pages() -> Vec<Page> {
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let book = fixture_book();
+    let sheets = fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
+        "columns.css",
+        COLUMNS_CSS,
+    )]);
+    let styles = sheets.compile(&book, &registry);
+    assert!(
+        styles.warnings().is_empty(),
+        "the sheet is in the subset: {:?}",
+        styles.warnings(),
+    );
+    let assets = Assets::probe(&book, &Beside);
+    fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
+}
+
 #[test]
 fn the_pdf_is_structurally_sound() {
     let (pdf, _) = render("structure", &[]);
@@ -985,10 +1116,21 @@ fn fixture_book() -> Book {
 /// `-layout` keeps each line's own words together: without it poppler
 /// rejoins words broken across lines and swallows the hyphen.
 fn extract_text(pdf: &Path) -> Option<String> {
-    let run = tool(
-        "pdftotext",
-        &["-layout".as_ref(), pdf.as_os_str(), "-".as_ref()],
-    )?;
+    extract_with(pdf, &["-layout"])
+}
+
+/// The same in reading order rather than physical layout, which is
+/// how a reader walks a page whose content box is divided: down one
+/// column, then down the next.
+fn extract_reading_order(pdf: &Path) -> Option<String> {
+    extract_with(pdf, &[])
+}
+
+fn extract_with(pdf: &Path, flags: &[&str]) -> Option<String> {
+    let mut args: Vec<&std::ffi::OsStr> = flags.iter().map(AsRef::as_ref).collect();
+    args.push(pdf.as_os_str());
+    args.push("-".as_ref());
+    let run = tool("pdftotext", &args)?;
     assert!(run.status.success(), "pdftotext failed");
     Some(String::from_utf8(run.stdout).expect("pdftotext writes UTF-8"))
 }
@@ -1030,6 +1172,21 @@ fn strip_furniture(text: &str, head: Option<&str>) -> String {
         }
         prose.push_str(&lines.join("\n"));
         prose.push('\n');
+    }
+    prose
+}
+
+/// Drops the folio from every page wherever it stands. Reading order
+/// puts a centred folio between the columns it sits under rather than
+/// at the foot of the page.
+fn strip_folios(text: &str) -> String {
+    let mut prose = String::new();
+    for (index, page) in text.split('\u{c}').enumerate() {
+        let folio = (index + 1).to_string();
+        for line in page.lines().filter(|line| line.trim() != folio) {
+            prose.push_str(line);
+            prose.push('\n');
+        }
     }
     prose
 }
@@ -1092,4 +1249,9 @@ fn first_difference(expected: &str, rendered: &str) -> String {
 /// character, which is stricter than counting words.
 fn squeeze(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+/// The same with the hyphens taken out too.
+fn unhyphenated(text: &str) -> String {
+    squeeze(text).replace('-', "")
 }
