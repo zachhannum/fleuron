@@ -27,8 +27,9 @@ use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, 
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
-    Align, Band, Break, ComputedStyle, Content, Hyphens, MarginBox, MarginBoxStyle, PageQuery,
-    PageStyle, Situation, StringPiece, StyleTree, TextAlign, TextJustify,
+    Align, Band, BoxDecorationBreak, Break, Color, ComputedStyle, Content, Edges, Hyphens,
+    MarginBox, MarginBoxStyle, PageQuery, PageStyle, Situation, StringPiece, StyleTree, TextAlign,
+    TextJustify,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -126,6 +127,10 @@ pub struct Fragment {
     /// Space above, from the margins around it. A page that opens on
     /// this fragment drops it.
     pub lead: f32,
+    /// Space above that a page break does not drop and no margin
+    /// collapses through: the borders and padding between this
+    /// fragment and whatever is above it.
+    pub fixed: f32,
     /// The fragment's own height.
     pub height: f32,
     /// Whether a page may end above it.
@@ -136,6 +141,51 @@ pub struct Fragment {
     /// a book has thousands of fragments and a handful of chapter
     /// headings.
     pub marks: Option<Box<Marks>>,
+    /// The decorated blocks this fragment opens and closes. Boxed
+    /// for the same reason: most fragments decorate nothing.
+    pub decorations: Option<Box<Decorations>>,
+}
+
+/// What one fragment does to the blocks decorated around it.
+///
+/// A decoration spans a range of fragments. The range is settled
+/// while the flow is built and the geometry is not: the paginator
+/// places fragments one at a time and moves what it has already
+/// painted when one carries to the next page. So the range travels on
+/// the fragments at its ends, and the paginator resolves it, per
+/// page, into a border box over the fragments that landed there.
+#[derive(Debug, Clone, Default)]
+pub struct Decorations {
+    /// The blocks whose first fragment this is, outermost first.
+    pub opens: Vec<Decoration>,
+    /// How many of the open blocks end with this fragment,
+    /// innermost first.
+    pub closes: u32,
+}
+
+/// One decorated block: what it paints, and where it sits around the
+/// fragments it spans.
+#[derive(Debug, Clone)]
+pub struct Decoration {
+    /// Leading edge of the border box, from the content box's own.
+    pub x: f32,
+    /// Width of the border box.
+    pub width: f32,
+    /// Distance from the top of the block's first fragment up to the
+    /// top of its border box.
+    pub above: f32,
+    /// Distance from the bottom of its last fragment down to the
+    /// bottom of its border box.
+    pub below: f32,
+    /// Border widths, zero on an edge that is not drawn.
+    pub border: Edges,
+    /// What each edge is painted in, `currentColor` resolved.
+    pub colors: Edges<Color>,
+    /// What is painted behind the whole border box.
+    pub background: Option<Color>,
+    /// Whether `box-decoration-break: clone` closes the two edges a
+    /// page break cuts.
+    pub cloned: bool,
 }
 
 /// What a fragment tells the page it lands on: the running strings
@@ -294,18 +344,16 @@ impl<'a> Paginator<'a> {
             source: section.source.as_deref(),
             fragments: Vec::new(),
             pending: BreakPoint::Allowed,
-            lead: 0.0,
+            margin: 0.0,
+            fixed: 0.0,
             pending_marks: None,
+            open: Vec::new(),
         };
-        let style = self.styles.style(section.id);
-        builder.ask(style.break_before);
-        builder.mark(style, &[]);
-        builder.lead = style.margin.top;
-        builder.blocks(
-            &section.blocks,
-            style.margin.left,
-            measure - style.margin.left - style.margin.right,
-        );
+        let style = self.styles.style(section.id).clone();
+        let start = builder.open(&style, &[], 0.0, measure);
+        let (x, narrowed) = style.content_box(0.0, measure);
+        builder.blocks(&section.blocks, x, narrowed);
+        builder.close(&style, start);
         builder.fragments
     }
 
@@ -514,6 +562,38 @@ impl<'a> Paginator<'a> {
     }
 }
 
+/// Whether a block paints anything behind or around its content.
+fn decorated(style: &ComputedStyle) -> bool {
+    style.background_color.is_some() || style.border.paints()
+}
+
+/// The decoration one block paints, or `None` where it paints
+/// nothing. `x` and `measure` are what the block was laid out
+/// against; the border box takes its margins off them.
+fn decoration(style: &ComputedStyle, x: f32, measure: f32) -> Option<Decoration> {
+    if !decorated(style) {
+        return None;
+    }
+    let (left, width) = style.border_box(x, measure);
+    let border = style.border.widths();
+    let ink = |edge: crate::style::Border| edge.color.unwrap_or(style.color);
+    Some(Decoration {
+        x: left,
+        width,
+        above: 0.0,
+        below: 0.0,
+        border,
+        colors: Edges {
+            top: ink(style.border.top),
+            right: ink(style.border.right),
+            bottom: ink(style.border.bottom),
+            left: ink(style.border.left),
+        },
+        background: style.background_color,
+        cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
+    })
+}
+
 /// The initial letter of one paragraph, sized and shaped, with the
 /// text it was taken out of.
 struct Cap {
@@ -534,11 +614,32 @@ struct Builder<'a, 'p> {
     fragments: Vec<Fragment>,
     /// What the cascade has asked for above the next fragment.
     pending: BreakPoint,
-    /// Space left by the last block's bottom margin.
-    lead: f32,
+    /// The collapsible margin standing above the next fragment,
+    /// which is the larger of the margins that met there.
+    margin: f32,
+    /// Space above the next fragment that no margin collapses
+    /// through: the borders and padding the blocks around it set.
+    fixed: f32,
     /// What the blocks opened so far have set, waiting for a fragment
     /// to attach it to a page.
     pending_marks: Option<Box<Marks>>,
+    /// The decorated blocks still open, outermost first.
+    open: Vec<Pending>,
+}
+
+/// A decorated block while its fragments are still being built.
+struct Pending {
+    /// The fragment its first one will be.
+    start: usize,
+    /// What `fixed` stood at when the block's border box opened, and
+    /// what the distance down to its first fragment is measured from.
+    open_fixed: f32,
+    /// Whether anything has been committed above the block's first
+    /// fragment yet. Until something has, a margin committed inside
+    /// the block is one that collapsed through it, and sits above its
+    /// border box rather than inside it.
+    started: bool,
+    decoration: Decoration,
 }
 
 impl Builder<'_, '_> {
@@ -560,13 +661,47 @@ impl Builder<'_, '_> {
     }
 
     /// Opens a block: what it asks for above itself, what it sets for
-    /// the page furniture, and the space its top margin leaves.
-    /// Adjacent margins collapse to the larger.
-    fn open(&mut self, style: &ComputedStyle, inlines: &[Inline]) -> usize {
+    /// the page furniture, the space its top margin leaves, and the
+    /// decoration it paints across `x` and `measure`.
+    ///
+    /// Adjacent margins collapse to the larger. A top border or
+    /// padding is not a margin: it takes height of its own, and the
+    /// margins on either side of it no longer meet.
+    fn open(&mut self, style: &ComputedStyle, inlines: &[Inline], x: f32, measure: f32) -> usize {
         self.ask(style.break_before);
         self.mark(style, inlines);
-        self.lead = self.lead.max(style.margin.top);
-        self.fragments.len()
+        self.margin = self.margin.max(style.margin.top);
+        let start = self.fragments.len();
+        let border = style.border.widths();
+        if let Some(decoration) = decoration(style, x, measure) {
+            self.open.push(Pending {
+                start,
+                open_fixed: self.fixed,
+                started: false,
+                decoration,
+            });
+        }
+        if border.top + style.padding.top > 0.0 {
+            let margin = std::mem::take(&mut self.margin);
+            self.commit(margin);
+            self.fixed += border.top + style.padding.top;
+        }
+        start
+    }
+
+    /// Commits space no margin collapses through. The margin a
+    /// border or padding shuts off is outside every block that has
+    /// not opened a box of its own yet, and inside every block that
+    /// has.
+    fn commit(&mut self, amount: f32) {
+        for pending in self.open.iter_mut().rev() {
+            if pending.started {
+                break;
+            }
+            pending.started = true;
+            pending.open_fixed += amount;
+        }
+        self.fixed += amount;
     }
 
     /// Resolves what one element sets — its `string-set` values, the
@@ -600,20 +735,55 @@ impl Builder<'_, '_> {
     }
 
     /// Closes a block: `break-inside: avoid` glues everything it
-    /// emitted, and its bottom margin becomes the next block's lead.
+    /// emitted, its bottom border and padding take height of their
+    /// own, and its bottom margin becomes the next block's lead.
     fn close(&mut self, style: &ComputedStyle, start: usize) {
         if style.break_inside == Break::Avoid {
             for fragment in self.fragments.iter_mut().skip(start + 1) {
                 fragment.break_before = BreakPoint::Forbidden;
             }
         }
-        self.lead = self.lead.max(style.margin.bottom);
+        let border = style.border.widths();
+        if border.bottom + style.padding.bottom > 0.0 {
+            let margin = std::mem::take(&mut self.margin);
+            self.commit(margin);
+            self.fixed += border.bottom + style.padding.bottom;
+        }
+        if decorated(style) {
+            let pending = self.open.pop().expect("the block opened a decoration");
+            self.seal(pending);
+        }
+        self.margin = self.margin.max(style.margin.bottom);
         // A block that emitted nothing settles nothing: what was
         // asked above it is still asked above whatever comes next.
         if self.fragments.len() > start {
             self.pending = BreakPoint::Allowed;
         }
         self.ask(style.break_after);
+    }
+
+    /// Hands one block's decoration to the fragments at the ends of
+    /// its range, which is where the paginator reads it back. A block
+    /// that emitted nothing has no range and paints nothing.
+    fn seal(&mut self, pending: Pending) {
+        let end = self.fragments.len();
+        if end == pending.start {
+            return;
+        }
+        let mut decoration = pending.decoration;
+        // Everything committed since the last fragment was emitted
+        // lies inside the block that fragment was in.
+        decoration.below = self.fixed;
+        // Outermost first, so the paginator's stack pops the
+        // innermost block that ends at a fragment.
+        Builder::decorations(&mut self.fragments[pending.start])
+            .opens
+            .insert(0, decoration);
+        Builder::decorations(&mut self.fragments[end - 1]).closes += 1;
+    }
+
+    fn decorations(fragment: &mut Fragment) -> &mut Decorations {
+        fragment.decorations.get_or_insert_with(Box::default)
     }
 
     /// Emits the one fragment a block is: everything the cascade asked
@@ -627,23 +797,34 @@ impl Builder<'_, '_> {
     /// cascade asked for above it and the space its margins left; the
     /// rest get what the block says about splitting itself.
     fn emit(&mut self, first: &mut bool, inner: BreakPoint, x: f32, height: f32, piece: Piece) {
-        let (break_before, lead, marks) = if *first {
+        // This fragment settles how far the border box of every
+        // block opening on it sits above it.
+        let (index, fixed) = (self.fragments.len(), self.fixed);
+        for pending in &mut self.open {
+            if pending.start == index {
+                pending.decoration.above = fixed - pending.open_fixed;
+            }
+        }
+        let (break_before, lead, fixed, marks) = if *first {
             *first = false;
             (
                 std::mem::replace(&mut self.pending, BreakPoint::Allowed),
-                std::mem::take(&mut self.lead),
+                std::mem::take(&mut self.margin),
+                std::mem::take(&mut self.fixed),
                 self.pending_marks.take(),
             )
         } else {
-            (inner, 0.0, None)
+            (inner, 0.0, 0.0, None)
         };
         self.fragments.push(Fragment {
             x,
             lead,
+            fixed,
             height,
             break_before,
             piece,
             marks,
+            decorations: None,
         });
     }
 
@@ -657,17 +838,14 @@ impl Builder<'_, '_> {
                 }
                 Block::Blockquote { id, blocks, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[]);
-                    self.blocks(
-                        blocks,
-                        x + style.margin.left,
-                        measure - style.margin.left - style.margin.right,
-                    );
+                    let start = self.open(&style, &[], x, measure);
+                    let (inner, narrowed) = style.content_box(x, measure);
+                    self.blocks(blocks, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::ThematicBreak { id, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[]);
+                    let start = self.open(&style, &[], x, measure);
                     self.ornament(&style, x, measure);
                     self.close(&style, start);
                 }
@@ -675,7 +853,7 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[]);
+                    let start = self.open(&style, &[], x, measure);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
                 }
@@ -687,9 +865,8 @@ impl Builder<'_, '_> {
     /// first of them, and where a page may end between them.
     fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
         let computed = self.styles().style(id).clone();
-        let start = self.open(&computed, inlines);
-        let x = x + computed.margin.left;
-        let measure = measure - computed.margin.left - computed.margin.right;
+        let start = self.open(&computed, inlines, x, measure);
+        let (x, measure) = computed.content_box(x, measure);
 
         let style = computed.paragraph();
         let hyphenate = computed.hyphens == Hyphens::Auto;
@@ -799,7 +976,7 @@ impl Builder<'_, '_> {
     /// A thematic break: the ornament the cascade named, or the space
     /// it leaves when it names none.
     fn ornament(&mut self, style: &ComputedStyle, x: f32, measure: f32) {
-        let measure = measure - style.margin.left - style.margin.right;
+        let (x, measure) = style.content_box(x, measure);
         let paragraph = style.paragraph();
         let ornament = match &style.content {
             Content::Text(text) if !text.is_empty() => {
@@ -818,7 +995,7 @@ impl Builder<'_, '_> {
                 Piece::Blank,
             )
         });
-        self.emit_one(x + style.margin.left + offset, height, piece);
+        self.emit_one(x + offset, height, piece);
     }
 
     /// A block image, sized as CSS 2.1 §10.4 sizes a replaced element
@@ -837,7 +1014,7 @@ impl Builder<'_, '_> {
             }
             return;
         };
-        let measure = measure - style.margin.left - style.margin.right;
+        let (x, measure) = style.content_box(x, measure);
         let available = self
             .paginator
             .styles
@@ -863,7 +1040,7 @@ impl Builder<'_, '_> {
         }
         let offset = align_offset(style.text_align, width, measure);
         self.emit_one(
-            x + style.margin.left + offset,
+            x + offset,
             height,
             Piece::Image {
                 width,
@@ -993,6 +1170,72 @@ struct Placed {
     items: Vec<DrawItem>,
     /// What it sets for the furniture of whichever page it ends on.
     marks: Option<Box<Marks>>,
+    /// The decorated blocks it opens and closes.
+    decorations: Option<Box<Decorations>>,
+}
+
+/// One decorated block resolved against one page: the border box it
+/// takes there, and which of its edges the page boundary cut.
+struct Painted {
+    decoration: Decoration,
+    /// Top of the border box, from the page content box's top.
+    top: f32,
+    /// Its bottom, the same way.
+    bottom: f32,
+    /// Whether the block began on an earlier page.
+    cut_above: bool,
+    /// Whether it goes on to the next one.
+    cut_below: bool,
+}
+
+impl Painted {
+    /// The rects this box paints, background first: `origin` is the
+    /// page's content box.
+    fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
+        let (x, y) = (origin.0 + self.decoration.x, origin.1 + self.top);
+        let (w, h) = (self.decoration.width, self.bottom - self.top);
+        if w <= 0.0 || h <= 0.0 {
+            return Vec::new();
+        }
+        let mut items = Vec::new();
+        if let Some(color) = self.decoration.background {
+            items.push(DrawItem::Rect { x, y, w, h, color });
+        }
+        // `slice` leaves the two edges the break made open; `clone`
+        // closes them.
+        let closed = self.decoration.cloned;
+        let border = self.decoration.border;
+        let top = if self.cut_above && !closed {
+            0.0
+        } else {
+            border.top
+        };
+        let bottom = if self.cut_below && !closed {
+            0.0
+        } else {
+            border.bottom
+        };
+        // The corners fall to the horizontal edges: a filled rect is
+        // all the display structure has, and a mitre is a path.
+        let colors = self.decoration.colors;
+        let mut rect = |x: f32, y: f32, w: f32, h: f32, color| {
+            if w > 0.0 && h > 0.0 {
+                items.push(DrawItem::Rect { x, y, w, h, color });
+            }
+        };
+        rect(x, y, w, top, colors.top);
+        rect(x, y + h - bottom, w, bottom, colors.bottom);
+        let side = h - top - bottom;
+        rect(x, y + top, border.left, side, colors.left);
+        rect(
+            x + w - border.right,
+            y + top,
+            border.right,
+            side,
+            colors.right,
+        );
+        items
+    }
 }
 
 /// What is recorded about one finished page: the master to ask for,
@@ -1039,6 +1282,9 @@ struct Flow<'a, 'p> {
     cursor: f32,
     /// Height of the content box being filled.
     height: f32,
+    /// The decorated blocks the page being built opened with,
+    /// outermost first: a block the page before it did not finish.
+    carried: Vec<Decoration>,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -1060,6 +1306,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             section: NodeId::UNASSIGNED,
             cursor: 0.0,
             height,
+            carried: Vec::new(),
         }
     }
 
@@ -1107,7 +1354,9 @@ impl<'a, 'p> Flow<'a, 'p> {
             } else {
                 fragment.lead
             };
-            if self.placed.is_empty() || self.cursor + lead + fragment.height <= self.height {
+            if self.placed.is_empty()
+                || self.cursor + lead + fragment.fixed + fragment.height <= self.height
+            {
                 self.emit(fragment, lead);
                 return;
             }
@@ -1157,7 +1406,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Paints one fragment onto the page being built.
     fn emit(&mut self, fragment: &Fragment, lead: f32) {
         let (x, y) = self.origin();
-        let top = self.cursor + lead;
+        let top = self.cursor + lead + fragment.fixed;
         let items = match &fragment.piece {
             Piece::Line { line, cap } => {
                 let baseline = y + top + line.box_.baseline;
@@ -1192,7 +1441,61 @@ impl<'a, 'p> Flow<'a, 'p> {
             break_before: fragment.break_before,
             items,
             marks: fragment.marks.clone(),
+            decorations: fragment.decorations.clone(),
         });
+    }
+
+    /// Resolves the decorations over the page being closed into the
+    /// rects they paint there.
+    ///
+    /// A block whose first fragment landed on this page has its top
+    /// edge here, and one whose last fragment did has its bottom;
+    /// the ranges are contiguous, so a block with neither covers
+    /// every fragment the page holds. What is still open when the
+    /// page closes carries to the next.
+    fn decorate(&mut self, placed: &[Placed]) -> Vec<DrawItem> {
+        let mut boxes: Vec<Painted> = Vec::new();
+        let mut open: Vec<usize> = Vec::new();
+        for decoration in self.carried.drain(..) {
+            open.push(boxes.len());
+            boxes.push(Painted {
+                decoration,
+                top: 0.0,
+                bottom: 0.0,
+                cut_above: true,
+                cut_below: true,
+            });
+        }
+        for entry in placed {
+            let Some(decorations) = &entry.decorations else {
+                continue;
+            };
+            for decoration in &decorations.opens {
+                open.push(boxes.len());
+                boxes.push(Painted {
+                    top: entry.top - decoration.above,
+                    decoration: decoration.clone(),
+                    bottom: 0.0,
+                    cut_above: false,
+                    cut_below: true,
+                });
+            }
+            for _ in 0..decorations.closes {
+                let Some(index) = open.pop() else { continue };
+                boxes[index].bottom = entry.top + entry.height + boxes[index].decoration.below;
+                boxes[index].cut_below = false;
+            }
+        }
+        let last = placed
+            .last()
+            .map(|entry| entry.top + entry.height)
+            .unwrap_or(0.0);
+        for index in open {
+            boxes[index].bottom = last;
+            self.carried.push(boxes[index].decoration.clone());
+        }
+        let origin = self.origin();
+        boxes.iter().flat_map(|box_| box_.items(origin)).collect()
     }
 
     /// Ends the page being built, if anything is on it.
@@ -1207,9 +1510,13 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
         let opened = self.strings.clone();
         let mut reset = None;
-        let mut items = Vec::new();
+        let placed = std::mem::take(&mut self.placed);
+        // Backgrounds and borders go in front of the page's text:
+        // `DrawItem` order is paint order, and the display structure
+        // has no layers.
+        let mut items = self.decorate(&placed);
         let mut sections: Vec<NodeId> = Vec::new();
-        for placed in self.placed.drain(..) {
+        for placed in placed {
             if sections.last() != Some(&placed.section) {
                 sections.push(placed.section);
             }
@@ -1435,6 +1742,167 @@ mod tests {
             crate::style::Stylesheets::parse(&[crate::style::Source::author("test.css", css)])
                 .compile(&book, registry());
         Paginator::new(registry(), &styles).paginate(&book)
+    }
+
+    /// Prose enough to break over several lines.
+    fn prose() -> Block {
+        paragraph(&"a quiet sentence of prose ".repeat(6))
+    }
+
+    /// Every filled rect one page paints, in paint order.
+    fn rects(page: &Page) -> Vec<(f32, f32, f32, f32, Color)> {
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Rect { x, y, w, h, color } => Some((*x, *y, *w, *h, *color)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A quotation set with padding on all four edges and a rule down
+    /// its leading edge: its lines start inside both, and the measure
+    /// they break to gives up both on the left and the padding alone
+    /// on the right.
+    #[test]
+    fn padding_and_a_border_move_the_leading_edge_and_narrow_the_measure() {
+        let sections = vec![section(vec![quote(vec![prose()])])];
+        let plain = paginate_styled("blockquote { margin: 0 }", sections.clone());
+        let boxed = paginate_styled(
+            "blockquote { margin: 0; padding: 12pt; border-left: 2pt solid }",
+            sections,
+        );
+        let measure = master(Situation::First(Side::Recto)).geometry.measure();
+        let left = |pages: &[Page]| content_items(&pages[0])[0].0;
+        assert_eq!(left(&boxed) - left(&plain), 14.0);
+        let widest = |pages: &[Page]| {
+            content_lines(&pages[0])
+                .iter()
+                .map(|(_, runs)| runs.iter().map(|(x, _, _)| *x).fold(0.0f32, f32::max))
+                .fold(0.0f32, f32::max)
+        };
+        assert!(widest(&boxed) <= left(&plain) + measure - 12.0);
+    }
+
+    /// The rule down a quotation reaches every line it sets: one rect,
+    /// the height of the border box, over the whole quote.
+    #[test]
+    fn a_rule_reaches_the_full_height_of_the_box() {
+        let pages = paginate_styled(
+            "blockquote { margin: 0; padding: 12pt; border-left: 2pt solid }",
+            vec![section(vec![quote(vec![prose()])])],
+        );
+        let rect = rects(&pages[0]);
+        assert_eq!(rect.len(), 1, "one edge, one rect");
+        let (x, y, w, h, color) = rect[0];
+        assert_eq!(w, 2.0);
+        assert_eq!(color, Color::BLACK);
+        let lines = content_lines(&pages[0]);
+        let (first, last) = (lines[0].0, lines[lines.len() - 1].0);
+        assert!(y < first, "the rule starts above the first baseline");
+        assert!(y + h > last, "and ends below the last");
+        let origin = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin();
+        assert_eq!(x, origin.0);
+    }
+
+    /// A rule under a heading sits below its last baseline, and the
+    /// prose under it moves down by the rule and the padding
+    /// together.
+    #[test]
+    fn a_rule_under_a_heading_moves_the_prose_below_it() {
+        let sections = || vec![section(vec![heading("Chapter One"), prose()])];
+        let plain = paginate_styled("h1 { margin: 0 }", sections());
+        let ruled = paginate_styled(
+            "h1 { margin: 0; padding-bottom: 6pt; border-bottom: 1pt solid }",
+            sections(),
+        );
+        let opening = |pages: &[Page]| content_lines(&pages[0])[1].0;
+        assert_eq!(opening(&ruled) - opening(&plain), 7.0);
+        let rect = rects(&ruled[0]);
+        assert_eq!(rect.len(), 1);
+        let (_, y, _, h, _) = rect[0];
+        assert_eq!(h, 1.0);
+        let title = content_lines(&ruled[0])[0].0;
+        assert!(y > title, "the rule sits below the heading's baseline");
+        assert!(y + h < opening(&ruled), "and above the prose");
+    }
+
+    /// A top border stops a block's top margin collapsing with its
+    /// first child's: both are set, rather than the larger of the two.
+    #[test]
+    fn a_top_border_stops_the_margins_collapsing() {
+        let sections = || vec![section(vec![paragraph("Above."), quote(vec![prose()])])];
+        let collapsed = paginate_styled(
+            "blockquote { margin: 20pt 0 } blockquote p { margin-top: 10pt }",
+            sections(),
+        );
+        let held = paginate_styled(
+            "blockquote { margin: 20pt 0; border-top: 1pt solid } blockquote p { margin-top: 10pt }",
+            sections(),
+        );
+        let gap = |pages: &[Page]| {
+            let lines = content_lines(&pages[0]);
+            lines[1].0 - lines[0].0
+        };
+        assert_eq!(gap(&held) - gap(&collapsed), 11.0);
+    }
+
+    /// A tinted quote broken over pages paints on every one of them,
+    /// each over the fragments that page holds. `slice` leaves the
+    /// two edges a break made open; `clone` closes them.
+    #[test]
+    fn a_box_split_across_pages_paints_on_every_one() {
+        let tint = Color::rgb(0xee, 0xee, 0xee);
+        let sheet = |extra: &str| {
+            format!(
+                "blockquote {{ margin: 0; background-color: #eeeeee; border: 1pt solid; {extra} }}"
+            )
+        };
+        let quoted = || vec![section(vec![quote((0..40).map(|_| prose()).collect())])];
+        /// The rules across a border box: its top and bottom edges,
+        /// which are the ones a page break opens.
+        fn rules(page: &Page) -> usize {
+            rects(page)
+                .iter()
+                .filter(|(_, _, w, h, color)| w > h && *color == Color::BLACK)
+                .count()
+        }
+
+        let sliced = paginate_styled(&sheet(""), quoted());
+        assert!(sliced.len() >= 3, "the quote has to break twice");
+        let last = sliced.len() - 1;
+        assert!(
+            sliced
+                .iter()
+                .all(|page| rects(page).iter().any(|rect| rect.4 == tint)),
+            "every page the quote covers is tinted"
+        );
+        assert_eq!(rules(&sliced[0]), 1, "the top edge, where it began");
+        assert_eq!(rules(&sliced[1]), 0, "both edges cut");
+        assert_eq!(rules(&sliced[last]), 1, "the bottom edge, where it ended");
+
+        let cloned = paginate_styled(&sheet("box-decoration-break: clone"), quoted());
+        assert_eq!(cloned.len(), sliced.len());
+        for page in &cloned {
+            assert_eq!(rules(page), 2, "each piece closed on both edges");
+        }
+    }
+
+    /// Nothing painted where nothing was asked for: a sheet that
+    /// names no padding, border or background lays out the same
+    /// display structure it did before there was a box model.
+    #[test]
+    fn a_book_that_asks_for_no_box_paints_no_rects() {
+        let pages = paginate(vec![section(vec![
+            heading("Chapter One"),
+            prose(),
+            quote(vec![prose()]),
+            scene_break(),
+            prose(),
+        ])]);
+        assert!(pages.iter().all(|page| rects(page).is_empty()));
     }
 
     fn quote(blocks: Vec<Block>) -> Block {

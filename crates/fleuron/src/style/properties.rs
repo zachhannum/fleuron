@@ -222,22 +222,23 @@ pub enum Break {
     Side(Side),
 }
 
-/// Box edges in points, resolved.
+/// The four edges of a box, in whatever the property resolves to:
+/// points for `margin` and `padding`, a [`Border`] for `border`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct Edges {
-    /// Top edge in points.
-    pub top: f32,
-    /// Right edge in points.
-    pub right: f32,
-    /// Bottom edge in points.
-    pub bottom: f32,
-    /// Left edge in points.
-    pub left: f32,
+pub struct Edges<T = f32> {
+    /// Top edge.
+    pub top: T,
+    /// Right edge.
+    pub right: T,
+    /// Bottom edge.
+    pub bottom: T,
+    /// Left edge.
+    pub left: T,
 }
 
-impl Edges {
+impl<T: Copy> Edges<T> {
     /// All four edges the same.
-    pub const fn all(value: f32) -> Edges {
+    pub const fn all(value: T) -> Edges<T> {
         Edges {
             top: value,
             right: value,
@@ -245,7 +246,107 @@ impl Edges {
             left: value,
         }
     }
+
+    /// The edge `which`.
+    pub fn edge(&mut self, which: Edge) -> &mut T {
+        match which {
+            Edge::Top => &mut self.top,
+            Edge::Right => &mut self.right,
+            Edge::Bottom => &mut self.bottom,
+            Edge::Left => &mut self.left,
+        }
+    }
 }
+
+impl Edges<f32> {
+    /// What the left and right edges take off a measure.
+    pub fn inline(self) -> f32 {
+        self.left + self.right
+    }
+}
+
+/// How a border edge is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BorderStyle {
+    /// `none`: the edge is not drawn, whatever width it was given.
+    None,
+    /// `solid`
+    Solid,
+}
+
+/// One border edge: its style, its width and its colour.
+///
+/// The colour is what `border-color` set, and `None` is
+/// `currentColor`: the element's own `color`, whichever order the two
+/// were declared in.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Border {
+    /// How the edge is drawn.
+    pub style: BorderStyle,
+    /// Thickness in points, whether or not the edge is drawn.
+    pub width: f32,
+    /// What it is painted in, or `None` for the element's `color`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+impl Border {
+    /// The initial border: `medium` wide, and not drawn.
+    pub const NONE: Border = Border {
+        style: BorderStyle::None,
+        width: MEDIUM,
+        color: None,
+    };
+
+    /// The thickness this edge takes in the flow: nothing unless it
+    /// is drawn.
+    pub fn used(self) -> f32 {
+        match self.style {
+            BorderStyle::None => 0.0,
+            BorderStyle::Solid => self.width.max(0.0),
+        }
+    }
+}
+
+/// `border-width: medium`, the initial value, in points.
+pub(crate) const MEDIUM: f32 = 2.25;
+
+impl Edges<Border> {
+    /// The four used thicknesses.
+    pub fn widths(self) -> Edges {
+        Edges {
+            top: self.top.used(),
+            right: self.right.used(),
+            bottom: self.bottom.used(),
+            left: self.left.used(),
+        }
+    }
+
+    /// Whether any edge is drawn.
+    pub fn paints(self) -> bool {
+        let widths = self.widths();
+        widths.top + widths.right + widths.bottom + widths.left > 0.0
+    }
+}
+
+/// What a block's decoration does where a page break splits it, from
+/// `box-decoration-break`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoxDecorationBreak {
+    /// `slice`: the box is drawn as one and cut, so the two edges
+    /// the break made are open.
+    Slice,
+    /// `clone`: each piece is a box of its own, closed on all four
+    /// edges.
+    Clone,
+}
+
+/// `thin`, `medium` and `thick`, in points: the CSS pixel widths a
+/// browser gives them.
+pub(crate) const LINE_WIDTHS: [(&str, f32); 3] =
+    [("thin", 0.75), ("medium", MEDIUM), ("thick", 3.75)];
 
 /// Which edge a one-sided box property sets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -590,6 +691,12 @@ pub enum Declaration {
     CounterReset(Option<u32>),
     InitialLetter(u16),
     Margin(Edge, Length),
+    Padding(Edge, Length),
+    BorderStyle(Edge, BorderStyle),
+    BorderWidth(Edge, Length),
+    BorderColor(Edge, Option<Color>),
+    BackgroundColor(Option<Color>),
+    BoxDecorationBreak(BoxDecorationBreak),
     BreakBefore(Break),
     BreakAfter(Break),
     BreakInside(Break),
@@ -626,6 +733,18 @@ impl LineHeight {
 /// What `line-height: normal` works out to. The strut takes its
 /// ascent and descent from the font; this is the factor over them.
 const NORMAL_LINE_HEIGHT: f32 = 1.2;
+
+fn no_padding(padding: &Edges) -> bool {
+    *padding == Edges::all(0.0)
+}
+
+fn no_border(border: &Edges<Border>) -> bool {
+    *border == Edges::all(Border::NONE)
+}
+
+fn sliced(value: &BoxDecorationBreak) -> bool {
+    *value == BoxDecorationBreak::Slice
+}
 
 /// One node's resolved style: what every downstream pass reads.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -687,6 +806,18 @@ pub struct ComputedStyle {
     pub initial_letter: u16,
     /// Margins in points.
     pub margin: Edges,
+    /// Padding in points, between the border and the content.
+    #[serde(skip_serializing_if = "no_padding")]
+    pub padding: Edges,
+    /// The four border edges.
+    #[serde(skip_serializing_if = "no_border")]
+    pub border: Edges<Border>,
+    /// What is painted behind the block, from `background-color`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<Color>,
+    /// What the decoration does where a page break splits the block.
+    #[serde(skip_serializing_if = "sliced")]
+    pub box_decoration_break: BoxDecorationBreak,
     /// Where a page break falls before this element.
     pub break_before: Break,
     /// Where one falls after it.
@@ -723,6 +854,10 @@ impl ComputedStyle {
             counter_reset: None,
             initial_letter: 0,
             margin: Edges::all(0.0),
+            padding: Edges::all(0.0),
+            border: Edges::all(Border::NONE),
+            background_color: None,
+            box_decoration_break: BoxDecorationBreak::Slice,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -734,6 +869,10 @@ impl ComputedStyle {
     pub fn inherit(&self) -> ComputedStyle {
         ComputedStyle {
             margin: Edges::all(0.0),
+            padding: Edges::all(0.0),
+            border: Edges::all(Border::NONE),
+            background_color: None,
+            box_decoration_break: BoxDecorationBreak::Slice,
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
@@ -780,14 +919,18 @@ impl ComputedStyle {
             Declaration::CounterReset(folio) => self.counter_reset = *folio,
             Declaration::InitialLetter(lines) => self.initial_letter = *lines,
             Declaration::Margin(edge, length) => {
-                let points = length.to_points(self.font_size, root_size);
-                match edge {
-                    Edge::Top => self.margin.top = points,
-                    Edge::Right => self.margin.right = points,
-                    Edge::Bottom => self.margin.bottom = points,
-                    Edge::Left => self.margin.left = points,
-                }
+                *self.margin.edge(*edge) = length.to_points(self.font_size, root_size)
             }
+            Declaration::Padding(edge, length) => {
+                *self.padding.edge(*edge) = length.to_points(self.font_size, root_size).max(0.0)
+            }
+            Declaration::BorderStyle(edge, style) => self.border.edge(*edge).style = *style,
+            Declaration::BorderWidth(edge, length) => {
+                self.border.edge(*edge).width = length.to_points(self.font_size, root_size).max(0.0)
+            }
+            Declaration::BorderColor(edge, color) => self.border.edge(*edge).color = *color,
+            Declaration::BackgroundColor(color) => self.background_color = *color,
+            Declaration::BoxDecorationBreak(value) => self.box_decoration_break = *value,
             Declaration::BreakBefore(value) => self.break_before = *value,
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
@@ -816,6 +959,27 @@ impl ComputedStyle {
             ),
             color: set(self.color != element.color, self.color),
         }
+    }
+
+    /// This block's border box inside `measure`, laid out at `x` from
+    /// the enclosing content box's leading edge: `(leading edge,
+    /// width)`, with only the margins taken off.
+    pub fn border_box(&self, x: f32, measure: f32) -> (f32, f32) {
+        (
+            x + self.margin.left,
+            (measure - self.margin.inline()).max(0.0),
+        )
+    }
+
+    /// This block's content box inside `measure`: `(leading edge, the
+    /// measure its lines break to)`. Margin, border and padding come
+    /// off both edges, and the leading edge moves in by what they
+    /// take on the left.
+    pub fn content_box(&self, x: f32, measure: f32) -> (f32, f32) {
+        let border = self.border.widths();
+        let leading = self.margin.left + border.left + self.padding.left;
+        let trailing = self.margin.right + border.right + self.padding.right;
+        (x + leading, (measure - leading - trailing).max(0.0))
     }
 
     /// Everything line layout needs from a style.

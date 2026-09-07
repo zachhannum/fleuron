@@ -19,9 +19,9 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
-    Break, Color, Content, CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps,
-    Hyphens, Length, LineHeight, MarginBox, StringPiece, StringSet, TextAlign, TextJustify,
-    TextTransform,
+    BorderStyle, BoxDecorationBreak, Break, Color, Content, CounterStyle, Declaration, Edge,
+    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, MEDIUM,
+    MarginBox, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -574,19 +574,67 @@ fn longhand<'i, T, D>(
     Ok(vec![wrap(value)])
 }
 
-/// Reads the `margin` shorthand into its four longhands.
-fn margins<'i, D>(
+/// Reads a one-to-four value shorthand (`margin`, `padding`,
+/// `border-width`) into its four longhands.
+fn sides<'i, T: Copy, D>(
     name: &CowRcStr<'i>,
     input: &mut Parser<'i, '_>,
-    wrap: fn(Edge, Length) -> D,
+    parse: fn(&mut Parser<'_, '_>) -> Option<T>,
+    wrap: fn(Edge, T) -> D,
 ) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>> {
-    let edges = edges(input)
+    let edges = edges(input, parse)
         .ok_or_else(|| input.new_custom_error(StyleError::UnsupportedValue(name.clone())))?;
     Ok(edges
         .into_iter()
-        .map(|(edge, length)| wrap(edge, length))
+        .map(|(edge, value)| wrap(edge, value))
         .collect())
 }
+
+/// Reads `border` or one of its per-edge longhands: a width, a style
+/// and a colour in any order, any of them left out. What is left out
+/// goes back to its initial value, as the shorthand asks.
+fn border<'i>(
+    name: &CowRcStr<'i>,
+    input: &mut Parser<'i, '_>,
+    edges: &[Edge],
+) -> Result<Vec<Declaration>, ParseError<'i, StyleError<'i>>> {
+    let (mut width, mut style, mut color) = (None, None, None);
+    loop {
+        if width.is_none()
+            && let Some(value) = input.try_parse(|input| line_width(input).ok_or(())).ok()
+        {
+            width = Some(value);
+        } else if style.is_none()
+            && let Some(value) = input.try_parse(|input| line_style(input).ok_or(())).ok()
+        {
+            style = Some(value);
+        } else if color.is_none()
+            && let Some(value) = input.try_parse(|input| self::color(input).ok_or(())).ok()
+        {
+            color = Some(value);
+        } else {
+            break;
+        }
+    }
+    if width.is_none() && style.is_none() && color.is_none() {
+        return Err(input.new_custom_error(StyleError::UnsupportedValue(name.clone())));
+    }
+    let width = width.unwrap_or(Length::Points(MEDIUM));
+    let style = style.unwrap_or(BorderStyle::None);
+    Ok(edges
+        .iter()
+        .flat_map(|edge| {
+            [
+                Declaration::BorderWidth(*edge, width),
+                Declaration::BorderStyle(*edge, style),
+                Declaration::BorderColor(*edge, color),
+            ]
+        })
+        .collect())
+}
+
+/// Every edge, for the shorthands that set all four.
+const ALL_EDGES: &[Edge] = &[Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 
 /// The properties of a style rule.
 pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
@@ -752,7 +800,7 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         inherited: false,
         syntax: "[ <length> | <percentage> ]{1,4}",
         examples: &["1em", "1em 2em", "1em 2em 0", "54pt 42pt 54pt 54pt"],
-        read: |name, input| margins(name, input, Declaration::Margin),
+        read: |name, input| sides(name, input, length, Declaration::Margin),
     },
     Spec {
         name: "margin-top",
@@ -796,6 +844,134 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
             longhand(name, input, length, |length| {
                 Declaration::Margin(Edge::Left, length)
             })
+        },
+    },
+    Spec {
+        name: "padding",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,4}",
+        examples: &["12pt", "6pt 12pt", "6pt 12pt 0", "6pt 12pt 6pt 12pt"],
+        read: |name, input| sides(name, input, length, Declaration::Padding),
+    },
+    Spec {
+        name: "padding-top",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["6pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Padding(Edge::Top, length)
+            })
+        },
+    },
+    Spec {
+        name: "padding-right",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["6pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Padding(Edge::Right, length)
+            })
+        },
+    },
+    Spec {
+        name: "padding-bottom",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["6pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Padding(Edge::Bottom, length)
+            })
+        },
+    },
+    Spec {
+        name: "padding-left",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["6pt"],
+        read: |name, input| {
+            longhand(name, input, length, |length| {
+                Declaration::Padding(Edge::Left, length)
+            })
+        },
+    },
+    Spec {
+        name: "border",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ] || [ none | solid ] || <color>",
+        examples: &["2pt solid", "thin solid crimson", "none"],
+        read: |name, input| border(name, input, ALL_EDGES),
+    },
+    Spec {
+        name: "border-top",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ] || [ none | solid ] || <color>",
+        examples: &["2pt solid", "thin solid crimson", "none"],
+        read: |name, input| border(name, input, &[Edge::Top]),
+    },
+    Spec {
+        name: "border-right",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ] || [ none | solid ] || <color>",
+        examples: &["2pt solid", "thin solid crimson", "none"],
+        read: |name, input| border(name, input, &[Edge::Right]),
+    },
+    Spec {
+        name: "border-bottom",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ] || [ none | solid ] || <color>",
+        examples: &["2pt solid", "thin solid crimson", "none"],
+        read: |name, input| border(name, input, &[Edge::Bottom]),
+    },
+    Spec {
+        name: "border-left",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ] || [ none | solid ] || <color>",
+        examples: &["2pt solid", "thin solid crimson", "none"],
+        read: |name, input| border(name, input, &[Edge::Left]),
+    },
+    Spec {
+        name: "border-width",
+        inherited: false,
+        syntax: "[ <length> | thin | medium | thick ]{1,4}",
+        examples: &["2pt", "thin thick", "1pt 2pt 1pt 2pt"],
+        read: |name, input| sides(name, input, line_width, Declaration::BorderWidth),
+    },
+    Spec {
+        name: "border-style",
+        inherited: false,
+        syntax: "[ none | solid ]{1,4}",
+        examples: &["solid", "none solid"],
+        read: |name, input| sides(name, input, line_style, Declaration::BorderStyle),
+    },
+    Spec {
+        name: "border-color",
+        inherited: false,
+        syntax: "<color>{1,4}",
+        examples: &["crimson", "#369 black"],
+        read: |name, input| sides(name, input, border_color, Declaration::BorderColor),
+    },
+    Spec {
+        name: "background-color",
+        inherited: false,
+        syntax: "<color> | transparent",
+        examples: &["#f4f1ea", "transparent"],
+        read: |name, input| longhand(name, input, background_color, Declaration::BackgroundColor),
+    },
+    Spec {
+        name: "box-decoration-break",
+        inherited: false,
+        syntax: "slice | clone",
+        examples: &["slice", "clone"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                decoration_break,
+                Declaration::BoxDecorationBreak,
+            )
         },
     },
     Spec {
@@ -931,6 +1107,55 @@ fn named(name: &str) -> Option<Color> {
         .binary_search_by_key(&lowercase.as_str(), |(known, _)| known)
         .ok()?;
     Some(NAMED[at].1)
+}
+
+/// `background-color: <color> | transparent`, where `transparent` is
+/// the initial value: nothing is painted behind the block.
+fn background_color(input: &mut Parser<'_, '_>) -> Option<Option<Color>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("transparent"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    color(input).map(Some)
+}
+
+/// `<line-width>`: a length, or one of the three keywords a browser
+/// gives a pixel width to.
+fn line_width(input: &mut Parser<'_, '_>) -> Option<Length> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return LINE_WIDTHS
+            .iter()
+            .find(|(name, _)| keyword.eq_ignore_ascii_case(name))
+            .map(|(_, points)| Length::Points(*points));
+    }
+    length(input)
+}
+
+/// `<line-style>`, of which the engine draws one.
+fn line_style(input: &mut Parser<'_, '_>) -> Option<BorderStyle> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(BorderStyle::None),
+        "solid" => Some(BorderStyle::Solid),
+        _ => None,
+    }
+}
+
+/// A colour written where a longhand takes one, which never means
+/// `currentColor`: only the shorthand leaves the colour out.
+fn border_color(input: &mut Parser<'_, '_>) -> Option<Option<Color>> {
+    color(input).map(Some)
+}
+
+fn decoration_break(input: &mut Parser<'_, '_>) -> Option<BoxDecorationBreak> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "slice" => Some(BoxDecorationBreak::Slice),
+        "clone" => Some(BoxDecorationBreak::Clone),
+        _ => None,
+    }
 }
 
 fn variant_caps(input: &mut Parser<'_, '_>) -> Option<FontVariantCaps> {
@@ -1134,12 +1359,15 @@ fn break_value(input: &mut Parser<'_, '_>) -> Option<Break> {
     }
 }
 
-/// The `margin` shorthand, in the CSS order: one to four lengths,
+/// A one-to-four value shorthand, in the CSS order:
 /// top/right/bottom/left filled in the usual way.
-fn edges(input: &mut Parser<'_, '_>) -> Option<Vec<(Edge, Length)>> {
+fn edges<T: Copy>(
+    input: &mut Parser<'_, '_>,
+    parse: fn(&mut Parser<'_, '_>) -> Option<T>,
+) -> Option<Vec<(Edge, T)>> {
     let mut values = Vec::new();
     while values.len() < 4 {
-        match input.try_parse(|input| length(input).ok_or(())) {
+        match input.try_parse(|input| parse(input).ok_or(())) {
             Ok(value) => values.push(value),
             Err(()) => break,
         }
@@ -1237,7 +1465,7 @@ pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
         inherited: false,
         syntax: "[ <length> | <percentage> ]{1,4}",
         examples: &["54pt", "54pt 42pt", "54pt 42pt 54pt 54pt"],
-        read: |name, input| margins(name, input, PageDeclaration::Margin),
+        read: |name, input| sides(name, input, length, PageDeclaration::Margin),
     },
     Spec {
         name: "margin-top",

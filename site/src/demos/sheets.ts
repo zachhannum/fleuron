@@ -63,7 +63,7 @@ export const OUTSIDE = `@page {
 p {
   text-indent: 1.2em;
   color: crimson;
-  border-bottom: 1px solid black;
+  border-radius: 3pt;
 }
 
 blockquote {

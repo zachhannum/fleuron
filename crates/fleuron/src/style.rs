@@ -33,9 +33,9 @@ use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Break, Color, ComputedStyle, Content, CounterStyle, Edge, Edges, Family,
-    FontStyle, FontVariantCaps, Hyphens, Length, LineHeight, MarginBox, PageGeometry, StringPiece,
-    StringSet, TextAlign, TextJustify, TextTransform,
+    Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ComputedStyle, Content,
+    CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Length, LineHeight,
+    MarginBox, PageGeometry, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
 };
 pub use sheet::{Origin, Source};
 
@@ -1337,6 +1337,60 @@ mod tests {
         }
     }
 
+    /// The border shorthands compute onto the four edges: `border`
+    /// sets all of them, a per-edge longhand one, and the per-value
+    /// longhands one component of each. What a shorthand leaves out
+    /// goes back to its initial value, so `border: solid` after a
+    /// colour drops the colour.
+    #[test]
+    fn the_border_shorthands_reach_the_four_edges() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { border: 2pt solid crimson; border-left: 6pt solid }\n             blockquote { border-style: solid none; border-width: 1pt; border-color: teal }",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+        let paragraph = first(&tree, "p");
+        assert_eq!(paragraph.border.top.width, 2.0);
+        assert_eq!(paragraph.border.top.style, BorderStyle::Solid);
+        assert_eq!(paragraph.border.top.color, Some(Color::rgb(220, 20, 60)));
+        assert_eq!(paragraph.border.left.width, 6.0);
+        assert_eq!(paragraph.border.left.color, None);
+        assert_eq!(paragraph.border.widths().inline(), 8.0);
+
+        let quote = first(&tree, "blockquote");
+        assert_eq!(quote.border.widths().top, 1.0);
+        assert_eq!(quote.border.widths().right, 0.0);
+        assert_eq!(quote.border.left.color, Some(Color::rgb(0, 128, 128)));
+    }
+
+    /// An edge `border-style` leaves at `none` takes no width in the
+    /// flow, whatever `border-width` said, and one written with no
+    /// width at all is `medium`.
+    #[test]
+    fn an_undrawn_edge_takes_no_width() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { border-width: 4pt }\nblockquote { border: solid }",
+        );
+        assert_eq!(first(&tree, "p").border.widths(), Edges::all(0.0));
+        assert_eq!(first(&tree, "blockquote").border.widths(), Edges::all(2.25));
+    }
+
+    /// `padding` reads the one-to-four value shorthand the way
+    /// `margin` does, and its longhands overwrite what it set.
+    #[test]
+    fn padding_reads_the_shorthand_and_its_longhands() {
+        let book = sample();
+        let tree = compile(&book, "p { padding: 6pt 12pt; padding-bottom: 0 }");
+        let padding = first(&tree, "p").padding;
+        assert_eq!(padding.top, 6.0);
+        assert_eq!(padding.right, 12.0);
+        assert_eq!(padding.bottom, 0.0);
+        assert_eq!(padding.left, 12.0);
+    }
+
     /// `text-justify` and `hanging-punctuation` read as CSS writes
     /// them: the first a keyword, the second a set of them in any
     /// order.
@@ -1798,21 +1852,25 @@ mod tests {
         assert_eq!(first(&tree, "h1").color, Color::rgb(180, 30, 30));
     }
 
-    /// `color` sets the text of a box. `background-color` fills the
-    /// box behind it and needs a box model, so it warns at the line
-    /// and column it was written at.
+    /// `color` is the ink a box is set in and `background-color` is
+    /// what is painted behind it. The text colour inherits and the
+    /// background does not, so the emphasis inside a tinted paragraph
+    /// takes the ink and leaves the tint.
     #[test]
-    fn background_colour_warns_where_it_was_written() {
-        let book = sample();
-        let tree = compile(&book, "p {\n  color: teal;\n  background-color: teal;\n}\n");
-        let warning = tree
-            .warnings()
-            .iter()
-            .find(|warning| warning.message.contains("background-color"))
-            .expect("background-color is outside the subset");
-        assert_eq!(warning.message, "unsupported property `background-color`");
-        assert_eq!(warning.origin.as_deref(), Some("author.css:3:3"));
+    fn colour_inherits_where_a_background_does_not() {
+        let book = nested();
+        let tree = compile(
+            &book,
+            "p {\n  color: teal;\n  background-color: #f4f1ea;\n}\n",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
         assert_eq!(first(&tree, "p").color, Color::rgb(0, 128, 128));
+        assert_eq!(
+            first(&tree, "p").background_color,
+            Some(Color::rgb(0xf4, 0xf1, 0xea))
+        );
+        assert_eq!(first(&tree, "em").color, Color::rgb(0, 128, 128));
+        assert_eq!(first(&tree, "em").background_color, None);
     }
 
     /// A face with no small capitals of its own is reported once,
