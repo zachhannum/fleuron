@@ -124,13 +124,13 @@ The preview and the PDF fill from the same field on the run.
 
 ### The box model
 
-A block has a margin, a border and padding around its content, and a background behind them. `margin`, `padding` and `border` each take a one-to-four value shorthand and a longhand per edge; `border` also takes `border-width`, `border-style` and `border-color`. `border-style` is `none` or `solid`.
+A block has a margin, a border and padding around its content, and a background behind them. `margin` and `padding` take a one-to-four value shorthand and a longhand per edge. `border` takes a width, a style and a colour in any order, and `border-top`, `border-right`, `border-bottom` and `border-left` take the same three for one edge. `border-width`, `border-style` and `border-color` each set one of the three across all four edges, with the one-to-four value shorthand `margin` uses. `border-style` is `none` or `solid`.
 
-The border and the padding on the left and right narrow the measure and move the leading edge in by what they take. The ones on the top and bottom take height in the flow, and the margins on either side of them no longer collapse: a top border on a blockquote sits between the quote's own top margin and its first paragraph's, and both are set.
+The border and the padding on the left and right narrow the measure and move the leading edge in by what they take. The ones on the top and bottom take height in the flow, and the margins on either side of them no longer collapse: a top border on a blockquote sits between the quote's own top margin and its first paragraph's, and both take space.
 
 `background-color` fills the border box, with the border over it. Neither inherits.
 
-A border edge is a filled rectangle. Where two edges of different colours meet, the corner goes to the horizontal one rather than mitring, and there are no rounded corners.
+Where two edges of different colours meet, the corner goes to the horizontal one rather than mitring, and there are no rounded corners.
 
 A page break through a block splits its box, and `box-decoration-break` settles the two edges the break made. `slice`, the initial value, draws the block as one box and cuts it, leaving both open. `clone` closes each piece on all four edges. Neither repeats the padding, which belongs to the block's own top and bottom.
 
@@ -237,7 +237,7 @@ The string in `url()` is handed to the loader unchanged, and does not have to be
 
 Floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
 
-Of the box model: the `background` shorthand and every background property but `background-color`, the per-edge per-value border longhands such as `border-top-width`, `border-radius`, and a border, padding or background on an inline element or on `@page`.
+The box model is missing the `background` shorthand and every background property but `background-color`, the border longhands that name both an edge and a value, such as `border-top-width`, `border-radius`, and a border, padding or background on an inline element or on `@page`.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.
 

@@ -59,8 +59,8 @@ const COMPARED = 3;
  * a bordered, padded, tinted box carried over a page turn.
  *
  * A background is the one thing a painter lays under the text rather
- * than over it, so a painter that got the order wrong parts company
- * with the export here.
+ * than over it, so a painter that got the order wrong differs from
+ * the export here.
  */
 const BOXED = 22;
 

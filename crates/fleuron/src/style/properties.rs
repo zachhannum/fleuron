@@ -222,9 +222,8 @@ pub enum Break {
     Side(Side),
 }
 
-/// The four edges of a box, carrying whatever the property that
-/// wrote them resolves to: points for `margin` and `padding`, a
-/// [`Border`] for `border`.
+/// The four edges of a box, in whatever the property resolves to:
+/// points for `margin` and `padding`, a [`Border`] for `border`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Edges<T = f32> {
     /// Top edge.
@@ -276,7 +275,7 @@ pub enum BorderStyle {
     Solid,
 }
 
-/// One border edge: how it is drawn, how thick, and in what.
+/// One border edge: its style, its width and its colour.
 ///
 /// The colour is what `border-color` set, and `None` is
 /// `currentColor`: the element's own `color`, whichever order the two
@@ -285,7 +284,7 @@ pub enum BorderStyle {
 pub struct Border {
     /// How the edge is drawn.
     pub style: BorderStyle,
-    /// Thickness in points, before `style` is consulted.
+    /// Thickness in points, whether or not the edge is drawn.
     pub width: f32,
     /// What it is painted in, or `None` for the element's `color`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -293,15 +292,15 @@ pub struct Border {
 }
 
 impl Border {
-    /// The edge `border-style: none` leaves: `medium`, undrawn.
+    /// The initial border: `medium` wide, and not drawn.
     pub const NONE: Border = Border {
         style: BorderStyle::None,
         width: MEDIUM,
         color: None,
     };
 
-    /// The thickness this edge takes in the flow: nothing at all
-    /// unless it is drawn.
+    /// The thickness this edge takes in the flow: nothing unless it
+    /// is drawn.
     pub fn used(self) -> f32 {
         match self.style {
             BorderStyle::None => 0.0,
@@ -345,7 +344,7 @@ pub enum BoxDecorationBreak {
 }
 
 /// `thin`, `medium` and `thick`, in points: the CSS pixel widths a
-/// browser gives them, which is what an author writing them expects.
+/// browser gives them.
 pub(crate) const LINE_WIDTHS: [(&str, f32); 3] =
     [("thin", 0.75), ("medium", MEDIUM), ("thick", 3.75)];
 
