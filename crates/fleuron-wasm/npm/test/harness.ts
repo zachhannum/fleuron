@@ -388,7 +388,7 @@ if (run === undefined) {
 }
 const written = await client.sourceOf(run.node);
 check(
-  'a run names a node the worker says was read from the manuscript',
+  'the node a run names was read from the manuscript',
   written?.source === 'gulliver-excerpt.md' && written.start < written.end,
   JSON.stringify(written),
 );
@@ -398,13 +398,11 @@ check(
   markdown.slice(start, written?.end ?? 0).trim().length > 0,
   JSON.stringify(markdown.slice(start, Math.min(written?.end ?? 0, start + 40))),
 );
-check(
-  'that stretch of the manuscript names the node again',
-  (await client.nodeAt('gulliver-excerpt.md', start)) === run.node,
-);
+const answered = await client.nodeAt('gulliver-excerpt.md', start);
+check('that stretch of the manuscript names the node again', answered === run.node);
 check(
   'and the node it names is painted on the page the run was on',
-  writtenRuns.some((other) => other.node === run.node && other.page === run.page),
+  writtenRuns.some((other) => other.node === answered && other.page === run.page),
 );
 check(
   'a byte of a file the book has not read is read from nothing',
