@@ -50,6 +50,7 @@ export {
   type Page,
   type RectItem,
   type Side,
+  type SourceRange,
   type TextItem,
   type Warning,
 } from './wire.js';

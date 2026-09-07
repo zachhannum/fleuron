@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
-use crate::content::NodeId;
+use crate::content::{NodeId, SourceRange};
 use crate::fonts::Features;
 use crate::style::Color;
 
@@ -81,6 +81,13 @@ pub enum DrawItem {
         /// so `source_map[range.start]..source_map[range.end]` is the
         /// source a glyph stands for. Empty alongside `source`.
         source_map: Vec<u32>,
+        /// Where the run was written: the content node it was shaped
+        /// from and the bytes of that node's own text it stands for.
+        /// The runs that name one node tile it, so a cursor in the
+        /// manuscript lands on a run and a run lands back on the
+        /// manuscript. Absent on text the engine wrote itself: a
+        /// folio, a running head, a scene break's ornament.
+        origin: Option<SourceRange>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs
         /// has the answer already.

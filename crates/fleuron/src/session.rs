@@ -37,7 +37,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
 use crate::images::{Added, Assets};
-use crate::layout::{Fragment, PageInfo, Paginator, font_table, no_assets};
+use crate::layout::{Fragment, PageInfo, Paginator, Piece, font_table, no_assets};
 use crate::lines::Patterns;
 use crate::pdf::{self, PdfError};
 use crate::style::{ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets};
@@ -125,8 +125,36 @@ pub enum AddImageError {
 /// One section's lines, and what building them had to complain about.
 struct Cached {
     key: u64,
+    /// The id the section had when its lines were broken.
+    section: NodeId,
     fragments: Vec<Fragment>,
     warnings: Vec<Warning>,
+}
+
+impl Cached {
+    /// Moves the source ranges onto the ids the book hands out now.
+    /// Ids renumber globally on every edit, so a chapter nothing
+    /// touched comes back out of the cache under a new number; its
+    /// nodes are dense and in document order from the section's own,
+    /// so all of them move by the same step.
+    fn renumber(&mut self, section: NodeId) {
+        let step = section.get() as i64 - self.section.get() as i64;
+        self.section = section;
+        if step == 0 {
+            return;
+        }
+        for fragment in &mut self.fragments {
+            let Piece::Line { line, cap } = &mut fragment.piece else {
+                continue;
+            };
+            let caps = cap.iter_mut().map(|cap| &mut cap.line);
+            for line in std::iter::once(line).chain(caps) {
+                for origin in line.runs.iter_mut().filter_map(|run| run.origin.as_mut()) {
+                    origin.node = origin.node.shifted(step);
+                }
+            }
+        }
+    }
 }
 
 /// A retained pipeline: content, styling, and every stage between
@@ -527,7 +555,10 @@ impl<'a> Session<'a> {
                 .and_then(|slots| slots.pop())
                 .and_then(|slot| previous[slot].take());
             fresh.push(match kept {
-                Some(cached) => cached,
+                Some(mut cached) => {
+                    cached.renumber(section.id);
+                    cached
+                }
                 None => {
                     // One paginator per section, so the warnings it
                     // collects are the ones this section raised.
@@ -541,6 +572,7 @@ impl<'a> Session<'a> {
                     self.stages.lines += 1;
                     Cached {
                         key,
+                        section: section.id,
                         fragments,
                         warnings: paginator.warnings(),
                     }

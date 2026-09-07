@@ -60,6 +60,7 @@ Text {
     text: String,
     source: String,
     source_map: Vec<u32>,
+    origin: Option<SourceRange>,
     features: Features,
     color: Color,
     glyphs: Vec<Glyph>,
@@ -79,6 +80,8 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 
 `source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped, and empty where the two are the same. Extraction, selection and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` records the offset in `source` of every byte boundary of `text`, and is empty alongside it: a glyph's range taken through the map is the source that glyph stands for.
 
+`origin` is where the run was written: the content node it was shaped from, and the bytes of that node's own text it stands for. The runs that name one node tile it, so a byte of the manuscript falls in exactly one of them, and a paragraph broken over a page turn gives two ranges that meet at the break. A hyphen a line break drew stands for nothing anybody wrote, so its range is empty. It is `None` on text the engine wrote itself: a folio, a running head, a scene break's ornament.
+
 `color` is what the run is filled with: three eight-bit channels, and no alpha. A sheet that names no colour leaves it black.
 
 `features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
@@ -96,6 +99,19 @@ pub struct Glyph {
 `id` is a glyph id in the run's font, not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
 
 `range` is the byte range in the run's `text` that this glyph stands for. A ligature spans several characters; a decomposed cluster puts several glyphs on one range. A painter that treats the range as a mapping rather than a bijection handles both.
+
+### `SourceRange`
+
+```rust
+pub struct SourceRange {
+    pub node: NodeId,
+    pub range: Range<u32>,
+}
+```
+
+`node` is a content-tree [node id](content-tree.md#node-identity). `range` indexes that node's own text as the frontend read it, before `text-transform` or a synthesized small capital changed what was shaped, so a run's `origin` and its `source` cover the same bytes.
+
+A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range hold the byte, and the glyph on it whose range does.
 
 ### `Rect`
 

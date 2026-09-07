@@ -7,7 +7,7 @@
 //! through: encode, decode, encode again, and the second buffer is
 //! the first one.
 
-use fleuron::content::NodeId;
+use fleuron::content::{NodeId, SourceRange};
 use fleuron::images::{Asset, Assets, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Page, Side};
 use fleuron::style::Color;
@@ -34,6 +34,20 @@ fn color() -> impl Strategy<Value = Color> {
     (any::<u8>(), any::<u8>(), any::<u8>()).prop_map(|(r, g, b)| Color::rgb(r, g, b))
 }
 
+/// Where a run was written, or nothing where the engine synthesized
+/// it. The nodes are the ones a parsed tree hands out.
+fn origin() -> impl Strategy<Value = Option<SourceRange>> {
+    let nodes = section_ids();
+    proptest::option::of(
+        (proptest::sample::select(nodes), 0u32..64, 0u32..64).prop_map(|(node, start, len)| {
+            SourceRange {
+                node,
+                range: start..start + len,
+            }
+        }),
+    )
+}
+
 fn text_item() -> impl Strategy<Value = DrawItem> {
     (
         coordinate(),
@@ -43,9 +57,10 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         ".{0,40}",
         proptest::collection::vec(glyph(), 0..12),
         color(),
+        origin(),
     )
         .prop_map(
-            |(x, y, font_id, size, text, glyphs, color)| DrawItem::Text {
+            |(x, y, font_id, size, text, glyphs, color, origin)| DrawItem::Text {
                 x,
                 y,
                 font_id,
@@ -54,6 +69,7 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
                 // own; one that was is covered where the transform is.
                 source: String::new(),
                 source_map: Vec::new(),
+                origin,
                 features: fleuron::fonts::Features::NONE,
                 color,
                 text,

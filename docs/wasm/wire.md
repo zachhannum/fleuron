@@ -23,13 +23,15 @@ A `preview` reply need not carry the whole book. `first` and `count` on the requ
 
 ## The display structure
 
-The [display structure reference](../reference/display-structure.mdx) has the full shape. Three things about it matter to a host in particular.
+The [display structure reference](../reference/display-structure.mdx) has the full shape. Four things about it matter to a host in particular.
 
 Coordinates are points, origin top-left. Every painter, SVG, canvas or PDF, consumes the same numbers. A preview that disagrees with the export about where a glyph goes has a bug in the painter, not in the engine.
 
 Faces include their instance. The font table records where on its file's axes each face sits. A variable file names several styles and they are one file, so a painter that does not pin the axes draws the default weight for every one of them.
 
 Glyphs are tied to their text. Each text run has the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so the display structure records it. A painter that supports selection or accessible text reads it through those ranges; a painter that only draws ignores it.
+
+Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, a folio or a running head, names no node.
 
 ## One book, both targets
 

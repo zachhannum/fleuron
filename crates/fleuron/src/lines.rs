@@ -17,7 +17,7 @@
 
 use std::ops::Range;
 
-use crate::content::{Inline, Metadata, NodeId};
+use crate::content::{Inline, Metadata, NodeId, SourceRange};
 use crate::fonts::{Features, FontRegistry, ShapedGlyph};
 use crate::linebox::{LineBox, Strut};
 use crate::style::{Color, FontVariantCaps, TextTransform};
@@ -134,14 +134,37 @@ impl FirstLine {
     }
 }
 
-/// A paragraph's opening style and how far it reaches.
-#[derive(Debug, Clone, Copy)]
-struct Opening {
-    style: FirstLine,
+/// What sets a paragraph's opening apart from the rest of it.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Opening {
+    /// What `::first-line` changes about the line the paragraph
+    /// opens on.
+    pub first_line: Option<FirstLine>,
+    /// Bytes of the paragraph's text a drop cap already set. They
+    /// are neither shaped nor broken here; the cap carries the range
+    /// they cover.
+    pub taken: usize,
+}
+
+/// What one pass of the breaker is told about the paragraph's
+/// opening: the style it is set in, how far that reaches, and what a
+/// drop cap already took off the front of it.
+#[derive(Debug, Clone, Copy, Default)]
+struct Lead {
+    style: Option<FirstLine>,
     /// Bytes of the shaped text the style covers. `None` on the pass
     /// that has no break to read it off yet, where it covers the
     /// paragraph.
     extent: Option<usize>,
+    /// Bytes of the source the paragraph starts past.
+    taken: usize,
+}
+
+impl Lead {
+    /// How far into the shaped text the opening style reaches.
+    fn reach(self) -> usize {
+        self.extent.unwrap_or(usize::MAX)
+    }
 }
 
 /// Where line layout gets the style of one inline node.
@@ -321,6 +344,10 @@ pub struct ShapedRun {
     /// Byte offset of `text` in the paragraph the glyphs' clusters
     /// index.
     pub text_start: u32,
+    /// Where the run was written: the node it was shaped from and
+    /// the bytes of that node's own text it stands for. `None` for
+    /// text no node was walked for: page furniture, an ornament.
+    pub origin: Option<SourceRange>,
     /// The features the run was shaped with.
     pub features: Features,
     /// What the run is painted in.
@@ -403,6 +430,24 @@ struct FlatParagraph {
     word_start: bool,
     /// The style spans, in document order.
     spans: Vec<Span>,
+    /// Which node each stretch of the source was written in, in
+    /// document order.
+    origins: Vec<Origin>,
+    /// Bytes of the source still to be passed over before anything
+    /// is written: what a drop cap took out of the paragraph.
+    skip: usize,
+}
+
+/// One stretch of the paragraph's source, and the node it was
+/// written in. Stretches are contiguous, so one origin runs to where
+/// the next begins.
+struct Origin {
+    node: NodeId,
+    /// Where the stretch starts in the paragraph's source.
+    start: u32,
+    /// Where it starts in the node's own text, which is past the
+    /// letter wherever a drop cap took one.
+    node_start: u32,
 }
 
 /// One span of uniform shaping: a face, a size, the tracking after
@@ -462,10 +507,7 @@ impl FlatParagraph {
         if !self.transformed {
             return (String::new(), Vec::new());
         }
-        let at = |byte: usize| match self.map.get(byte) {
-            Some(offset) => *offset as usize,
-            None => self.source.len(),
-        };
+        let at = |byte: usize| self.source_at(byte);
         let (from, to) = (at(range.start), at(range.end).max(at(range.start)));
         let source = &self.source[from..to];
         if source == &self.text[range.clone()] {
@@ -475,6 +517,80 @@ impl FlatParagraph {
             .map(|byte| (at(byte).clamp(from, to) - from) as u32)
             .collect();
         (source.to_string(), map)
+    }
+
+    /// Where one byte of the shaped text falls in the source it was
+    /// made from. The two run together until something transforms,
+    /// and the map holds them together after that.
+    fn source_at(&self, byte: usize) -> usize {
+        if !self.transformed {
+            return byte.min(self.text.len());
+        }
+        match self.map.get(byte) {
+            Some(offset) => *offset as usize,
+            None => self.source.len(),
+        }
+    }
+
+    /// How much source the paragraph has been written from so far.
+    fn source_len(&self) -> usize {
+        if self.transformed {
+            self.source.len()
+        } else {
+            self.text.len()
+        }
+    }
+
+    /// Opens a stretch of the source written in `node`, starting
+    /// `node_start` bytes into that node's own text.
+    fn open(&mut self, node: NodeId, node_start: usize) {
+        self.origins.push(Origin {
+            node,
+            start: self.source_len() as u32,
+            node_start: node_start as u32,
+        });
+    }
+
+    /// The stretch of the source one byte of the shaped text was
+    /// written in: the node, where the stretch starts in that node's
+    /// own text, and the source it covers.
+    ///
+    /// `None` where no node was walked: page furniture, an ornament.
+    fn origin_at(&self, byte: usize) -> Option<(NodeId, u32, Range<usize>)> {
+        let at = self.source_at(byte);
+        let index = self
+            .origins
+            .partition_point(|origin| origin.start as usize <= at)
+            .checked_sub(1)?;
+        let origin = &self.origins[index];
+        let end = self.origins[index + 1..]
+            .first()
+            .map_or(self.source_len(), |next| next.start as usize);
+        Some((origin.node, origin.node_start, origin.start as usize..end))
+    }
+
+    /// The node one stretch of the shaped text was written in, and
+    /// the bytes of that node's own text it stands for, running from
+    /// `from` to wherever `to` reaches.
+    ///
+    /// `after` is the node the stretch before this one was written
+    /// in. A stretch opening a node opens at that node's first byte,
+    /// wherever the break before it fell, so the space a break
+    /// swallowed at a node boundary belongs to the node that holds
+    /// it. Both ends stop at the node.
+    fn origin_of(&self, after: Option<NodeId>, from: usize, to: usize) -> Option<SourceRange> {
+        let (node, node_start, stretch) = self.origin_at(from)?;
+        let start = if after == Some(node) {
+            self.source_at(from).clamp(stretch.start, stretch.end)
+        } else {
+            stretch.start
+        };
+        let end = self.source_at(to).clamp(start, stretch.end);
+        let at = |source: usize| node_start + (source - stretch.start) as u32;
+        Some(SourceRange {
+            node,
+            range: at(start)..at(end),
+        })
     }
 
     /// Starts keeping the source text, backfilling what has been
@@ -794,11 +910,19 @@ impl<'a> LineLayout<'a> {
         measure: impl Into<Measure>,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        self.layout_styled(inlines, style, &Inherited, measure, options, None)
+        self.layout_styled(
+            inlines,
+            style,
+            &Inherited,
+            measure,
+            options,
+            Opening::default(),
+        )
     }
 
     /// The same, with the style tree answering for each inline and
-    /// `first_line` styling the line the paragraph opens on.
+    /// `opening` saying what sets the line the paragraph opens on
+    /// apart from the rest of it.
     pub fn layout_styled(
         &self,
         inlines: &[Inline],
@@ -806,9 +930,9 @@ impl<'a> LineLayout<'a> {
         styles: &dyn InlineStyles,
         measure: impl Into<Measure>,
         options: LineBreakOptions,
-        first_line: Option<FirstLine>,
+        opening: Opening,
     ) -> Vec<Line> {
-        self.broken(inlines, style, styles, measure.into(), options, first_line)
+        self.broken(inlines, style, styles, measure.into(), options, opening)
             .0
     }
 
@@ -831,37 +955,37 @@ impl<'a> LineLayout<'a> {
         styles: &dyn InlineStyles,
         measure: Measure,
         options: LineBreakOptions,
-        first_line: Option<FirstLine>,
+        opening: Opening,
     ) -> (Vec<Line>, u8) {
-        let Some(first_line) = first_line else {
+        let lead = Lead {
+            style: opening.first_line,
+            extent: None,
+            taken: opening.taken,
+        };
+        if lead.style.is_none() {
             return (
-                self.break_once(inlines, style, styles, measure, options, None)
+                self.break_once(inlines, style, styles, measure, options, lead)
                     .0,
                 1,
             );
-        };
-        let opening = Opening {
-            style: first_line,
-            extent: None,
-        };
-        let (lines, extent) =
-            self.break_once(inlines, style, styles, measure, options, Some(opening));
+        }
+        let (lines, extent) = self.break_once(inlines, style, styles, measure, options, lead);
         if extent == 0 {
             return (lines, 1);
         }
-        let opening = Opening {
+        let lead = Lead {
             extent: Some(extent),
-            ..opening
+            ..lead
         };
-        let (lines, _) = self.break_once(inlines, style, styles, measure, options, Some(opening));
+        let (lines, _) = self.break_once(inlines, style, styles, measure, options, lead);
         (lines, 2)
     }
 
     /// One run of the breaker: the paragraph's lines, and where the
     /// first of them ended in the shaped text.
     ///
-    /// `opening` is the style the paragraph opens in and how far it
-    /// reaches, in bytes of that text.
+    /// `lead` is the style the paragraph opens in, how far it
+    /// reaches in bytes of that text, and what a drop cap took.
     fn break_once(
         &self,
         inlines: &[Inline],
@@ -869,9 +993,9 @@ impl<'a> LineLayout<'a> {
         styles: &dyn InlineStyles,
         measure: Measure,
         options: LineBreakOptions,
-        opening: Option<Opening>,
+        lead: Lead,
     ) -> (Vec<Line>, usize) {
-        let flat = self.flatten(inlines, style, styles, opening);
+        let flat = self.flatten(inlines, style, styles, lead);
         if flat.text.is_empty() {
             return (Vec::new(), 0);
         }
@@ -895,8 +1019,8 @@ impl<'a> LineLayout<'a> {
             size: style.size,
             hyphen,
             options,
-            opening: opening
-                .and_then(|opening| opening.extent)
+            opening: lead
+                .extent
                 .and_then(|extent| breaks.iter().position(|at| at.content_end == extent)),
         };
 
@@ -920,6 +1044,7 @@ impl<'a> LineLayout<'a> {
             }
             start = at.next;
         }
+        tile(&mut lines, &flat);
         (lines, extent)
     }
 
@@ -942,10 +1067,11 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        opening: Option<Opening>,
+        lead: Lead,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
-        self.walk_inlines(inlines, style, styles, opening, &mut flat);
+        flat.skip = lead.taken;
+        self.walk_inlines(inlines, style, styles, lead, &mut flat);
         flat
     }
 
@@ -954,42 +1080,55 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        opening: Option<Opening>,
+        lead: Lead,
         flat: &mut FlatParagraph,
     ) {
         for inline in inlines {
             match inline {
-                Inline::Text { value, .. } => self.push_text(flat, value, style, opening),
+                Inline::Text { id, value, .. } => self.push_text(flat, *id, value, style, lead),
                 Inline::Code { id, value, .. } => {
-                    self.push_text(flat, value, styles.style(*id, style), opening)
+                    self.push_text(flat, *id, value, styles.style(*id, style), lead)
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
-                    self.walk_inlines(children, styles.style(*id, style), styles, opening, flat);
+                    self.walk_inlines(children, styles.style(*id, style), styles, lead, flat);
                 }
             }
         }
     }
 
-    /// Appends one stretch of text, in the opening style as far as it
-    /// reaches and in `style` after that.
+    /// Appends one node's text, in the opening style as far as it
+    /// reaches and in `style` after that. What a drop cap took is
+    /// passed over here, so the paragraph starts at the letter after
+    /// the one the cap holds.
     ///
-    /// The switch is on the length of the shaped text, which is what
-    /// the extent a break gave is written in. Where the opening style
-    /// still applies the text goes in a character at a time, so the
-    /// switch can fall inside a word; the spans it writes merge back
-    /// into one, and the whole of the opening line shapes together.
+    /// The switch to `style` is on the length of the shaped text,
+    /// which is what the extent a break gave is written in. Where the
+    /// opening style still applies the text goes in a character at a
+    /// time, so the switch can fall inside a word; the spans it
+    /// writes merge back into one, and the whole of the opening line
+    /// shapes together.
     fn push_text(
         &self,
         flat: &mut FlatParagraph,
+        node: NodeId,
         value: &str,
         style: ParagraphStyle,
-        opening: Option<Opening>,
+        lead: Lead,
     ) {
-        let reach = |opening: Opening| opening.extent.unwrap_or(usize::MAX);
-        let (opening, extent) = match opening {
-            Some(open) if flat.text.len() < reach(open) => (open.style.over(style), reach(open)),
+        let mut at = flat.skip.min(value.len());
+        while !value.is_char_boundary(at) {
+            at += 1;
+        }
+        flat.skip = flat.skip.saturating_sub(at);
+        let (node_start, value) = (at, &value[at..]);
+        if value.is_empty() {
+            return;
+        }
+        flat.open(node, node_start);
+        let (opening, extent) = match lead.style {
+            Some(first) if flat.text.len() < lead.reach() => (first.over(style), lead.reach()),
             _ => {
                 flat.push_styled(value, style, self.small_caps(style));
                 return;
@@ -1328,6 +1467,7 @@ impl<'a> LineLayout<'a> {
                 source: String::new(),
                 source_map: Vec::new(),
                 text_start: ending,
+                origin: None,
                 features: Features::NONE,
                 color,
                 glyphs: vec![ShapedGlyph {
@@ -1808,6 +1948,25 @@ impl ShapedSpan {
     }
 }
 
+/// Says where each of a paragraph's runs was written, each range
+/// running on to where the next one starts, so the space a break
+/// swallowed belongs to a run rather than to nothing and the runs
+/// naming one node tile that node's text.
+fn tile(lines: &mut [Line], flat: &FlatParagraph) {
+    let starts: Vec<usize> = lines
+        .iter()
+        .flat_map(|line| &line.runs)
+        .map(|run| run.text_start as usize)
+        .collect();
+    let mut ends = starts.iter().skip(1).copied().chain([flat.text.len()]);
+    let mut after = None;
+    for run in lines.iter_mut().flat_map(|line| &mut line.runs) {
+        let to = ends.next().unwrap_or(flat.text.len());
+        run.origin = flat.origin_of(after, run.text_start as usize, to);
+        after = run.origin.as_ref().map(|origin| origin.node);
+    }
+}
+
 /// Number of trailing ASCII spaces in `[start, end)`.
 fn trailing_spaces(text: &str, start: usize, end: usize) -> usize {
     let bytes = &text.as_bytes()[start..end];
@@ -1856,6 +2015,9 @@ fn cut_runs(
             source,
             source_map,
             text_start: text_start as u32,
+            // Where the run was written is settled once the
+            // paragraph is broken, by `tile`.
+            origin: None,
             features: spec.features,
             color: spec.color,
             glyphs,
@@ -1948,7 +2110,10 @@ mod tests {
             &Inherited,
             measure_pt,
             LineBreakOptions::default(),
-            first_line,
+            Opening {
+                first_line,
+                taken: 0,
+            },
         )
     }
 
@@ -2320,7 +2485,7 @@ mod tests {
             &styles,
             400.0,
             Default::default(),
-            None,
+            Opening::default(),
         );
         assert_eq!(lines.len(), 1);
         let runs: Vec<(u16, &str)> = lines[0]
@@ -2678,7 +2843,10 @@ mod tests {
                     &Inherited,
                     Measure::uniform(160.0),
                     LineBreakOptions::default(),
-                    first_line,
+                    Opening {
+                        first_line,
+                        taken: 0,
+                    },
                 )
                 .1
         };

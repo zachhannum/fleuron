@@ -144,6 +144,7 @@ fn described(item: &DrawItem) -> String {
             text,
             source,
             source_map,
+            origin,
             features,
             // Every other test here checks the colour; this one
             // checks everything else.
@@ -159,9 +160,18 @@ fn described(item: &DrawItem) -> String {
                     )
                 })
                 .collect();
+            let written = match origin {
+                Some(origin) => format!(
+                    "node {} {}..{}",
+                    origin.node.get(),
+                    origin.range.start,
+                    origin.range.end
+                ),
+                None => "nothing".to_string(),
+            };
             format!(
                 "text {x:?} {y:?} font {font_id} at {size:?}pt {text:?} source {source:?} {source_map:?} \
-                 small-caps {} glyphs {}",
+                 written {written} small-caps {} glyphs {}",
                 features.small_caps,
                 placed.join(" ")
             )

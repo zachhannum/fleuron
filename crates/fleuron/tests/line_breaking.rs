@@ -365,7 +365,10 @@ proptest! {
             &fleuron::lines::Inherited,
             measure,
             LineBreakOptions::default(),
-            first_line,
+            fleuron::lines::Opening {
+                first_line,
+                taken: 0,
+            },
         );
         let lines = broken();
         prop_assert_eq!(lines.clone(), broken());
