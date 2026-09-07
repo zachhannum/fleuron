@@ -72,8 +72,7 @@ impl NodeId {
 /// A stretch of one node's text: the node it was written in, and
 /// the bytes of that node's own text the stretch covers.
 ///
-/// This is how a laid-out run says where it came from. The range
-/// indexes the node's text as the frontend read it, before
+/// The range indexes the node's text as the frontend read it, before
 /// `text-transform` or a synthesized small capital changed what was
 /// shaped.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

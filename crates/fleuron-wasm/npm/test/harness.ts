@@ -331,6 +331,49 @@ function misplacedSelection(page: Page, output: LayoutOutput): string | null {
   return null;
 }
 
+/**
+ * The source ranges as they arrive over the wire: the runs that name
+ * one node cover it from its first byte on, without a gap and
+ * without overlapping, so a cursor in the manuscript falls in exactly
+ * one of them.
+ */
+function untiledOrigins(pages: Page[]): string | null {
+  const covered = new Map<number, [number, number][]>();
+  for (const page of pages) {
+    for (const item of page.items) {
+      if (item.kind !== 'text' || item.origin === null) {
+        continue;
+      }
+      const ranges = covered.get(item.origin.node) ?? [];
+      ranges.push(item.origin.range);
+      covered.set(item.origin.node, ranges);
+    }
+  }
+  if (covered.size === 0) {
+    return 'no run says where it was written';
+  }
+  for (const [node, ranges] of covered) {
+    ranges.sort((a, b) => a[0] - b[0]);
+    let at = 0;
+    for (const [start, end] of ranges) {
+      if (start !== at || end < start) {
+        return `node ${node} is covered as ${JSON.stringify(ranges)}`;
+      }
+      at = end;
+    }
+  }
+  return null;
+}
+
+const untiled = untiledOrigins(preview.pages);
+check('the runs that name one node tile it', untiled === null, untiled ?? '');
+check(
+  'the text the engine wrote itself crosses naming no node',
+  preview.pages.some((page) =>
+    page.items.some((item) => item.kind === 'text' && item.origin === null),
+  ),
+);
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
 const wrongSelection = preview.pages

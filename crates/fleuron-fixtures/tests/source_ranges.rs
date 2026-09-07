@@ -72,10 +72,10 @@ fn painted(pages: &[Page]) -> BTreeMap<u32, Vec<Range<u32>>> {
     out
 }
 
-/// Acceptance: over the gate novel, the runs that name a node tile it
-/// — no overlap, no gap — and the bytes they cover, read back off the
-/// node, are the node's own text. A node no run names is a space a
-/// line break swallowed, and nothing else.
+/// Acceptance: over the gate novel, the runs that name a node tile
+/// it, with no overlap and no gap, and the bytes they cover, read
+/// back off the node, are the node's own text. A node no run names is
+/// a space a line break swallowed, and nothing else.
 #[test]
 fn every_node_of_the_novel_is_given_back_by_the_runs_that_name_it() {
     let book = Corpus::GATE.book();

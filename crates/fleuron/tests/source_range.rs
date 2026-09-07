@@ -169,7 +169,7 @@ const PROSE: &str = "My father had a small estate in Nottinghamshire; I was the 
     eminent surgeon in London, with whom I continued four years.";
 
 /// Acceptance: a paragraph broken across a page boundary comes back
-/// as ranges that meet exactly where the break fell — the last range
+/// as ranges that meet exactly where the break fell. The last range
 /// on one page ends where the first on the next begins, and together
 /// they are the whole paragraph.
 #[test]

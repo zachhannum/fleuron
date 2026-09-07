@@ -85,7 +85,7 @@ pub enum DrawItem {
         /// from and the bytes of that node's own text it stands for.
         /// The runs that name one node tile it, so a cursor in the
         /// manuscript lands on a run and a run lands back on the
-        /// manuscript. Absent on text the engine synthesized — a
+        /// manuscript. Absent on text the engine wrote itself: a
         /// folio, a running head, a scene break's ornament, the
         /// hyphen a line break drew.
         origin: Option<SourceRange>,

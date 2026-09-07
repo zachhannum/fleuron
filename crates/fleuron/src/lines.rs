@@ -141,8 +141,8 @@ pub struct Opening {
     /// opens on.
     pub first_line: Option<FirstLine>,
     /// Bytes of the paragraph's text a drop cap already set. They
-    /// are neither shaped nor broken here, and the cap says where
-    /// they were written.
+    /// are neither shaped nor broken here; the cap carries the range
+    /// they cover.
     pub taken: usize,
 }
 
@@ -346,8 +346,8 @@ pub struct ShapedRun {
     pub text_start: u32,
     /// Where the run was written: the node it was shaped from and
     /// the bytes of that node's own text it stands for. `None` for
-    /// text no node was walked for — page furniture, an ornament,
-    /// the hyphen a break drew.
+    /// text no node was walked for: page furniture, an ornament, the
+    /// hyphen a break drew.
     pub origin: Option<SourceRange>,
     /// The features the run was shaped with.
     pub features: Features,
