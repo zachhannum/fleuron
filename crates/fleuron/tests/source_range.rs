@@ -1,10 +1,10 @@
-//! Where a laid-out run says it was written.
+//! Where a laid-out run was written.
 //!
 //! A run names the content node it was shaped from and the bytes of
 //! that node it stands for. What the tests here hold it to: the
 //! ranges tile the manuscript, a break does not drop the byte it fell
 //! on, a glyph reaches the letters it swallowed rather than the whole
-//! run, and text nobody wrote names nobody.
+//! run, and text the engine wrote itself names no node.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -85,28 +85,32 @@ fn pages(book: &Book, css: &str) -> Vec<Page> {
 
 /// Every text node of a book, by id.
 fn nodes(book: &Book) -> BTreeMap<u32, String> {
-    fn walk(inlines: &[Inline], out: &mut BTreeMap<u32, String>) {
-        for inline in inlines {
+    fn walk_inlines(list: &[Inline], out: &mut BTreeMap<u32, String>) {
+        for inline in list {
             match inline {
                 Inline::Text { id, value, .. } | Inline::Code { id, value, .. } => {
                     out.insert(id.get(), value.clone());
                 }
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => walk(children, out),
+                | Inline::Link { children, .. } => walk_inlines(children, out),
+            }
+        }
+    }
+    fn walk_blocks(list: &[Block], out: &mut BTreeMap<u32, String>) {
+        for block in list {
+            match block {
+                Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                    walk_inlines(inlines, out)
+                }
+                Block::Blockquote { blocks, .. } => walk_blocks(blocks, out),
+                Block::ThematicBreak { .. } | Block::Image { .. } => {}
             }
         }
     }
     let mut out = BTreeMap::new();
     for section in &book.sections {
-        for block in &section.blocks {
-            match block {
-                Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
-                    walk(inlines, &mut out)
-                }
-                _ => {}
-            }
-        }
+        walk_blocks(&section.blocks, &mut out);
     }
     out
 }
@@ -125,11 +129,7 @@ fn runs(page: &Page) -> Vec<(&str, &Option<SourceRange>)> {
     page.items
         .iter()
         .filter_map(|item| match item {
-            DrawItem::Text {
-                text,
-                origin: text_origin,
-                ..
-            } => Some((text.as_str(), text_origin)),
+            DrawItem::Text { text, origin, .. } => Some((text.as_str(), origin)),
             _ => None,
         })
         .collect()
@@ -197,11 +197,7 @@ fn a_paragraph_broken_across_a_page_meets_at_the_break() {
     let pages = pages(&book, CSS);
     assert!(pages.len() > 1, "the paragraph fits on one page");
 
-    let node = *nodes(&book)
-        .iter()
-        .find(|(_, value)| value.as_str() == PROSE)
-        .expect("the prose is a node of its own")
-        .0;
+    let node = node_of(&book, PROSE);
     let ranges = painted(&pages)
         .remove(&node)
         .expect("the prose reaches the pages");
