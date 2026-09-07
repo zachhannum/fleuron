@@ -66,6 +66,14 @@ impl NodeId {
         self.0
     }
 
+    /// The node one number names. Identity stays the engine's to
+    /// hand out; this is how a host asks about an id it read off a
+    /// display structure, and an id no node has answers with
+    /// nothing.
+    pub fn new(id: u32) -> NodeId {
+        NodeId(id)
+    }
+
     /// The id this one becomes when the section around it is
     /// renumbered by `step`. A section's nodes are dense and in
     /// document order from its own id, so one step moves all of

@@ -68,14 +68,25 @@ export type Op =
    */
   | { op: 'style'; sheets: Sheet[] };
 
+/** Where one node of the book was read from. */
+export interface NodeSource {
+  /** The source the node was read from, by the name the book calls it. */
+  source: string;
+  /** First byte of that source the node covers. */
+  start: number;
+  /** One past the last. */
+  end: number;
+}
+
 /**
- * What a request wants back, if anything: a display structure, a PDF, or
- * the file a face was registered from.
+ * What a request wants back, if anything: a display structure, a PDF,
+ * the file a face was registered from, the node one byte of a source
+ * was read into, or the source one node was read from.
  *
- * The first two are renders and the last is a question, which is
+ * The first two are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
  */
-export type Want = 'preview' | 'pdf' | 'font';
+export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source';
 
 /** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
@@ -89,6 +100,12 @@ export interface Request {
   want?: Want;
   /** Which face `want: 'font'` is asking for. */
   font?: number;
+  /** Which source, with `byte`, `want: 'node'` is asking about. */
+  source?: string;
+  /** Which byte of it. */
+  byte?: number;
+  /** Which node `want: 'source'` is asking about. */
+  node?: number;
   /**
    * With `count`, which pages of `want: 'preview'`'s answer to send:
    * `first` pages counting from 0, `count` of them. Leaving either
@@ -104,7 +121,10 @@ export interface Request {
   count?: number;
 }
 
-/** The bytes a request produced: a display structure, a PDF, or a font file. */
+/**
+ * The bytes a request produced: a display structure, a PDF, a font
+ * file, or the JSON a question was answered with.
+ */
 export interface Rendered {
   id: number;
   generation: number;

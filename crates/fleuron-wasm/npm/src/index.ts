@@ -20,6 +20,7 @@ export {
   type Applied,
   type Failed,
   type Metadata,
+  type NodeSource,
   type Op,
   type Rendered,
   type Request,
