@@ -30,6 +30,7 @@ import {
   type LayoutOutput,
   type Op,
   type Page,
+  type RectItem,
   type Response,
   type TextItem,
 } from '../dist/index.js';
@@ -553,6 +554,79 @@ check(
   'and the painter fills that run with it, leaving the rest to the page ink',
   inRed > 0 && (inColour.match(/fill="#b41e1e"/g) ?? []).length === inRed,
   `${inRed} coloured runs on the page`,
+);
+
+/**
+ * The filled rects a painted page draws, in paint order. An image the
+ * painter was given no bytes for is drawn as a rect too, and names the
+ * asset it is standing in for.
+ */
+function rects(svg: string): Record<string, number>[] {
+  return [...svg.matchAll(/<rect\b([^>]*)\/>/g)]
+    .map((match) =>
+      Object.fromEntries(
+        [...(match[1] ?? '').matchAll(/(\w+)="([-\d.]+)"/g)].map((attribute) => [
+          attribute[1] ?? '',
+          Number(attribute[2]),
+        ]),
+      ),
+    )
+    .filter((rect) => !('asset' in rect));
+}
+
+/** Two lengths in points, the same to within a rounding of a float. */
+function near(painted: number | undefined, wanted: number): boolean {
+  return painted !== undefined && Math.abs(painted - wanted) < 1e-3;
+}
+
+// Columns. The page box divides, the flow fills one column before it
+// fills the next, and the painter draws the rule the display structure
+// carries in the gutter, which is the rect the PDF writer fills.
+const divided = await client.preview([
+  styleOp(
+    '@page { column-count: 2; column-gap: 18pt; column-rule-style: solid; column-rule-width: 0.5pt }',
+  ),
+]);
+const columned = divided?.pages.find((page) =>
+  page.items.some((item) => item.kind === 'rect'),
+) ?? null;
+const rule = columned?.items.find((item): item is RectItem => item.kind === 'rect') ?? null;
+check(
+  'a two-column page carries one rule down its gutter',
+  rule !== null && rule.w === 0.5 && columned?.items.filter((item) => item.kind === 'rect').length === 1,
+  rule === null ? 'no rect on any page' : `${rule.w}pt wide at ${rule.x}`,
+);
+const drawn = columned === null ? '' : paintPage(columned, { fonts: divided?.fonts ?? [], paper: null });
+const gutterRects = rects(drawn);
+check(
+  'and the painter draws it where the display structure put it',
+  rule !== null &&
+    gutterRects.length === 1 &&
+    near(gutterRects[0]?.['x'], rule.x) &&
+    near(gutterRects[0]?.['y'], rule.y) &&
+    near(gutterRects[0]?.['width'], rule.w) &&
+    near(gutterRects[0]?.['height'], rule.h),
+  rule === null
+    ? ''
+    : `${JSON.stringify(gutterRects)} against ${rule.x}, ${rule.y}, ${rule.w}, ${rule.h}`,
+);
+// The columns fill in order: every run left of the gutter is painted
+// before every run right of it, and the second column opens above the
+// foot of the first.
+const columns = (columned?.items ?? []).filter(
+  (item): item is TextItem => item.kind === 'text' && item.y < (rule?.y ?? 0) + (rule?.h ?? 0),
+);
+const gutter = rule === null ? 0 : rule.x;
+const turn = columns.findIndex((run) => run.x > gutter);
+check(
+  'the flow fills the first column before the second',
+  turn > 0 && columns.slice(turn).every((run) => run.x > gutter),
+  `${turn} runs in the first column of ${columns.length}`,
+);
+check(
+  'and the second column opens above the foot of the first',
+  turn > 0 && (columns[turn]?.y ?? 0) <= (columns[turn - 1]?.y ?? 0),
+  `${columns[turn]?.y} against ${columns[turn - 1]?.y}`,
 );
 
 // Named sheets. A host that builds its styling out of layers sends

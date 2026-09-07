@@ -73,10 +73,11 @@ pushed onto a different page paints at new coordinates with the same breaks.
 
 The session checks two preconditions to determine this.
 
-The first is a single measure. Masters with different content widths, such as asymmetric `@page :left` and `@page :right` 
-margins or a named master set narrower, make where a line breaks depend on which page it lands on, 
-and that depends on everything before it. Mirrored margins are not this case: the built-in sheet 
-mirrors the spine margin across the spread and both sides come to the same measure.
+The first is a single measure. Masters with different measures make where a line breaks depend on which page it 
+lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are this 
+case, so is a named master set narrower, and so is one that divides its content box into a different number of 
+columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread and both sides 
+come to the same measure.
 
 The second is that no prose depends on pagination. `counter(page)` and `string()` 
 are legal only inside a margin box, so nothing in the text can depend on where the text fell. 

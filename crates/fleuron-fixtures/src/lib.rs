@@ -31,6 +31,22 @@ pub fn styles(book: &fleuron::content::Book) -> fleuron::style::StyleTree {
     fleuron::style::defaults(book, registry())
 }
 
+/// The same on the page box `division` asks for. The undivided one is
+/// the built-in sheet alone.
+pub fn styles_on(
+    book: &fleuron::content::Book,
+    division: gate::Division,
+) -> fleuron::style::StyleTree {
+    if division == gate::Division::Undivided {
+        return styles(book);
+    }
+    fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
+        "gate.css",
+        division.css(),
+    )])
+    .compile(book, registry())
+}
+
 /// Every block of a book as the flat text one shaping call is handed,
 /// in document order. v0.1 puts one face on everything, so a block is
 /// a run and a run is a shaping call.

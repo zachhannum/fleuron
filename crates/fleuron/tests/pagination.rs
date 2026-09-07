@@ -81,6 +81,53 @@ fn paginate(book: &Book) -> Vec<Page> {
     Paginator::new(registry(), &styles).paginate(book)
 }
 
+/// A page box divided in two, with a gutter wide enough that a line
+/// in one column cannot be mistaken for a line in the other.
+const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
+
+fn paginate_styled(css: &str, book: &Book) -> Vec<Page> {
+    let styles =
+        fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("columns.css", css)])
+            .compile(book, registry());
+    Paginator::new(registry(), &styles).paginate(book)
+}
+
+/// The master a page of a two-column book resolves to.
+fn column_master(situation: Situation) -> &'static PageStyle {
+    static STYLES: std::sync::OnceLock<StyleTree> = std::sync::OnceLock::new();
+    STYLES
+        .get_or_init(|| {
+            let mut book = Book {
+                metadata: Default::default(),
+                sections: vec![Section {
+                    id: NodeId::UNASSIGNED,
+                    source: None,
+                    title: None,
+                    blocks: vec![Block::Paragraph {
+                        id: NodeId::UNASSIGNED,
+                        inlines: vec![Inline::Text {
+                            id: NodeId::UNASSIGNED,
+                            value: "prose".into(),
+                            position: None,
+                        }],
+                        position: None,
+                    }],
+                    position: None,
+                }],
+            };
+            book.assign_node_ids();
+            fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
+                "columns.css",
+                TWO_COLUMNS,
+            )])
+            .compile(&book, registry())
+        })
+        .page(PageQuery {
+            name: Some("chapter"),
+            situation,
+        })
+}
+
 /// The built-in sheet's own answers, which is where these properties
 /// get the geometry and sizes they check against.
 fn ua() -> &'static StyleTree {
@@ -334,6 +381,92 @@ proptest! {
             }
         }
     }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    /// Acceptance: no line exceeds the column measure. Every glyph of
+    /// every run sits between the leading edge of the column it was
+    /// set in and that column's measure.
+    #[test]
+    fn no_line_exceeds_the_column_measure(book in book_strategy()) {
+        let pages = paginate_styled(TWO_COLUMNS, &book);
+        prop_assert!(!pages.is_empty());
+        for page in &pages {
+            let geometry = column_master(Situation::Body(page.side)).geometry;
+            for (column, x, right) in glyph_edges(page, geometry) {
+                let origin = geometry.column_origin(column).0;
+                prop_assert!(
+                    x >= origin - 1e-3,
+                    "page {}: a glyph at {x} sits left of column {column}",
+                    page.number
+                );
+                prop_assert!(
+                    right <= origin + geometry.measure() + 1e-3,
+                    "page {}: a line reaches {right}, past column {column}",
+                    page.number
+                );
+            }
+        }
+    }
+
+    /// Acceptance: nothing crosses a gutter. No glyph box falls
+    /// inside `column-gap`.
+    #[test]
+    fn no_glyph_falls_in_a_gutter(book in book_strategy()) {
+        let pages = paginate_styled(TWO_COLUMNS, &book);
+        for page in &pages {
+            let geometry = column_master(Situation::Body(page.side)).geometry;
+            for column in 1..geometry.column_count() {
+                let gutter = geometry.column_origin(column).0 - geometry.columns.gap;
+                for (_, x, right) in glyph_edges(page, geometry) {
+                    prop_assert!(
+                        right <= gutter + 1e-3 || x >= gutter + geometry.columns.gap - 1e-3,
+                        "page {}: a glyph box {x}..{right} lies in the gutter at {gutter}",
+                        page.number
+                    );
+                }
+            }
+        }
+    }
+
+    /// Acceptance: a two-column book lays out the same twice: the
+    /// same pages, the same columns, the same glyphs in the same
+    /// places.
+    #[test]
+    fn a_divided_page_box_is_deterministic(book in book_strategy()) {
+        let first = paginate_styled(TWO_COLUMNS, &book);
+        let second = paginate_styled(TWO_COLUMNS, &book);
+        prop_assert_eq!(first.len(), second.len());
+        for (a, b) in first.iter().zip(&second) {
+            prop_assert!(a == b, "page {} differs between runs", a.number);
+        }
+    }
+}
+
+/// Every glyph box of one page's content: the column it was set in,
+/// its left edge, and its right. The folio is furniture and belongs
+/// to no column.
+fn glyph_edges(page: &Page, geometry: fleuron::style::PageGeometry) -> Vec<(u32, f32, f32)> {
+    let mut edges = Vec::new();
+    for item in &page.items {
+        if is_folio(item) {
+            continue;
+        }
+        let DrawItem::Text { glyphs, .. } = item else {
+            continue;
+        };
+        let (Some(first), Some(last)) = (glyphs.first(), glyphs.last()) else {
+            continue;
+        };
+        let column = (0..geometry.column_count())
+            .rev()
+            .find(|column| first.x >= geometry.column_origin(*column).0 - 1e-3)
+            .unwrap_or(0);
+        edges.push((column, first.x, last.x));
+    }
+    edges
 }
 
 /// Snapshot of the assembled display structure for a two-chapter book:

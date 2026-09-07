@@ -380,6 +380,11 @@ mod tests {
         check(PAGE_PROPERTIES, |declaration| match declaration {
             PageDeclaration::Size(..) => "size",
             PageDeclaration::Margin(edge, _) => margin_of(*edge),
+            PageDeclaration::ColumnCount(_) => "column-count",
+            PageDeclaration::ColumnWidth(_) => "column-width",
+            PageDeclaration::ColumnGap(_) => "column-gap",
+            PageDeclaration::ColumnRuleWidth(_) => "column-rule-width",
+            PageDeclaration::ColumnRuleStyle(_) => "column-rule-style",
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
             MarginDeclaration::Content(_) => "content",

@@ -652,12 +652,17 @@ impl Builder<'_, '_> {
 
     /// Folds one `break-before` or `break-after` into what is already
     /// asked above the next fragment. A forced break outranks an
-    /// avoided one, and either outranks `auto`.
+    /// avoided one, and either outranks `auto`. A page break outranks
+    /// a column break, being the same break carried further.
     fn ask(&mut self, wanted: Break) {
         self.pending = match (self.pending, wanted) {
+            (BreakPoint::Forced(Break::Column), Break::Page | Break::Side(_)) => {
+                BreakPoint::Forced(wanted)
+            }
             (BreakPoint::Forced(forced), _) => BreakPoint::Forced(forced),
             (_, Break::Page) => BreakPoint::Forced(Break::Page),
             (_, Break::Side(side)) => BreakPoint::Forced(Break::Side(side)),
+            (_, Break::Column) => BreakPoint::Forced(Break::Column),
             (_, Break::Avoid) => BreakPoint::Forbidden,
             (pending, Break::Auto) => pending,
         };
@@ -1183,7 +1188,9 @@ struct Placed {
     /// a fragment moved onto the next page counts toward the page it
     /// ends on rather than the one it was measured for.
     section: NodeId,
-    /// Top of its box, from the content box's top.
+    /// The column of the page it landed in.
+    column: u32,
+    /// Top of its box, from its column's top.
     top: f32,
     /// Its own height.
     height: f32,
@@ -1301,10 +1308,17 @@ struct Flow<'a, 'p> {
     pending_slot: Option<PageSlot>,
     /// The section whose fragments are being placed.
     section: NodeId,
-    /// Bottom of what is placed, from the content box's top.
+    /// Bottom of what is placed, from the column's top.
     cursor: f32,
-    /// Height of the content box being filled.
+    /// Height of the column being filled, which is the content box's.
     height: f32,
+    /// The column being filled, counting from the leading edge.
+    column: u32,
+    /// How many the page divides into.
+    columns: u32,
+    /// Where in `placed` the column being filled began. A break backs
+    /// up to a fragment of this column, never past its head.
+    column_start: usize,
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
     carried: Vec<Decoration>,
@@ -1317,7 +1331,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             first: true,
             blank: false,
         };
-        let height = paginator.master(0, &slot).geometry.content_size().1;
+        let geometry = paginator.master(0, &slot).geometry;
         Flow {
             paginator,
             pages: Vec::new(),
@@ -1328,7 +1342,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             pending_slot: None,
             section: NodeId::UNASSIGNED,
             cursor: 0.0,
-            height,
+            height: geometry.content_size().1,
+            column: 0,
+            columns: geometry.column_count(),
+            column_start: 0,
             carried: Vec::new(),
         }
     }
@@ -1350,12 +1367,18 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// Places one fragment, ending pages as its break point demands.
+    /// Places one fragment, ending columns and pages as its break
+    /// point demands.
     fn place(&mut self, fragment: &Fragment) {
         if let BreakPoint::Forced(wanted) = fragment.break_before {
-            self.close();
-            if let Break::Side(side) = wanted {
-                self.square_to(side);
+            match wanted {
+                Break::Column => self.break_column(),
+                _ => {
+                    self.close();
+                    if let Break::Side(side) = wanted {
+                        self.square_to(side);
+                    }
+                }
             }
         }
         // Nothing laid on the page yet means the page the section is
@@ -1366,20 +1389,15 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.slot = slot;
             self.remaster();
         }
-        // A fragment that does not fit ends the page. Where it ends
+        // A fragment that does not fit ends the column. Where it ends
         // is the last point a break was allowed — which may be
         // several fragments back, and may be nowhere, in which case
         // the break falls here whatever the cascade wanted.
         let mut forced = false;
         loop {
-            let lead = if self.placed.is_empty() {
-                0.0
-            } else {
-                fragment.lead
-            };
-            if self.placed.is_empty()
-                || self.cursor + lead + fragment.fixed + fragment.height <= self.height
-            {
+            let opening = self.column_empty();
+            let lead = if opening { 0.0 } else { fragment.lead };
+            if opening || self.cursor + lead + fragment.fixed + fragment.height <= self.height {
                 self.emit(fragment, lead);
                 return;
             }
@@ -1393,37 +1411,67 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// The last place above the bottom of the page where a break was
-    /// allowed. Never the top: a page that gives up everything on it
-    /// has made no progress.
+    /// Whether nothing stands in the column being filled.
+    fn column_empty(&self) -> bool {
+        self.placed.len() == self.column_start
+    }
+
+    /// The last place above the foot of the column where a break was
+    /// allowed. Never its head: a column that carries everything on
+    /// it into the next one makes no progress.
     fn back_up(&self) -> Option<usize> {
-        (1..self.placed.len())
+        (self.column_start + 1..self.placed.len())
             .rev()
             .find(|index| self.placed[*index].break_before == BreakPoint::Allowed)
     }
 
-    /// Ends the page at `cut`, carrying what was below onto the next.
-    /// Carried fragments move; they are never measured again.
+    /// Ends the column at `cut`, carrying what was below into the
+    /// next one, which is the next page's first where the column that
+    /// ended was the page's last. Carried fragments move; they are
+    /// never measured again.
     fn carry(&mut self, cut: usize) {
         let mut carried = self.placed.split_off(cut);
         let (from_x, from_y) = self.origin();
-        self.close();
+        self.advance();
         let (to_x, to_y) = self.origin();
         let Some(head) = carried.first().map(|placed| placed.top) else {
             return;
         };
-        // The carried group starts at the top of the fresh page, and
-        // the space that was above it there is dropped.
+        // The carried group starts at the head of the fresh column,
+        // and the space that was above it there is dropped.
         let (dx, dy) = (to_x - from_x, to_y - from_y - head);
+        let column = self.column;
         for placed in &mut carried {
             placed.top -= head;
+            placed.column = column;
             shift(&mut placed.items, dx, dy);
         }
         self.cursor = carried
             .last()
             .map(|placed| placed.top + placed.height)
             .unwrap_or(0.0);
-        self.placed = carried;
+        self.placed.append(&mut carried);
+    }
+
+    /// Moves to the next column, or ends the page when the column
+    /// that filled was its last.
+    fn advance(&mut self) {
+        if self.column + 1 < self.columns {
+            self.column += 1;
+            self.cursor = 0.0;
+            self.column_start = self.placed.len();
+        } else {
+            self.close();
+        }
+    }
+
+    /// What `break-before: column` asks for: the next column, unless
+    /// this one is still empty, which is already the column it asks
+    /// for.
+    fn break_column(&mut self) {
+        if !self.column_empty() {
+            self.advance();
+        }
     }
 
     /// Paints one fragment onto the page being built.
@@ -1459,6 +1507,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
             section: self.section,
+            column: self.column,
             top,
             height: fragment.height,
             break_before: fragment.break_before,
@@ -1469,14 +1518,33 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// Resolves the decorations over the page being closed into the
-    /// rects they paint there.
+    /// rects they paint there, column by column.
     ///
-    /// A block whose first fragment landed on this page has its top
-    /// edge here, and one whose last fragment did has its bottom;
-    /// the ranges are contiguous, so a block with neither covers
-    /// every fragment the page holds. What is still open when the
-    /// page closes carries to the next.
+    /// A column boundary cuts a block the way a page boundary does,
+    /// so each column resolves on its own and what is still open at
+    /// the foot of one carries into the next.
     fn decorate(&mut self, placed: &[Placed]) -> Vec<DrawItem> {
+        let mut items = Vec::new();
+        let mut start = 0;
+        for index in 1..=placed.len() {
+            if index < placed.len() && placed[index].column == placed[start].column {
+                continue;
+            }
+            let column = placed[start].column;
+            items.extend(self.decorate_column(&placed[start..index], column));
+            start = index;
+        }
+        items
+    }
+
+    /// The same over one column.
+    ///
+    /// A block whose first fragment landed in this column has its top
+    /// edge here, and one whose last fragment did has its bottom; the
+    /// ranges are contiguous, so a block with neither covers every
+    /// fragment the column holds. What is still open when the column
+    /// closes carries into the next.
+    fn decorate_column(&mut self, placed: &[Placed], column: u32) -> Vec<DrawItem> {
         let mut boxes: Vec<Painted> = Vec::new();
         let mut open: Vec<usize> = Vec::new();
         for decoration in self.carried.drain(..) {
@@ -1517,8 +1585,43 @@ impl<'a, 'p> Flow<'a, 'p> {
             boxes[index].bottom = last;
             self.carried.push(boxes[index].decoration.clone());
         }
-        let origin = self.origin();
+        let origin = self.column_origin(column);
         boxes.iter().flat_map(|box_| box_.items(origin)).collect()
+    }
+
+    /// The rules down the gutters of the page being closed: one down
+    /// each gutter the flow filled past, over the height of the
+    /// taller of the two columns it divides.
+    ///
+    /// A page the flow left in one column paints no rule.
+    fn rules(&self, placed: &[Placed]) -> Vec<DrawItem> {
+        let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
+        let width = geometry.columns.rule.used();
+        if width <= 0.0 || self.columns < 2 {
+            return Vec::new();
+        }
+        let mut feet = vec![0.0f32; self.columns as usize];
+        let mut filled = vec![false; self.columns as usize];
+        for entry in placed {
+            let column = entry.column as usize;
+            feet[column] = feet[column].max(entry.top + entry.height);
+            filled[column] = true;
+        }
+        let (_, top) = geometry.content_origin();
+        let color = self.paginator.styles.root().color;
+        (1..self.columns as usize)
+            .filter(|column| filled[*column])
+            .map(|column| {
+                let gutter = geometry.column_origin(column as u32).0 - geometry.columns.gap;
+                DrawItem::Rect {
+                    x: gutter + (geometry.columns.gap - width) / 2.0,
+                    y: top,
+                    w: width,
+                    h: feet[column - 1].max(feet[column]),
+                    color,
+                }
+            })
+            .collect()
     }
 
     /// Ends the page being built, if anything is on it.
@@ -1534,10 +1637,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let placed = std::mem::take(&mut self.placed);
-        // Backgrounds and borders go in front of the page's text:
-        // `DrawItem` order is paint order, and the display structure
-        // has no layers.
+        // Backgrounds, borders and column rules go in front of the
+        // page's text: `DrawItem` order is paint order, and the
+        // display structure has no layers.
         let mut items = self.decorate(&placed);
+        items.append(&mut self.rules(&placed));
         let mut sections: Vec<NodeId> = Vec::new();
         for placed in placed {
             if sections.last() != Some(&placed.section) {
@@ -1568,6 +1672,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             ..self.slot.clone()
         });
         self.cursor = 0.0;
+        self.column = 0;
+        self.column_start = 0;
         self.remaster();
     }
 
@@ -1590,21 +1696,23 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.remaster();
     }
 
-    /// The content box of the page being built.
+    /// The column being filled, in page coordinates.
     fn origin(&self) -> (f32, f32) {
+        self.column_origin(self.column)
+    }
+
+    /// One column of the page being built, in page coordinates.
+    fn column_origin(&self, column: u32) -> (f32, f32) {
         self.paginator
             .master(self.pages.len(), &self.slot)
             .geometry
-            .content_origin()
+            .column_origin(column)
     }
 
     fn remaster(&mut self) {
-        self.height = self
-            .paginator
-            .master(self.pages.len(), &self.slot)
-            .geometry
-            .content_size()
-            .1;
+        let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
+        self.height = geometry.content_size().1;
+        self.columns = geometry.column_count();
     }
 
     fn finish(mut self) -> Paged {
@@ -1761,10 +1869,34 @@ mod tests {
     /// The same, with author CSS cascading over the built-in sheet.
     fn paginate_styled(css: &str, sections: Vec<Section>) -> Vec<Page> {
         let book = book_of(sections);
-        let styles =
-            crate::style::Stylesheets::parse(&[crate::style::Source::author("test.css", css)])
-                .compile(&book, registry());
+        let styles = styled(css, &book);
         Paginator::new(registry(), &styles).paginate(&book)
+    }
+
+    /// One book's styling with author CSS over the built-in sheet.
+    fn styled(css: &str, book: &Book) -> StyleTree {
+        crate::style::Stylesheets::parse(&[crate::style::Source::author("test.css", css)])
+            .compile(book, registry())
+    }
+
+    /// The page box one sheet computes for a chapter page, which is
+    /// the master the fixture sections resolve to. The situation is
+    /// the page's own: mirrored margins put the columns of a verso
+    /// page at different offsets from a recto's.
+    fn styled_geometry(css: &str, situation: Situation) -> crate::style::PageGeometry {
+        let book = book_of(vec![section(vec![heading("H"), paragraph("prose")])]);
+        styled(css, &book)
+            .page(PageQuery {
+                name: Some("chapter"),
+                situation,
+            })
+            .geometry
+    }
+
+    /// The same for the page a flow put at `index`, which is where a
+    /// test that walks a book reads its columns from.
+    fn page_geometry(css: &str, page: &Page) -> crate::style::PageGeometry {
+        styled_geometry(css, Situation::Body(page.side))
     }
 
     /// Prose enough to break over several lines.
@@ -1781,6 +1913,275 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A page divided in two, with a gutter wide enough to tell the
+    /// columns apart by where a line starts.
+    const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
+
+    /// A two-column page reads in column order: every line of the
+    /// first column comes before every line of the second, and the
+    /// second starts back at the top of the page.
+    #[test]
+    fn a_two_column_page_fills_one_column_before_the_next() {
+        let pages = paginate_styled(
+            TWO_COLUMNS,
+            vec![section((0..12).map(|_| prose()).collect())],
+        );
+        let geometry = styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto));
+        let measure = geometry.measure();
+        let (left, top) = geometry.content_origin();
+        let second = geometry.column_origin(1).0;
+        assert_eq!(measure, (geometry.content_size().0 - 18.0) / 2.0);
+        let lines = content_lines(&pages[0]);
+        let column_of = |runs: &Vec<Run<'_>>| {
+            if runs.iter().all(|(x, _, _)| *x < second) {
+                0
+            } else {
+                1
+            }
+        };
+        let columns: Vec<usize> = lines.iter().map(|(_, runs)| column_of(runs)).collect();
+        let turn = columns
+            .iter()
+            .position(|column| *column == 1)
+            .expect("the prose reaches the second column");
+        assert!(columns[..turn].iter().all(|column| *column == 0));
+        assert!(columns[turn..].iter().all(|column| *column == 1));
+        // The second column opens at the top of the page, below the
+        // first column's last line.
+        assert!(lines[turn].0 < lines[turn - 1].0);
+        assert!(lines[turn].0 > top);
+        for (index, (_, runs)) in lines.iter().enumerate() {
+            let origin = if columns[index] == 0 { left } else { second };
+            for (x, _, _) in runs {
+                assert!(
+                    *x >= origin - 1e-3,
+                    "line {index} starts left of its column"
+                );
+            }
+        }
+    }
+
+    /// The lines of one page grouped by the column they were set
+    /// in, first column first: the tagged first word of each line,
+    /// the way `tagged_lines` reads a page.
+    fn tagged_columns(page: &Page, geometry: crate::style::PageGeometry) -> Vec<Vec<String>> {
+        let mut columns = vec![Vec::new(); geometry.column_count() as usize];
+        for (_, runs) in content_lines(page) {
+            let x = runs[0].0;
+            let column = (0..geometry.column_count())
+                .rev()
+                .find(|column| x >= geometry.column_origin(*column).0 - 1e-3)
+                .unwrap_or(0);
+            columns[column as usize].push(
+                runs[0]
+                    .2
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        }
+        columns
+    }
+
+    /// The page ends after its last column: a book that spills onto a
+    /// second page filled both columns of the first, each of them to
+    /// within a line of its foot.
+    #[test]
+    fn a_page_ends_when_its_last_column_does() {
+        let pages = paginate_styled(
+            TWO_COLUMNS,
+            vec![section((0..40).map(|_| prose()).collect())],
+        );
+        assert!(pages.len() > 1, "the book spills onto a second page");
+        let (_, top) = styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto)).content_origin();
+        let foot = top
+            + styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto))
+                .content_size()
+                .1;
+        let line = body_size() * ua().root().line_height;
+        for (index, page) in pages[..pages.len() - 1].iter().enumerate() {
+            let geometry = page_geometry(TWO_COLUMNS, page);
+            for (column, lines) in tagged_columns(page, geometry).iter().enumerate() {
+                assert!(
+                    !lines.is_empty(),
+                    "page {}: column {column} is empty",
+                    index + 1
+                );
+            }
+            let last = content_lines(page)
+                .last()
+                .expect("a filled page has lines")
+                .0;
+            assert!(
+                last > foot - 2.0 * line,
+                "page {}: the last column stopped {} short of the foot",
+                index + 1,
+                foot - last
+            );
+        }
+    }
+
+    /// `break-before: column` on a heading opens the next column. The
+    /// page it opens on is the same one, and the prose before it is
+    /// still in the column it was set in.
+    #[test]
+    fn break_before_column_opens_a_column_rather_than_a_page() {
+        let sections = || vec![section(vec![prose(), heading("Second"), prose(), prose()])];
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-before: column }}"),
+            sections(),
+        );
+        assert_eq!(pages.len(), 1, "a column break does not turn the page");
+        let geometry = page_geometry(TWO_COLUMNS, &pages[0]);
+        let columns = tagged_columns(&pages[0], geometry);
+        assert_eq!(columns[1].first().map(String::as_str), Some("Second"));
+        assert!(!columns[0].iter().any(|line| line == "Second"));
+    }
+
+    /// The same heading with `break-before: page` still turns the
+    /// page, so the column break is the weaker of the two rather than
+    /// the only one left.
+    #[test]
+    fn break_before_page_still_turns_the_page_on_a_divided_box() {
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-before: page }}"),
+            vec![section(vec![prose(), heading("Second"), prose()])],
+        );
+        assert_eq!(pages.len(), 2);
+        let geometry = page_geometry(TWO_COLUMNS, &pages[1]);
+        let columns = tagged_columns(&pages[1], geometry);
+        assert_eq!(columns[0].first().map(String::as_str), Some("Second"));
+    }
+
+    /// Acceptance: orphans and widows hold at a column boundary the
+    /// way they hold at a page boundary. A line that would stand
+    /// alone at the head of a column takes its paragraph with it.
+    #[test]
+    fn orphans_and_widows_hold_at_every_column_boundary() {
+        let pages = paginate_styled(TWO_COLUMNS, vec![section(tagged_prose(60))]);
+        let columns: Vec<Vec<String>> = pages
+            .iter()
+            .flat_map(|page| tagged_columns(page, page_geometry(TWO_COLUMNS, page)))
+            .collect();
+        assert_orphans_and_widows_over(&columns, "column", 2, 2);
+    }
+
+    /// `break-inside: avoid` holds inside a column: a quotation the
+    /// rest of a column cannot take moves whole into the next one
+    /// rather than splitting across the gutter.
+    #[test]
+    fn break_inside_avoid_keeps_a_block_in_one_column() {
+        let blocks: Vec<Block> = (0..12)
+            .flat_map(|index| {
+                let quoted = format!("q{index:02}");
+                [
+                    paragraph(&vec![format!("p{index:02}"); (5 + index % 7) * 18].join(" ")),
+                    quote(vec![paragraph(&vec![quoted; 30].join(" "))]),
+                ]
+            })
+            .collect();
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} blockquote {{ break-inside: avoid }}"),
+            vec![section(blocks)],
+        );
+        let mut seen: BTreeMap<String, Vec<(u32, usize)>> = BTreeMap::new();
+        for page in &pages {
+            let geometry = page_geometry(TWO_COLUMNS, page);
+            for (column, lines) in tagged_columns(page, geometry).iter().enumerate() {
+                for token in lines.iter().filter(|token| token.starts_with('q')) {
+                    let at = (page.number, column);
+                    let places = seen.entry(token.clone()).or_default();
+                    if places.last() != Some(&at) {
+                        places.push(at);
+                    }
+                }
+            }
+        }
+        assert!(seen.len() >= 8, "only {} quotations to check", seen.len());
+        for (token, places) in &seen {
+            assert_eq!(
+                places.len(),
+                1,
+                "{token} is set over {places:?} rather than in one column",
+            );
+        }
+    }
+
+    /// `break-after: column` closes the column under the block that
+    /// asks for it, and what follows opens the next one.
+    #[test]
+    fn break_after_column_closes_the_column_under_it() {
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-after: column }}"),
+            vec![section(vec![heading("Opening"), prose(), prose()])],
+        );
+        assert_eq!(pages.len(), 1);
+        let columns = tagged_columns(&pages[0], page_geometry(TWO_COLUMNS, &pages[0]));
+        assert_eq!(columns[0], vec!["Opening".to_string()]);
+        assert!(!columns[1].is_empty(), "the prose opens the second column");
+    }
+
+    /// A rule paints down the gutter, centred in it, from the top of
+    /// the content box to the foot of the columns it divides.
+    #[test]
+    fn a_column_rule_paints_centred_in_the_gutter() {
+        let css =
+            format!("{TWO_COLUMNS} @page {{ column-rule-style: solid; column-rule-width: 1pt }}");
+        let pages = paginate_styled(&css, vec![section((0..12).map(|_| prose()).collect())]);
+        let geometry = page_geometry(&css, &pages[0]);
+        let rects = rects(&pages[0]);
+        assert_eq!(rects.len(), 1, "two columns, one gutter, one rule");
+        let (x, y, w, h, color) = rects[0];
+        assert_eq!(w, 1.0);
+        assert_eq!(color, ua().root().color);
+        let gutter = geometry.column_origin(1).0 - geometry.columns.gap;
+        assert_eq!(x + w / 2.0, gutter + geometry.columns.gap / 2.0);
+        let (_, top) = geometry.content_origin();
+        assert_eq!(y, top);
+        let last = content_lines(&pages[0])
+            .last()
+            .expect("the page has lines")
+            .0;
+        assert!(y + h >= last - 1e-3, "the rule reaches the last line");
+        assert!(y + h <= top + geometry.content_size().1 + 1e-3);
+    }
+
+    /// A page the flow left in one column divides nothing, and paints
+    /// no rule.
+    #[test]
+    fn a_one_column_page_paints_no_rule() {
+        let css = format!("{TWO_COLUMNS} @page {{ column-rule-style: solid }}");
+        let short = paginate_styled(&css, vec![section(vec![paragraph("One short line.")])]);
+        assert!(rects(&short[0]).is_empty());
+        let undivided = paginate_styled(
+            "@page { column-rule-style: solid; column-rule-width: 1pt }",
+            vec![section((0..12).map(|_| prose()).collect())],
+        );
+        assert!(rects(&undivided[0]).is_empty());
+    }
+
+    /// Furniture belongs to the page: the folio of a two-column page
+    /// sits where the folio of the same page undivided does.
+    #[test]
+    fn columns_leave_the_furniture_where_it_was() {
+        let sections = || vec![section((0..40).map(|_| prose()).collect())];
+        let folio = |pages: &[Page], index: usize| {
+            pages[index]
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { x, y, size, .. } if *size == folio_size() => Some((*x, *y)),
+                    _ => None,
+                })
+                .expect("a body page carries a folio")
+        };
+        let divided = paginate_styled(TWO_COLUMNS, sections());
+        let undivided = paginate(sections());
+        assert!(divided.len() > 1 && undivided.len() > 1);
+        assert_eq!(folio(&divided, 1), folio(&undivided, 1));
     }
 
     /// A quotation set with padding on all four edges and a rule down
@@ -2583,6 +2984,17 @@ mod tests {
     /// the bottom.
     fn assert_orphans_and_widows(pages: &[Page], orphans: usize, widows: usize) {
         let tagged: Vec<Vec<String>> = pages.iter().map(tagged_lines).collect();
+        assert_orphans_and_widows_over(&tagged, "page", orphans, widows);
+    }
+
+    /// The same over whatever the flow filled in order, which is
+    /// pages on an undivided page box and columns on a divided one.
+    fn assert_orphans_and_widows_over(
+        tagged: &[Vec<String>],
+        what: &str,
+        orphans: usize,
+        widows: usize,
+    ) {
         let mut boundaries = 0;
         for (index, lines) in tagged.iter().enumerate() {
             let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
@@ -2592,7 +3004,7 @@ mod tests {
                 let carried = lines.iter().take_while(|token| *token == first).count();
                 assert!(
                     carried >= widows,
-                    "page {}: {carried} line(s) of {first} carried over, widows is {widows}",
+                    "{what} {}: {carried} line(s) of {first} carried over, widows is {widows}",
                     index + 1,
                 );
                 boundaries += 1;
@@ -2605,7 +3017,7 @@ mod tests {
                     .count();
                 assert!(
                     left >= orphans,
-                    "page {}: {left} line(s) of {last} left behind, orphans is {orphans}",
+                    "{what} {}: {left} line(s) of {last} left behind, orphans is {orphans}",
                     index + 1,
                 );
                 boundaries += 1;

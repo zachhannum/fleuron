@@ -69,6 +69,40 @@ pub mod budget {
     pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
 }
 
+/// The page box a book is measured on. The budgets are the same on
+/// both: dividing the content box moves where a fragment lands, not
+/// how much work laying one out is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Division {
+    /// The built-in sheet's page box, one column wide.
+    Undivided,
+    /// The same box divided in two, with a rule down the gutter.
+    TwoColumn,
+}
+
+impl Division {
+    /// Both, in the order the gate reports them.
+    pub const ALL: [Division; 2] = [Division::Undivided, Division::TwoColumn];
+
+    /// The author CSS this division adds to the built-in sheet.
+    pub fn css(self) -> &'static str {
+        match self {
+            Division::Undivided => "",
+            Division::TwoColumn => {
+                "@page { column-count: 2; column-gap: 18pt; column-rule-style: solid }"
+            }
+        }
+    }
+
+    /// What reports call this division.
+    pub fn name(self) -> &'static str {
+        match self {
+            Division::Undivided => "one column",
+            Division::TwoColumn => "two columns",
+        }
+    }
+}
+
 /// Where the harness is running. The budgets differ; the measurements
 /// do not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +149,8 @@ impl Target {
 pub struct Report {
     /// The book measured.
     pub corpus: Corpus,
+    /// The page box it was measured on.
+    pub division: Division,
     /// Pages the book fragmented into.
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
@@ -254,9 +290,19 @@ impl fmt::Display for Check {
 /// work. Memory goes the other way — a ceiling is only met if it is
 /// met every time.
 pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
+    measure_on(corpus, Division::Undivided, registry, runs)
+}
+
+/// The same on a page box the sheet divides.
+pub fn measure_on(
+    corpus: Corpus,
+    division: Division,
+    registry: &FontRegistry,
+    runs: usize,
+) -> Report {
     let markdown = corpus.markdown();
     let book = corpus.book();
-    let styles = crate::styles(&book);
+    let styles = crate::styles_on(&book, division);
     let paginator = Paginator::new(registry, &styles);
 
     let mut parse = Duration::MAX;
@@ -281,7 +327,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         parse = parse.min(start.elapsed());
 
         let start = Instant::now();
-        black_box(crate::styles(&book));
+        black_box(crate::styles_on(&book, division));
         style = style.min(start.elapsed());
 
         let start = Instant::now();
@@ -334,6 +380,10 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         let (mut session, peak) = crate::alloc::measure(|| {
             let mut session = Session::new(registry);
             session.set_content(owned);
+            session.set_style(Stylesheets::parse(&[Source::author(
+                "gate.css",
+                division.css(),
+            )]));
             session.preview();
             session
         });
@@ -344,7 +394,11 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
         // margin lands somewhere the built-in sheet did not, and
         // somewhere no other run put it, so every run measures a real
         // re-render rather than a cache that was already warm.
-        let css = format!("@page {{ margin-bottom: {}pt }}", 60 + index);
+        let css = format!(
+            "{}@page {{ margin-bottom: {}pt }}",
+            division.css(),
+            60 + index
+        );
         let sheets = Stylesheets::parse(&[Source::author("gate.css", &css)]);
         let start = Instant::now();
         session.set_style(sheets);
@@ -354,6 +408,7 @@ pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
 
     Report {
         corpus,
+        division,
         pages,
         lines,
         parse,
@@ -387,8 +442,9 @@ impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "{} — {} pages, {} lines, {} KiB of PDF",
+            "{} — {}, {} pages, {} lines, {} KiB of PDF",
             self.corpus.slug(),
+            self.division.name(),
             self.pages,
             self.lines,
             self.pdf_bytes / 1024,
@@ -470,6 +526,7 @@ mod tests {
     fn each_target_is_timed_on_what_it_waits_for() {
         let report = Report {
             corpus: Corpus::GATE,
+            division: Division::Undivided,
             pages: 300,
             lines: 10_000,
             parse: Duration::from_millis(30),

@@ -82,7 +82,7 @@ Block box, not inherited:
 | `border-color` | `<color>{1,4}` |
 | `background-color` | `<color> \| transparent` |
 | `box-decoration-break` | `slice \| clone` |
-| `break-before`, `break-after`, `break-inside` | `auto \| avoid \| avoid-page \| page \| always \| left \| right \| recto \| verso` |
+| `break-before`, `break-after`, `break-inside` | `auto \| avoid \| avoid-page \| avoid-column \| column \| page \| always \| left \| right \| recto \| verso` |
 
 {/* end generated */}
 
@@ -180,6 +180,11 @@ An initial letter is sized from the sink rather than from `font-size`. Its cap h
   margin-right: <length> | <percentage>;
   margin-bottom: <length> | <percentage>;
   margin-left: <length> | <percentage>;
+  column-count: auto | <integer>;
+  column-width: auto | <length>;
+  column-gap: normal | <length>;
+  column-rule-width: <length> | thin | medium | thick;
+  column-rule-style: none | solid;
   @<margin-box> {
     content: none | <string> | counter(page) | counter(page, <counter-style>) | string(<name>);
     /* text properties */
@@ -206,6 +211,16 @@ Page selectors cascade like any other rule: origin first, then specificity, then
 A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
 
 A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not get one. `@page :blank` still gives that leaf its trim and margins.
+
+### Columns
+
+`column-count` and `column-width` divide the page's content box. `column-count` alone takes that many columns. `column-width` alone takes as many columns of at least that width as fit. Declared together, the count is the ceiling on how many the width takes. `column-gap` is the gutter between them, and `normal` is one em of the book's own size.
+
+The flow fills the first column to its foot, then the next. Only the last column running out starts a page. A paragraph breaks to the column it is set in, and orphans, widows and `break-inside: avoid` hold inside a column. `break-before: column` and `break-after: column` open the next column rather than the next page.
+
+`column-rule-style: solid` paints a rule down each gutter, `column-rule-width` wide, centred in the gutter and reaching the foot of the columns it divides. The rule takes no width from the columns. A page the flow left in one column paints no rule.
+
+Running heads, folios and margin boxes belong to the page rather than to a column. Dividing the content box leaves them where an undivided page puts them.
 
 ## `@font-face`
 
@@ -238,6 +253,8 @@ The string in `url()` is handed to the loader unchanged, and does not have to be
 Floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
 
 The box model is missing the `background` shorthand and every background property but `background-color`, the border longhands that name both an edge and a value, such as `border-top-width`, `border-radius`, and a border, padding or background on an inline element or on `@page`.
+
+Columns are missing `column-fill`, so the last page fills its columns in order and stops short rather than balancing them; `column-rule-color`, so a rule paints in the ink the book is set in; and `column-span`, so nothing spans the full measure with columns above and below it. The `columns` and `column-rule` shorthands are missing too, and columns on an element: `@page` is where the box divides.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.
 

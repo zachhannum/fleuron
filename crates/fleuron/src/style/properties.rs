@@ -215,6 +215,9 @@ pub enum Break {
     Auto,
     /// `avoid`
     Avoid,
+    /// `column`: the flow moves to the next column, and only the last
+    /// column of a page moving on ends the page.
+    Column,
     /// `page`
     Page,
     /// Break to the next page that falls on the given side, leaving a
@@ -361,7 +364,77 @@ pub enum Edge {
     Left,
 }
 
-/// Page trim and margins, in points: the resolved `@page` box.
+/// The rule painted down a page's gutters, from `column-rule-width`
+/// and `column-rule-style`. It takes no room: the gutter is the room
+/// it has.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct ColumnRule {
+    /// How the rule is drawn.
+    pub style: BorderStyle,
+    /// Thickness in points, whether or not it is drawn.
+    pub width: f32,
+}
+
+impl ColumnRule {
+    /// The initial rule: `medium` wide, and not drawn.
+    pub const NONE: ColumnRule = ColumnRule {
+        style: BorderStyle::None,
+        width: MEDIUM,
+    };
+
+    /// The thickness the rule paints at: nothing unless it is drawn.
+    pub fn used(self) -> f32 {
+        match self.style {
+            BorderStyle::None => 0.0,
+            BorderStyle::Solid => self.width.max(0.0),
+        }
+    }
+}
+
+/// How a page's content box divides, from `column-count`,
+/// `column-width` and `column-gap`.
+///
+/// Both `column-count` and `column-width` are what the author asked
+/// for rather than what the page does: a content box only so wide
+/// takes only so many columns of a given width, and
+/// [`PageGeometry::column_count`] is where the two meet.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Columns {
+    /// `column-count`, or `None` for `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+    /// `column-width`: the width a column is asked to have, or
+    /// `None` for `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<f32>,
+    /// `column-gap`: the gutter between two columns.
+    pub gap: f32,
+    /// What is painted down each gutter.
+    pub rule: ColumnRule,
+}
+
+impl Columns {
+    /// One column, the whole content box: what a page that declares
+    /// no column property divides into.
+    pub const fn undivided(gap: f32) -> Columns {
+        Columns {
+            count: None,
+            width: None,
+            gap,
+            rule: ColumnRule::NONE,
+        }
+    }
+
+    /// Whether the page asked for no division at all. A page box
+    /// that divides into nothing serializes without a `columns`
+    /// field.
+    pub fn single(&self) -> bool {
+        self.count.is_none() && self.width.is_none()
+    }
+}
+
+/// Page trim, margins and columns, in points: the resolved `@page`
+/// box.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct PageGeometry {
     /// Trimmed page width.
@@ -372,6 +445,9 @@ pub struct PageGeometry {
     /// across the spread is `@page :left` and `@page :right` saying
     /// different things, not a property of its own.
     pub margin: Edges,
+    /// How the content box divides.
+    #[serde(skip_serializing_if = "Columns::single")]
+    pub columns: Columns,
 }
 
 impl PageGeometry {
@@ -388,9 +464,41 @@ impl PageGeometry {
         )
     }
 
-    /// The measure line layout breaks to: the content box width.
+    /// How many columns the content box divides into.
+    ///
+    /// A declared `column-width` is a preference: as many columns of
+    /// that width as fit, and where `column-count` was declared too
+    /// it is the ceiling on that. A box too narrow for one column of
+    /// that width still divides into one.
+    pub fn column_count(self) -> u32 {
+        let available = self.content_size().0;
+        let fitting = self.columns.width.map(|width| {
+            let pitch = width.max(0.0) + self.columns.gap;
+            if pitch <= 0.0 {
+                return 1;
+            }
+            (((available + self.columns.gap) / pitch).floor() as i32).max(1) as u32
+        });
+        match (self.columns.count, fitting) {
+            (Some(count), Some(fitting)) => count.max(1).min(fitting),
+            (Some(count), None) => count.max(1),
+            (None, Some(fitting)) => fitting,
+            (None, None) => 1,
+        }
+    }
+
+    /// The measure line layout breaks to: one column's width, which
+    /// on an undivided page is the content box's own.
     pub fn measure(self) -> f32 {
-        self.content_size().0
+        let count = self.column_count() as f32;
+        let gutters = self.columns.gap * (count - 1.0);
+        ((self.content_size().0 - gutters) / count).max(0.0)
+    }
+
+    /// Origin (top-left) of one column, in page coordinates.
+    pub fn column_origin(self, index: u32) -> (f32, f32) {
+        let (x, y) = self.content_origin();
+        (x + index as f32 * (self.measure() + self.columns.gap), y)
     }
 }
 
