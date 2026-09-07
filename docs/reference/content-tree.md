@@ -113,4 +113,6 @@ Two questions are answered from it, and they are the two halves of a cursor's wa
 
 A cursor becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page it is set on. A run under the pointer goes the other way. Only the sections read from the source asked about are looked at, so one file's cursor is answered by one file's nodes.
 
+Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host that holds one across an edit asks again rather than reusing it.
+
 A node the engine synthesized, or one from a tree built rather than parsed, was read from nothing, and both questions answer with nothing rather than guessing.
