@@ -20,8 +20,8 @@ use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     BorderStyle, BoxDecorationBreak, Break, Color, Content, CounterStyle, Declaration, Edge,
-    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, MarginBox,
-    StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
+    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, MEDIUM,
+    MarginBox, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -574,8 +574,8 @@ fn longhand<'i, T, D>(
     Ok(vec![wrap(value)])
 }
 
-/// Reads a one-to-four value shorthand — `margin`, `padding`,
-/// `border-width` — into its four longhands.
+/// Reads a one-to-four value shorthand (`margin`, `padding`,
+/// `border-width`) into its four longhands.
 fn sides<'i, T: Copy, D>(
     name: &CowRcStr<'i>,
     input: &mut Parser<'i, '_>,
@@ -619,7 +619,7 @@ fn border<'i>(
     if width.is_none() && style.is_none() && color.is_none() {
         return Err(input.new_custom_error(StyleError::UnsupportedValue(name.clone())));
     }
-    let width = width.unwrap_or(Length::Points(LINE_WIDTHS[1].1));
+    let width = width.unwrap_or(Length::Points(MEDIUM));
     let style = style.unwrap_or(BorderStyle::None);
     Ok(edges
         .iter()
@@ -1143,8 +1143,8 @@ fn line_style(input: &mut Parser<'_, '_>) -> Option<BorderStyle> {
     }
 }
 
-/// A colour written where a longhand wants one, which never means
-/// `currentColor`: only the shorthand leaves the colour unsaid.
+/// A colour written where a longhand takes one, which never means
+/// `currentColor`: only the shorthand leaves the colour out.
 fn border_color(input: &mut Parser<'_, '_>) -> Option<Option<Color>> {
     color(input).map(Some)
 }

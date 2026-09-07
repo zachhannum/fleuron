@@ -1,8 +1,8 @@
 //! The box model: what a padded, bordered, tinted block paints, and
 //! where.
 //!
-//! One fixture — a chapter opening and a quotation long enough to
-//! carry over a page turn — set under a sheet that boxes the
+//! One fixture, a chapter opening and a quotation long enough to
+//! carry over a page turn, set under a sheet that boxes the
 //! quotation and rules the heading.
 
 use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, Section};

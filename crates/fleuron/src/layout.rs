@@ -148,8 +148,8 @@ pub struct Fragment {
 
 /// What one fragment does to the blocks decorated around it.
 ///
-/// A decoration spans a range of fragments, and the range is known
-/// while the flow is built while the geometry is not: the paginator
+/// A decoration spans a range of fragments. The range is settled
+/// while the flow is built and the geometry is not: the paginator
 /// places fragments one at a time and moves what it has already
 /// painted when one carries to the next page. So the range travels on
 /// the fragments at its ends, and the paginator resolves it, per
@@ -183,8 +183,9 @@ pub struct Decoration {
     pub colors: Edges<Color>,
     /// What is painted behind the whole border box.
     pub background: Option<Color>,
-    /// Whether a page break closes the two edges it cuts.
-    pub clone: bool,
+    /// Whether `box-decoration-break: clone` closes the two edges a
+    /// page break cuts.
+    pub cloned: bool,
 }
 
 /// What a fragment tells the page it lands on: the running strings
@@ -569,11 +570,12 @@ fn decorated(style: &ComputedStyle) -> bool {
 /// The decoration one block paints, or `None` where it paints
 /// nothing. `x` and `measure` are what the block was laid out
 /// against; the border box takes its margins off them.
-fn decoration(style: &ComputedStyle, x: f32, measure: f32, border: Edges) -> Option<Decoration> {
+fn decoration(style: &ComputedStyle, x: f32, measure: f32) -> Option<Decoration> {
     if !decorated(style) {
         return None;
     }
     let (left, width) = style.border_box(x, measure);
+    let border = style.border.widths();
     let ink = |edge: crate::style::Border| edge.color.unwrap_or(style.color);
     Some(Decoration {
         x: left,
@@ -588,7 +590,7 @@ fn decoration(style: &ComputedStyle, x: f32, measure: f32, border: Edges) -> Opt
             left: ink(style.border.left),
         },
         background: style.background_color,
-        clone: style.box_decoration_break == BoxDecorationBreak::Clone,
+        cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
     })
 }
 
@@ -671,7 +673,7 @@ impl Builder<'_, '_> {
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
-        if let Some(decoration) = decoration(style, x, measure, border) {
+        if let Some(decoration) = decoration(style, x, measure) {
             self.open.push(Pending {
                 start,
                 open_fixed: self.fixed,
@@ -761,8 +763,8 @@ impl Builder<'_, '_> {
     }
 
     /// Hands one block's decoration to the fragments at the ends of
-    /// its range, which is what the paginator resolves it through. A
-    /// block that emitted nothing has no range and paints nothing.
+    /// its range, which is where the paginator reads it back. A block
+    /// that emitted nothing has no range and paints nothing.
     fn seal(&mut self, pending: Pending) {
         let end = self.fragments.len();
         if end == pending.start {
@@ -795,8 +797,8 @@ impl Builder<'_, '_> {
     /// cascade asked for above it and the space its margins left; the
     /// rest get what the block says about splitting itself.
     fn emit(&mut self, first: &mut bool, inner: BreakPoint, x: f32, height: f32, piece: Piece) {
-        // A block whose first fragment this is now knows how far its
-        // border box sits above it.
+        // This fragment settles how far the border box of every
+        // block opening on it sits above it.
         let (index, fixed) = (self.fragments.len(), self.fixed);
         for pending in &mut self.open {
             if pending.start == index {
@@ -1201,7 +1203,7 @@ impl Painted {
         }
         // `slice` leaves the two edges the break made open; `clone`
         // closes them.
-        let closed = self.decoration.clone;
+        let closed = self.decoration.cloned;
         let border = self.decoration.border;
         let top = if self.cut_above && !closed {
             0.0

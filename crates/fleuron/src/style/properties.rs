@@ -248,7 +248,7 @@ impl<T: Copy> Edges<T> {
         }
     }
 
-    /// The edge `which`, to read or to write.
+    /// The edge `which`.
     pub fn edge(&mut self, which: Edge) -> &mut T {
         match which {
             Edge::Top => &mut self.top,
@@ -278,9 +278,9 @@ pub enum BorderStyle {
 
 /// One border edge: how it is drawn, how thick, and in what.
 ///
-/// The colour is what `border-color` said, and `None` is
-/// `currentColor` — the element's own `color`, whichever order the
-/// two were declared in.
+/// The colour is what `border-color` set, and `None` is
+/// `currentColor`: the element's own `color`, whichever order the two
+/// were declared in.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Border {
     /// How the edge is drawn.
@@ -311,7 +311,7 @@ impl Border {
 }
 
 /// `border-width: medium`, the initial value, in points.
-const MEDIUM: f32 = 2.25;
+pub(crate) const MEDIUM: f32 = 2.25;
 
 impl Edges<Border> {
     /// The four used thicknesses.
