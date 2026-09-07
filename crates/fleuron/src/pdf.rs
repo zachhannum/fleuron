@@ -446,8 +446,10 @@ mod tests {
                         id: Default::default(),
                         value: text.into(),
                         position: None,
+                        span: None,
                     }],
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],
@@ -469,8 +471,10 @@ mod tests {
                             id: Default::default(),
                             value: "Chapter One".into(),
                             position: None,
+                            span: None,
                         }],
                         position: None,
+                        span: None,
                     },
                     Block::Paragraph {
                         id: Default::default(),
@@ -478,8 +482,10 @@ mod tests {
                             id: Default::default(),
                             value: "The wind came off the water.".into(),
                             position: None,
+                            span: None,
                         }],
                         position: None,
+                        span: None,
                     },
                 ],
                 ..Default::default()
@@ -829,6 +835,7 @@ mod tests {
                     url: "missing.png".into(),
                     alt: "a map".into(),
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],

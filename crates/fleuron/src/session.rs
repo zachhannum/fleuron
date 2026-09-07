@@ -804,7 +804,8 @@ fn hyphenation(metadata: &Metadata) -> (Patterns, Option<&str>) {
 /// its content, and the style every node in it resolved to. Node ids
 /// are deliberately absent, because they renumber globally on every
 /// edit and a chapter nothing touched would then miss its own
-/// cache.
+/// cache. So is the stretch of the source a node was read from,
+/// which moves whenever a byte above it does and changes no line.
 fn section_key(
     section: &Section,
     styles: &StyleTree,
@@ -831,6 +832,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 level,
                 inlines,
                 position,
+                span: _,
             } => {
                 (0u8, level, position).hash(h);
                 hash_node(*id, styles, h);
@@ -840,6 +842,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 inlines,
                 position,
+                span: _,
             } => {
                 (1u8, position).hash(h);
                 hash_node(*id, styles, h);
@@ -849,12 +852,17 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 blocks,
                 position,
+                span: _,
             } => {
                 (2u8, position).hash(h);
                 hash_node(*id, styles, h);
                 hash_blocks(blocks, styles, h);
             }
-            Block::ThematicBreak { id, position } => {
+            Block::ThematicBreak {
+                id,
+                position,
+                span: _,
+            } => {
                 (3u8, position).hash(h);
                 hash_node(*id, styles, h);
             }
@@ -863,6 +871,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 url,
                 alt,
                 position,
+                span: _,
             } => {
                 (4u8, url, alt, position).hash(h);
                 hash_node(*id, styles, h);
@@ -878,6 +887,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 value,
                 position,
+                span: _,
             } => {
                 (0u8, value, position).hash(h);
                 hash_node(*id, styles, h);
@@ -886,6 +896,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 children,
                 position,
+                span: _,
             } => {
                 (1u8, position).hash(h);
                 hash_node(*id, styles, h);
@@ -895,6 +906,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 children,
                 position,
+                span: _,
             } => {
                 (2u8, position).hash(h);
                 hash_node(*id, styles, h);
@@ -904,6 +916,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 value,
                 position,
+                span: _,
             } => {
                 (3u8, value, position).hash(h);
                 hash_node(*id, styles, h);
@@ -913,6 +926,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 url,
                 children,
                 position,
+                span: _,
             } => {
                 (4u8, url, position).hash(h);
                 hash_node(*id, styles, h);
@@ -1059,6 +1073,7 @@ mod tests {
                     url: "plate.jpg".into(),
                     alt: "a map".into(),
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],
@@ -1115,6 +1130,7 @@ mod tests {
                     url: url.into(),
                     alt: "a picture".into(),
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],
@@ -1220,6 +1236,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: value.into(),
             position: None,
+            span: None,
         }
     }
 
@@ -1228,6 +1245,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             inlines: vec![text(value)],
             position: None,
+            span: None,
         }
     }
 
@@ -1237,6 +1255,7 @@ mod tests {
             level: HeadingLevel::H1,
             inlines: vec![text(value)],
             position: None,
+            span: None,
         }
     }
 
@@ -1255,6 +1274,7 @@ mod tests {
             title: None,
             blocks,
             position: None,
+            span: None,
         }
     }
 

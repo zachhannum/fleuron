@@ -31,10 +31,13 @@ fn book() -> Book {
                     id: NodeId::UNASSIGNED,
                     value: "prose".into(),
                     position: None,
+                    span: None,
                 }],
                 position: None,
+                span: None,
             }],
             position: None,
+            span: None,
         }],
     };
     book.assign_node_ids();

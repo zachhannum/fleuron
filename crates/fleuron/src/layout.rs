@@ -1773,6 +1773,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: value.into(),
             position: None,
+            span: None,
         }
     }
 
@@ -1782,6 +1783,7 @@ mod tests {
             level: HeadingLevel::H1,
             inlines: vec![text(value)],
             position: Some(SourcePos { line: 1, column: 1 }),
+            span: None,
         }
     }
 
@@ -1790,6 +1792,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             inlines: vec![text(value)],
             position: None,
+            span: None,
         }
     }
 
@@ -1800,6 +1803,7 @@ mod tests {
             title: None,
             blocks,
             position: None,
+            span: None,
         }
     }
 
@@ -2334,6 +2338,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             blocks,
             position: None,
+            span: None,
         }
     }
 
@@ -2341,6 +2346,7 @@ mod tests {
         Block::ThematicBreak {
             id: NodeId::UNASSIGNED,
             position: None,
+            span: None,
         }
     }
 
@@ -3497,6 +3503,7 @@ mod tests {
                 level: HeadingLevel::H3,
                 inlines: vec![text("A Voyage")],
                 position: None,
+                span: None,
             },
             paragraph(prose),
         ])]
@@ -3714,6 +3721,7 @@ mod tests {
             url: url.into(),
             alt: "a drawer of knives".into(),
             position: Some(SourcePos { line: 9, column: 1 }),
+            span: None,
         };
         let book = book_of(vec![section(vec![
             paragraph("before"),

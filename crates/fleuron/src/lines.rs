@@ -2080,6 +2080,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
             position: None,
+            span: None,
         }];
         layout.layout(&inlines, body(), measure_pt, options)
     }
@@ -2094,6 +2095,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
             position: None,
+            span: None,
         }]
     }
 
@@ -2131,6 +2133,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
             position: None,
+            span: None,
         }];
         layout.layout(&inlines, style, measure_pt, LineBreakOptions::default())
     }
@@ -2412,11 +2415,13 @@ mod tests {
                 id: NodeId::UNASSIGNED,
                 value: "body ".into(),
                 position: None,
+                span: None,
             },
             Inline::Code {
                 id: NodeId::UNASSIGNED,
                 value: "code".into(),
                 position: None,
+                span: None,
             },
         ];
         let lines = layout.layout(&inlines, body(), 200.0, Default::default());
@@ -2441,6 +2446,7 @@ mod tests {
                             id: NodeId::UNASSIGNED,
                             value: "He said ".into(),
                             position: None,
+                            span: None,
                         },
                         Inline::Emphasis {
                             id: NodeId::UNASSIGNED,
@@ -2449,6 +2455,7 @@ mod tests {
                                     id: NodeId::UNASSIGNED,
                                     value: "never ".into(),
                                     position: None,
+                                    span: None,
                                 },
                                 Inline::Strong {
                                     id: NodeId::UNASSIGNED,
@@ -2456,19 +2463,24 @@ mod tests {
                                         id: NodeId::UNASSIGNED,
                                         value: "again".into(),
                                         position: None,
+                                        span: None,
                                     }],
                                     position: None,
+                                    span: None,
                                 },
                             ],
                             position: None,
+                            span: None,
                         },
                         Inline::Text {
                             id: NodeId::UNASSIGNED,
                             value: " to her.".into(),
                             position: None,
+                            span: None,
                         },
                     ],
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],
@@ -2534,6 +2546,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
             position: None,
+            span: None,
         }];
         let lines = layout.layout(&inlines, body(), measure, Default::default());
         assert!(lines.len() > 3, "expected several lines: {lines:?}");
@@ -3044,6 +3057,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: "hi Ho".to_string(),
             position: None,
+            span: None,
         }];
         let synthesized =
             LineLayout::new(&bare).layout(&inlines, style, 400.0, LineBreakOptions::default());

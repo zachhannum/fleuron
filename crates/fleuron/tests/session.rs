@@ -20,6 +20,7 @@ fn text(value: &str) -> Inline {
         id: NodeId::UNASSIGNED,
         value: value.into(),
         position: None,
+        span: None,
     }
 }
 
@@ -29,6 +30,7 @@ fn heading(value: &str) -> Block {
         level: HeadingLevel::H1,
         inlines: vec![text(value)],
         position: None,
+        span: None,
     }
 }
 
@@ -37,6 +39,7 @@ fn paragraph(value: &str) -> Block {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(value)],
         position: None,
+        span: None,
     }
 }
 
@@ -56,6 +59,7 @@ fn section(source: &str, tag: &str, paragraphs: usize) -> Section {
             }))
             .collect(),
         position: None,
+        span: None,
     }
 }
 

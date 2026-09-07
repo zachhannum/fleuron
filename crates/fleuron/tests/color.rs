@@ -46,6 +46,7 @@ fn text(value: &str) -> Inline {
         id: NodeId::UNASSIGNED,
         value: value.into(),
         position: None,
+        span: None,
     }
 }
 
@@ -64,6 +65,7 @@ fn fixture() -> Book {
                     level: HeadingLevel::H1,
                     inlines: vec![text("The Quay")],
                     position: None,
+                    span: None,
                 },
                 Block::Paragraph {
                     id: NodeId::UNASSIGNED,
@@ -73,13 +75,16 @@ fn fixture() -> Book {
                             id: NodeId::UNASSIGNED,
                             children: vec![text("harbour lights")],
                             position: None,
+                            span: None,
                         },
                         text(" went out."),
                     ],
                     position: None,
+                    span: None,
                 },
             ],
             position: None,
+            span: None,
         }],
     };
     book.assign_node_ids();
@@ -113,10 +118,13 @@ fn hyphenated() -> Book {
                          the incomprehensible correspondence.",
                     )],
                     position: None,
+                    span: None,
                 }],
                 position: None,
+                span: None,
             }],
             position: None,
+            span: None,
         }],
     };
     book.assign_node_ids();

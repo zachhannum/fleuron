@@ -862,6 +862,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             value: value.into(),
             position: None,
+            span: None,
         }
     }
 
@@ -880,6 +881,7 @@ mod tests {
                         level: HeadingLevel::H1,
                         inlines: vec![text("Chapter One")],
                         position: None,
+                        span: None,
                     },
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
@@ -888,15 +890,18 @@ mod tests {
                                 id: NodeId::UNASSIGNED,
                                 children: vec![text("In which")],
                                 position: None,
+                                span: None,
                             },
                             text(" a drawer is opened."),
                         ],
                         position: None,
+                        span: None,
                     },
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("It was the kind of morning.")],
                         position: None,
+                        span: None,
                     },
                     Block::Blockquote {
                         id: NodeId::UNASSIGNED,
@@ -904,11 +909,14 @@ mod tests {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("\"Nobody's early here.\"")],
                             position: None,
+                            span: None,
                         }],
                         position: None,
+                        span: None,
                     },
                 ],
                 position: None,
+                span: None,
             }],
         };
         book.assign_node_ids();
@@ -1522,10 +1530,12 @@ mod tests {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("Before the break.")],
                         position: None,
+                        span: None,
                     },
                     Block::ThematicBreak {
                         id: NodeId::UNASSIGNED,
                         position: None,
+                        span: None,
                     },
                     Block::Blockquote {
                         id: NodeId::UNASSIGNED,
@@ -1533,8 +1543,10 @@ mod tests {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("Quoted.")],
                             position: None,
+                            span: None,
                         }],
                         position: None,
+                        span: None,
                     },
                 ],
                 ..Default::default()
@@ -1733,13 +1745,16 @@ mod tests {
                                     id: NodeId::UNASSIGNED,
                                     children: vec![text("again")],
                                     position: None,
+                                    span: None,
                                 },
                             ],
                             position: None,
+                            span: None,
                         },
                         text("."),
                     ],
                     position: None,
+                    span: None,
                 }],
                 ..Default::default()
             }],
