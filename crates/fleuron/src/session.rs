@@ -40,7 +40,9 @@ use crate::images::{Added, Assets};
 use crate::layout::{Fragment, PageInfo, Paginator, Piece, font_table, no_assets};
 use crate::lines::Patterns;
 use crate::pdf::{self, PdfError};
-use crate::style::{ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets};
+use crate::style::{
+    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets,
+};
 use crate::{LayoutOutput, Warning};
 
 /// How many times each stage has run since the session was made.
@@ -998,9 +1000,19 @@ fn hash_geometry(geometry: PageGeometry, h: &mut DefaultHasher) {
         width,
         height,
         margin,
+        columns,
     } = geometry;
     (width.to_bits(), height.to_bits()).hash(h);
     hash_edges(margin, h);
+    let Columns {
+        count,
+        width,
+        gap,
+        rule,
+    } = columns;
+    (count, width.map(f32::to_bits), gap.to_bits()).hash(h);
+    let ColumnRule { style, width } = rule;
+    (style, width.to_bits()).hash(h);
 }
 
 fn hash_edges(edges: Edges, h: &mut DefaultHasher) {

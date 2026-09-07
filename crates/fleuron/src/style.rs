@@ -33,9 +33,10 @@ use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ComputedStyle, Content,
-    CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Length, LineHeight,
-    MarginBox, PageGeometry, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
+    Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, Columns,
+    ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens,
+    Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet, TextAlign, TextJustify,
+    TextTransform,
 };
 pub use sheet::{Origin, Source};
 
@@ -339,10 +340,13 @@ fn resolve_page(
     matching.sort_by_key(|(level, rule)| (*level, rule.specificity()));
 
     let root_size = root.font_size;
+    // `column-gap: normal` is one em of the book's own size, and the
+    // page box is not text, so the em it means is the root's.
     let mut geometry = PageGeometry {
         width: 612.0,
         height: 792.0,
         margin: Edges::all(0.0),
+        columns: Columns::undivided(root_size),
     };
     let mut boxes: BTreeMap<MarginBox, MarginBoxStyle> = BTreeMap::new();
     for (_, rule) in matching {
@@ -361,6 +365,20 @@ fn resolve_page(
                         Edge::Left => geometry.margin.left = points,
                     }
                 }
+                PageDeclaration::ColumnCount(count) => geometry.columns.count = *count,
+                PageDeclaration::ColumnWidth(width) => {
+                    geometry.columns.width =
+                        width.map(|width| width.to_points(root_size, root_size))
+                }
+                PageDeclaration::ColumnGap(gap) => {
+                    geometry.columns.gap = gap
+                        .map(|gap| gap.to_points(root_size, root_size))
+                        .unwrap_or(root_size)
+                }
+                PageDeclaration::ColumnRuleWidth(width) => {
+                    geometry.columns.rule.width = width.to_points(root_size, root_size)
+                }
+                PageDeclaration::ColumnRuleStyle(style) => geometry.columns.rule.style = *style,
             }
         }
         for (which, declarations) in &rule.boxes {

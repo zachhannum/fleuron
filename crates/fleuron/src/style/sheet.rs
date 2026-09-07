@@ -117,6 +117,14 @@ pub enum PageDeclaration {
     /// Trim size in points.
     Size(f32, f32),
     Margin(Edge, Length),
+    /// `column-count`, or `None` for `auto`.
+    ColumnCount(Option<u32>),
+    /// `column-width`, or `None` for `auto`.
+    ColumnWidth(Option<Length>),
+    /// `column-gap`, or `None` for `normal`.
+    ColumnGap(Option<Length>),
+    ColumnRuleWidth(Length),
+    ColumnRuleStyle(BorderStyle),
 }
 
 /// A declaration inside a page margin box.
@@ -977,21 +985,21 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "break-before",
         inherited: false,
-        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        syntax: "auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso",
         examples: &["recto"],
         read: |name, input| longhand(name, input, break_value, Declaration::BreakBefore),
     },
     Spec {
         name: "break-after",
         inherited: false,
-        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        syntax: "auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso",
         examples: &["avoid"],
         read: |name, input| longhand(name, input, break_value, Declaration::BreakAfter),
     },
     Spec {
         name: "break-inside",
         inherited: false,
-        syntax: "auto | avoid | avoid-page | page | always | left | right | recto | verso",
+        syntax: "auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso",
         examples: &["avoid"],
         read: |name, input| longhand(name, input, break_value, Declaration::BreakInside),
     },
@@ -1141,6 +1149,51 @@ fn line_style(input: &mut Parser<'_, '_>) -> Option<BorderStyle> {
         "solid" => Some(BorderStyle::Solid),
         _ => None,
     }
+}
+
+/// `column-count`: how many columns, or `auto` for as many as
+/// `column-width` allows.
+fn column_count(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    let count = input.expect_integer().ok()?;
+    (count >= 1).then_some(Some(count as u32))
+}
+
+/// `column-width`: the width a column would rather have, or `auto`
+/// for whatever `column-count` divides the box into.
+fn column_width(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    auto_or(input, length)
+}
+
+/// `column-gap`: the gutter, or `normal`, which is one em of the
+/// book's own size.
+fn column_gap(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("normal"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    length(input).map(Some)
+}
+
+/// A value that may be written `auto`.
+fn auto_or<T>(
+    input: &mut Parser<'_, '_>,
+    parse: fn(&mut Parser<'_, '_>) -> Option<T>,
+) -> Option<Option<T>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    parse(input).map(Some)
 }
 
 /// A colour written where a longhand takes one, which never means
@@ -1351,7 +1404,8 @@ fn break_value(input: &mut Parser<'_, '_>) -> Option<Break> {
     let keyword = input.expect_ident().ok()?.clone();
     match_ignore_ascii_case! { &keyword,
         "auto" => Some(Break::Auto),
-        "avoid" | "avoid-page" => Some(Break::Avoid),
+        "avoid" | "avoid-page" | "avoid-column" => Some(Break::Avoid),
+        "column" => Some(Break::Column),
         "page" | "always" => Some(Break::Page),
         "left" | "verso" => Some(Break::Side(Side::Verso)),
         "right" | "recto" => Some(Break::Side(Side::Recto)),
@@ -1510,6 +1564,41 @@ pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
                 PageDeclaration::Margin(Edge::Left, length)
             })
         },
+    },
+    Spec {
+        name: "column-count",
+        inherited: false,
+        syntax: "auto | <integer>",
+        examples: &["auto", "2"],
+        read: |name, input| longhand(name, input, column_count, PageDeclaration::ColumnCount),
+    },
+    Spec {
+        name: "column-width",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "160pt"],
+        read: |name, input| longhand(name, input, column_width, PageDeclaration::ColumnWidth),
+    },
+    Spec {
+        name: "column-gap",
+        inherited: false,
+        syntax: "normal | <length>",
+        examples: &["normal", "18pt"],
+        read: |name, input| longhand(name, input, column_gap, PageDeclaration::ColumnGap),
+    },
+    Spec {
+        name: "column-rule-width",
+        inherited: false,
+        syntax: "<length> | thin | medium | thick",
+        examples: &["0.5pt", "thin", "medium", "thick"],
+        read: |name, input| longhand(name, input, line_width, PageDeclaration::ColumnRuleWidth),
+    },
+    Spec {
+        name: "column-rule-style",
+        inherited: false,
+        syntax: "none | solid",
+        examples: &["none", "solid"],
+        read: |name, input| longhand(name, input, line_style, PageDeclaration::ColumnRuleStyle),
     },
 ];
 
