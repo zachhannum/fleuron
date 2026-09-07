@@ -2066,6 +2066,61 @@ mod tests {
         assert_orphans_and_widows_over(&columns, "column", 2, 2);
     }
 
+    /// `break-inside: avoid` holds inside a column: a quotation the
+    /// rest of a column cannot take moves whole into the next one
+    /// rather than splitting across the gutter.
+    #[test]
+    fn break_inside_avoid_keeps_a_block_in_one_column() {
+        let blocks: Vec<Block> = (0..12)
+            .flat_map(|index| {
+                let quoted = format!("q{index:02}");
+                [
+                    paragraph(&vec![format!("p{index:02}"); (5 + index % 7) * 18].join(" ")),
+                    quote(vec![paragraph(&vec![quoted; 30].join(" "))]),
+                ]
+            })
+            .collect();
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} blockquote {{ break-inside: avoid }}"),
+            vec![section(blocks)],
+        );
+        let mut seen: BTreeMap<String, Vec<(u32, usize)>> = BTreeMap::new();
+        for page in &pages {
+            let geometry = page_geometry(TWO_COLUMNS, page);
+            for (column, lines) in tagged_columns(page, geometry).iter().enumerate() {
+                for token in lines.iter().filter(|token| token.starts_with('q')) {
+                    let at = (page.number, column);
+                    let places = seen.entry(token.clone()).or_default();
+                    if places.last() != Some(&at) {
+                        places.push(at);
+                    }
+                }
+            }
+        }
+        assert!(seen.len() >= 8, "only {} quotations to check", seen.len());
+        for (token, places) in &seen {
+            assert_eq!(
+                places.len(),
+                1,
+                "{token} is set over {places:?} rather than in one column",
+            );
+        }
+    }
+
+    /// `break-after: column` closes the column under the block that
+    /// asks for it, and what follows opens the next one.
+    #[test]
+    fn break_after_column_closes_the_column_under_it() {
+        let pages = paginate_styled(
+            &format!("{TWO_COLUMNS} h1 {{ break-after: column }}"),
+            vec![section(vec![heading("Opening"), prose(), prose()])],
+        );
+        assert_eq!(pages.len(), 1);
+        let columns = tagged_columns(&pages[0], page_geometry(TWO_COLUMNS, &pages[0]));
+        assert_eq!(columns[0], vec!["Opening".to_string()]);
+        assert!(!columns[1].is_empty(), "the prose opens the second column");
+    }
+
     /// A rule paints down the gutter, centred in it, from the top of
     /// the content box to the foot of the columns it divides.
     #[test]

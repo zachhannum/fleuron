@@ -963,6 +963,59 @@ mod tests {
         assert_eq!(folio.style.line_height, 1.4);
     }
 
+    /// The column properties resolve to points against the page's
+    /// content box: a count divides it, a width takes as many columns
+    /// of that width as fit, the two together take the smaller
+    /// answer, and `normal` is one em of the book's own size.
+    #[test]
+    fn columns_divide_the_content_box() {
+        let book = sample();
+        let page = |css: &str| {
+            compile(&book, css)
+                .page(PageQuery {
+                    name: Some("chapter"),
+                    situation: Situation::Body(Side::Recto),
+                })
+                .geometry
+        };
+
+        let plain = page("");
+        assert_eq!(plain.column_count(), 1);
+        assert_eq!(plain.measure(), 336.0);
+        assert_eq!(plain.columns.gap, compile(&book, "").root().font_size);
+
+        let two = page("@page { column-count: 2; column-gap: 16pt }");
+        assert_eq!(two.column_count(), 2);
+        assert_eq!(two.measure(), 160.0);
+        assert_eq!(two.column_origin(0), (54.0, 54.0));
+        assert_eq!(two.column_origin(1), (230.0, 54.0));
+
+        // 336 points of content box takes three 100pt columns with
+        // 16pt gutters between them, and the columns widen to fill
+        // what is left over.
+        let by_width = page("@page { column-width: 100pt; column-gap: 16pt }");
+        assert_eq!(by_width.column_count(), 3);
+        assert_eq!(by_width.measure(), (336.0 - 32.0) / 3.0);
+
+        // A count declared beside a width is the ceiling on it.
+        let both = page("@page { column-count: 2; column-width: 100pt; column-gap: 16pt }");
+        assert_eq!(both.column_count(), 2);
+
+        // A width nothing fits still leaves one column.
+        assert_eq!(page("@page { column-width: 900pt }").column_count(), 1);
+
+        let ruled = page("@page { column-count: 2; column-rule-style: solid }");
+        assert_eq!(ruled.columns.rule.used(), crate::style::Border::NONE.width);
+        assert_eq!(
+            page("@page { column-rule-width: thin }")
+                .columns
+                .rule
+                .used(),
+            0.0,
+            "a rule with no style is not drawn",
+        );
+    }
+
     /// Selectors run against the content tree: type, descendant,
     /// child, `:first-child` and `:is()` all pick out the elements a
     /// reader of the markdown would expect.
