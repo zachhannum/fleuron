@@ -3,7 +3,7 @@
 
 use fleuron::content::{Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use fleuron::lines::{FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
 use fleuron::style::{FontVariantCaps, TextTransform};
 use proptest::prelude::*;
 
@@ -337,6 +337,43 @@ proptest! {
             prop_assert!(
                 (width - measure).abs() < 0.01,
                 "justified tracked line {i} is {width}pt, measure {measure}pt"
+            );
+        }
+    }
+
+    /// A first-line style is deterministic and fits the measure, two
+    /// runs of the breaker and all. What the opening line is set in
+    /// is a function of the style and the text, not of how many times
+    /// a paragraph was broken.
+    #[test]
+    fn a_first_line_style_is_deterministic_and_fits_the_measure(
+        text in text_strategy(),
+        measure in 20.0f32..300.0,
+        letter_spacing in 0.0f32..1.5,
+    ) {
+        let layout = LineLayout::new(registry());
+        let first_line = Some(FirstLine {
+            size: Some(body().size * 1.4),
+            letter_spacing: Some(letter_spacing),
+            caps: Some(FontVariantCaps::SmallCaps),
+            transform: Some(TextTransform::Uppercase),
+            color: None,
+        });
+        let broken = || layout.layout_styled(
+            &inlines_of(&text),
+            body(),
+            &fleuron::lines::Inherited,
+            measure,
+            LineBreakOptions::default(),
+            first_line,
+        );
+        let lines = broken();
+        prop_assert_eq!(lines.clone(), broken());
+        for (i, line) in lines.iter().enumerate() {
+            let width = width_pt(line);
+            prop_assert!(
+                width <= measure || is_single_word(line),
+                "line {} is {}pt, measure {}pt", i, width, measure
             );
         }
     }

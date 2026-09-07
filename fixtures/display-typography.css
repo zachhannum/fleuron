@@ -55,6 +55,14 @@ h3 {
   text-align: center;
 }
 
+/* The line the chapter opens on, in the face's own small capitals.
+   The line is the one the paragraph breaks to, so the paragraph is
+   broken twice: once to find where the opening line ends and once
+   with the small capitals set that far. */
+h3 + p::first-line {
+  font-variant-caps: small-caps;
+}
+
 /* Tracking on running text, which is where the measure has to take
    it in: every line breaks against the advance the tracking added. */
 p {
