@@ -101,6 +101,39 @@ pub struct ParagraphStyle {
     pub color: Color,
 }
 
+/// What `::first-line` changes about the paragraph it opens.
+///
+/// A field is set where the pseudo-element's style differs from the
+/// element's own, so the overlay reaches an emphasis or a link on the
+/// opening line without flattening the rest of its style.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FirstLine {
+    /// `font-size`, in points.
+    pub size: Option<f32>,
+    /// `letter-spacing`, in points.
+    pub letter_spacing: Option<f32>,
+    /// `font-variant-caps`.
+    pub caps: Option<FontVariantCaps>,
+    /// `text-transform`.
+    pub transform: Option<TextTransform>,
+    /// `color`.
+    pub color: Option<Color>,
+}
+
+impl FirstLine {
+    /// The style one run of the opening line is set in.
+    pub fn over(&self, style: ParagraphStyle) -> ParagraphStyle {
+        ParagraphStyle {
+            size: self.size.unwrap_or(style.size),
+            letter_spacing: self.letter_spacing.unwrap_or(style.letter_spacing),
+            caps: self.caps.unwrap_or(style.caps),
+            transform: self.transform.unwrap_or(style.transform),
+            color: self.color.unwrap_or(style.color),
+            ..style
+        }
+    }
+}
+
 /// Where line layout gets the style of one inline node.
 ///
 /// The style tree answers by node id. `Inherited` answers with the
@@ -375,6 +408,18 @@ struct Span {
     range: Range<usize>,
 }
 
+impl Span {
+    /// Whether two spans are set the same way, the text they cover
+    /// aside.
+    fn same_style(&self, other: &Span) -> bool {
+        self.font_id == other.font_id
+            && self.size == other.size
+            && self.tracking == other.tracking
+            && self.features == other.features
+            && self.color == other.color
+    }
+}
+
 /// How a span gets its small capitals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SmallCaps {
@@ -506,7 +551,7 @@ impl FlatParagraph {
         if start >= self.text.len() {
             return;
         }
-        self.spans.push(Span {
+        let span = Span {
             font_id: style.font_id,
             size: if small {
                 style.size * SMALL_CAPS_RATIO
@@ -519,7 +564,27 @@ impl FlatParagraph {
             },
             color: style.color,
             range: start..self.text.len(),
-        });
+        };
+        self.spans.push(span);
+    }
+
+    /// Joins the spans from `from` on where two adjacent ones are set
+    /// the same way. Text written a character at a time is one run of
+    /// one style as much as text written in a stretch, and a run
+    /// shapes as a whole: kerning and ligatures do not reach across a
+    /// span.
+    fn merge_from(&mut self, from: usize) {
+        let mut at = from.max(1);
+        while at < self.spans.len() {
+            let joins = self.spans[at - 1].range.end == self.spans[at].range.start
+                && self.spans[at - 1].same_style(&self.spans[at]);
+            if joins {
+                self.spans[at - 1].range.end = self.spans[at].range.end;
+                self.spans.remove(at);
+            } else {
+                at += 1;
+            }
+        }
     }
 }
 
@@ -720,10 +785,11 @@ impl<'a> LineLayout<'a> {
         measure: impl Into<Measure>,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        self.layout_styled(inlines, style, &Inherited, measure, options)
+        self.layout_styled(inlines, style, &Inherited, measure, options, None)
     }
 
-    /// The same, with the style tree answering for each inline.
+    /// The same, with the style tree answering for each inline and
+    /// `first_line` styling the line the paragraph opens on.
     pub fn layout_styled(
         &self,
         inlines: &[Inline],
@@ -731,14 +797,78 @@ impl<'a> LineLayout<'a> {
         styles: &dyn InlineStyles,
         measure: impl Into<Measure>,
         options: LineBreakOptions,
+        first_line: Option<FirstLine>,
     ) -> Vec<Line> {
-        let measure = measure.into();
-        let flat = self.flatten(inlines, style, styles);
+        self.broken(inlines, style, styles, measure.into(), options, first_line)
+            .0
+    }
+
+    /// Breaks one paragraph, and how many times the breaker ran.
+    ///
+    /// A first-line style takes two runs. What it sets changes the
+    /// width of the opening run, the width moves where the paragraph
+    /// breaks, and the break decides how much text the opening line
+    /// holds. The first run styles the paragraph's leading run to its
+    /// end and breaks the whole of it; the second styles as far as
+    /// the extent that break gave and breaks again. The count is
+    /// fixed at two whether or not the runs agree, because a line
+    /// count that depended on how long a paragraph took to settle
+    /// would not be deterministic.
+    fn broken(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        measure: Measure,
+        options: LineBreakOptions,
+        first_line: Option<FirstLine>,
+    ) -> (Vec<Line>, u8) {
+        let Some(first_line) = first_line else {
+            return (
+                self.break_once(inlines, style, styles, measure, options, None)
+                    .0,
+                1,
+            );
+        };
+        let (_, extent) = self.break_once(
+            inlines,
+            style,
+            styles,
+            measure,
+            options,
+            Some((first_line, usize::MAX)),
+        );
+        let (lines, _) = self.break_once(
+            inlines,
+            style,
+            styles,
+            measure,
+            options,
+            Some((first_line, extent)),
+        );
+        (lines, 2)
+    }
+
+    /// One run of the breaker: the paragraph's lines, and where the
+    /// first of them ended in the shaped text.
+    ///
+    /// `first` is the opening style and how far it reaches, in bytes
+    /// of that text.
+    fn break_once(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        measure: Measure,
+        options: LineBreakOptions,
+        first: Option<(FirstLine, usize)>,
+    ) -> (Vec<Line>, usize) {
+        let flat = self.flatten(inlines, style, styles, first);
         if flat.text.is_empty() {
-            return Vec::new();
+            return (Vec::new(), 0);
         }
         let Some(metrics) = self.registry.metrics(style.font_id) else {
-            return Vec::new();
+            return (Vec::new(), 0);
         };
         let upem = metrics.units_per_em as f32;
         // Points → font units: measure / size gives ems, ems *
@@ -760,6 +890,7 @@ impl<'a> LineLayout<'a> {
         };
 
         let mut lines = Vec::new();
+        let mut extent = 0usize;
         let mut start = 0usize;
         for fit in breaker.run() {
             let at = &breaks[fit.at];
@@ -771,11 +902,14 @@ impl<'a> LineLayout<'a> {
                 }
                 line.overhang = to_points(fit.overhang);
                 line.protrusion = to_points(fit.protrusion);
+                if lines.is_empty() {
+                    extent = at.content_end;
+                }
                 lines.push(line);
             }
             start = at.next;
         }
-        lines
+        (lines, extent)
     }
 
     /// One string as shaped runs, set the way `style` asks for it.
@@ -797,9 +931,10 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
+        first: Option<(FirstLine, usize)>,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
-        self.walk_inlines(inlines, style, styles, &mut flat);
+        self.walk_inlines(inlines, style, styles, first, &mut flat);
         flat
     }
 
@@ -808,24 +943,58 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
+        first: Option<(FirstLine, usize)>,
         flat: &mut FlatParagraph,
     ) {
         for inline in inlines {
             match inline {
-                Inline::Text { value, .. } => {
-                    flat.push_styled(value, style, self.small_caps(style))
-                }
+                Inline::Text { value, .. } => self.push_text(flat, value, style, first),
                 Inline::Code { id, value, .. } => {
-                    let code = styles.style(*id, style);
-                    flat.push_styled(value, code, self.small_caps(code));
+                    self.push_text(flat, value, styles.style(*id, style), first)
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
-                    self.walk_inlines(children, styles.style(*id, style), styles, flat);
+                    self.walk_inlines(children, styles.style(*id, style), styles, first, flat);
                 }
             }
         }
+    }
+
+    /// Appends one stretch of text, in the opening style as far as it
+    /// reaches and in `style` after that.
+    ///
+    /// The switch is on the length of the shaped text, which is what
+    /// the extent a break gave is written in. Where the opening style
+    /// still applies the text goes in a character at a time, so the
+    /// switch can fall inside a word; the spans it writes merge back
+    /// into one, and the whole of the opening line shapes together.
+    fn push_text(
+        &self,
+        flat: &mut FlatParagraph,
+        value: &str,
+        style: ParagraphStyle,
+        first: Option<(FirstLine, usize)>,
+    ) {
+        let (opening, extent) = match first {
+            Some((first_line, extent)) if flat.text.len() < extent => {
+                (first_line.over(style), extent)
+            }
+            _ => {
+                flat.push_styled(value, style, self.small_caps(style));
+                return;
+            }
+        };
+        let (opening_caps, caps) = (self.small_caps(opening), self.small_caps(style));
+        let from = flat.spans.len();
+        for (at, letter) in value.char_indices() {
+            if flat.text.len() >= extent {
+                flat.push_styled(&value[at..], style, caps);
+                break;
+            }
+            flat.push_styled(&value[at..at + letter.len_utf8()], opening, opening_caps);
+        }
+        flat.merge_from(from);
     }
 
     /// Where a style's small capitals come from: the face's own where
@@ -2100,6 +2269,7 @@ mod tests {
             &styles,
             400.0,
             Default::default(),
+            None,
         );
         assert_eq!(lines.len(), 1);
         let runs: Vec<(u16, &str)> = lines[0]

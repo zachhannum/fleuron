@@ -723,6 +723,10 @@ impl Builder<'_, '_> {
             },
             None => Measure::uniform(measure),
         };
+        // Where a drop cap and a first line meet, the initial is
+        // already out of the inlines below, so `::first-letter` has
+        // it and `::first-line` styles what is left beside the cap.
+        let first_line = self.styles().opening_line(id);
         let lines = self.paginator.lines.layout_styled(
             match &cap {
                 Some((_, rest)) => rest,
@@ -732,6 +736,7 @@ impl Builder<'_, '_> {
             self.styles(),
             spec,
             options,
+            first_line,
         );
 
         let count = lines.len();

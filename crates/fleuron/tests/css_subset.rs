@@ -111,6 +111,15 @@ fn every_listed_property_parses_a_value_the_description_names() {
     for selector in listed {
         parses(&rule(&selector.example, "color: black"));
     }
+    for name in &subset.selectors.first_line_properties {
+        let property = subset
+            .properties
+            .iter()
+            .find(|property| &property.name == name)
+            .unwrap_or_else(|| panic!("`{name}` is not a property of the description"));
+        accepts_property("p::first-line", property);
+    }
+
     assert!(subset.declaration.contains("!important?"));
     parses(&rule("p", "color: black !important"));
 
@@ -180,6 +189,21 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
     warns_at_line_two(&rule("@page", "font-size: 10pt"), "font-size");
     warns_at_line_two(&rule("@font-face", "size: a4"), "size");
 
+    for property in &subset.properties {
+        if subset
+            .selectors
+            .first_line_properties
+            .contains(&property.name)
+        {
+            continue;
+        }
+        let example = property.examples.first().expect("a value that parses");
+        warns_at_line_two(
+            &rule("p::first-line", &format!("{}: {example}", property.name)),
+            &property.name,
+        );
+    }
+
     warns_at_line_two(&rule("p", "font-size: bigger"), "font-size");
     warns_at_line_two(&rule("p", "margin-top: 1vw"), "margin-top");
     warns_at_line_two(&rule("p", "color: transparent"), "color");
@@ -198,7 +222,6 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ":focus",
         ":lang(en)",
         ":dir(ltr)",
-        "::first-line",
         "::before",
         "::after",
     ] {
@@ -390,7 +413,11 @@ fn selectors(subset: &Subset) -> String {
             selectors.list.name,
             selectors.list.example
         ),
-        format!("The pseudo-element {}.", list(&pseudo_elements)),
+        format!("The pseudo-elements are {}.", list(&pseudo_elements)),
+        format!(
+            "`::first-line` takes {}.",
+            list(&selectors.first_line_properties)
+        ),
     ]
     .join("\n\n")
 }

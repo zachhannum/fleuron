@@ -794,6 +794,30 @@ impl ComputedStyle {
         }
     }
 
+    /// What this style, computed for `::first-line`, changes about
+    /// the element it was computed beside.
+    pub fn first_line_over(&self, element: &ComputedStyle) -> crate::lines::FirstLine {
+        fn set<T>(differs: bool, value: T) -> Option<T> {
+            differs.then_some(value)
+        }
+        crate::lines::FirstLine {
+            size: set(self.font_size != element.font_size, self.font_size),
+            letter_spacing: set(
+                self.letter_spacing != element.letter_spacing,
+                self.letter_spacing,
+            ),
+            caps: set(
+                self.font_variant_caps != element.font_variant_caps,
+                self.font_variant_caps,
+            ),
+            transform: set(
+                self.text_transform != element.text_transform,
+                self.text_transform,
+            ),
+            color: set(self.color != element.color, self.color),
+        }
+    }
+
     /// Everything line layout needs from a style.
     pub fn paragraph(&self) -> crate::lines::ParagraphStyle {
         crate::lines::ParagraphStyle {
