@@ -43,7 +43,7 @@ See the [content tree](reference/content-tree.md) for a reference of the AST the
 ## Scope
 
 `fleuron` handles book-shaped documents: flowing prose with headings, block quotes, scene breaks, 
-drop caps, images, running heads, footnotes, and page furniture like recto and verso, page counters and named pages.
+drop caps, images, running heads, footnotes, multi-column pages, and page furniture like recto and verso, page counters and named pages.
 
 While it uses CSS to describe the intended formatting, `fleuron` is not a browser engine.
 
