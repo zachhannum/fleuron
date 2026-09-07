@@ -18,9 +18,9 @@ use serde::{Deserialize, Serialize};
 use crate::style::element::ELEMENTS;
 use crate::style::properties::{CounterStyle, MarginBox};
 use crate::style::sheet::{
-    COMBINATORS, COMPOUNDS, DECLARATION, FONT_FACE_DESCRIPTORS, MARGIN_BOX_PROPERTIES, NAMED,
-    PAGE_PROPERTIES, PAGE_SELECTORS, PAGE_SIZES, PROPERTIES, PSEUDO_CLASSES, PSEUDO_ELEMENTS,
-    SELECTOR_LIST, Spec, UNITS,
+    COMBINATORS, COMPOUNDS, DECLARATION, FIRST_LINE_PROPERTIES, FONT_FACE_DESCRIPTORS,
+    MARGIN_BOX_PROPERTIES, NAMED, PAGE_PROPERTIES, PAGE_SELECTORS, PAGE_SIZES, PROPERTIES,
+    PSEUDO_CLASSES, PSEUDO_ELEMENTS, SELECTOR_LIST, Spec, UNITS,
 };
 
 /// What the engine accepts, from the version that produced it.
@@ -59,6 +59,9 @@ pub struct Selectors {
     pub pseudo_classes: Vec<Selector>,
     /// The pseudo-elements.
     pub pseudo_elements: Vec<Selector>,
+    /// The properties `::first-line` takes, out of the properties a
+    /// style rule may declare.
+    pub first_line_properties: Vec<String>,
 }
 
 /// One piece of selector syntax, with a selector that uses it.
@@ -164,6 +167,7 @@ impl Subset {
                 },
                 pseudo_classes: selectors(PSEUDO_CLASSES),
                 pseudo_elements: selectors(PSEUDO_ELEMENTS),
+                first_line_properties: strings(FIRST_LINE_PROPERTIES),
             },
             declaration: DECLARATION.to_string(),
             properties: properties(PROPERTIES),

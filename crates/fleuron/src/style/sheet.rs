@@ -163,6 +163,7 @@ pub struct Sheet {
 #[derive(Debug, Clone)]
 pub enum StyleError<'i> {
     UnsupportedProperty(CowRcStr<'i>),
+    NotOnFirstLine(CowRcStr<'i>),
     UnsupportedValue(CowRcStr<'i>),
     UnsupportedAtRule(CowRcStr<'i>),
     UnsupportedPageSelector,
@@ -235,6 +236,9 @@ pub fn warning(sheet: &str, error: &ParseError<'_, StyleError<'_>>) -> Warning {
         ParseErrorKind::Custom(StyleError::UnsupportedProperty(name)) => {
             format!("unsupported property `{name}`")
         }
+        ParseErrorKind::Custom(StyleError::NotOnFirstLine(name)) => {
+            format!("unsupported property `{name}` on `::first-line`")
+        }
         ParseErrorKind::Custom(StyleError::UnsupportedValue(name)) => {
             format!("unsupported value for `{name}`")
         }
@@ -282,7 +286,11 @@ impl<'i> QualifiedRuleParser<'i> for TopLevel {
         _start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-        let (declarations, warnings) = declarations(input, &self.name);
+        let first_line = selectors
+            .slice()
+            .iter()
+            .all(|selector| selector.pseudo_element() == Some(&PseudoElement::FirstLine));
+        let (declarations, warnings) = declarations(input, &self.name, first_line);
         self.warnings.extend(warnings);
         Ok(Rule::Style(StyleRule {
             selectors,
@@ -408,6 +416,7 @@ impl<'i> selectors::Parser<'i> for Selectors {
     ) -> Result<PseudoElement, ParseError<'i, StyleError<'i>>> {
         match_ignore_ascii_case! { &name,
             "first-letter" => Ok(PseudoElement::FirstLetter),
+            "first-line" => Ok(PseudoElement::FirstLine),
             _ => Err(location.new_custom_error(
                 SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.clone()),
             )),
@@ -416,12 +425,14 @@ impl<'i> selectors::Parser<'i> for Selectors {
 }
 
 /// Every declaration in one style-rule body, plus a warning for each
-/// one that fell outside the subset.
+/// one that fell outside the subset. `first_line` narrows the subset
+/// to what `::first-line` takes.
 fn declarations(
     input: &mut Parser<'_, '_>,
     sheet: &str,
+    first_line: bool,
 ) -> (Vec<(Declaration, Importance)>, Vec<Warning>) {
-    let mut properties = Properties;
+    let mut properties = Properties { first_line };
     let mut kept = Vec::new();
     let mut warnings = Vec::new();
     for result in RuleBodyParser::new(input, &mut properties) {
@@ -452,7 +463,10 @@ fn at<'i: 't, 't, T>(
 }
 
 /// The declaration parser for style rules.
-struct Properties;
+struct Properties {
+    /// Whether the rule this body belongs to selects `::first-line`.
+    first_line: bool,
+}
 
 /// What one declaration expands to: a shorthand is several longhands.
 type Longhands = (Vec<Declaration>, Importance);
@@ -468,6 +482,9 @@ impl<'i> DeclarationParser<'i> for Properties {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
+            if self.first_line && !FIRST_LINE_PROPERTIES.contains(&&*name.to_ascii_lowercase()) {
+                return Err(input.new_custom_error(StyleError::NotOnFirstLine(name.clone())));
+            }
             let declarations = property(&name, input)?;
             let importance = if input.try_parse(cssparser::parse_important).is_ok() {
                 Importance::Important
@@ -1339,7 +1356,21 @@ pub(crate) const COMBINATORS: &[(&str, &str)] = &[
 
 /// The pseudo-elements, as they are written, with one use of each
 /// that parses.
-pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[("::first-letter", "p::first-letter")];
+pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[
+    ("::first-letter", "p::first-letter"),
+    ("::first-line", "p::first-line"),
+];
+
+/// What `::first-line` takes. Everything but `color` changes the
+/// width of the shaped run, which is what the second breaking pass is
+/// for; `color` is paint alone and breaks the same either way.
+pub(crate) const FIRST_LINE_PROPERTIES: &[&str] = &[
+    "color",
+    "font-size",
+    "font-variant-caps",
+    "letter-spacing",
+    "text-transform",
+];
 
 /// The body of one `@page` rule: page declarations and margin boxes.
 struct PageBody {

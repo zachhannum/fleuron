@@ -916,6 +916,45 @@ mod tests {
         );
     }
 
+    /// A first line transformed is drawn in the letters the transform
+    /// asked for and read back in the ones the author wrote, and the
+    /// rest of the paragraph is untouched.
+    #[test]
+    fn a_transformed_first_line_extracts_as_it_was_written() {
+        let book = book(&"my father had a small estate in nottinghamshire ".repeat(6));
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "author.css",
+            "p::first-line { text-transform: uppercase }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let drawn: Vec<(String, String)> = output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .filter_map(|item| match item {
+                DrawItem::Text { text, source, .. } => Some((text.clone(), source.clone())),
+                _ => None,
+            })
+            .collect();
+        let (opening, written) = drawn.first().expect("the book set a line");
+        assert_eq!(opening, &opening.to_uppercase());
+        assert_eq!(written, &written.to_lowercase());
+        assert_eq!(opening, &written.to_uppercase());
+        assert!(
+            drawn[1..]
+                .iter()
+                .all(|(text, source)| text == &text.to_lowercase() && source.is_empty()),
+            "the transform ran past the first line",
+        );
+
+        let pdf = readable(&output, &Metadata::default());
+        assert!(
+            pdf.contains("<006D>"),
+            "the ToUnicode map does not send the capitals to the source:\n{pdf}",
+        );
+    }
+
     /// The file is structurally whole — header, page tree, cross
     /// reference, trailer — which is what `qpdf --check` reads.
     #[test]

@@ -229,8 +229,9 @@ fn running_heads_and_roman_folios_reach_the_pdf() {
 }
 
 /// The display-typography book: a title transformed to capitals, a
-/// chapter title in the face's own small capitals, a small-capital
-/// running head and tracking throughout, all through the CLI.
+/// chapter title and a chapter's opening line in the face's own small
+/// capitals, a small-capital running head and tracking throughout,
+/// all through the CLI.
 ///
 /// What a PDF can be asked is what a reader gets back, and what a
 /// reader gets back is the manuscript: the transform and the small
@@ -269,6 +270,7 @@ fn the_display_typography_book_extracts_as_it_was_written() {
     for written in [
         "A Voyage to Lilliput",
         "The Author Gives Some Account of Himself",
+        "My father had a small estate in Nottinghamshire",
     ] {
         assert!(
             squeeze(&text).contains(&squeeze(written)),

@@ -55,6 +55,12 @@ h3 {
   text-align: center;
 }
 
+/* The chapter's opening line, in the face's own small capitals: the
+   pseudo-element on the page the two painters compare. */
+h3 + p::first-line {
+  font-variant-caps: small-caps;
+}
+
 /* Tracking on running text, which is where the measure has to take
    it in: every line breaks against the advance the tracking added. */
 p {

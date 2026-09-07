@@ -29,7 +29,7 @@ use serde::Serialize;
 use crate::Warning;
 use crate::content::{Book, NodeId};
 use crate::fonts::{FaceAttributes, FontRegistry, FontSource};
-use crate::lines::{InlineStyles, ParagraphStyle};
+use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
@@ -80,6 +80,10 @@ pub struct NodeStyle {
     /// when a rule named one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_letter: Option<u32>,
+    /// Index of the style `::first-line` computed for this node, when
+    /// a rule named one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_line: Option<u32>,
 }
 
 /// The situation a page finds itself in, which is what `@page`
@@ -174,6 +178,9 @@ pub struct StyleTree {
     /// `::first-letter` style index by raw node id, where there is one.
     #[serde(skip)]
     initial_by_node: Vec<Option<u32>>,
+    /// `::first-line` style index by raw node id, where there is one.
+    #[serde(skip)]
+    first_line_by_node: Vec<Option<u32>>,
     warnings: Vec<Warning>,
 }
 
@@ -200,6 +207,20 @@ impl StyleTree {
     pub fn first_letter(&self, id: NodeId) -> Option<&ComputedStyle> {
         let index = (*self.initial_by_node.get(id.get() as usize)?)?;
         Some(&self.styles[index as usize])
+    }
+
+    /// The style `::first-line` computed for one node, when a rule
+    /// named one. Line layout reads it as what the opening line
+    /// changes about the paragraph around it.
+    pub fn first_line(&self, id: NodeId) -> Option<&ComputedStyle> {
+        let index = (*self.first_line_by_node.get(id.get() as usize)?)?;
+        Some(&self.styles[index as usize])
+    }
+
+    /// What `::first-line` changes about one node's own style, which
+    /// is what line layout applies to the opening line.
+    pub fn opening_line(&self, id: NodeId) -> Option<FirstLine> {
+        Some(self.first_line(id)?.first_line_over(self.style(id)))
     }
 
     /// The style of the book itself: the root of inheritance.
@@ -520,6 +541,7 @@ fn cascade(
     let mut nodes = Vec::new();
     let mut computed: Vec<u32> = Vec::with_capacity(elements.nodes().len());
     let mut first_letters: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
+    let mut first_lines: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
     let mut max_id = 0u32;
 
     for (index, node) in elements.nodes().iter().enumerate() {
@@ -538,34 +560,36 @@ fn cascade(
         report(&mut warnings, warning);
         report(&mut warnings, synthesized_small_caps(&style, registry));
 
-        // `::first-letter` cascades over the element's own style, so
-        // it is a second matching pass rather than a second element.
-        let pseudo = applicable(
-            sheets,
-            &elements,
-            index,
-            &mut caches,
-            Some(&PseudoElement::FirstLetter),
-        );
-        let first_letter = (!pseudo.is_empty()).then(|| {
-            let mut initial = style.inherit();
-            apply_all(&mut initial, sheets, &pseudo, style.font_size, root_size);
-            let (font_id, warning) = resolve_face(&initial, registry);
-            initial.font_id = font_id;
-            report(&mut warnings, warning);
-            report(&mut warnings, synthesized_small_caps(&initial, registry));
-            initial
-        });
+        // A pseudo-element cascades over the style of the element it
+        // belongs to, so each is a second matching pass rather than a
+        // second element.
+        let mut pseudo_style = |which, warnings: &mut Vec<Warning>| {
+            let matched = applicable(sheets, &elements, index, &mut caches, Some(which));
+            (!matched.is_empty()).then(|| {
+                let mut pseudo = style.inherit();
+                apply_all(&mut pseudo, sheets, &matched, style.font_size, root_size);
+                let (font_id, warning) = resolve_face(&pseudo, registry);
+                pseudo.font_id = font_id;
+                report(warnings, warning);
+                report(warnings, synthesized_small_caps(&pseudo, registry));
+                pseudo
+            })
+        };
+        let first_letter = pseudo_style(&PseudoElement::FirstLetter, &mut warnings);
+        let first_line = pseudo_style(&PseudoElement::FirstLine, &mut warnings);
 
         let index_of_style = intern(&mut styles, style);
         let index_of_initial = first_letter.map(|initial| intern(&mut styles, initial));
+        let index_of_line = first_line.map(|line| intern(&mut styles, line));
         computed.push(index_of_style);
         first_letters.push(index_of_initial);
+        first_lines.push(index_of_line);
         nodes.push(NodeStyle {
             id: node.id.get(),
             element: node.name,
             style: index_of_style,
             first_letter: index_of_initial,
+            first_line: index_of_line,
         });
         max_id = max_id.max(node.id.get());
     }
@@ -573,9 +597,17 @@ fn cascade(
     let root = computed.first().copied().unwrap_or(0);
     let mut by_node = vec![root; max_id as usize + 1];
     let mut initial_by_node = vec![None; max_id as usize + 1];
-    for ((node, style), initial) in elements.nodes().iter().zip(&computed).zip(&first_letters) {
+    let mut first_line_by_node = vec![None; max_id as usize + 1];
+    for (((node, style), initial), line) in elements
+        .nodes()
+        .iter()
+        .zip(&computed)
+        .zip(&first_letters)
+        .zip(&first_lines)
+    {
         by_node[node.id.get() as usize] = *style;
         initial_by_node[node.id.get() as usize] = *initial;
+        first_line_by_node[node.id.get() as usize] = *line;
     }
     by_node[0] = root;
 
@@ -603,6 +635,7 @@ fn cascade(
         masters,
         by_node,
         initial_by_node,
+        first_line_by_node,
         warnings,
     }
 }
@@ -1478,16 +1511,83 @@ mod tests {
         let book = sample();
         let tree = compile(
             &book,
-            "p::first-line { font-size: 30pt }\np { font-size: 15pt }\n",
+            "p::before { content: \"x\" }\np { font-size: 15pt }\n",
         );
         assert!(
             tree.warnings()
                 .iter()
-                .any(|warning| warning.message == "unsupported selector `:first-line`"),
+                .any(|warning| warning.message == "unsupported selector `:before`"),
             "{:?}",
             tree.warnings(),
         );
         assert_eq!(first(&tree, "p").font_size, 15.0);
+    }
+
+    /// `::first-line` cascades over the element the way
+    /// `::first-letter` does, and what line layout reads back is what
+    /// it changed rather than the whole computed style.
+    #[test]
+    fn first_line_cascades_over_the_element_it_belongs_to() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { font-size: 12pt; color: #112233 }
+             h1 + p::first-line { font-variant-caps: small-caps; letter-spacing: 0.5pt }",
+        );
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let line = tree
+            .first_line(*id)
+            .expect("a rule named the paragraph's first line");
+        assert_eq!(line.font_variant_caps, FontVariantCaps::SmallCaps);
+        assert_eq!(line.font_size, 12.0, "the element's size is inherited");
+        assert_eq!(line.color, first(&tree, "p").color);
+
+        let opening = tree.opening_line(*id).expect("the opening line's overlay");
+        assert_eq!(opening.caps, Some(FontVariantCaps::SmallCaps));
+        assert_eq!(opening.letter_spacing, Some(0.5));
+        assert_eq!(opening.size, None, "nothing the rule left alone is set");
+        assert_eq!(opening.color, None);
+        assert_eq!(opening.transform, None);
+
+        // The element keeps its own style, and the sibling selector
+        // in front of the pseudo-element still has to match.
+        assert_eq!(first(&tree, "p").font_variant_caps, FontVariantCaps::Normal);
+        let Block::Paragraph { id: second, .. } = &book.sections[0].blocks[2] else {
+            panic!("the third block is a paragraph");
+        };
+        assert!(tree.first_line(*second).is_none());
+        assert!(tree.opening_line(*second).is_none());
+    }
+
+    /// `::first-line` takes the properties that change a run's width
+    /// and its colour. Anything else warns naming the property, is
+    /// dropped, and leaves the rest of the rule standing.
+    #[test]
+    fn a_property_outside_the_first_line_set_warns_and_is_dropped() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p::first-line { font-family: monospace; text-transform: uppercase }",
+        );
+        assert!(
+            tree.warnings().iter().any(|warning| {
+                warning.message == "unsupported property `font-family` on `::first-line`"
+            }),
+            "{:?}",
+            tree.warnings(),
+        );
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let opening = tree.opening_line(*id).expect("the opening line's overlay");
+        assert_eq!(opening.transform, Some(TextTransform::Uppercase));
+        assert_eq!(
+            tree.first_line(*id).unwrap().font_id,
+            first(&tree, "p").font_id,
+            "the family the rule asked for was dropped",
+        );
     }
 
     /// A book whose one paragraph nests `strong` inside `em`.

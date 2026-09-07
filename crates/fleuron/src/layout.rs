@@ -723,6 +723,11 @@ impl Builder<'_, '_> {
             },
             None => Measure::uniform(measure),
         };
+        // The initial is already out of the inlines below, so a drop
+        // cap and a first line over the same paragraph divide it:
+        // `::first-letter` has the cap, `::first-line` the rest of
+        // the line beside it.
+        let first_line = self.styles().opening_line(id);
         let lines = self.paginator.lines.layout_styled(
             match &cap {
                 Some((_, rest)) => rest,
@@ -732,6 +737,7 @@ impl Builder<'_, '_> {
             self.styles(),
             spec,
             options,
+            first_line,
         );
 
         let count = lines.len();
@@ -2550,6 +2556,144 @@ mod tests {
             }
         }
         assert_eq!(painted, 23, "every scene break paints exactly once");
+    }
+
+    /// The text runs of one page, grouped by the baseline they share,
+    /// each with whether it was shaped in small capitals.
+    fn small_caps_lines(page: &Page) -> Vec<(f32, Vec<(&str, bool)>)> {
+        let mut lines: Vec<(f32, Vec<(&str, bool)>)> = Vec::new();
+        for item in &page.items {
+            let DrawItem::Text {
+                y,
+                size,
+                text,
+                features,
+                ..
+            } = item
+            else {
+                continue;
+            };
+            if *size == folio_size() {
+                continue;
+            }
+            let run = (text.as_str(), features.small_caps);
+            match lines.last_mut() {
+                Some((baseline, runs)) if (*baseline - y).abs() < 1e-3 => runs.push(run),
+                _ => lines.push((*y, vec![run])),
+            }
+        }
+        lines
+    }
+
+    /// A section of an `h3` and one long paragraph, which is what a
+    /// chapter opening styled through `h3 + p` needs.
+    fn under_h3(prose: &str) -> Vec<Section> {
+        vec![section(vec![
+            Block::Heading {
+                id: NodeId::UNASSIGNED,
+                level: HeadingLevel::H3,
+                inlines: vec![text("A Voyage")],
+                position: None,
+            },
+            paragraph(prose),
+        ])]
+    }
+
+    /// Acceptance: `h3 + p::first-line { font-variant-caps:
+    /// small-caps }` draws the opening line in small capitals and the
+    /// rest of the paragraph in the letters the author wrote. The
+    /// change stops at the break the paragraph came to: the last run
+    /// of the first line is small capitals and the first run of the
+    /// second is not.
+    #[test]
+    fn a_first_line_of_small_capitals_stops_where_the_line_does() {
+        let prose = "my father had a small estate in nottinghamshire ".repeat(6);
+        let pages = paginate_styled(
+            "h3 + p::first-line { font-variant-caps: small-caps }",
+            under_h3(&prose),
+        );
+        let lines = small_caps_lines(&pages[0]);
+        assert!(lines.len() > 3, "not enough lines to break");
+
+        // The heading is the first baseline; the paragraph follows.
+        let opening = &lines[1].1;
+        let next = &lines[2].1;
+        assert!(
+            opening.iter().all(|(_, small)| *small),
+            "the opening line is not all small capitals: {opening:?}",
+        );
+        assert!(
+            next.iter().all(|(_, small)| !*small),
+            "the small capitals ran past the first line: {next:?}",
+        );
+        assert!(
+            lines[3..]
+                .iter()
+                .all(|(_, runs)| runs.iter().all(|(_, small)| !*small)),
+            "the small capitals reached further down the page",
+        );
+
+        // The letters are the ones the author wrote: the face draws
+        // the capitals, the text does not spell them.
+        // A break swallows the space it falls on, so the lines join
+        // back with one between them.
+        let set = lines[1..]
+            .iter()
+            .map(|(_, runs)| runs.iter().map(|(text, _)| *text).collect::<String>())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            prose.starts_with(set.trim_end()),
+            "the paragraph was not set as it was written: {set:?}",
+        );
+    }
+
+    /// Acceptance: a drop cap and a small-capitals first line set
+    /// together. Both fall on the initial and `::first-letter` wins
+    /// it: the cap is the one run set larger and it is not small
+    /// capitals, while the line beside it is.
+    #[test]
+    fn a_drop_cap_takes_the_initial_from_the_first_line() {
+        let prose = "my father had a small estate in nottinghamshire ".repeat(6);
+        let pages = paginate_styled(
+            "h3 + p::first-letter { initial-letter: 3 }
+             h3 + p::first-line { font-variant-caps: small-caps }",
+            under_h3(&prose),
+        );
+        let lines = small_caps_lines(&pages[0]);
+        // The cap is the one run of the paragraph set larger than the
+        // body; the heading above it is larger too.
+        let cap = pages[0]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Text {
+                    size,
+                    text,
+                    features,
+                    ..
+                } if *size > 1.5 * body_size() && text != "A Voyage" => {
+                    Some((text.as_str(), features.small_caps))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            cap,
+            vec![("m", false)],
+            "the initial is not one run of its own, out of the first line's small capitals",
+        );
+
+        let opening: Vec<(&str, bool)> = lines[1]
+            .1
+            .iter()
+            .copied()
+            .filter(|(text, _)| *text != "m")
+            .collect();
+        assert!(
+            !opening.is_empty() && opening.iter().all(|(_, small)| *small),
+            "the line beside the cap is not small capitals: {opening:?}",
+        );
     }
 
     /// Acceptance: a three-line drop cap sits on the third baseline,

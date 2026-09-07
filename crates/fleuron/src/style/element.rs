@@ -93,17 +93,20 @@ impl NonTSPseudoClass for PseudoClass {
 }
 
 /// The pseudo-elements the engine styles: the initial letter a drop
-/// cap is set from, and nothing else.
+/// cap is set from, the line a chapter opens on, and nothing else.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PseudoElement {
     /// `::first-letter`
     FirstLetter,
+    /// `::first-line`
+    FirstLine,
 }
 
 impl ToCss for PseudoElement {
     fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
         match self {
             PseudoElement::FirstLetter => dest.write_str("::first-letter"),
+            PseudoElement::FirstLine => dest.write_str("::first-line"),
         }
     }
 }
