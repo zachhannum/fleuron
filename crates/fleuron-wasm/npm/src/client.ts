@@ -131,7 +131,7 @@ export class Client {
    * The node one byte of one source was read into: the first step of
    * a cursor's way onto a page, since the node it answers with is the
    * one the display structure's runs name. `null` where nothing was
-   * read — a blank line between chapters, a file the book has not
+   * read: a blank line between chapters, or a file the book has not
    * read.
    *
    * A question rather than a render: nothing overtakes it. The answer

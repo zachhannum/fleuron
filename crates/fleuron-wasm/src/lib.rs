@@ -304,7 +304,7 @@ impl Session {
     ///
     /// This is the first step of a cursor's way onto a page: the
     /// node it answers with is the one the display structure's runs
-    /// name. `undefined` where nothing was read — a blank line
+    /// name. `undefined` where nothing was read: a blank line
     /// between chapters, a file the book has not read, a tree the
     /// host built rather than parsed.
     #[wasm_bindgen(js_name = nodeAt)]

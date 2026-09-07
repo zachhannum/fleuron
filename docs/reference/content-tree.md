@@ -37,7 +37,8 @@ The dump, abridged:
             { "type": "emphasis", "children": [{ "type": "text", "value": "Nottinghamshire" }] },
             { "type": "text", "value": "." }
           ],
-          "position": { "line": 7, "column": 1 }
+          "position": { "line": 7, "column": 1 },
+          "span": { "start": 143, "end": 216 }
         }
       ]
     }
@@ -61,10 +62,11 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `title` | A title supplied outside the body, from frontmatter `title:`. Implies heading level 1. |
 | `blocks` | The section's blocks, in reading order. |
 | `position` | Where in `source` the section began. |
+| `span` | The bytes of `source` the section was read from: the heading that opened it to the end of its last block. |
 
 ## Blocks
 
-`type` is the tag. Every block takes an optional `position`.
+`type` is the tag. Every block takes an optional `position` and `span`.
 
 | type | |
 |---|---|
@@ -97,3 +99,18 @@ Call it once, after building the tree. Calling it again renumbers. A [session](.
 `position` is a 1-based line and column into the markdown the frontend read the node out of, exactly as its parser reported them. Paired with the section's `source`, it is what a diagnostic points at: `chapter-01.md:12:3`.
 
 Positions are diagnostic data and never layout input, so a missing one never fails a run. A node with no position degrades to the bare file name, and a node with neither still warns, without a location.
+
+## Where a node was read from
+
+`span` is the other half: the bytes of `source` the node was read from, markup and all. A source and the text of the nodes read from it are different bytes, because markup is not text, so the span is the node's extent rather than a letter-by-letter map. A byte of the file lands on the node written there, not on a letter of it. The node that holds another was read from a stretch that holds its own, and the innermost nodes tile the file, so one byte is one node.
+
+Two questions are answered from it, and they are the two halves of a cursor's way onto a page and back:
+
+| | |
+|---|---|
+| `Book::node_at(source, byte)` | The node one byte of one source was read into, innermost first: a byte of prose answers with the run it was typed into, a byte of markup with the construct it opens, a byte between two blocks with the section around them. |
+| `Book::source_of(node)` | The source a node was read from, and the bytes of it. |
+
+A cursor becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page it is set on. A run under the pointer goes the other way. Only the sections read from the source asked about are looked at, so one file's cursor is answered by one file's nodes.
+
+A node the engine synthesized, or one from a tree built rather than parsed, was read from nothing, and both questions answer with nothing rather than guessing.

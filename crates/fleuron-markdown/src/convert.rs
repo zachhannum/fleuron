@@ -775,7 +775,7 @@ code line
     }
 
     /// Acceptance: a heading, a quotation and a list item answer a
-    /// cursor the way a paragraph does — with the run the byte was
+    /// cursor the way a paragraph does, with the run the byte was
     /// typed into.
     #[test]
     fn a_heading_a_quotation_and_a_list_item_answer_as_prose_does() {

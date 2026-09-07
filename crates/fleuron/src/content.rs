@@ -470,8 +470,9 @@ impl Book {
     ///
     /// Only sections read from that source are looked at, so one
     /// file's cursor is answered by one file's nodes. Nothing for a
-    /// byte no node was read from — a blank line between chapters,
-    /// frontmatter — or for a tree built rather than parsed.
+    /// byte no node was read from, such as a blank line between
+    /// chapters or a source's frontmatter, and nothing for a tree
+    /// built rather than parsed.
     pub fn node_at(&self, source: &str, byte: u32) -> Option<NodeId> {
         self.sections
             .iter()

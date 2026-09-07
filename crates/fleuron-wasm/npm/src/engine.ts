@@ -203,8 +203,8 @@ function answer(json: string | number | null): Uint8Array {
 /**
  * Whether a request is a question rather than a render: asking for a
  * face's bytes, asking where a node was read from or what was read at
- * a byte, or asking which pages of the book as it stands — no `ops`
- * of its own — fall in a range. None of them overtakes a render nor
+ * a byte, or asking which pages of the book as it stands (no `ops`
+ * of its own) fall in a range. None of them overtakes a render nor
  * is overtaken by one, or by a sibling question, since none says
  * what the last edit produced.
  *
