@@ -367,12 +367,8 @@ mod tests {
                     assert!(!declarations.is_empty(), "{}: {example}", spec.name);
                     for declaration in &declarations {
                         let read = property_of(declaration);
-                        let longhand_of = |shorthand: &str| {
-                            read.strip_prefix(shorthand)
-                                .is_some_and(|rest| rest.starts_with('-'))
-                        };
                         assert!(
-                            read == spec.name || longhand_of(spec.name),
+                            longhand_of(read, spec.name),
                             "{}: {example} read as {read}",
                             spec.name
                         );
@@ -397,12 +393,53 @@ mod tests {
         });
     }
 
+    /// Whether `read` names a longhand of `shorthand`: its own name,
+    /// or a name carrying every word of it, in order. `border-width`
+    /// and `border-top` are both shorthands of `border-top-width`,
+    /// which is why one prefix is not enough.
+    fn longhand_of(read: &str, shorthand: &str) -> bool {
+        let mut words = read.split('-');
+        shorthand
+            .split('-')
+            .all(|word| words.any(|read| read == word))
+    }
+
+    #[test]
+    fn a_longhand_carries_every_word_of_its_shorthand() {
+        assert!(longhand_of("margin-top", "margin"));
+        assert!(longhand_of("margin-top", "margin-top"));
+        assert!(longhand_of("border-top-width", "border"));
+        assert!(longhand_of("border-top-width", "border-top"));
+        assert!(longhand_of("border-top-width", "border-width"));
+        assert!(!longhand_of("border-top-width", "border-color"));
+        assert!(!longhand_of("margin-top", "padding"));
+    }
+
     fn margin_of(edge: Edge) -> &'static str {
         match edge {
             Edge::Top => "margin-top",
             Edge::Right => "margin-right",
             Edge::Bottom => "margin-bottom",
             Edge::Left => "margin-left",
+        }
+    }
+
+    /// The full CSS longhand one border declaration writes, which is
+    /// finer than anything the engine takes as a property of its own.
+    fn border_of(edge: Edge, value: &str) -> &'static str {
+        match (edge, value) {
+            (Edge::Top, "width") => "border-top-width",
+            (Edge::Right, "width") => "border-right-width",
+            (Edge::Bottom, "width") => "border-bottom-width",
+            (Edge::Left, "width") => "border-left-width",
+            (Edge::Top, "style") => "border-top-style",
+            (Edge::Right, "style") => "border-right-style",
+            (Edge::Bottom, "style") => "border-bottom-style",
+            (Edge::Left, "style") => "border-left-style",
+            (Edge::Top, _) => "border-top-color",
+            (Edge::Right, _) => "border-right-color",
+            (Edge::Bottom, _) => "border-bottom-color",
+            (Edge::Left, _) => "border-left-color",
         }
     }
 
@@ -430,6 +467,17 @@ mod tests {
             Declaration::CounterReset(_) => "counter-reset",
             Declaration::InitialLetter(_) => "initial-letter",
             Declaration::Margin(edge, _) => margin_of(*edge),
+            Declaration::Padding(edge, _) => match edge {
+                Edge::Top => "padding-top",
+                Edge::Right => "padding-right",
+                Edge::Bottom => "padding-bottom",
+                Edge::Left => "padding-left",
+            },
+            Declaration::BorderWidth(edge, _) => border_of(*edge, "width"),
+            Declaration::BorderStyle(edge, _) => border_of(*edge, "style"),
+            Declaration::BorderColor(edge, _) => border_of(*edge, "color"),
+            Declaration::BackgroundColor(_) => "background-color",
+            Declaration::BoxDecorationBreak(_) => "box-decoration-break",
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",
             Declaration::BreakInside(_) => "break-inside",

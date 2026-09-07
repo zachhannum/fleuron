@@ -938,6 +938,10 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         counter_reset,
         initial_letter,
         margin,
+        padding,
+        border,
+        background_color,
+        box_decoration_break,
         break_before,
         break_after,
         break_inside,
@@ -948,7 +952,13 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
     (break_before, break_after, break_inside).hash(h);
+    (background_color, box_decoration_break).hash(h);
     hash_edges(*margin, h);
+    hash_edges(*padding, h);
+    hash_edges(border.widths(), h);
+    for edge in [border.top, border.right, border.bottom, border.left] {
+        edge.color.hash(h);
+    }
 }
 
 fn hash_geometry(geometry: PageGeometry, h: &mut DefaultHasher) {
@@ -1412,7 +1422,7 @@ mod tests {
         let before = session.stages();
         let painted = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
 
-        session.set_style(sheets("p { background-color: rebeccapurple }"));
+        session.set_style(sheets("p { float: left }"));
         let (repainted, complained) = {
             let output = session.preview();
             (
@@ -1420,7 +1430,7 @@ mod tests {
                 output
                     .warnings
                     .iter()
-                    .any(|warning| warning.message.contains("`background-color`")),
+                    .any(|warning| warning.message.contains("`float`")),
             )
         };
         let after = session.stages();
