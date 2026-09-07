@@ -375,6 +375,44 @@ check(
   ),
 );
 
+// A run under the pointer, taken to the manuscript and back: the
+// two questions the wall carries, over the book the worker holds.
+const writtenRuns = preview.pages.flatMap((page, index) =>
+  page.items.flatMap((item) =>
+    item.kind === 'text' && item.origin !== null ? [{ node: item.origin.node, page: index }] : [],
+  ),
+);
+const run = writtenRuns[Math.floor(writtenRuns.length / 2)];
+if (run === undefined) {
+  throw new Error('no run of the fixture book says where it was written');
+}
+const written = await client.sourceOf(run.node);
+check(
+  'the node a run names was read from the manuscript',
+  written?.source === 'gulliver-excerpt.md' && written.start < written.end,
+  JSON.stringify(written),
+);
+const start = written?.start ?? 0;
+check(
+  'the bytes it names are the ones the run was written at',
+  markdown.slice(start, written?.end ?? 0).trim().length > 0,
+  JSON.stringify(markdown.slice(start, Math.min(written?.end ?? 0, start + 40))),
+);
+const answered = await client.nodeAt('gulliver-excerpt.md', start);
+check('that stretch of the manuscript names the node again', answered === run.node);
+check(
+  'and the node it names is painted on the page the run was on',
+  writtenRuns.some((other) => other.node === answered && other.page === run.page),
+);
+check(
+  'a byte of a file the book has not read is read from nothing',
+  (await client.nodeAt('nothing.md', start)) === null,
+);
+check(
+  'a node the book does not have was read from nothing',
+  (await client.sourceOf(0)) === null,
+);
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
 const wrongSelection = preview.pages

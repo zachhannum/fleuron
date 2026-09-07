@@ -41,8 +41,10 @@ fn book(language: Option<&str>, prose: &str) -> Book {
                     id: NodeId::UNASSIGNED,
                     value: prose.to_string(),
                     position: None,
+                    span: None,
                 }],
                 position: None,
+                span: None,
             }],
             ..Default::default()
         }],

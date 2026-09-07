@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 9;
+export const WIRE_VERSION = 10;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';

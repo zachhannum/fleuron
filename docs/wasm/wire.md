@@ -31,7 +31,7 @@ Faces include their instance. The font table records where on its file's axes ea
 
 Glyphs are tied to their text. Each text run has the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so the display structure records it. A painter that supports selection or accessible text reads it through those ranges; a painter that only draws ignores it.
 
-Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, a folio or a running head, names no node.
+Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, a folio or a running head, names no node. A node id is the engine's own name for a place in the book, and the two questions below turn it into a file and a byte of one.
 
 ## One book, both targets
 
@@ -51,9 +51,11 @@ The `style` op takes the author's sheets in cascade order, each under a name. A 
 
 Request and response are paired by `id`, and each request has a generation the worker echoes back untouched.
 
-Two kinds of request are questions rather than renders, and neither overtakes a render or is overtaken by one. `want: 'font'` is one: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. A face keeps its id for the session's life, so the answer cannot go stale.
+Some requests are questions rather than renders, and none overtakes a render or is overtaken by one. `want: 'font'` is one: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. A face keeps its id for the session's life, so the answer cannot go stale.
 
-A `want: 'preview'` naming `first` and `count` with no `ops` of its own is the other: it asks what a page of the book already is rather than what an edit produced. An edit that also names a range, fetching the one page it changed rather than the whole book, is still a render for supersession's sake, since it does say what that edit produced.
+A `want: 'preview'` naming `first` and `count` with no `ops` of its own is another: it asks what a page of the book already is rather than what an edit produced. An edit that also names a range, fetching the one page it changed rather than the whole book, is still a render for supersession's sake, since it does say what that edit produced.
+
+The last two are about the manuscript rather than the page. `want: 'node'`, with `source` and `byte`, answers with the node that byte of that file was read into, which is the node the display structure's runs name and a cursor's first step onto a page. `want: 'source'`, with `node`, answers with `{ source, start, end }`: the file the node was read from and the bytes of it, which is the way back from a run under the pointer. Both answer in JSON, the same contract the content tree crosses in, and both answer `null` where nothing was read: a blank line between chapters, a node the engine synthesized, a tree the host built rather than parsed. `Client.nodeAt` and `Client.sourceOf` are the two on the host's side.
 
 The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or a new manuscript. A response whose generation is behind the current one is dropped without painting.
 

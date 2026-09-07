@@ -25,7 +25,7 @@
 use std::collections::BTreeMap;
 
 use fleuron::Warning;
-use fleuron::content::{Book, HeadingLevel, Metadata};
+use fleuron::content::{Book, HeadingLevel, Metadata, NodeId};
 use fleuron::fonts::{FontSource, bundled_registry};
 use fleuron::session::Session as Engine;
 use fleuron::style::{Source, Stylesheets};
@@ -296,6 +296,44 @@ impl Session {
     #[wasm_bindgen(js_name = exportPdf)]
     pub fn export_pdf(&mut self) -> Result<Vec<u8>, JsError> {
         self.engine.export().map_err(js_error)
+    }
+
+    /// The node one byte of one source was read into: the innermost,
+    /// so a byte of prose answers with the run it was typed into and
+    /// a byte of markup answers with the construct it opens.
+    ///
+    /// This is the first step of a cursor's way onto a page: the
+    /// node it answers with is the one the display structure's runs
+    /// name. `undefined` where nothing was read: a blank line
+    /// between chapters, a file the book has not read, a tree the
+    /// host built rather than parsed.
+    #[wasm_bindgen(js_name = nodeAt)]
+    pub fn node_at(&self, source: &str, byte: u32) -> Option<u32> {
+        self.engine
+            .book()
+            .node_at(source, byte)
+            .map(|node| node.get())
+    }
+
+    /// The source a node was read from and the bytes of it, as JSON:
+    /// `{"source": "chapter-01.md", "start": 812, "end": 1043}`.
+    ///
+    /// This is the way back: a run under the pointer names a node,
+    /// and the node names a place in the manuscript. `undefined` for
+    /// a node the engine synthesized, or one from a tree built
+    /// rather than parsed.
+    #[wasm_bindgen(js_name = nodeSource)]
+    pub fn node_source(&self, node: u32) -> Option<String> {
+        let book = self.engine.book();
+        let (source, span) = book.source_of(NodeId::new(node))?;
+        Some(
+            serde_json::json!({
+                "source": source,
+                "start": span.start,
+                "end": span.end,
+            })
+            .to_string(),
+        )
     }
 
     /// How many times each stage has run since the session was made,

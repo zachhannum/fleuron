@@ -39,6 +39,7 @@ fn text(value: &str) -> Inline {
         id: NodeId::UNASSIGNED,
         value: value.into(),
         position: None,
+        span: None,
     }
 }
 
@@ -52,6 +53,7 @@ fn book(blocks: Vec<Block>) -> Book {
             title: None,
             blocks,
             position: None,
+            span: None,
         }],
     };
     book.assign_node_ids();
@@ -64,6 +66,7 @@ fn heading(title: &str) -> Block {
         level: HeadingLevel::H1,
         inlines: vec![text(title)],
         position: None,
+        span: None,
     }
 }
 
@@ -72,6 +75,7 @@ fn paragraph(inlines: Vec<Inline>) -> Block {
         id: NodeId::UNASSIGNED,
         inlines,
         position: None,
+        span: None,
     }
 }
 

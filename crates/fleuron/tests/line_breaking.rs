@@ -33,6 +33,7 @@ fn inlines_of(text: &str) -> Vec<Inline> {
         id: NodeId::UNASSIGNED,
         value: text.to_string(),
         position: None,
+        span: None,
     }]
 }
 

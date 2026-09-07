@@ -93,8 +93,9 @@ fn hash_inlines(inlines: &[Inline], hasher: &mut DefaultHasher) {
 /// sixty-one files of one. Split it and read each piece as a whole
 /// source, and the tree is the tree the single file produced, section
 /// for section and block for block. What differs is `source`, which
-/// now names a chapter file, and the positions inside it, which count
-/// from the top of that file rather than the top of the book.
+/// now names a chapter file, and where inside it every node was read
+/// from, which counts from the top of that file rather than the top
+/// of the book.
 #[test]
 fn one_file_of_chapters_and_a_file_per_chapter_read_alike() {
     let corpus = Corpus::PrideAndPrejudice;
@@ -141,6 +142,7 @@ fn anonymous(book: &Book) -> Book {
     for section in &mut book.sections {
         section.source = None;
         section.position = None;
+        section.span = None;
         strip_blocks(&mut section.blocks);
     }
     book
@@ -150,22 +152,31 @@ fn strip_blocks(blocks: &mut [Block]) {
     for block in blocks {
         match block {
             Block::Heading {
-                position, inlines, ..
+                position,
+                span,
+                inlines,
+                ..
             }
             | Block::Paragraph {
-                position, inlines, ..
+                position,
+                span,
+                inlines,
+                ..
             } => {
-                *position = None;
+                (*position, *span) = (None, None);
                 strip_inlines(inlines);
             }
             Block::Blockquote {
-                position, blocks, ..
+                position,
+                span,
+                blocks,
+                ..
             } => {
-                *position = None;
+                (*position, *span) = (None, None);
                 strip_blocks(blocks);
             }
-            Block::ThematicBreak { position, .. } | Block::Image { position, .. } => {
-                *position = None
+            Block::ThematicBreak { position, span, .. } | Block::Image { position, span, .. } => {
+                (*position, *span) = (None, None)
             }
         }
     }
@@ -174,17 +185,28 @@ fn strip_blocks(blocks: &mut [Block]) {
 fn strip_inlines(inlines: &mut [Inline]) {
     for inline in inlines {
         match inline {
-            Inline::Text { position, .. } | Inline::Code { position, .. } => *position = None,
+            Inline::Text { position, span, .. } | Inline::Code { position, span, .. } => {
+                (*position, *span) = (None, None)
+            }
             Inline::Emphasis {
-                position, children, ..
+                position,
+                span,
+                children,
+                ..
             }
             | Inline::Strong {
-                position, children, ..
+                position,
+                span,
+                children,
+                ..
             }
             | Inline::Link {
-                position, children, ..
+                position,
+                span,
+                children,
+                ..
             } => {
-                *position = None;
+                (*position, *span) = (None, None);
                 strip_inlines(children);
             }
         }

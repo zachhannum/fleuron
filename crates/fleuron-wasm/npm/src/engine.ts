@@ -128,6 +128,10 @@ export class Engine {
         return this.session.exportPdf();
       case 'font':
         return this.session.fontBytes(request.font ?? 0);
+      case 'node':
+        return answer(this.session.nodeAt(request.source ?? '', request.byte ?? 0) ?? null);
+      case 'source':
+        return answer(this.session.nodeSource(request.node ?? 0) ?? null);
       default:
         return this.session.preview(request.first, request.count);
     }
@@ -188,10 +192,20 @@ export class Engine {
 }
 
 /**
+ * An answer to a question about the book, as the JSON bytes every
+ * reply carries. The module already wrote the JSON for a node's
+ * source; a node id is a number, and `null` is nothing read there.
+ */
+function answer(json: string | number | null): Uint8Array {
+  return new TextEncoder().encode(typeof json === 'string' ? json : JSON.stringify(json));
+}
+
+/**
  * Whether a request is a question rather than a render: asking for a
- * face's bytes, or asking which pages of the book as it stands — no
- * `ops` of its own — fall in a range. Neither overtakes a render nor
- * is overtaken by one, or by a sibling question, since neither says
+ * face's bytes, asking where a node was read from or what was read at
+ * a byte, or asking which pages of the book as it stands (no `ops`
+ * of its own) fall in a range. None of them overtakes a render nor
+ * is overtaken by one, or by a sibling question, since none says
  * what the last edit produced.
  *
  * A range alone does not make a question: an edit that also names a
@@ -202,6 +216,8 @@ export class Engine {
 function isQuestion(request: Request): boolean {
   return (
     request.want === 'font' ||
+    request.want === 'node' ||
+    request.want === 'source' ||
     (request.want === 'preview' &&
       request.ops.length === 0 &&
       request.first !== undefined &&

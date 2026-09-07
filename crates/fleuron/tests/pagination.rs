@@ -32,8 +32,10 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
                 id: NodeId::UNASSIGNED,
                 value: "Chapter".into(),
                 position: None,
+                span: None,
             }],
             position: None,
+            span: None,
         })
         .chain(paragraphs.into_iter().map(|value| Block::Paragraph {
             id: NodeId::UNASSIGNED,
@@ -41,8 +43,10 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
                 id: NodeId::UNASSIGNED,
                 value,
                 position: None,
+                span: None,
             }],
             position: None,
+            span: None,
         }))
         .collect();
         Section {
@@ -51,6 +55,7 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
             title: None,
             blocks,
             position: None,
+            span: None,
         }
     })
 }
@@ -109,10 +114,13 @@ fn column_master(situation: Situation) -> &'static PageStyle {
                             id: NodeId::UNASSIGNED,
                             value: "prose".into(),
                             position: None,
+                            span: None,
                         }],
                         position: None,
+                        span: None,
                     }],
                     position: None,
+                    span: None,
                 }],
             };
             book.assign_node_ids();
@@ -145,10 +153,13 @@ fn ua() -> &'static StyleTree {
                         id: NodeId::UNASSIGNED,
                         value: "prose".into(),
                         position: None,
+                        span: None,
                     }],
                     position: None,
+                    span: None,
                 }],
                 position: None,
+                span: None,
             }],
         };
         book.assign_node_ids();
@@ -482,8 +493,10 @@ fn page_assembly_snapshot() {
             id: NodeId::UNASSIGNED,
             value: prose.repeat(60),
             position: None,
+            span: None,
         }],
         position: None,
+        span: None,
     };
     let chapter = |title: &str| Section {
         id: NodeId::UNASSIGNED,
@@ -497,12 +510,15 @@ fn page_assembly_snapshot() {
                     id: NodeId::UNASSIGNED,
                     value: title.into(),
                     position: None,
+                    span: None,
                 }],
                 position: None,
+                span: None,
             },
             paragraph.clone(),
         ],
         position: None,
+        span: None,
     };
     let mut book = Book {
         metadata: Default::default(),

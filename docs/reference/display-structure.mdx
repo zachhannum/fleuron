@@ -113,6 +113,8 @@ pub struct SourceRange {
 
 A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range hold the byte, and the glyph on it whose range does.
 
+A node id is the engine's own name for a place in the book, and a host that handed over markdown holds a file and a byte of it instead. [The content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor becomes a node, and the runs that name it are on the page the cursor is set on; a run under the pointer becomes a place in the manuscript.
+
 ### `Rect`
 
 ```rust

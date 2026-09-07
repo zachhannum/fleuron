@@ -43,6 +43,7 @@ fn text(value: &str) -> Inline {
         id: NodeId::UNASSIGNED,
         value: value.into(),
         position: None,
+        span: None,
     }
 }
 
@@ -51,6 +52,7 @@ fn paragraph(value: &str) -> Block {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(value)],
         position: None,
+        span: None,
     }
 }
 
@@ -71,15 +73,18 @@ fn fixture() -> Book {
                     level: HeadingLevel::H1,
                     inlines: vec![text("The Quay")],
                     position: None,
+                    span: None,
                 },
                 Block::Blockquote {
                     id: NodeId::UNASSIGNED,
                     blocks: (0..4).map(|_| paragraph(quoted)).collect(),
                     position: None,
+                    span: None,
                 },
                 paragraph("The tide turned before morning."),
             ],
             position: None,
+            span: None,
         }],
     };
     book.assign_node_ids();

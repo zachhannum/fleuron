@@ -1,8 +1,11 @@
 //! Markdown events to blocks, and the mapping's degradations.
 
+use std::ops::Range;
+
 use fleuron::Warning;
 use fleuron::content::{
-    Block, HeadingLevel, Inline, Section, SourcePos, origin, text as inline_text,
+    Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_span, origin,
+    text as inline_text,
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
@@ -12,7 +15,7 @@ use crate::{Options, Sections};
 pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Warning>) {
     let mut converter = Converter::new(text, source, options);
     for (event, range) in Parser::new_ext(text, parser_options(options)).into_offset_iter() {
-        converter.event(event, range.start);
+        converter.event(event, range);
     }
     let (mut sections, warnings) = converter.finish();
     // A source read whole is one chapter, so its frontmatter is that
@@ -45,6 +48,25 @@ fn parser_options(options: &Options) -> ParserOptions {
         dialect.smart_punctuation,
     );
     parser
+}
+
+/// Where one event was read from: the position a diagnostic quotes,
+/// and the bytes of the source it covers. A start tag covers the
+/// whole construct it opens, so a node's span holds the span of every
+/// node written inside it.
+#[derive(Debug, Clone, Copy)]
+struct Read {
+    position: SourcePos,
+    span: SourceSpan,
+}
+
+/// The source these blocks were read from, together.
+fn extent(blocks: &[Block]) -> Option<SourceSpan> {
+    let spans = || blocks.iter().filter_map(block_span);
+    Some(SourceSpan {
+        start: spans().map(|span| span.start).min()?,
+        end: spans().map(|span| span.end).max()?,
+    })
 }
 
 /// Byte offset to 1-based line and column, for source positions.
@@ -97,9 +119,9 @@ struct Converter<'a> {
     /// section's body, each nested one a blockquote under
     /// construction.
     blocks: Vec<Vec<Block>>,
-    /// Inline frames, innermost last, with what each is collecting for
-    /// and where it started.
-    inlines: Vec<(Vec<Inline>, InlineFor, SourcePos)>,
+    /// Inline frames, innermost last, with what each is collecting
+    /// for and where it was read from.
+    inlines: Vec<(Vec<Inline>, InlineFor, Read)>,
     /// Blocks an inline construct produced, flushed once the block
     /// that contained it closes.
     deferred: Vec<Block>,
@@ -122,41 +144,42 @@ impl<'a> Converter<'a> {
         }
     }
 
-    fn event(&mut self, event: Event<'_>, offset: usize) {
-        let at = self.lines.position(offset);
+    fn event(&mut self, event: Event<'_>, range: Range<usize>) {
+        let read = self.read(range);
+        let at = read.position;
         match event {
             Event::Start(Tag::MetadataBlock(_)) => self.metadata += 1,
             Event::End(TagEnd::MetadataBlock(_)) => self.metadata -= 1,
 
-            Event::Start(Tag::Paragraph) => self.push_inlines(InlineFor::Paragraph, at),
+            Event::Start(Tag::Paragraph) => self.push_inlines(InlineFor::Paragraph, read),
             Event::Start(Tag::Heading { level, .. }) => {
-                self.push_inlines(InlineFor::Heading(heading_level(level)), at)
+                self.push_inlines(InlineFor::Heading(heading_level(level)), read)
             }
             Event::Start(Tag::Image { dest_url, .. }) => self.push_inlines(
                 InlineFor::Image {
                     url: dest_url.into_string(),
                 },
-                at,
+                read,
             ),
-            Event::Start(Tag::Emphasis) => self.push_inlines(InlineFor::Emphasis, at),
-            Event::Start(Tag::Strong) => self.push_inlines(InlineFor::Strong, at),
+            Event::Start(Tag::Emphasis) => self.push_inlines(InlineFor::Emphasis, read),
+            Event::Start(Tag::Strong) => self.push_inlines(InlineFor::Strong, read),
             Event::Start(Tag::Link { dest_url, .. }) => self.push_inlines(
                 InlineFor::Link {
                     url: dest_url.into_string(),
                 },
-                at,
+                read,
             ),
             Event::Start(Tag::Strikethrough) => {
                 self.degrades("strikethrough", "plain text", at);
-                self.push_inlines(InlineFor::Plain, at)
+                self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::Superscript) => {
                 self.degrades("a superscript", "plain text", at);
-                self.push_inlines(InlineFor::Plain, at)
+                self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::Subscript) => {
                 self.degrades("a subscript", "plain text", at);
-                self.push_inlines(InlineFor::Plain, at)
+                self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::BlockQuote(_)) => self.blocks.push(Vec::new()),
 
@@ -164,7 +187,7 @@ impl<'a> Converter<'a> {
             Event::Start(Tag::Table(_)) => self.degrades("a table", "one paragraph per cell", at),
             Event::Start(Tag::CodeBlock(_)) => {
                 self.degrades("a code block", "a paragraph", at);
-                self.push_inlines(InlineFor::Paragraph, at)
+                self.push_inlines(InlineFor::Paragraph, read)
             }
             Event::Start(Tag::FootnoteDefinition(_)) => {
                 self.degrades("a footnote", "prose where it was written", at)
@@ -182,7 +205,7 @@ impl<'a> Converter<'a> {
                 | Tag::TableCell
                 | Tag::DefinitionListTitle
                 | Tag::DefinitionListDefinition,
-            ) => self.push_inlines(InlineFor::Paragraph, at),
+            ) => self.push_inlines(InlineFor::Paragraph, read),
 
             Event::End(
                 TagEnd::Paragraph
@@ -200,26 +223,37 @@ impl<'a> Converter<'a> {
                 | TagEnd::Link
                 | TagEnd::Image,
             ) => self.close_inlines(),
-            Event::End(TagEnd::BlockQuote(_)) => self.close_blockquote(at),
+            Event::End(TagEnd::BlockQuote(_)) => self.close_blockquote(read),
 
-            Event::Text(text) => self.text(&text, at),
+            Event::Text(text) => self.text(&text, read),
             Event::Code(code) => self.inline(Inline::Code {
                 id: Default::default(),
                 value: code.into_string(),
                 position: Some(at),
+                span: Some(read.span),
             }),
             Event::InlineMath(math) | Event::DisplayMath(math) => {
                 self.degrades("math", "plain text", at);
-                self.text(&math, at)
+                self.text(&math, read)
             }
             Event::Html(_) | Event::InlineHtml(_) => self.drops("html", at),
             Event::FootnoteReference(_) => self.drops("a footnote reference", at),
             Event::TaskListMarker(_) => self.drops("a task list marker", at),
             // A wrapped line is a space; the shaper never sees the
             // markdown's ragged column.
-            Event::SoftBreak | Event::HardBreak => self.text(" ", at),
-            Event::Rule => self.rule(at),
+            Event::SoftBreak | Event::HardBreak => self.text(" ", read),
+            Event::Rule => self.rule(read),
             Event::End(_) | Event::Start(_) => {}
+        }
+    }
+
+    fn read(&self, range: Range<usize>) -> Read {
+        Read {
+            position: self.lines.position(range.start),
+            span: SourceSpan {
+                start: range.start as u32,
+                end: range.end as u32,
+            },
         }
     }
 
@@ -244,18 +278,19 @@ impl<'a> Converter<'a> {
 
     /// Opens an inline frame. Frames nest: emphasis inside a paragraph
     /// collects into its own and folds back on close.
-    fn push_inlines(&mut self, kind: InlineFor, at: SourcePos) {
-        self.inlines.push((Vec::new(), kind, at));
+    fn push_inlines(&mut self, kind: InlineFor, read: Read) {
+        self.inlines.push((Vec::new(), kind, read));
     }
 
-    fn text(&mut self, value: &str, at: SourcePos) {
+    fn text(&mut self, value: &str, read: Read) {
         if value.is_empty() || self.metadata > 0 {
             return;
         }
         self.inline(Inline::Text {
             id: Default::default(),
             value: value.to_string(),
-            position: Some(at),
+            position: Some(read.position),
+            span: Some(read.span),
         });
     }
 
@@ -272,25 +307,29 @@ impl<'a> Converter<'a> {
     /// files that block instead, so a heading may open a section and a
     /// paragraph joins the one already open.
     fn close_inlines(&mut self) {
-        let Some((children, kind, at)) = self.inlines.pop() else {
+        let Some((children, kind, read)) = self.inlines.pop() else {
             return;
         };
+        let (at, span) = (Some(read.position), Some(read.span));
         match kind {
             InlineFor::Emphasis => self.inline(Inline::Emphasis {
                 id: Default::default(),
                 children,
-                position: Some(at),
+                position: at,
+                span,
             }),
             InlineFor::Strong => self.inline(Inline::Strong {
                 id: Default::default(),
                 children,
-                position: Some(at),
+                position: at,
+                span,
             }),
             InlineFor::Link { url } => self.inline(Inline::Link {
                 id: Default::default(),
                 url,
                 children,
-                position: Some(at),
+                position: at,
+                span,
             }),
             InlineFor::Plain => {
                 for child in children {
@@ -304,18 +343,20 @@ impl<'a> Converter<'a> {
                 id: Default::default(),
                 url,
                 alt: inline_text(&children),
-                position: Some(at),
+                position: at,
+                span,
             }),
             InlineFor::Heading(level) => {
                 self.displaced(&children);
                 if self.options.sections.opens(level) {
-                    self.open_section(at);
+                    self.open_section(read.position);
                 }
                 self.push_block(Block::Heading {
                     id: Default::default(),
                     level,
                     inlines: children,
-                    position: Some(at),
+                    position: at,
+                    span,
                 });
                 self.flush_deferred();
             }
@@ -325,7 +366,8 @@ impl<'a> Converter<'a> {
                     self.push_block(Block::Paragraph {
                         id: Default::default(),
                         inlines: children,
-                        position: Some(at),
+                        position: at,
+                        span,
                     });
                 }
                 self.flush_deferred();
@@ -366,7 +408,7 @@ impl<'a> Converter<'a> {
         }
     }
 
-    fn close_blockquote(&mut self, at: SourcePos) {
+    fn close_blockquote(&mut self, read: Read) {
         let Some(blocks) = self.blocks.pop() else {
             return;
         };
@@ -376,14 +418,16 @@ impl<'a> Converter<'a> {
         self.push_block(Block::Blockquote {
             id: Default::default(),
             blocks,
-            position: Some(at),
+            position: Some(read.position),
+            span: Some(read.span),
         });
     }
 
-    fn rule(&mut self, at: SourcePos) {
+    fn rule(&mut self, read: Read) {
         self.push_block(Block::ThematicBreak {
             id: Default::default(),
-            position: Some(at),
+            position: Some(read.position),
+            span: Some(read.span),
         });
     }
 
@@ -399,6 +443,7 @@ impl<'a> Converter<'a> {
             title: None,
             blocks: Vec::new(),
             position: Some(at),
+            span: None,
         });
     }
 
@@ -413,6 +458,7 @@ impl<'a> Converter<'a> {
                 title: None,
                 blocks: Vec::new(),
                 position,
+                span: None,
             });
         }
         match self.blocks.last_mut() {
@@ -428,6 +474,10 @@ impl<'a> Converter<'a> {
         self.blocks.push(Vec::new());
         if let Some(section) = self.sections.last_mut() {
             section.blocks.extend(blocks);
+            // A section covers the source its blocks were read from,
+            // which is everything from the heading that opened it to
+            // the end of the last block under it.
+            section.span = extent(&section.blocks);
         }
     }
 
@@ -463,6 +513,7 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
 mod tests {
     use super::*;
     use crate::{Dialect, to_sections};
+    use fleuron::content::inline_span;
 
     fn read(markdown: &str) -> Vec<Section> {
         to_sections(markdown, "test.md", &Options::default()).0
@@ -671,6 +722,114 @@ code line
             inlines.iter().any(|i| matches!(i, Inline::Link { .. })),
             "{inlines:?}",
         );
+    }
+
+    /// A node's span is the bytes of the source it was read from,
+    /// markup and all, and the nodes under it fall inside it.
+    #[test]
+    fn a_node_spans_the_source_it_was_read_from() {
+        let markdown = "# One\n\nPlain *stressed* plain.\n";
+        let sections = read(markdown);
+        let covered = |span: Option<SourceSpan>| {
+            let span = span.expect("a parsed node was read from somewhere");
+            &markdown[span.start as usize..span.end as usize]
+        };
+
+        let Block::Heading { span, .. } = &sections[0].blocks[0] else {
+            panic!("expected a heading");
+        };
+        assert_eq!(covered(*span), "# One\n");
+
+        let Block::Paragraph { span, inlines, .. } = &sections[0].blocks[1] else {
+            panic!("expected a paragraph");
+        };
+        assert_eq!(covered(*span), "Plain *stressed* plain.\n");
+        assert_eq!(covered(inline_span(&inlines[0])), "Plain ");
+        let Inline::Emphasis { span, children, .. } = &inlines[1] else {
+            panic!("expected an emphasis");
+        };
+        assert_eq!(covered(*span), "*stressed*");
+        assert_eq!(covered(inline_span(&children[0])), "stressed");
+
+        // The section runs from the heading that opened it to the end
+        // of the last block under it.
+        assert_eq!(covered(sections[0].span), markdown);
+    }
+
+    /// A wrapped line is a space in the tree and a newline in the
+    /// file, and the space says which newline it was read from.
+    #[test]
+    fn a_wrapped_line_spans_the_break_it_was_read_from() {
+        let markdown = "# C\n\none\ntwo\n";
+        let sections = read(markdown);
+        let Block::Paragraph { inlines, .. } = &sections[0].blocks[1] else {
+            panic!("expected a paragraph");
+        };
+        let spaces: Vec<Option<SourceSpan>> = inlines
+            .iter()
+            .filter(|inline| matches!(inline, Inline::Text { value, .. } if value == " "))
+            .map(inline_span)
+            .collect();
+        assert_eq!(spaces, [Some(SourceSpan { start: 8, end: 9 })]);
+        assert_eq!(&markdown[8..9], "\n");
+    }
+
+    /// Acceptance: a heading, a quotation and a list item answer a
+    /// cursor the way a paragraph does, with the run the byte was
+    /// typed into.
+    #[test]
+    fn a_heading_a_quotation_and_a_list_item_answer_as_prose_does() {
+        let markdown = "\
+# The Heading
+
+Ordinary prose.
+
+> Quoted prose.
+
+- An item
+";
+        let (sections, _) = to_sections(
+            markdown,
+            "test.md",
+            &Options {
+                dialect: Dialect::gfm(),
+                ..Options::default()
+            },
+        );
+        let book = crate::assemble(Default::default(), sections);
+
+        for written in ["Heading", "prose.", "Quoted", "item"] {
+            let byte = markdown.find(written).expect("the fixture holds it") as u32;
+            let node = book
+                .node_at("test.md", byte)
+                .unwrap_or_else(|| panic!("nothing was read from {written:?}"));
+            let (source, span) = book.source_of(node).expect("and it says where");
+            assert_eq!(source, "test.md");
+            assert!(
+                markdown[span.start as usize..span.end as usize].contains(written),
+                "{written:?} answered with {:?}",
+                &markdown[span.start as usize..span.end as usize],
+            );
+        }
+    }
+
+    /// An image written among prose is set after the paragraph it was
+    /// written in, and its span stays where it was written, so the
+    /// bytes of the picture answer with the picture.
+    #[test]
+    fn a_displaced_image_answers_for_the_bytes_it_was_written_at() {
+        let markdown = "# C\n\nProse ![a plate](plate.png) more.\n";
+        let (sections, _) = to_sections(markdown, "test.md", &Options::default());
+        let book = crate::assemble(Default::default(), sections);
+
+        let at = markdown.find("plate.png").expect("the fixture holds it") as u32;
+        let node = book
+            .node_at("test.md", at)
+            .expect("the image was read there");
+        let Block::Image { id, .. } = &book.sections[0].blocks[2] else {
+            panic!("expected an image block");
+        };
+        assert_eq!(node, *id);
     }
 
     #[test]

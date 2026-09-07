@@ -657,6 +657,7 @@ mod tests {
             url: url.into(),
             alt: String::new(),
             position: None,
+            span: None,
         };
         let mut book = Book {
             metadata: Default::default(),
@@ -667,6 +668,7 @@ mod tests {
                         id: crate::content::NodeId::UNASSIGNED,
                         blocks: vec![image("b.jpg")],
                         position: None,
+                        span: None,
                     },
                     image("a.png"),
                     image("missing.png"),
@@ -702,6 +704,7 @@ mod tests {
             url: url.into(),
             alt: String::new(),
             position: None,
+            span: None,
         };
         let mut book = Book {
             metadata: Default::default(),

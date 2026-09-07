@@ -3,7 +3,15 @@
  * never paint one the reader has already typed past.
  */
 
-import { isFailed, isRendered, type Op, type Request, type Response, type Want } from './protocol.js';
+import {
+  isFailed,
+  isRendered,
+  type NodeSource,
+  type Op,
+  type Request,
+  type Response,
+  type Want,
+} from './protocol.js';
 import { decodeDisplayList, type LayoutOutput } from './wire.js';
 
 /** How a request reaches the worker. */
@@ -119,6 +127,31 @@ export class Client {
     return response.bytes;
   }
 
+  /**
+   * The node one byte of one source was read into: the first step of
+   * a cursor's way onto a page, since the node it answers with is the
+   * one the display structure's runs name. `null` where nothing was
+   * read: a blank line between chapters, or a file the book has not
+   * read.
+   *
+   * A question rather than a render: nothing overtakes it. The answer
+   * is about the book as the worker holds it, so an edit still in
+   * flight is an edit this has not seen.
+   */
+  async nodeAt(source: string, byte: number): Promise<number | null> {
+    return this.ask<number | null>({ ops: [], want: 'node', source, byte });
+  }
+
+  /**
+   * The source a node was read from, and the bytes of it: the way
+   * back, for a run under the pointer. `null` for a node the engine
+   * synthesized, or one from a tree the host built rather than
+   * parsed.
+   */
+  async sourceOf(node: number): Promise<NodeSource | null> {
+    return this.ask<NodeSource | null>({ ops: [], want: 'source', node });
+  }
+
   /** Applies inputs and asks for nothing back. */
   async apply(ops: Op[]): Promise<void> {
     await this.send({ ops });
@@ -151,11 +184,23 @@ export class Client {
     return response.bytes;
   }
 
+  /** One question, and the JSON the worker answered it with. */
+  private async ask<T>(what: { ops: Op[]; want: Want; source?: string; byte?: number; node?: number }): Promise<T> {
+    const response = await this.send(what);
+    if (!isRendered(response)) {
+      throw new Error(`the engine answered no ${what.want}`);
+    }
+    return JSON.parse(new TextDecoder().decode(response.bytes)) as T;
+  }
+
   private send(what: {
     ops: Op[];
     want?: Want;
     generation?: number;
     font?: number;
+    source?: string;
+    byte?: number;
+    node?: number;
     first?: number;
     count?: number;
   }): Promise<Response> {
@@ -166,6 +211,9 @@ export class Client {
       ops: what.ops,
       ...(what.want === undefined ? {} : { want: what.want }),
       ...(what.font === undefined ? {} : { font: what.font }),
+      ...(what.source === undefined ? {} : { source: what.source }),
+      ...(what.byte === undefined ? {} : { byte: what.byte }),
+      ...(what.node === undefined ? {} : { node: what.node }),
       ...(what.first === undefined ? {} : { first: what.first }),
       ...(what.count === undefined ? {} : { count: what.count }),
     };

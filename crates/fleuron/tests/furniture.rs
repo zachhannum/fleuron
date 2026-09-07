@@ -50,6 +50,7 @@ fn text(value: &str) -> Inline {
         id: NodeId::UNASSIGNED,
         value: value.into(),
         position: None,
+        span: None,
     }
 }
 
@@ -59,6 +60,7 @@ fn heading(value: &str) -> Block {
         level: HeadingLevel::H1,
         inlines: vec![text(value)],
         position: None,
+        span: None,
     }
 }
 
@@ -71,6 +73,7 @@ fn paragraph(sentences: usize) -> Block {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(sentence.repeat(sentences).trim_end())],
         position: None,
+        span: None,
     }
 }
 
@@ -83,6 +86,7 @@ fn chapter(title: &str, paragraphs: usize, sentences: usize) -> Section {
             .chain((0..paragraphs).map(|_| paragraph(sentences)))
             .collect(),
         position: None,
+        span: None,
     }
 }
 
