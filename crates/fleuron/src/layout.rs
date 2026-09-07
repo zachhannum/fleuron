@@ -723,9 +723,10 @@ impl Builder<'_, '_> {
             },
             None => Measure::uniform(measure),
         };
-        // Where a drop cap and a first line meet, the initial is
-        // already out of the inlines below, so `::first-letter` has
-        // it and `::first-line` styles what is left beside the cap.
+        // The initial is already out of the inlines below, so a drop
+        // cap and a first line over the same paragraph divide it:
+        // `::first-letter` has the cap, `::first-line` the rest of
+        // the line beside it.
         let first_line = self.styles().opening_line(id);
         let lines = self.paginator.lines.layout_styled(
             match &cap {

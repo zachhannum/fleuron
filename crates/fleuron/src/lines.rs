@@ -2664,10 +2664,8 @@ mod tests {
     }
 
     /// A first-line style takes two runs of the breaker and a
-    /// paragraph without one takes a single run. The count is fixed
-    /// whether or not the two runs agree: a line count that depended
-    /// on how long a paragraph took to settle would not be
-    /// deterministic.
+    /// paragraph without one takes a single run, whether or not the
+    /// two runs agree on where the paragraph breaks.
     #[test]
     fn a_first_line_style_breaks_the_paragraph_twice() {
         let layout = LineLayout::new(registry());

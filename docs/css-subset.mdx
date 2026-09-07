@@ -31,9 +31,9 @@ The pseudo-elements are `::first-letter` and `::first-line`.
 
 There are no classes, ids, attributes or namespaces, because the content tree has none, and no interaction pseudo-classes, because nothing here is interactive.
 
-`::first-letter` is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size. `::first-line` cascades the same way, and takes the five properties listed above and nothing else. A declaration outside that set warns naming the property and is dropped.
+`::first-letter` is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size. `::first-line` cascades the same way, and takes the properties listed above and nothing else. A declaration outside that set warns naming the property and is dropped.
 
-Where a drop cap and a first line meet, the initial takes `::first-letter`.
+`::first-letter` takes the initial where both fall on the same paragraph, and `::first-line` sets the rest of the line.
 
 Text runs are not elements. They take the style of the inline or block around them, and never count towards `:first-child`.
 
@@ -136,13 +136,13 @@ How far a mark hangs depends on the mark: most of a full stop or a comma, less o
 
 Recto and verso do not follow the folio. Which side of the spread a page falls on is where it sits in the sheet, not what is printed on it, so front matter restarting the body at 1 leaves the sides alone.
 
-### The opening line
+### First lines
 
-`::first-line` is where a chapter opening set in small capitals comes from. It reaches the line the paragraph opens on, which is the paragraph's first line rather than the page's: a paragraph broken across a page boundary is styled on its opening line and nowhere else.
+`::first-line` is where a chapter opening set in small capitals comes from. It reaches the paragraph's first line rather than the page's, so a paragraph broken across a page boundary is styled on its opening line and nowhere else.
 
-The paragraph is broken twice. `letter-spacing`, `font-variant-caps`, `text-transform` and `font-size` change the width of the run, the width moves where the total-fit pass breaks, and the break decides how much text the first line holds. The first pass sets the paragraph's leading run in the opening style and breaks the whole of it. The second sets as far as the extent that break gave and breaks again with the opening line ending there, so the style covers the text the line comes to hold. There are always two passes, so a paragraph's line count does not depend on how long it took to settle.
+Which words the line holds depends on the style over it. `letter-spacing`, `font-variant-caps`, `text-transform` and `font-size` change the width of the text, and the width moves where the line breaks. The style covers the words the line comes to hold, wherever that break lands.
 
-`font-size` grows the line around the shared baseline. `color` is paint alone, and the paragraph breaks the same with it or without it.
+`font-size` grows the line around the baseline the paragraph shares. `color` is paint alone, and the lines break the same with it or without it.
 
 ### Drop caps
 
