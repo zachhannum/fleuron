@@ -346,8 +346,7 @@ pub struct ShapedRun {
     pub text_start: u32,
     /// Where the run was written: the node it was shaped from and
     /// the bytes of that node's own text it stands for. `None` for
-    /// text no node was walked for: page furniture, an ornament, the
-    /// hyphen a break drew.
+    /// text no node was walked for: page furniture, an ornament.
     pub origin: Option<SourceRange>,
     /// The features the run was shaped with.
     pub features: Features,
@@ -552,26 +551,44 @@ impl FlatParagraph {
         });
     }
 
-    /// The node one stretch of the shaped text was written in, and
-    /// the bytes of that node's own text it stands for. The end is
-    /// clamped to the node, so a range asked past it comes back
-    /// naming what the node has.
+    /// The stretch of the source one byte of the shaped text was
+    /// written in: the node, where the stretch starts in that node's
+    /// own text, and the source it covers.
     ///
     /// `None` where no node was walked: page furniture, an ornament.
-    fn origin_of(&self, from: usize, to: usize) -> Option<SourceRange> {
-        let start = self.source_at(from);
+    fn origin_at(&self, byte: usize) -> Option<(NodeId, u32, Range<usize>)> {
+        let at = self.source_at(byte);
         let index = self
             .origins
-            .partition_point(|origin| origin.start as usize <= start)
+            .partition_point(|origin| origin.start as usize <= at)
             .checked_sub(1)?;
         let origin = &self.origins[index];
-        let limit = self.origins[index + 1..]
+        let end = self.origins[index + 1..]
             .first()
             .map_or(self.source_len(), |next| next.start as usize);
-        let end = self.source_at(to).clamp(start, limit);
-        let at = |source: usize| origin.node_start + (source - origin.start as usize) as u32;
+        Some((origin.node, origin.node_start, origin.start as usize..end))
+    }
+
+    /// The node one stretch of the shaped text was written in, and
+    /// the bytes of that node's own text it stands for, running from
+    /// `from` to wherever `to` reaches.
+    ///
+    /// `after` is the node the stretch before this one was written
+    /// in. A stretch opening a node opens at that node's first byte,
+    /// wherever the break before it fell, so the space a break
+    /// swallowed at a node boundary belongs to the node that holds
+    /// it. Both ends stop at the node.
+    fn origin_of(&self, after: Option<NodeId>, from: usize, to: usize) -> Option<SourceRange> {
+        let (node, node_start, stretch) = self.origin_at(from)?;
+        let start = if after == Some(node) {
+            self.source_at(from).clamp(stretch.start, stretch.end)
+        } else {
+            stretch.start
+        };
+        let end = self.source_at(to).clamp(start, stretch.end);
+        let at = |source: usize| node_start + (source - stretch.start) as u32;
         Some(SourceRange {
-            node: origin.node,
+            node,
             range: at(start)..at(end),
         })
     }
@@ -1931,23 +1948,22 @@ impl ShapedSpan {
     }
 }
 
-/// Runs every source range on to where the next one starts, so the
-/// space a break swallowed belongs to the line that ended on it and
-/// the runs naming one node tile that node's text. A range stops at
-/// its own node either way.
+/// Says where each of a paragraph's runs was written, each range
+/// running on to where the next one starts, so the space a break
+/// swallowed belongs to a run rather than to nothing and the runs
+/// naming one node tile that node's text.
 fn tile(lines: &mut [Line], flat: &FlatParagraph) {
-    let mut next = flat.text.len();
-    let runs = lines
-        .iter_mut()
-        .rev()
-        .flat_map(|line| line.runs.iter_mut().rev());
-    for run in runs {
-        if run.origin.is_none() {
-            continue;
-        }
-        let start = run.text_start as usize;
-        run.origin = flat.origin_of(start, next);
-        next = start;
+    let starts: Vec<usize> = lines
+        .iter()
+        .flat_map(|line| &line.runs)
+        .map(|run| run.text_start as usize)
+        .collect();
+    let mut ends = starts.iter().skip(1).copied().chain([flat.text.len()]);
+    let mut after = None;
+    for run in lines.iter_mut().flat_map(|line| &mut line.runs) {
+        let to = ends.next().unwrap_or(flat.text.len());
+        run.origin = flat.origin_of(after, run.text_start as usize, to);
+        after = run.origin.as_ref().map(|origin| origin.node);
     }
 }
 
@@ -1999,7 +2015,9 @@ fn cut_runs(
             source,
             source_map,
             text_start: text_start as u32,
-            origin: flat.origin_of(text_start, text_end),
+            // Where the run was written is settled once the
+            // paragraph is broken, by `tile`.
+            origin: None,
             features: spec.features,
             color: spec.color,
             glyphs,

@@ -159,6 +159,25 @@ fn painted(pages: &[Page]) -> BTreeMap<u32, Vec<Range<u32>>> {
     out
 }
 
+/// The node whose ranges do not give the node's own text back, with
+/// what they gave instead.
+fn misread(book: &Book, pages: &[Page]) -> Option<(u32, String)> {
+    let nodes = nodes(book);
+    painted(pages).into_iter().find_map(|(id, ranges)| {
+        let text = nodes.get(&id)?;
+        let mut read = String::new();
+        let mut at = 0u32;
+        for range in ranges {
+            if range.start != at || range.end as usize > text.len() {
+                return Some((id, read));
+            }
+            read.push_str(&text[range.start as usize..range.end as usize]);
+            at = range.end;
+        }
+        (&read != text).then_some((id, read))
+    })
+}
+
 /// Prose long enough to fill more than one of the small pages the
 /// sheet sets, in one text node, so a page break falls inside it.
 const PROSE: &str = "My father had a small estate in Nottinghamshire; I was the third \
@@ -361,4 +380,30 @@ fn a_drop_cap_names_the_letter_it_took() {
 fn the_ranges_are_the_same_on_every_run() {
     let book = book(vec![heading("Chapter One"), paragraph(vec![text(PROSE)])]);
     assert_eq!(painted(&pages(&book, CSS)), painted(&pages(&book, CSS)));
+}
+
+/// The author sheets the e2e drives the fixture book with, and the
+/// display-typography fixture: a drop cap takes a letter out of a
+/// paragraph, and small capitals and `text-transform` change what is
+/// shaped. Every node comes back whole all the same.
+#[test]
+fn the_fixture_book_reads_back_under_the_author_sheets() {
+    let sheets = [
+        ("styled.css", include_str!("../../../fixtures/styled.css")),
+        (
+            "display-typography.css",
+            include_str!("../../../fixtures/display-typography.css"),
+        ),
+    ];
+    let manuscript = include_str!("../../../fixtures/gulliver-excerpt.md");
+    let (sections, _) = fleuron_markdown::to_sections(
+        manuscript,
+        "gulliver-excerpt.md",
+        &fleuron_markdown::Options::default(),
+    );
+    let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(manuscript), sections);
+    for (name, css) in sheets {
+        let pages = pages(&book, css);
+        assert_eq!(misread(&book, &pages), None, "under {name}");
+    }
 }

@@ -74,7 +74,7 @@ export interface TextItem {
    * naming one node tile it, so a cursor in the manuscript lands on
    * a run and a run lands back on the manuscript. Null on text the
    * engine wrote itself: a folio, a running head, a scene break's
-   * ornament, the hyphen a line break drew.
+   * ornament.
    */
   origin: SourceRange | null;
   /**

@@ -86,8 +86,7 @@ pub enum DrawItem {
         /// The runs that name one node tile it, so a cursor in the
         /// manuscript lands on a run and a run lands back on the
         /// manuscript. Absent on text the engine wrote itself: a
-        /// folio, a running head, a scene break's ornament, the
-        /// hyphen a line break drew.
+        /// folio, a running head, a scene break's ornament.
         origin: Option<SourceRange>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs
