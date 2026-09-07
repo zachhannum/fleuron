@@ -24,7 +24,7 @@ use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, SourceRange
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::lines::{
-    Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns,
+    Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns, Span,
 };
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
@@ -489,13 +489,8 @@ impl<'a> Paginator<'a> {
     /// ornaments and initial letters that are content but not prose.
     fn line_of(&self, text: &str, style: ParagraphStyle) -> Option<Line> {
         let runs = self.lines.shape(text, style)?;
-        Some(Line {
-            width: runs.iter().map(|run| run.advance).sum(),
-            overhang: 0.0,
-            protrusion: 0.0,
-            box_: self.lines.line_box(&runs, style),
-            runs,
-        })
+        let box_ = self.lines.line_box(&runs, style);
+        Some(Line::of(runs, box_))
     }
 
     /// Design units per em of a face, for the one conversion that
@@ -520,6 +515,25 @@ impl<'a> Paginator<'a> {
             - line.protrusion
     }
 
+    /// One span's width in points. Runs of different sizes each
+    /// convert against their own face: font units do not commute
+    /// across sizes. A band hangs into the margins at its own two
+    /// ends, never at a span boundary inside it.
+    fn span_width(&self, line: &Line, index: usize) -> f32 {
+        let span = &line.spans[index];
+        let ink = line.runs[span.runs.clone()]
+            .iter()
+            .map(|run| run.advance as f32 / self.upem(run.font_id) * run.size)
+            .sum::<f32>();
+        let overhang = if index + 1 == line.spans.len() {
+            line.overhang
+        } else {
+            0.0
+        };
+        let protrusion = if index == 0 { line.protrusion } else { 0.0 };
+        ink - overhang - protrusion
+    }
+
     /// Records one diagnostic, once. A book that hits the same
     /// problem on every page has one problem.
     fn warn(&self, message: String, origin: Option<String>) {
@@ -530,36 +544,39 @@ impl<'a> Paginator<'a> {
     }
 
     /// One line as paint ops: every run a `DrawItem::Text` at the
-    /// baseline, glyphs placed at their accumulated advances.
+    /// baseline, glyphs placed at their accumulated advances, and
+    /// each span of the line opened at its own origin.
     fn text_items(&self, line: &Line, x: f32, baseline: f32) -> Vec<DrawItem> {
         let mut items = Vec::new();
-        let mut x_cursor = x;
-        for run in &line.runs {
-            let upem = self.upem(run.font_id);
-            let mut glyphs = Vec::with_capacity(run.glyphs.len());
-            let mut glyph_x = x_cursor;
-            for (shaped, range) in run.glyphs.iter().zip(run.glyph_ranges()) {
-                glyphs.push(Glyph {
-                    id: shaped.id,
-                    x: glyph_x,
-                    range,
+        for span in &line.spans {
+            let mut x_cursor = x + span.offset;
+            for run in &line.runs[span.runs.clone()] {
+                let upem = self.upem(run.font_id);
+                let mut glyphs = Vec::with_capacity(run.glyphs.len());
+                let mut glyph_x = x_cursor;
+                for (shaped, range) in run.glyphs.iter().zip(run.glyph_ranges()) {
+                    glyphs.push(Glyph {
+                        id: shaped.id,
+                        x: glyph_x,
+                        range,
+                    });
+                    glyph_x += shaped.x_advance as f32 / upem * run.size;
+                }
+                items.push(DrawItem::Text {
+                    x: x_cursor,
+                    y: baseline,
+                    font_id: run.font_id,
+                    size: run.size,
+                    text: run.text.clone(),
+                    source: run.source.clone(),
+                    source_map: run.source_map.clone(),
+                    origin: run.origin.clone(),
+                    features: run.features,
+                    color: run.color,
+                    glyphs,
                 });
-                glyph_x += shaped.x_advance as f32 / upem * run.size;
+                x_cursor = glyph_x;
             }
-            items.push(DrawItem::Text {
-                x: x_cursor,
-                y: baseline,
-                font_id: run.font_id,
-                size: run.size,
-                text: run.text.clone(),
-                source: run.source.clone(),
-                source_map: run.source_map.clone(),
-                origin: run.origin.clone(),
-                features: run.features,
-                color: run.color,
-                glyphs,
-            });
-            x_cursor = glyph_x;
         }
         items
     }
@@ -890,22 +907,19 @@ impl Builder<'_, '_> {
             hanging: computed.hanging_punctuation,
         };
         let cap = self.paginator.drop_cap(id, &computed, inlines);
+        let full = Span::band(0.0, measure);
         let spec = match &cap {
-            Some((cap, _)) => Measure {
-                full: measure,
-                narrow: measure - cap.reserved,
-                shortened: cap.lines,
-            },
-            // An indent is a shorter first line that starts where
-            // that line's measure ends, which is what a drop cap
-            // already asks of the emit below. A cap outranks it: the
-            // first line is already displaced, and a book does not
-            // indent the paragraph a chapter opens with.
-            None if computed.text_indent != 0.0 => Measure {
-                full: measure,
-                narrow: measure - computed.text_indent,
-                shortened: 1,
-            },
+            Some((cap, _)) => Measure::new(
+                vec![Span::ending(measure, measure - cap.reserved); cap.lines],
+                full,
+            ),
+            // An indent is a shorter first line. A cap outranks it:
+            // the first line is already displaced, and a book does
+            // not indent the paragraph a chapter opens with.
+            None if computed.text_indent != 0.0 => Measure::new(
+                vec![Span::ending(measure, measure - computed.text_indent)],
+                full,
+            ),
             None => Measure::uniform(measure),
         };
         // The letter the cap holds is passed over below, so a drop
@@ -920,7 +934,7 @@ impl Builder<'_, '_> {
             inlines,
             style,
             self.styles(),
-            spec,
+            &spec,
             options,
             opening,
         );
@@ -950,13 +964,19 @@ impl Builder<'_, '_> {
 
         let (orphans, widows) = (computed.orphans as usize, computed.widows as usize);
         let mut first = true;
-        for (index, line) in lines.into_iter().enumerate() {
-            let available = spec.at(index);
+        let mut slot = 0;
+        for (index, mut line) in lines.into_iter().enumerate() {
+            let last = line.spans.len() - 1;
+            // A band's slack is at the end of its last span, so that
+            // is where alignment moves the text.
             let offset = align_offset(
                 computed.text_align,
-                self.paginator.line_width(&line),
-                available,
+                self.paginator.span_width(&line, last),
+                spec.at(slot + last).width,
             );
+            line.spans[last].offset += offset;
+            let origin = spec.at(slot).origin;
+            slot += line.spans.len();
             // A line beside the cap starts where the cap's own
             // measure ended.
             let inner = if index < orphans || count - index < widows || index < sunk {
@@ -970,13 +990,7 @@ impl Builder<'_, '_> {
                 line,
                 cap: (index == 0).then(|| cap.take()).flatten(),
             };
-            self.emit(
-                &mut first,
-                inner,
-                x + (measure - available) + offset - protrusion,
-                height,
-                piece,
-            );
+            self.emit(&mut first, inner, x + origin - protrusion, height, piece);
         }
         self.close(&computed, start);
     }

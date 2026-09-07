@@ -3,7 +3,9 @@
 
 use fleuron::content::{Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::lines::{FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use fleuron::lines::{
+    FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Span,
+};
 use fleuron::style::{FontVariantCaps, TextTransform};
 use proptest::prelude::*;
 
@@ -213,21 +215,24 @@ proptest! {
         measure in 60.0f32..300.0,
         indent in 0.0f32..50.0,
     ) {
-        let spec = Measure { full: measure, narrow: measure - indent, shortened: 1 };
+        let spec = Measure::new(
+            vec![Span::band(indent, measure - indent)],
+            Span::band(0.0, measure),
+        );
         let layout = LineLayout::new(registry());
         for options in [LineBreakOptions::default(), justified()] {
-            let lines = layout.layout(&inlines_of(&text), body(), spec, options);
+            let lines = layout.layout(&inlines_of(&text), body(), spec.clone(), options);
             for (i, line) in lines.iter().enumerate() {
                 if is_single_word(line) {
                     continue;
                 }
                 let width = width_pt(line);
-                let allowed = spec.at(i);
+                let allowed = spec.at(i).width;
                 prop_assert!(
                     width <= allowed + 0.01,
                     "line {i} is {width}pt, measure {allowed}pt"
                 );
-                let start = if i == 0 { indent } else { 0.0 };
+                let start = spec.at(i).origin;
                 prop_assert!(
                     start + width <= measure + 0.01,
                     "line {i} runs {}pt past a {measure}pt measure",
@@ -364,7 +369,7 @@ proptest! {
             &inlines_of(&text),
             body(),
             &fleuron::lines::Inherited,
-            measure,
+            &Measure::uniform(measure),
             LineBreakOptions::default(),
             fleuron::lines::Opening {
                 first_line,
