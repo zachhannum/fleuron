@@ -70,7 +70,7 @@ jobs:
       # The wire is positional and layout is deterministic, so the
       # structured output a worker builds is the one a native run builds,
       # to the byte. The digest is how that is checked rather than
-      # assumed. There is one digest per book and page box the gate
+      # assumed. The gate reports one digest per book and page box it
       # measured.
       - name: Same structured output, both targets
         run: |

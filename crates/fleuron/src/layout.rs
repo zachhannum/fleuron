@@ -1417,8 +1417,8 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// The last place above the foot of the column where a break was
-    /// allowed. Never its head: a column that gives up everything on
-    /// it has made no progress.
+    /// allowed. Never its head: a column that carries everything on
+    /// it into the next one makes no progress.
     fn back_up(&self) -> Option<usize> {
         (self.column_start + 1..self.placed.len())
             .rev()
@@ -1466,8 +1466,8 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// What `break-before: column` asks for: the next column, unless
-    /// this one is still empty, which is already the column the
-    /// cascade wants.
+    /// this one is still empty, which is already the column it asks
+    /// for.
     fn break_column(&mut self) {
         if !self.column_empty() {
             self.advance();

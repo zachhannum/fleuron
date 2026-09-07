@@ -1164,7 +1164,7 @@ fn column_count(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
     (count >= 1).then_some(Some(count as u32))
 }
 
-/// `column-width`: the width a column would rather have, or `auto`
+/// `column-width`: the width a column is asked to have, or `auto`
 /// for whatever `column-count` divides the box into.
 fn column_width(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
     auto_or(input, length)

@@ -403,7 +403,7 @@ pub struct Columns {
     /// `column-count`, or `None` for `auto`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
-    /// `column-width`: the width a column would rather have, or
+    /// `column-width`: the width a column is asked to have, or
     /// `None` for `auto`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<f32>,
@@ -414,8 +414,8 @@ pub struct Columns {
 }
 
 impl Columns {
-    /// One column, the whole content box: what a page that says
-    /// nothing about columns does.
+    /// One column, the whole content box: what a page that declares
+    /// no column property divides into.
     pub const fn undivided(gap: f32) -> Columns {
         Columns {
             count: None,
@@ -425,9 +425,9 @@ impl Columns {
         }
     }
 
-    /// Whether the page asked for no division at all, which is what
-    /// keeps a serialized page box the shape it was before columns
-    /// existed.
+    /// Whether the page asked for no division at all. A page box
+    /// that divides into nothing serializes without a `columns`
+    /// field.
     pub fn single(&self) -> bool {
         self.count.is_none() && self.width.is_none()
     }
