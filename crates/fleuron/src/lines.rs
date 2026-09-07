@@ -2274,6 +2274,88 @@ mod tests {
         line.runs.iter().map(|run| run.text.as_str()).collect()
     }
 
+    /// A band of two spans of `width`, a gutter between them, and
+    /// one undivided band of the whole width under it.
+    fn divided_band(width: f32, gutter: f32) -> Measure {
+        Measure::new(
+            vec![
+                Span {
+                    origin: 0.0,
+                    width,
+                    ends_band: false,
+                },
+                Span::band(width + gutter, width),
+            ],
+            Span::band(0.0, width * 2.0 + gutter),
+        )
+    }
+
+    /// One span's text, read off the runs set in it.
+    fn span_text(line: &Line, index: usize) -> String {
+        line.runs[line.spans[index].runs.clone()]
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect()
+    }
+
+    /// One span's width in points.
+    fn span_width_pt(line: &Line, index: usize) -> f32 {
+        line.spans[index].width as f32 / units_per_em() as f32 * body().size
+    }
+
+    /// A band set in two spans sets text in both, in reading order:
+    /// the paragraph crosses from the first to the second and comes
+    /// back off them in the order it was written.
+    #[test]
+    fn a_band_of_two_spans_sets_text_in_both() {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(
+            &one_run(OPENING),
+            body(),
+            divided_band(80.0, 20.0),
+            LineBreakOptions::default(),
+        );
+        let first = &lines[0];
+        assert_eq!(first.spans.len(), 2, "the band was set in one span");
+        assert!(
+            !span_text(first, 0).is_empty() && !span_text(first, 1).is_empty(),
+            "a span of the band holds no text: {first:?}"
+        );
+        assert_eq!(
+            OPENING
+                .replace(' ', "")
+                .find(&span_text(first, 1).replace(' ', "")),
+            Some(span_text(first, 0).replace(' ', "").len()),
+            "the second span does not carry on from the first"
+        );
+        // The second span opens where the profile put it, which is
+        // past the gutter rather than at the line's own edge.
+        assert_eq!(first.spans[1].offset, 100.0);
+        assert!(
+            lines[1..].iter().all(|line| line.spans.len() == 1),
+            "a band under the divided one was set in more than one span"
+        );
+    }
+
+    /// Justification flushes an interior span at both edges: the
+    /// text between two spans of a band fills the first of them, as
+    /// only the last line of a paragraph is left short.
+    #[test]
+    fn justification_flushes_an_interior_span() {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(
+            &one_run(OPENING),
+            body(),
+            divided_band(80.0, 20.0),
+            justified(),
+        );
+        assert!(
+            (span_width_pt(&lines[0], 0) - 80.0).abs() < 0.01,
+            "the first span of the band is {}pt of 80pt",
+            span_width_pt(&lines[0], 0),
+        );
+    }
+
     /// A run's glyphs map back to the characters they were shaped
     /// from: the ffi ligature is one glyph spanning three bytes, and
     /// the ranges tile the run's text without gaps.
