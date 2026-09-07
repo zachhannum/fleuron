@@ -581,7 +581,7 @@ function near(painted: number | undefined, wanted: number): boolean {
 
 // Columns. The page box divides, the flow fills one column before it
 // fills the next, and the painter draws the rule the display structure
-// carries in the gutter — the same rect the PDF writer fills.
+// carries in the gutter, which is the rect the PDF writer fills.
 const divided = await client.preview([
   styleOp(
     '@page { column-count: 2; column-gap: 18pt; column-rule-style: solid; column-rule-width: 0.5pt }',

@@ -214,13 +214,13 @@ A page the flow put nothing on paints no margin boxes at all, so a page whose on
 
 ### Columns
 
-`column-count` and `column-width` divide the page's content box. `column-count` alone takes that many; `column-width` alone takes as many columns of at least that width as fit; the two together take the smaller of the two answers. `column-gap` is the gutter between them, and `normal` is one em of the book's own size.
+`column-count` and `column-width` divide the page's content box. `column-count` alone takes that many columns; `column-width` alone takes as many columns of at least that width as fit; declared together, the smaller of the two answers wins. `column-gap` is the gutter between them, and `normal` is one em of the book's own size.
 
 The flow fills the first column to its foot, then the next. Only the last column running out starts a page. A paragraph breaks to the column it is set in, and orphans, widows and `break-inside: avoid` hold inside one. `break-before: column` and `break-after: column` open the next column rather than the next page.
 
-`column-rule-style: solid` paints a rule down each gutter, `column-rule-width` wide, centred in the gutter and reaching the foot of the columns it divides. A page the flow left in one column paints none. The rule takes no room of its own: the gutter is the room it has.
+`column-rule-style: solid` paints a rule down each gutter, `column-rule-width` wide, centred in the gutter and reaching the foot of the columns it divides. A page the flow left in one column paints no rule. The rule is painted inside the gutter and takes no width from the columns.
 
-The furniture belongs to the page rather than to a column. Running heads, folios and margin boxes are placed the same way with columns as without.
+Running heads, folios and margin boxes belong to the page rather than to a column. Dividing the content box leaves them where an undivided page puts them.
 
 ## `@font-face`
 
@@ -254,7 +254,7 @@ Floats, tables, grid, flexbox, transforms, media queries, custom properties, cou
 
 The box model is missing the `background` shorthand and every background property but `background-color`, the border longhands that name both an edge and a value, such as `border-top-width`, `border-radius`, and a border, padding or background on an inline element or on `@page`.
 
-Columns are missing `column-fill`, so the last page fills its columns in order and stops short rather than balancing them; `column-rule-color`, so a rule paints in the ink the book is set in; `column-span`, so nothing spans the full measure with columns above and below it; and the `columns` and `column-rule` shorthands. An element cannot set columns of its own: `@page` is where the box divides.
+Columns are missing `column-fill`, so the last page fills its columns in order and stops short rather than balancing them; `column-rule-color`, so a rule paints in the ink the book is set in; `column-span`, so nothing spans the full measure with columns above and below it; the `columns` and `column-rule` shorthands; and columns on an element, `@page` being where the box divides.
 
 Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.
 

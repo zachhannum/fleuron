@@ -374,6 +374,7 @@ fn resolve_page(
                     geometry.columns.gap = gap
                         .map(|gap| gap.to_points(root_size, root_size))
                         .unwrap_or(root_size)
+                        .max(0.0)
                 }
                 PageDeclaration::ColumnRuleWidth(width) => {
                     geometry.columns.rule.width = width.to_points(root_size, root_size)

@@ -431,7 +431,7 @@ proptest! {
         }
     }
 
-    /// Acceptance: a two-column book lays out the same twice — the
+    /// Acceptance: a two-column book lays out the same twice: the
     /// same pages, the same columns, the same glyphs in the same
     /// places.
     #[test]

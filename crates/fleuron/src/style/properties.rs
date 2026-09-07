@@ -468,8 +468,8 @@ impl PageGeometry {
     ///
     /// A declared `column-width` is a preference: as many columns of
     /// that width as fit, and where `column-count` was declared too
-    /// it is the ceiling on that. A box too narrow for one of them
-    /// still gets one — a page with no column on it holds nothing.
+    /// it is the ceiling on that. A box too narrow for one column of
+    /// that width still divides into one.
     pub fn column_count(self) -> u32 {
         let available = self.content_size().0;
         let fitting = self.columns.width.map(|width| {

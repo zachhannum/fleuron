@@ -1426,9 +1426,9 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// Ends the column at `cut`, carrying what was below into the
-    /// next one — the next page's first, where the column that ended
-    /// was the page's last. Carried fragments move; they are never
-    /// measured again.
+    /// next one, which is the next page's first where the column that
+    /// ended was the page's last. Carried fragments move; they are
+    /// never measured again.
     fn carry(&mut self, cut: usize) {
         let mut carried = self.placed.split_off(cut);
         let (from_x, from_y) = self.origin();
@@ -1537,9 +1537,13 @@ impl<'a, 'p> Flow<'a, 'p> {
         items
     }
 
-    /// The same over one column: the decorations open at its head,
-    /// what the fragments in it open and close, and what is left
-    /// open at its foot.
+    /// The same over one column.
+    ///
+    /// A block whose first fragment landed in this column has its top
+    /// edge here, and one whose last fragment did has its bottom; the
+    /// ranges are contiguous, so a block with neither covers every
+    /// fragment the column holds. What is still open when the column
+    /// closes carries into the next.
     fn decorate_column(&mut self, placed: &[Placed], column: u32) -> Vec<DrawItem> {
         let mut boxes: Vec<Painted> = Vec::new();
         let mut open: Vec<usize> = Vec::new();
@@ -1585,12 +1589,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         boxes.iter().flat_map(|box_| box_.items(origin)).collect()
     }
 
-    /// The rules down the gutters of the page being closed: one
-    /// between each pair of columns that both hold something, over
-    /// the height of the taller of the two.
+    /// The rules down the gutters of the page being closed: one down
+    /// each gutter the flow filled past, over the height of the
+    /// taller of the two columns it divides.
     ///
-    /// A page the flow left in one column divides nothing, and paints
-    /// none.
+    /// A page the flow left in one column paints no rule.
     fn rules(&self, placed: &[Placed]) -> Vec<DrawItem> {
         let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
         let width = geometry.columns.rule.used();
@@ -2054,7 +2057,7 @@ mod tests {
     }
 
     /// Acceptance: orphans and widows hold at a column boundary the
-    /// way they hold at a page boundary — a line that would stand
+    /// way they hold at a page boundary. A line that would stand
     /// alone at the head of a column takes its paragraph with it.
     #[test]
     fn orphans_and_widows_hold_at_every_column_boundary() {
