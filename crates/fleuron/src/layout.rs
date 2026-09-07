@@ -20,10 +20,12 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, origin, text};
+use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, SourceRange, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Patterns};
+use crate::lines::{
+    Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns,
+};
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
@@ -552,6 +554,7 @@ impl<'a> Paginator<'a> {
                 text: run.text.clone(),
                 source: run.source.clone(),
                 source_map: run.source_map.clone(),
+                origin: run.origin.clone(),
                 features: run.features,
                 color: run.color,
                 glyphs,
@@ -900,21 +903,21 @@ impl Builder<'_, '_> {
             },
             None => Measure::uniform(measure),
         };
-        // The initial is already out of the inlines below, so a drop
+        // The letter the cap holds is passed over below, so a drop
         // cap and a first line over the same paragraph divide it:
         // `::first-letter` has the cap, `::first-line` the rest of
         // the line beside it.
-        let first_line = self.styles().opening_line(id);
+        let opening = Opening {
+            first_line: self.styles().opening_line(id),
+            taken: cap.as_ref().map_or(0, |(_, taken)| *taken),
+        };
         let lines = self.paginator.lines.layout_styled(
-            match &cap {
-                Some((_, rest)) => rest,
-                None => inlines,
-            },
+            inlines,
             style,
             self.styles(),
             spec,
             options,
-            first_line,
+            opening,
         );
 
         let count = lines.len();
@@ -1063,15 +1066,15 @@ impl Paginator<'_> {
         id: NodeId,
         computed: &ComputedStyle,
         inlines: &[Inline],
-    ) -> Option<(Cap, Vec<Inline>)> {
-        let initial = self.styles.first_letter(id)?;
-        let sink = initial.initial_letter as usize;
+    ) -> Option<(Cap, usize)> {
+        let cap_style = self.styles.first_letter(id)?;
+        let sink = cap_style.initial_letter as usize;
         if sink < 2 {
             return None;
         }
-        let (letter, rest) = take_initial(inlines)?;
+        let initial = take_initial(inlines)?;
         let body = computed.paragraph();
-        let cap_metrics = self.registry.metrics(initial.font_id)?;
+        let cap_metrics = self.registry.metrics(cap_style.font_id)?;
         let cap_units = cap_height(cap_metrics);
         if cap_units <= 0.0 {
             return None;
@@ -1081,9 +1084,14 @@ impl Paginator<'_> {
         let sunk = (sink - 1) as f32 * self.lines.strut(body).height() + body_cap;
         let style = ParagraphStyle {
             size: sunk * cap_metrics.units_per_em as f32 / cap_units,
-            ..initial.paragraph()
+            ..cap_style.paragraph()
         };
-        let line = self.line_of(&letter.to_string(), style)?;
+        let mut line = self.line_of(&initial.letter.to_string(), style)?;
+        // The cap stands for the letter it was taken from, so a
+        // cursor on the manuscript's first word lands on it.
+        if let Some(run) = line.runs.first_mut() {
+            run.origin = Some(initial.origin);
+        }
         // A word space of the body text separates the cap from the
         // lines it is sunk into.
         let gutter = self
@@ -1099,7 +1107,7 @@ impl Paginator<'_> {
                 line,
                 lines: sink,
             },
-            rest,
+            initial.taken,
         ))
     }
 }
@@ -1123,35 +1131,50 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
     }
 }
 
-/// Splits the first character off a run of inlines, wherever the
-/// markup has put it: a paragraph opening in italic still opens with
-/// a letter.
-fn take_initial(inlines: &[Inline]) -> Option<(char, Vec<Inline>)> {
-    let mut rest = inlines.to_vec();
-    let letter = strip_initial(&mut rest)?;
-    Some((letter, rest))
+/// The letter a drop cap is set from, where it was written, and how
+/// far into the paragraph the rest of the prose starts.
+struct Initial {
+    letter: char,
+    /// The node the letter came out of, and the bytes of it the cap
+    /// holds: the letter and whatever space stood before it.
+    origin: SourceRange,
+    /// Bytes of the paragraph's text the cap holds.
+    taken: usize,
 }
 
-fn strip_initial(inlines: &mut [Inline]) -> Option<char> {
-    for inline in inlines {
-        match inline {
-            Inline::Text { value, .. } | Inline::Code { value, .. } => {
-                let trimmed = value.trim_start();
-                if let Some(letter) = trimmed.chars().next() {
-                    *value = trimmed[letter.len_utf8()..].to_string();
-                    return Some(letter);
+/// The first character of a run of inlines, wherever the markup has
+/// put it: a paragraph opening in italic still opens with a letter.
+fn take_initial(inlines: &[Inline]) -> Option<Initial> {
+    fn walk(inlines: &[Inline], before: &mut usize) -> Option<Initial> {
+        for inline in inlines {
+            match inline {
+                Inline::Text { id, value, .. } | Inline::Code { id, value, .. } => {
+                    let space = value.len() - value.trim_start().len();
+                    if let Some(letter) = value[space..].chars().next() {
+                        let held = (space + letter.len_utf8()) as u32;
+                        return Some(Initial {
+                            letter,
+                            origin: SourceRange {
+                                node: *id,
+                                range: 0..held,
+                            },
+                            taken: *before + held as usize,
+                        });
+                    }
+                    *before += value.len();
                 }
-            }
-            Inline::Emphasis { children, .. }
-            | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } => {
-                if let Some(letter) = strip_initial(children) {
-                    return Some(letter);
+                Inline::Emphasis { children, .. }
+                | Inline::Strong { children, .. }
+                | Inline::Link { children, .. } => {
+                    if let Some(initial) = walk(children, before) {
+                        return Some(initial);
+                    }
                 }
             }
         }
+        None
     }
-    None
+    walk(inlines, &mut 0)
 }
 
 /// One fragment placed on the page being built.

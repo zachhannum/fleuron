@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 8;
+pub const VERSION: u16 = 9;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -137,7 +137,7 @@ pub fn version(bytes: &[u8]) -> Result<u16, WireError> {
 mod tests {
     use super::*;
     use crate::Warning;
-    use crate::content::NodeId;
+    use crate::content::{NodeId, SourceRange};
     use crate::fonts::{AxisSetting, FaceAttributes, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
     use crate::pages::{DrawItem, Glyph, Page, Side};
@@ -160,6 +160,10 @@ mod tests {
                         text: "FI ❦".into(),
                         source: "fi ❦".into(),
                         source_map: vec![0, 1, 2, 3, 4, 5, 6],
+                        origin: Some(SourceRange {
+                            node: NodeId::UNASSIGNED,
+                            range: 3..9,
+                        }),
                         features: Features { small_caps: true },
                         color: Color::rgb(180, 30, 30),
                         glyphs: vec![Glyph {

@@ -119,6 +119,7 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
         source: String::new(),
         source_map: Vec::new(),
         text_start: 0,
+        origin: None,
         features: fleuron::fonts::Features::NONE,
         color: fleuron::style::Color::BLACK,
         glyphs: Vec::new(),

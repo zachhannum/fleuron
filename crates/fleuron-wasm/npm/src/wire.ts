@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 8;
+export const WIRE_VERSION = 9;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -27,6 +27,14 @@ export interface Glyph {
   /** Absolute x of the glyph's origin, in points. */
   x: number;
   /** Byte range in the run's text this glyph came from. */
+  range: [number, number];
+}
+
+/** Where a run was written, in the content tree it came from. */
+export interface SourceRange {
+  /** The id of the node the text was written in. */
+  node: number;
+  /** Byte range in that node's own text. */
   range: [number, number];
 }
 
@@ -60,6 +68,15 @@ export interface TextItem {
    * the source that glyph stands for. Empty alongside `source`.
    */
   sourceMap: number[];
+  /**
+   * Where the run was written: the content node it was shaped from
+   * and the bytes of that node's own text it stands for. The runs
+   * naming one node tile it, so a cursor in the manuscript lands on
+   * a run and a run lands back on the manuscript. Null on text the
+   * engine synthesized — a folio, a running head, a scene break's
+   * ornament, the hyphen a line break drew.
+   */
+  origin: SourceRange | null;
   /**
    * The OpenType features the run was shaped with. A painter that
    * draws characters asks the face for these, or the browser picks
@@ -327,6 +344,10 @@ function glyph(r: Reader): Glyph {
   return { id: r.varint(), x: r.f32(), range: [r.varint(), r.varint()] };
 }
 
+function sourceRange(r: Reader): SourceRange {
+  return { node: r.varint(), range: [r.varint(), r.varint()] };
+}
+
 function item(r: Reader): DrawItem {
   const variant = r.varint();
   switch (variant) {
@@ -340,6 +361,7 @@ function item(r: Reader): DrawItem {
         text: r.string(),
         source: r.string(),
         sourceMap: r.seq(() => r.varint()),
+        origin: r.option(() => sourceRange(r)),
         features: { smallCaps: r.bool() },
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),

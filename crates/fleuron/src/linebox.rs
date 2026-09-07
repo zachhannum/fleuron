@@ -87,6 +87,7 @@ mod tests {
             source: String::new(),
             source_map: Vec::new(),
             text_start: 0,
+            origin: None,
             features: crate::fonts::Features::NONE,
             color: crate::style::Color::BLACK,
             glyphs: Vec::new(),

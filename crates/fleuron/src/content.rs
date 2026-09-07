@@ -37,6 +37,7 @@
 //! (`chapter-01.md:12:3`). A missing position never fails a run.
 
 use std::collections::BTreeMap;
+use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
@@ -55,6 +56,32 @@ impl NodeId {
     pub fn get(self) -> u32 {
         self.0
     }
+
+    /// The id this one becomes when the section around it is
+    /// renumbered by `step`. A section's nodes are dense and in
+    /// document order from its own id, so one step moves all of
+    /// them. Unassigned stays unassigned.
+    pub(crate) fn shifted(self, step: i64) -> NodeId {
+        if self == NodeId::UNASSIGNED {
+            return self;
+        }
+        NodeId((self.0 as i64 + step).max(0) as u32)
+    }
+}
+
+/// A stretch of one node's text: the node it was written in, and
+/// the bytes of that node's own text the stretch covers.
+///
+/// This is how a laid-out run says where it came from. The range
+/// indexes the node's text as the frontend read it, before
+/// `text-transform` or a synthesized small capital changed what was
+/// shaped.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SourceRange {
+    /// The node the text was written in.
+    pub node: NodeId,
+    /// Byte range in that node's own text.
+    pub range: Range<u32>,
 }
 
 /// A 1-based position in the frontend's source document.

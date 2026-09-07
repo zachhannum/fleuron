@@ -242,8 +242,11 @@ fn paint(
             source,
             source_map,
             // The glyphs are here; the features that chose them are
-            // for a painter that has to choose its own.
+            // for a painter that has to choose its own. Where the run
+            // was written is for a preview that follows a cursor; a
+            // page of a PDF does not move.
             features: _,
+            origin: _,
             color,
             glyphs,
         } => {
@@ -599,6 +602,7 @@ mod tests {
             text: "dd".into(),
             source: String::new(),
             source_map: Vec::new(),
+            origin: None,
             features: Features::NONE,
             color: Color::BLACK,
             glyphs: vec![

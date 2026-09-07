@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 78060b372240c222a5c27066a00e184ccbf69ca8ca605845688ed3e79ff6a2df # shrinks to edits = [Content(1), Preview, Content(3)]
 cc 57e7b276b57584d47d75a165abd83dee523f89d93e4ff7038ae2363bb3bbc027 # shrinks to edits = [Content(0), Preview, Style(3)]
+cc 98b8a8c488750e33ce001e199a63b15faf703f752a8e70fb6725c7ababb96f50 # shrinks to edits = [Content(0), Preview, Source(0)]
