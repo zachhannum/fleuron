@@ -134,6 +134,16 @@ impl FirstLine {
     }
 }
 
+/// A paragraph's opening style and how far it reaches.
+#[derive(Debug, Clone, Copy)]
+struct Opening {
+    style: FirstLine,
+    /// Bytes of the shaped text the style covers. `None` on the pass
+    /// that has no break to read it off yet, where it covers the
+    /// paragraph.
+    extent: Option<usize>,
+}
+
 /// Where line layout gets the style of one inline node.
 ///
 /// The style tree answers by node id. `Inherited` answers with the
@@ -808,12 +818,13 @@ impl<'a> LineLayout<'a> {
     /// A first-line style takes two runs. What it sets changes the
     /// width of the opening run, the width moves where the paragraph
     /// breaks, and the break decides how much text the opening line
-    /// holds. The first run styles the paragraph's leading run to its
-    /// end and breaks the whole of it; the second styles as far as
-    /// the extent that break gave and breaks again. The count is
-    /// fixed at two whether or not the runs agree, because a line
-    /// count that depended on how long a paragraph took to settle
-    /// would not be deterministic.
+    /// holds. The first run sets the paragraph's leading run in the
+    /// opening style to the end and breaks the whole of it. The
+    /// second sets as far as the extent that break gave and breaks
+    /// again with the opening line pinned there, so the text the
+    /// style covers is the text the line ships with. The count is
+    /// fixed at two, because a line count that depended on how long a
+    /// paragraph took to settle would not be deterministic.
     fn broken(
         &self,
         inlines: &[Inline],
@@ -830,22 +841,20 @@ impl<'a> LineLayout<'a> {
                 1,
             );
         };
-        let (_, extent) = self.break_once(
-            inlines,
-            style,
-            styles,
-            measure,
-            options,
-            Some((first_line, usize::MAX)),
-        );
-        let (lines, _) = self.break_once(
-            inlines,
-            style,
-            styles,
-            measure,
-            options,
-            Some((first_line, extent)),
-        );
+        let opening = Opening {
+            style: first_line,
+            extent: None,
+        };
+        let (lines, extent) =
+            self.break_once(inlines, style, styles, measure, options, Some(opening));
+        if extent == 0 {
+            return (lines, 1);
+        }
+        let opening = Opening {
+            extent: Some(extent),
+            ..opening
+        };
+        let (lines, _) = self.break_once(inlines, style, styles, measure, options, Some(opening));
         (lines, 2)
     }
 
@@ -861,9 +870,9 @@ impl<'a> LineLayout<'a> {
         styles: &dyn InlineStyles,
         measure: Measure,
         options: LineBreakOptions,
-        first: Option<(FirstLine, usize)>,
+        opening: Option<Opening>,
     ) -> (Vec<Line>, usize) {
-        let flat = self.flatten(inlines, style, styles, first);
+        let flat = self.flatten(inlines, style, styles, opening);
         if flat.text.is_empty() {
             return (Vec::new(), 0);
         }
@@ -887,6 +896,9 @@ impl<'a> LineLayout<'a> {
             size: style.size,
             hyphen,
             options,
+            opening: opening
+                .and_then(|opening| opening.extent)
+                .and_then(|extent| breaks.iter().position(|at| at.content_end == extent)),
         };
 
         let mut lines = Vec::new();
@@ -931,10 +943,10 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        first: Option<(FirstLine, usize)>,
+        opening: Option<Opening>,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
-        self.walk_inlines(inlines, style, styles, first, &mut flat);
+        self.walk_inlines(inlines, style, styles, opening, &mut flat);
         flat
     }
 
@@ -943,19 +955,19 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        first: Option<(FirstLine, usize)>,
+        opening: Option<Opening>,
         flat: &mut FlatParagraph,
     ) {
         for inline in inlines {
             match inline {
-                Inline::Text { value, .. } => self.push_text(flat, value, style, first),
+                Inline::Text { value, .. } => self.push_text(flat, value, style, opening),
                 Inline::Code { id, value, .. } => {
-                    self.push_text(flat, value, styles.style(*id, style), first)
+                    self.push_text(flat, value, styles.style(*id, style), opening)
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
-                    self.walk_inlines(children, styles.style(*id, style), styles, first, flat);
+                    self.walk_inlines(children, styles.style(*id, style), styles, opening, flat);
                 }
             }
         }
@@ -974,12 +986,11 @@ impl<'a> LineLayout<'a> {
         flat: &mut FlatParagraph,
         value: &str,
         style: ParagraphStyle,
-        first: Option<(FirstLine, usize)>,
+        opening: Option<Opening>,
     ) {
-        let (opening, extent) = match first {
-            Some((first_line, extent)) if flat.text.len() < extent => {
-                (first_line.over(style), extent)
-            }
+        let reach = |opening: Opening| opening.extent.unwrap_or(usize::MAX);
+        let (opening, extent) = match opening {
+            Some(open) if flat.text.len() < reach(open) => (open.style.over(style), reach(open)),
             _ => {
                 flat.push_styled(value, style, self.small_caps(style));
                 return;
@@ -1375,6 +1386,9 @@ struct Breaker<'a> {
     /// Font units a hyphenated break is charged for.
     hyphen: f32,
     options: LineBreakOptions,
+    /// Where the opening line has to end, when an opening style
+    /// covers exactly that much of the text.
+    opening: Option<usize>,
 }
 
 /// How one candidate line comes out: how far its glue is from its
@@ -1549,6 +1563,12 @@ impl Breaker<'_> {
             while index < active.len() {
                 let a = active[index];
                 let line = nodes[a].line + 1;
+                // The opening line ends where the style over it does,
+                // so the text set in that style is the text on it.
+                if line == 1 && self.opening.is_some_and(|end| end != b) {
+                    index += 1;
+                    continue;
+                }
                 let fit = self.fit(nodes[a].at, b, line);
                 if let Some(candidate) = self.candidate(&nodes[a], a, b, line, &fit) {
                     self.keep_best(&mut candidates, candidate);
@@ -1906,6 +1926,38 @@ mod tests {
     fn units_per_em() -> u16 {
         registry().metrics(0).unwrap().units_per_em
     }
+
+    /// One paragraph of one text run, as inlines.
+    fn one_run(text: &str) -> Vec<Inline> {
+        vec![Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: text.to_string(),
+            position: None,
+        }]
+    }
+
+    /// One paragraph with `first_line` over the line it opens on,
+    /// ragged and unhyphenated.
+    fn layout_first(
+        layout: &LineLayout<'_>,
+        measure_pt: f32,
+        first_line: Option<FirstLine>,
+    ) -> Vec<Line> {
+        layout.layout_styled(
+            &one_run(OPENING),
+            body(),
+            &Inherited,
+            measure_pt,
+            LineBreakOptions::default(),
+            first_line,
+        )
+    }
+
+    /// Prose long enough to break several times at the measures the
+    /// first-line tests use, and lowercase throughout so small
+    /// capitals show in the drawn text.
+    const OPENING: &str = "it was the best of times and the worst of them too, \
+        and nobody in the whole of the parish could tell the one from the other";
 
     /// One paragraph laid out under a style of the caller's, ragged
     /// and unhyphenated.
@@ -2610,6 +2662,185 @@ mod tests {
                 "a glyph has no tracking of its own",
             );
         }
+    }
+
+    /// A first-line style takes two runs of the breaker and a
+    /// paragraph without one takes a single run. The count is fixed
+    /// whether or not the two runs agree: a line count that depended
+    /// on how long a paragraph took to settle would not be
+    /// deterministic.
+    #[test]
+    fn a_first_line_style_breaks_the_paragraph_twice() {
+        let layout = LineLayout::new(registry());
+        let inlines = one_run(OPENING);
+        let broken = |first_line| {
+            layout
+                .broken(
+                    &inlines,
+                    body(),
+                    &Inherited,
+                    Measure::uniform(160.0),
+                    LineBreakOptions::default(),
+                    first_line,
+                )
+                .1
+        };
+        assert_eq!(broken(None), 1);
+        assert_eq!(
+            broken(Some(FirstLine {
+                caps: Some(FontVariantCaps::SmallCaps),
+                ..FirstLine::default()
+            })),
+            2,
+        );
+    }
+
+    /// Small capitals on the opening line stop at the break the
+    /// second run chose: the last word of the first line is set in
+    /// them throughout and the first word of the second line is none
+    /// of it. What the author wrote comes back off the runs either
+    /// way.
+    #[test]
+    fn a_first_line_is_small_capitals_as_far_as_the_break() {
+        // The face with no substitutions of its own synthesises its
+        // small capitals, which puts the boundary in the drawn text.
+        let bare = crate::fonts::registry_without_substitutions();
+        let layout = LineLayout::new(&bare);
+        let lines = layout_first(
+            &layout,
+            160.0,
+            Some(FirstLine {
+                caps: Some(FontVariantCaps::SmallCaps),
+                ..FirstLine::default()
+            }),
+        );
+        assert!(lines.len() > 2, "the paragraph did not break");
+
+        let opening = line_text(&lines[0]);
+        let next = line_text(&lines[1]);
+        let last_word = opening.split_whitespace().next_back().expect("a word");
+        let first_word = next.split_whitespace().next().expect("a word");
+        assert_eq!(
+            last_word,
+            last_word.to_uppercase(),
+            "the first line's last word is not small capitals throughout: {opening:?}",
+        );
+        assert_eq!(
+            first_word,
+            first_word.to_lowercase(),
+            "the small capitals ran past the first line: {next:?}",
+        );
+        assert_eq!(opening, opening.to_uppercase());
+        assert_eq!(next, next.to_lowercase());
+        assert!(
+            lines[0]
+                .runs
+                .iter()
+                .any(|run| run.size == body().size * SMALL_CAPS_RATIO),
+            "nothing on the opening line was set at the reduced size",
+        );
+        assert!(
+            lines[1].runs.iter().all(|run| run.size == body().size),
+            "the reduced size reached the second line",
+        );
+
+        // What the author wrote is on the runs beside what was drawn.
+        let written: String = lines[0]
+            .runs
+            .iter()
+            .map(|run| match run.source.is_empty() {
+                true => run.text.as_str(),
+                false => run.source.as_str(),
+            })
+            .collect();
+        assert!(
+            OPENING.starts_with(&written),
+            "the opening line lost the manuscript: {written:?}",
+        );
+    }
+
+    /// Tracking on the opening line is width like any other, so the
+    /// line the paragraph breaks at holds less than it does
+    /// untracked.
+    #[test]
+    fn a_tracked_first_line_breaks_earlier() {
+        let layout = LineLayout::new(registry());
+        let plain = layout_first(&layout, 160.0, None);
+        let tracked = layout_first(
+            &layout,
+            160.0,
+            Some(FirstLine {
+                letter_spacing: Some(0.12 * body().size),
+                ..FirstLine::default()
+            }),
+        );
+        assert!(
+            line_text(&tracked[0]).len() < line_text(&plain[0]).len(),
+            "the tracked line held as much: {:?} against {:?}",
+            line_text(&tracked[0]),
+            line_text(&plain[0]),
+        );
+    }
+
+    /// A first line set larger grows its own line box around the
+    /// baseline the paragraph shares, and leaves the lines under it
+    /// the size they were.
+    #[test]
+    fn a_first_line_set_larger_grows_its_line_box() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(
+            &layout,
+            240.0,
+            Some(FirstLine {
+                size: Some(body().size * 1.6),
+                ..FirstLine::default()
+            }),
+        );
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert!(
+            lines[0].box_.height > lines[1].box_.height,
+            "the opening line did not grow: {:?} against {:?}",
+            lines[0].box_,
+            lines[1].box_,
+        );
+        assert!(
+            lines[0].box_.baseline > lines[1].box_.baseline,
+            "the opening line grew below the baseline alone",
+        );
+        assert_eq!(
+            lines[0].runs[0].size,
+            body().size * 1.6,
+            "the opening run was not set larger",
+        );
+        assert_eq!(lines[1].runs[0].size, body().size);
+    }
+
+    /// `text-transform` on the opening line changes what is shaped
+    /// and leaves what the author wrote on the run beside it, the way
+    /// it does on a whole paragraph.
+    #[test]
+    fn a_transformed_first_line_keeps_the_manuscript() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(
+            &layout,
+            160.0,
+            Some(FirstLine {
+                transform: Some(TextTransform::Uppercase),
+                ..FirstLine::default()
+            }),
+        );
+        let opening = line_text(&lines[0]);
+        assert_eq!(opening, opening.to_uppercase());
+        assert_eq!(line_text(&lines[1]), line_text(&lines[1]).to_lowercase());
+        let written: String = lines[0]
+            .runs
+            .iter()
+            .map(|run| run.source.as_str())
+            .collect();
+        assert!(
+            OPENING.starts_with(&written) && written == written.to_lowercase(),
+            "the opening line lost the manuscript: {written:?}",
+        );
     }
 
     /// Small capitals come out of the face where the face has them:

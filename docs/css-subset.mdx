@@ -140,7 +140,7 @@ Recto and verso do not follow the folio. Which side of the spread a page falls o
 
 `::first-line` is where a chapter opening set in small capitals comes from. It reaches the line the paragraph opens on, which is the paragraph's own first line and not the page's: a paragraph broken across a page boundary is styled on its opening line and nowhere else.
 
-The line is broken twice. `letter-spacing`, `font-variant-caps`, `text-transform` and `font-size` change the width of the run, the width moves where the total-fit pass breaks, and the break decides how much text was on the first line. The first pass sets the paragraph's leading run in the opening style and breaks the whole of it; the second sets as far as the extent the first pass gave and breaks again. There are always two, so a paragraph's line count does not depend on how long it took to settle.
+The line is broken twice. `letter-spacing`, `font-variant-caps`, `text-transform` and `font-size` change the width of the run, the width moves where the total-fit pass breaks, and the break decides how much text was on the first line. The first pass sets the paragraph's leading run in the opening style and breaks the whole of it. The second sets as far as the extent that break gave and breaks again with the opening line ending there, so the text the style covers is the text the line carries. There are always two passes, so a paragraph's line count does not depend on how long it took to settle.
 
 `font-size` grows the line around the shared baseline. `color` is paint alone, and the paragraph breaks the same with it or without it.
 
