@@ -702,10 +702,10 @@ fn a_two_column_book_reaches_the_pdf() {
 }
 
 /// The rule down the gutter is in the display structure the preview
-/// paints and in the PDF the export writes: one rect per filled
-/// gutter, and the same ink filled in the PDF.
+/// paints from, one rect per filled gutter, and the export fills the
+/// same rect in the PDF.
 #[test]
-fn the_column_rule_reaches_both_painters() {
+fn the_column_rule_reaches_the_display_structure_and_the_pdf() {
     let pages = column_pages();
     let filled = pages
         .iter()
