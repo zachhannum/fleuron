@@ -4,27 +4,21 @@ description: A paged-media layout engine for book-shaped documents, in Rust.
 slug: overview
 ---
 
-fleuron takes markdown and CSS and generates a fully typeset and publish-ready novel. It shapes the text, 
-breaks and hyphenates the lines, fragments the result into pages, and emits a formatted output struct that 
-can be used to preview the book, and exported to PDF. The same source compiles to native and to WebAssembly.
+Fleuron takes markdown and CSS and typesets a book from them. It shapes the text, breaks and hyphenates the lines, and fragments the result into pages. What comes back is a display structure: where every glyph, rule and image sits on every page. A preview draws that on screen and the PDF writer writes it to a file. The same source compiles to native and to WebAssembly.
 
 ## Getting started
 
-There are three ways to use fleuron: the native Rust library, a CLI, and `npm` packages for use on the web.
+There are three ways to use fleuron: as a Rust library, as a command-line binary, and as npm packages for the web.
 
-Write Rust, and `fleuron` is the engine and `fleuron-markdown` the frontend in front of it. [Sessions](library/sessions.md) 
-can be used to keep the pipeline open so a preview re-runs only what an edit changed. Start at the [library quickstart](library/quickstart.md).
+In Rust, `fleuron` is the engine and `fleuron-markdown` is the frontend that reads markdown into it. A [session](library/sessions.md) keeps the pipeline open, so a preview re-runs only the stages an edit changed. Start at the [library quickstart](library/quickstart.md).
 
-The `fleuron` CLI can read markdown and write a PDF, taking author stylesheets as flags. It is the quickest way to see output. 
-Start at the [CLI quickstart](cli/quickstart.mdx).
+The `fleuron` binary reads markdown and writes a PDF, and takes author stylesheets as flags. It is the quickest way to see output. Start at the [CLI quickstart](cli/quickstart.mdx).
 
-The `fleuron` package can be used to run layout in a worker and render as `<svg>` or output PDF bytes. 
-Start at the [wasm quickstart](wasm/quickstart.md), or open [the demos](https://fleuron.typeworks.dev/demos/) 
-to test it out.
+The `fleuron` npm package runs layout in a worker and paints the pages as `<svg>` or writes them as PDF bytes. Start at the [WebAssembly quickstart](wasm/quickstart.md), or open [the demos](https://fleuron.typeworks.dev/demos/) to try it in your browser.
 
 ## The pipeline
 
-```mermaid
+```text
 markdown ─► content tree ──┐
                            ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
 CSS ───────────────────────┘                                                               │
@@ -32,24 +26,18 @@ CSS ───────────────────────┘    
                                                                                            └─► PDF (export)
 ```
 
-Content enters as markdown and becomes a semantic tree. Styling enters as CSS and is parsed into a supported ruleset. 
-From there, the engine lays out the lines, fragments into pages, and exports the display structure 
-(a structural representation of the typeset book). From there, the output can be rendered in 
-one of two ways: An `<svg>` preview, or a PDF. 
+Content enters as markdown and becomes a content tree, the semantic document the engine lays out. Styling enters as CSS. The engine builds boxes, breaks the lines, fragments them into pages, and produces the display structure. Two painters read it: one draws a page as `<svg>` for the preview, and one writes the PDF.
 
-See the [markdown page](reference/markdown.mdx) for what markdown syntax is supported by `fleuron-markdown`. 
-See the [content tree](reference/content-tree.md) for a reference of the AST the engine uses directly.
+See [the markdown mapping](reference/markdown.mdx) for the markdown `fleuron-markdown` reads. See [the content tree](reference/content-tree.md) for the document it produces, which a host with a structured source of its own can build directly.
 
 ## Scope
 
-`fleuron` handles book-shaped documents: flowing prose with headings, block quotes, scene breaks, 
-drop caps, images, running heads, footnotes, multi-column pages, and page furniture like recto and verso, page counters and named pages.
+Fleuron typesets book-shaped documents: flowing prose with headings, block quotes, scene breaks, drop caps, images, running heads, multi-column pages, page numbers, and named pages.
 
-While it uses CSS to describe the intended formatting, `fleuron` is not a browser engine.
+It describes all of that in CSS, but it is not a browser engine.
 
 ## Status
 
-Pre-alpha. fleuron is the pagination backend for [Orca](https://github.com/zachhannum/obsidian-orca), 
-the Obsidian novel-writing suite, extracted into its own project.
+Pre-alpha. Fleuron is the pagination backend for [Orca](https://github.com/zachhannum/obsidian-orca), the Obsidian novel-writing suite, extracted into its own project.
 
-These pages describe what has landed. A page that documents a contract before its implementation is marked at the top.
+These pages describe what the engine does today. A page that describes a contract the engine does not implement yet says so at the top.
