@@ -3,16 +3,24 @@ title: CLI quickstart
 description: Markdown in, PDF out, in one command.
 ---
 
+The `fleuron` binary reads markdown and writes a PDF. This page covers installing it, the flags that shape a run, and what it prints.
 
 ## Install
 
 ```sh
 cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
+```
+
+The following command typesets a novel with one author stylesheet:
+
+```sh
 fleuron fixtures/corpus/pride-and-prejudice.md -c fixtures/styled.css -o book.pdf
 ```
 
+A summary of the run comes back on stderr:
+
 ```text
-fleuron: fixtures/corpus/pride-and-prejudice.md → book.pdf: 443 pages
+fleuron: fixtures/corpus/pride-and-prejudice.md → book.pdf: 445 pages
 ```
 
 <Playground
@@ -23,17 +31,17 @@ fleuron: fixtures/corpus/pride-and-prejudice.md → book.pdf: 443 pages
 
 ## Multi-file books
 
-Multiple markdown files can be passed to the CLI. The engine combines all of the files into a single output.
+A book can arrive as several markdown files. The CLI reads them in the order given and composes one book out of them:
 
 ```sh
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
 ```
 
-The tree records each file's name, so a diagnostic points at the file the trouble is in.
+Each file's name is recorded in the content tree, so a warning names the file it came from.
 
 ## Book metadata
 
-One markdown file is a whole book, so its frontmatter is the book's. Several are chapters, and a chapter's frontmatter describes the chapter: its `title:` names that section, and the book is left unnamed. That leaves the work's own title and author to the command line:
+One markdown file is a whole book, so its frontmatter is the book's. Several files are chapters instead. A chapter's frontmatter describes that chapter: `title:` names the section, and the book is left unnamed. Name the book on the command line:
 
 ```sh
 fleuron ch01.md ch02.md ch03.md -o book.pdf \
@@ -44,15 +52,17 @@ A flag outranks frontmatter where the two overlap, so you can retitle a single f
 
 ## Where sections begin
 
-A section is what the fragmenter opens a page on, so where sections begin decides the page count before any styling does. `--split` names the rule:
+A section opens a new page, so where sections begin decides the page count before any styling does. `--split` sets the rule. The following command opens a section at every heading of level 2 or shallower:
 
 ```sh
 fleuron manuscript.md -o book.pdf --split 2
 ```
 
-A heading at level 2 or shallower opens a section, which suits a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, so in a vault of one chapter per file the file is the section.
+That suits a manuscript that sets parts with `#` and chapters with `##`. The default is `--split 1`. `--split none` opens no section at a heading at all, so in a vault of one chapter per file the file is the section.
 
-`--dialect` sets which markdown is being read: `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines. Under `commonmark` a brace run is prose. See [the markdown mapping](../reference/markdown.mdx) for what each construct becomes and which of them warn.
+## Markdown dialect
+
+`--dialect` sets which markdown is being read: `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block, and attribute lines. Under `commonmark` a brace run is prose. See [the markdown mapping](../reference/markdown.mdx) for what each construct becomes and which of them warn.
 
 ## Adding your own styling
 
@@ -63,6 +73,8 @@ fleuron manuscript.md -o book.pdf -c house.css -c series.css
 ```
 
 So `house.css` sets the press's defaults and `series.css` overrides the handful of things this series does differently. Author CSS outranks the built-in sheet whatever the specificity of the built-in rule, so you never have to out-specify a default you are replacing.
+
+The following stylesheet sets a smaller page, a page number centered at the bottom, and a larger body and headings:
 
 ```css
 @page {
@@ -75,11 +87,11 @@ book { font-size: 12pt; line-height: 1.5; }
 h1, h2, h3 { font-size: 20pt; }
 ```
 
-[The CSS subset](../css-subset.mdx) is everything the engine supports. Anything else becomes a warning on stderr naming the line and column, and the PDF is written regardless.
+[The CSS subset](../css-subset.mdx) is everything the engine supports. Anything else is a warning on stderr naming the line and column, and the PDF is written anyway.
 
 ## Fonts
 
-`@font-face` urls are resolved as paths: first against the directory of the stylesheet that asked for them, then against the working directory.
+`@font-face` urls are resolved as file paths: first against the directory of the stylesheet that asked for them, then against the working directory. The following rule loads a face from a `faces` directory beside the stylesheet:
 
 ```css
 @font-face {
@@ -88,11 +100,11 @@ h1, h2, h3 { font-size: 20pt; }
 }
 ```
 
-A face that resolves nowhere warns and the text falls back. See [fonts](../library/fonts.md).
+A face that resolves nowhere warns, and the text falls back to the next family in the list. See [fonts](../library/fonts.md).
 
 ## Reading the tree back
 
-To see what the frontend made of a manuscript, which heading opened a section, or where a construct degraded, dump the [content tree](../reference/content-tree.md) instead of laying it out:
+`--dump-tree` writes the [content tree](../reference/content-tree.md) the frontend read and lays nothing out. Use it to see which heading opened a section, or where a construct the content tree has no node for became prose:
 
 ```sh
 fleuron manuscript.md --dump-tree

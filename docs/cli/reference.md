@@ -3,6 +3,8 @@ title: CLI reference
 description: Flags, exit codes, and what lands on stderr.
 ---
 
+The `fleuron` binary reads markdown and writes a PDF. This page lists every flag, the exit codes, and what the run prints.
+
 ```text
 usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
@@ -38,13 +40,13 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-d`, `--dialect` | Which markdown is being read: `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines. `commonmark` is that without the attribute lines, so a brace run is prose. See [the markdown mapping](../reference/markdown.mdx). |
 | `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language and picks the hyphenation patterns. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
-| `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. A host pins the file for the version it embeds. |
+| `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. An editor that offers completions reads it. |
 | `-V`, `--version` | Prints `fleuron <version>` and exits 0, whether or not a job was named. |
 | `-h`, `--help` | Prints the usage above and exits 0, whether or not a job was named. |
 
 A lone markdown input is the whole book, so its frontmatter fills whatever `--title`, `--author` and `--meta` leave unset. Several inputs are chapters, and each file's frontmatter stays with the section it became.
 
-An unrecognised option beginning with `-` is a usage error. There is no `--` separator: every positional argument is an input, and every option takes its value next.
+An unrecognized option beginning with `-` is a usage error. There is no `--` separator: every positional argument is an input, and every option takes its value next.
 
 ## Exit codes
 
@@ -56,7 +58,7 @@ An unrecognised option beginning with `-` is a usage error. There is no `--` sep
 
 Exit 2 means the command line is wrong. Exit 1 means the input is. A book that laid out with warnings exits 0, so a build that must fail on warnings checks stderr.
 
-## stderr
+## What lands on stderr
 
 The run writes everything to stderr. stdout is only what `--version`, `--help`, `--dump-tree` and `--css-subset` print.
 
@@ -74,10 +76,10 @@ fleuron: warning: chapter-03.md:88:1: family "House Sans" resolved nothing
 fleuron: 2 warnings; the PDF was written anyway
 ```
 
-The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
+An origin is either a stylesheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
 
 ## Fonts and images on the command line
 
-`@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine opens nothing itself, so this resolution belongs to the binary. A library embedding fleuron supplies its own.
+`@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine opens no files itself, so this resolution belongs to the binary. A library embedding fleuron supplies its own.
 
 An image the binary cannot open, or opens and cannot read a header from, is a warning naming the url, and the book is laid out without it.
