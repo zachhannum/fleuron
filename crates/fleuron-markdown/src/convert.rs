@@ -752,7 +752,7 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
 mod tests {
     use super::*;
     use crate::{Dialect, to_sections};
-    use fleuron::content::inline_span;
+    use fleuron::content::{block_attributes, inline_span};
 
     fn read(markdown: &str) -> Vec<Section> {
         to_sections(markdown, "test.md", &Options::default()).0
@@ -1069,6 +1069,128 @@ Ordinary prose.
             panic!("expected an image block");
         };
         assert_eq!(node, *id);
+    }
+
+    /// The line above a quote names the quote. The blocks inside it
+    /// are their own, and the first of them is not what was written
+    /// over the `>`.
+    #[test]
+    fn an_attribute_line_names_the_blockquote_and_not_its_first_paragraph() {
+        let sections = read("# C\n\n{.epigraph}\n> Man is the only animal that blushes.\n");
+        let Block::Blockquote {
+            blocks, attributes, ..
+        } = &sections[0].blocks[1]
+        else {
+            panic!("expected a blockquote");
+        };
+        assert_eq!(attributes.classes, ["epigraph"]);
+        assert!(block_attributes(&blocks[0]).is_empty(), "{blocks:?}");
+    }
+
+    /// `---` under a line of text is a setext heading in CommonMark,
+    /// so the break an author asked for has to be read back out of
+    /// the heading it was parsed into.
+    #[test]
+    fn an_attribute_line_reaches_the_thematic_break_under_it() {
+        for markdown in ["# C\n\n{.ornament}\n---\n", "# C\n\n{.ornament}\n\n---\n"] {
+            let sections = read(markdown);
+            let Block::ThematicBreak { attributes, .. } = &sections[0].blocks[1] else {
+                panic!("expected a scene break for {markdown:?}");
+            };
+            assert_eq!(attributes.classes, ["ornament"], "{markdown:?}");
+        }
+    }
+
+    /// The two ways of writing a heading's classes are one class.
+    #[test]
+    fn a_heading_takes_the_same_class_written_over_it_or_after_it() {
+        let over = read("{.opening}\n# Chapter One\n");
+        let after = read("# Chapter One {.opening}\n");
+        assert_eq!(
+            block_attributes(&over[0].blocks[0]),
+            block_attributes(&after[0].blocks[0]),
+        );
+        assert_eq!(block_attributes(&over[0].blocks[0]).classes, ["opening"]);
+    }
+
+    /// An image alone on its line takes the run written after it,
+    /// which is the only trailing form that is not a heading's.
+    #[test]
+    fn an_image_alone_on_its_line_takes_the_run_after_it() {
+        let (sections, warnings) = to_sections(
+            "# C\n\n![a plate](plate.jpg){.plate}\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::Image { attributes, .. } = &sections[0].blocks[1] else {
+            panic!("expected an image");
+        };
+        assert_eq!(attributes.classes, ["plate"]);
+    }
+
+    /// A line that names nothing is the prose it was read as, and
+    /// says so: at the end of a section, and where a second line
+    /// takes its place.
+    #[test]
+    fn an_attribute_line_over_nothing_stays_prose_and_warns() {
+        let (sections, warnings) = to_sections(
+            "# C\n\n{.first}\n\n{.second}\n\nProse.\n\n{.last}\n",
+            "test.md",
+            &Options::default(),
+        );
+        let text: Vec<String> = sections[0].blocks[1..].iter().map(text_of).collect();
+        assert_eq!(text, ["{.first}", "Prose.", "{.last}"]);
+        assert_eq!(block_attributes(&sections[0].blocks[2]).classes, ["second"]);
+        let at: Vec<&str> = warnings
+            .iter()
+            .map(|warning| warning.origin.as_deref().unwrap_or_default())
+            .collect();
+        assert_eq!(at, ["test.md:3:1", "test.md:9:1"], "{warnings:?}");
+    }
+
+    /// A brace run the vocabulary has no room for is prose, the same
+    /// as every other construct it has no room for.
+    #[test]
+    fn a_brace_run_that_is_not_classes_and_an_id_stays_prose_and_warns() {
+        for run in ["{key=value}", "{#one #two}", "{.9lives}"] {
+            let (sections, warnings) = to_sections(
+                &format!("# C\n\n{run}\n\nProse.\n"),
+                "test.md",
+                &Options::default(),
+            );
+            assert_eq!(text_of(&sections[0].blocks[1]), run);
+            assert!(block_attributes(&sections[0].blocks[2]).is_empty());
+            assert_eq!(warnings.len(), 1, "{run}: {warnings:?}");
+            assert!(warnings[0].message.contains("attribute"), "{warnings:?}");
+        }
+    }
+
+    /// Under CommonMark the braces are four characters of prose, and
+    /// the tree is the tree that dialect always read.
+    #[test]
+    fn common_mark_reads_a_brace_run_as_prose() {
+        let markdown = "# C {.opening}\n\n{.epigraph}\n\n> Quoted.\n\n![a plate](p.jpg){.plate}\n";
+        let plain = Options {
+            dialect: Dialect::common_mark(),
+            ..Options::default()
+        };
+        let (sections, warnings) = to_sections(markdown, "test.md", &plain);
+        assert!(
+            sections[0]
+                .blocks
+                .iter()
+                .all(|block| block_attributes(block).is_empty()),
+            "{:?}",
+            sections[0].blocks,
+        );
+        assert_eq!(text_of(&sections[0].blocks[0]), "C {.opening}");
+        assert_eq!(text_of(&sections[0].blocks[1]), "{.epigraph}");
+        // The trailing run is prose too, which is the paragraph the
+        // image is broken out of.
+        assert_eq!(text_of(&sections[0].blocks[3]), "{.plate}");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].message.contains("an inline image"));
     }
 
     #[test]

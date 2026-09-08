@@ -936,7 +936,7 @@ fn stack(families: &[Family]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, Section};
+    use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, Section, SourcePos};
     use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
     use crate::lines::{HangEnd, HangingPunctuation};
 
@@ -1036,6 +1036,101 @@ mod tests {
 
     fn first(tree: &StyleTree, element: &str) -> ComputedStyle {
         nth(tree, element, 0)
+    }
+
+    /// A book of two plates, the first of them named.
+    fn plates() -> Book {
+        let plate = |named: Attributes| Block::Image {
+            id: NodeId::UNASSIGNED,
+            url: "plate.jpg".into(),
+            alt: "a plate".into(),
+            attributes: named,
+            position: None,
+            span: None,
+        };
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                id: NodeId::UNASSIGNED,
+                source: Some("chapter-01.md".into()),
+                title: None,
+                blocks: vec![
+                    plate(Attributes {
+                        id: Some("frontispiece".into()),
+                        classes: vec!["plate".into()],
+                    }),
+                    plate(Attributes::default()),
+                ],
+                position: None,
+                span: None,
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// A class names one element out of a kind of them: the plate
+    /// that carries it is set, and the plate beside it is not.
+    #[test]
+    fn a_class_reaches_the_element_that_carries_it_and_no_other() {
+        let book = plates();
+        let tree = compile(&book, ".plate { text-align: right }");
+        assert_eq!(nth(&tree, "img", 0).text_align, TextAlign::Right);
+        assert_eq!(nth(&tree, "img", 1).text_align, TextAlign::Left);
+    }
+
+    /// An id names one element and nothing else, and outranks the
+    /// class on the same element.
+    #[test]
+    fn an_id_reaches_the_element_that_carries_it_and_outranks_a_class() {
+        let book = plates();
+        let tree = compile(
+            &book,
+            ".plate { break-before: page } #frontispiece { break-before: recto }",
+        );
+        assert_eq!(nth(&tree, "img", 0).break_before, Break::Side(Side::Recto));
+        assert_eq!(nth(&tree, "img", 1).break_before, Break::Auto);
+    }
+
+    /// An id names one element, so a second element under it is a
+    /// mistake. Both still match: the sheet reaches two, and the
+    /// warning says where they were written.
+    #[test]
+    fn an_id_written_twice_warns_naming_both_places() {
+        let mut book = plates();
+        let Block::Image {
+            attributes,
+            position,
+            ..
+        } = &mut book.sections[0].blocks[1]
+        else {
+            panic!("expected an image");
+        };
+        attributes.id = Some("frontispiece".into());
+        *position = Some(SourcePos {
+            line: 12,
+            column: 1,
+        });
+        let Block::Image { position, .. } = &mut book.sections[0].blocks[0] else {
+            panic!("expected an image");
+        };
+        *position = Some(SourcePos { line: 3, column: 1 });
+
+        let tree = compile(&book, "#frontispiece { break-before: recto }");
+        assert_eq!(nth(&tree, "img", 0).break_before, Break::Side(Side::Recto));
+        assert_eq!(nth(&tree, "img", 1).break_before, Break::Side(Side::Recto));
+        let repeated: Vec<&Warning> = tree
+            .warnings()
+            .iter()
+            .filter(|warning| warning.message.contains("frontispiece"))
+            .collect();
+        assert_eq!(repeated.len(), 1, "{:?}", tree.warnings());
+        assert!(
+            repeated[0].message.contains("chapter-01.md:3:1")
+                && repeated[0].message.contains("chapter-01.md:12:1"),
+            "{:?}",
+            repeated[0],
+        );
     }
 
     /// The built-in sheet sets the body, chapter and folio styles, and

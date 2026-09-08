@@ -1,0 +1,157 @@
+---
+source: crates/fleuron/tests/content_tree.rs
+expression: json
+---
+{
+  "metadata": {},
+  "sections": [
+    {
+      "source": "chapter-01.md",
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "inlines": [
+            {
+              "type": "text",
+              "value": "Chapter One",
+              "position": {
+                "line": 1,
+                "column": 3
+              },
+              "span": {
+                "start": 2,
+                "end": 13
+              }
+            }
+          ],
+          "attributes": {
+            "id": "opening",
+            "classes": [
+              "grand"
+            ]
+          },
+          "position": {
+            "line": 1,
+            "column": 1
+          },
+          "span": {
+            "start": 0,
+            "end": 32
+          }
+        },
+        {
+          "type": "blockquote",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "inlines": [
+                {
+                  "type": "text",
+                  "value": "Man is the only animal that blushes.",
+                  "position": {
+                    "line": 4,
+                    "column": 3
+                  },
+                  "span": {
+                    "start": 47,
+                    "end": 83
+                  }
+                }
+              ],
+              "position": {
+                "line": 4,
+                "column": 3
+              },
+              "span": {
+                "start": 47,
+                "end": 84
+              }
+            }
+          ],
+          "attributes": {
+            "classes": [
+              "epigraph"
+            ]
+          },
+          "position": {
+            "line": 4,
+            "column": 1
+          },
+          "span": {
+            "start": 33,
+            "end": 84
+          }
+        },
+        {
+          "type": "image",
+          "url": "plate.jpg",
+          "alt": "a map of Lilliput",
+          "attributes": {
+            "id": "frontispiece",
+            "classes": [
+              "plate"
+            ]
+          },
+          "position": {
+            "line": 6,
+            "column": 1
+          },
+          "span": {
+            "start": 85,
+            "end": 139
+          }
+        },
+        {
+          "type": "thematic_break",
+          "attributes": {
+            "classes": [
+              "ornament"
+            ]
+          },
+          "position": {
+            "line": 9,
+            "column": 1
+          },
+          "span": {
+            "start": 140,
+            "end": 156
+          }
+        },
+        {
+          "type": "paragraph",
+          "inlines": [
+            {
+              "type": "text",
+              "value": "Plain prose carries nothing.",
+              "position": {
+                "line": 11,
+                "column": 1
+              },
+              "span": {
+                "start": 157,
+                "end": 185
+              }
+            }
+          ],
+          "position": {
+            "line": 11,
+            "column": 1
+          },
+          "span": {
+            "start": 157,
+            "end": 186
+          }
+        }
+      ],
+      "position": {
+        "line": 1,
+        "column": 1
+      },
+      "span": {
+        "start": 0,
+        "end": 186
+      }
+    }
+  ]
+}
