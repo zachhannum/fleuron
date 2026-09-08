@@ -45,7 +45,7 @@ export interface PreviewOptions {
    */
   worker?: Worker;
   /** Which markdown the sources are written in. */
-  dialect?: 'commonmark' | 'gfm' | 'obsidian';
+  dialect?: 'fleuron' | 'commonmark' | 'gfm' | 'obsidian';
   /** The heading level a section begins at, or 0 for one per file. */
   split?: number;
   /** Points to CSS pixels. */

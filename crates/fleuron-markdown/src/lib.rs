@@ -80,10 +80,11 @@ impl Sections {
 
 /// Which markdown a source is written in.
 ///
-/// Frontmatter and attributes are on by default because a
-/// manuscript's metadata has to live somewhere and a sheet has to be
-/// able to name one plate, and the alternative to both is a
-/// convention smuggled through the prose.
+/// [`Dialect::fleuron`] is the default and the one a manuscript for
+/// this engine is written in: frontmatter, because a manuscript's
+/// metadata has to live somewhere, and attribute lines, because a
+/// sheet has to be able to name one plate. The alternative to both is
+/// a convention smuggled through the prose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dialect {
     /// A leading `---` block is metadata rather than a scene break.
@@ -102,6 +103,15 @@ pub struct Dialect {
 
 impl Default for Dialect {
     fn default() -> Dialect {
+        Dialect::fleuron()
+    }
+}
+
+impl Dialect {
+    /// CommonMark, a frontmatter block and attribute lines: the
+    /// markdown a manuscript for this engine is written in, and what
+    /// a source is read as unless the host says otherwise.
+    pub fn fleuron() -> Dialect {
         Dialect {
             frontmatter: true,
             attributes: true,
@@ -110,15 +120,13 @@ impl Default for Dialect {
             smart_punctuation: false,
         }
     }
-}
 
-impl Dialect {
-    /// CommonMark and nothing else, frontmatter included. A brace run
-    /// is prose here.
+    /// CommonMark, frontmatter included, and nothing besides. A brace
+    /// run is prose here.
     pub fn common_mark() -> Dialect {
         Dialect {
             attributes: false,
-            ..Dialect::default()
+            ..Dialect::fleuron()
         }
     }
 
@@ -127,7 +135,7 @@ impl Dialect {
         Dialect {
             gfm: true,
             wikilinks: true,
-            ..Dialect::default()
+            ..Dialect::fleuron()
         }
     }
 
@@ -135,7 +143,7 @@ impl Dialect {
     pub fn gfm() -> Dialect {
         Dialect {
             gfm: true,
-            ..Dialect::default()
+            ..Dialect::fleuron()
         }
     }
 }

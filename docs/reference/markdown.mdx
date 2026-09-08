@@ -123,7 +123,7 @@ A line that names nothing, because the source ends under it or another attribute
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 
-`Dialect::attributes` is the switch. It is on by default and off under `Dialect::common_mark()`, where a brace run is prose.
+`Dialect::attributes` is the switch. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
 
 ## Inlines
 
@@ -176,7 +176,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 
-`Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the three named combinations. `common_mark()` is the strict one: it reads frontmatter and nothing else, so a brace run is prose.
+`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run is prose.
 
 A switch that is off turns its syntax into prose rather than an error. `[[Another Note]]` without `wikilinks` is four brackets and a title.
 

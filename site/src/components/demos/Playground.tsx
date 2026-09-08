@@ -42,7 +42,7 @@ export interface PlaygroundProps {
   /** The page to open on, counting from 1. */
   page?: number;
   /** Which markdown the manuscript is written in. */
-  dialect?: 'commonmark' | 'gfm' | 'obsidian';
+  dialect?: 'fleuron' | 'commonmark' | 'gfm' | 'obsidian';
   /** The images the manuscript refers to, for the island to fetch. */
   images?: string[];
   /** The faces the stylesheet names, for the island to fetch. */
