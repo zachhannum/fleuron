@@ -665,9 +665,8 @@ fn cascade(
 
 /// Reports every id a book gives to a second element.
 ///
-/// An id names one element, and a sheet that reaches two through it
-/// is not saying what its author meant. Both still match: dropping
-/// one silently would be a page nobody asked for.
+/// An id names one element. Both still match, because dropping one
+/// would be a page nobody asked for.
 fn repeated_ids(book: &Book) -> Vec<Warning> {
     let mut first: BTreeMap<&str, String> = BTreeMap::new();
     let mut warnings = Vec::new();

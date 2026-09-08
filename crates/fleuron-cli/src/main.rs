@@ -20,7 +20,8 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
   -s, --split <n|none> where a markdown file's sections begin: at a
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
-  -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
+  -d, --dialect <name> commonmark, gfm or obsidian; the default reads
+                       attribute lines and commonmark does not
   --title <text>       the book's title
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`

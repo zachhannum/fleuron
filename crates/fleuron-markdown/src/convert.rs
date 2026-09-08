@@ -3,8 +3,8 @@
 //! An attribute line is a paragraph whose whole content is one brace
 //! run, so it is an event to match rather than a tail of prose to
 //! scan, and it reaches every block in the vocabulary. It is held
-//! until the block under it arrives; a line that annotates nothing is
-//! prose again, and says so.
+//! until the block under it arrives; a line that names nothing is
+//! prose again, and warns.
 
 use std::ops::Range;
 
@@ -454,7 +454,7 @@ impl<'a> Converter<'a> {
 
     /// Whether a heading was written as a line of text underlined by
     /// dashes, which is how `---` under an attribute line parses.
-    fn underlined(&mut self, read: Read) -> bool {
+    fn underlined(&self, read: Read) -> bool {
         self.options.dialect.attributes && self.dashes(read).is_some()
     }
 
@@ -473,10 +473,10 @@ impl<'a> Converter<'a> {
         self.lines.position(read.span.start as usize + under)
     }
 
-    /// A paragraph that is one brace run and nothing else names
-    /// something rather than saying it: the image it was written
-    /// after, or the block written under it. Everything else is the
-    /// prose it was read as, handed back to be filed.
+    /// A paragraph that is one brace run and nothing else is a name
+    /// for another block: the image it was written after, or the
+    /// block written under it. Everything else is the prose it was
+    /// read as, handed back to be filed.
     fn brace_run(&mut self, children: Vec<Inline>, read: Read) -> Option<Vec<Inline>> {
         if !self.options.dialect.attributes {
             return Some(children);
@@ -713,15 +713,12 @@ fn brace_text(inlines: &[Inline]) -> Option<&str> {
 fn named(inside: &str) -> Option<Attributes> {
     let mut read = Attributes::default();
     for word in inside.split_whitespace() {
-        if let Some(class) = word.strip_prefix('.') {
-            read.classes.push(identifier(class)?);
-        } else if let Some(id) = word.strip_prefix('#') {
-            if read.id.is_some() {
-                return None;
-            }
-            read.id = Some(identifier(id)?);
-        } else {
-            return None;
+        // A second id is not a run the vocabulary can hold: an
+        // element answers to one name.
+        match word.split_at_checked(1)? {
+            (".", class) => read.classes.push(identifier(class)?),
+            ("#", id) if read.id.is_none() => read.id = Some(identifier(id)?),
+            _ => return None,
         }
     }
     Some(read)

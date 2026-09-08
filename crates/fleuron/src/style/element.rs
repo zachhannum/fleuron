@@ -57,15 +57,19 @@ impl ToCss for Atom {
 
 impl PrecomputedHash for Atom {
     fn precomputed_hash(&self) -> u32 {
-        // FNV-1a: the bloom filter needs a hash that is a function of
-        // the name, not of where the string happens to live.
-        let mut hash = 0x811c_9dc5u32;
-        for byte in self.0.as_bytes() {
-            hash ^= *byte as u32;
-            hash = hash.wrapping_mul(0x0100_0193);
-        }
-        hash
+        fnv(&self.0)
     }
+}
+
+/// FNV-1a: the bloom filter needs a hash that is a function of the
+/// name, not of where the string happens to live.
+fn fnv(name: &str) -> u32 {
+    let mut hash = 0x811c_9dc5u32;
+    for byte in name.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
 }
 
 /// The novel subset has no non-tree-structural pseudo-classes:
@@ -519,8 +523,7 @@ impl Element for ElementRef<'_> {
     /// gives it.
     fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool {
         let node = self.node();
-        let mut insert =
-            |name: &str| filter.insert_hash(Atom::from(name).precomputed_hash() & BLOOM_HASH_MASK);
+        let mut insert = |name: &str| filter.insert_hash(fnv(name) & BLOOM_HASH_MASK);
         insert(node.name);
         if let Some(id) = &node.attributes.id {
             insert(id);
