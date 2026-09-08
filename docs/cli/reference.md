@@ -40,7 +40,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-d`, `--dialect` | Which markdown is being read: `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines. `commonmark` is that without the attribute lines, so a brace run is prose. See [the markdown mapping](../reference/markdown.mdx). |
 | `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language and picks the hyphenation patterns. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
-| `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. An editor that offers completions reads it. |
+| `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. A host pins the file for the version it embeds. |
 | `-V`, `--version` | Prints `fleuron <version>` and exits 0, whether or not a job was named. |
 | `-h`, `--help` | Prints the usage above and exits 0, whether or not a job was named. |
 

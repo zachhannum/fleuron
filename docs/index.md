@@ -34,7 +34,7 @@ See [the markdown mapping](reference/markdown.mdx) for the markdown `fleuron-mar
 
 Fleuron typesets book-shaped documents: flowing prose with headings, block quotes, scene breaks, drop caps, images, running heads, multi-column pages, page numbers, and named pages.
 
-It describes all of that in CSS, but it is not a browser engine.
+It uses CSS to describe the formatting, but it is not a browser engine.
 
 ## Status
 

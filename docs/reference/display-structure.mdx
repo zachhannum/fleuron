@@ -118,7 +118,7 @@ pub struct Glyph {
 
 `id` is a glyph id in the run's font, not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
 
-`range` is the byte range in the run's `text` that this glyph stands for. One glyph may stand for several characters, as a ligature does, and several glyphs may share one range, as a decomposed cluster does. A painter that reads a range as a correspondence rather than a one-to-one mapping handles both.
+`range` is the byte range in the run's `text` that this glyph stands for. One glyph may stand for several characters, as a ligature does, and several glyphs may share one range, as a decomposed cluster does. A painter that does not assume one glyph maps to exactly one character handles both.
 
 ### `SourceRange`
 

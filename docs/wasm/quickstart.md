@@ -23,7 +23,7 @@ await preview.setMarkdown(markdown);
 preview.page = 12;
 ```
 
-Layout runs off the main thread. [The preview](preview.mdx) covers the rest of the API.
+Layout runs off the main thread, and page 12 is on the screen. [The preview](preview.mdx) covers the rest of the API.
 
 ## Assembling it yourself
 

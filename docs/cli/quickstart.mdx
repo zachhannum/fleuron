@@ -31,7 +31,7 @@ fleuron: fixtures/corpus/pride-and-prejudice.md → book.pdf: 445 pages
 
 ## Multi-file books
 
-A book can arrive as several markdown files. The CLI reads them in the order given and composes one book out of them:
+Multiple markdown files can be passed to the CLI. It reads them in the order given and combines them into a single book:
 
 ```sh
 fleuron front.md ch01.md ch02.md ch03.md -o book.pdf
