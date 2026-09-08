@@ -7,6 +7,10 @@
 //! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`,
 //! `a`.
 //!
+//! Beside the name, an element carries the classes and the id the
+//! content tree gave it, which is what `.plate` and `#frontispiece`
+//! match on.
+//!
 //! Text runs are not elements, the same as in CSS: they have no style
 //! of their own and never count towards `:first-child`.
 
@@ -26,8 +30,9 @@ use crate::content::{Attributes, Block, Book, Inline, NodeId};
 /// An interned CSS identifier: element name, class, id, namespace.
 ///
 /// One type serves every slot `SelectorImpl` asks for; the novel
-/// subset has no namespaces and no attributes, so the distinctions
-/// the trait draws between them do not pay for separate types.
+/// subset has no namespaces and no attribute selectors, so the
+/// distinctions the trait draws between them do not pay for separate
+/// types.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Atom(pub String);
 
