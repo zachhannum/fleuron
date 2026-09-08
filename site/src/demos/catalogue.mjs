@@ -143,6 +143,12 @@ h2 + p {
 h2 + p::first-letter {
   initial-letter: 3;
 }
+
+/* One quotation the manuscript named, rather than every quotation. */
+.aside {
+  font-size: 10pt;
+  margin: 12pt 24pt;
+}
 `;
 
 /**
@@ -266,8 +272,9 @@ p {
 
 /**
  * Every construct the mapping names, in one manuscript: the blocks
- * and inlines the content tree has a counterpart for, and the ones
- * it has none for, which are set as prose.
+ * and inlines the content tree has a counterpart for, the attribute
+ * line that names one of them, and the ones the tree has no
+ * counterpart for, which are set as prose.
  */
 export const MAPPING_MD = `## The Levant Papers
 
@@ -275,6 +282,7 @@ The letter reached Marsh on a Tuesday, in *the second post*, and it was
 **not** what he had been waiting for. It began \`Dear sir\` and ended
 without a name, which is [the whole of the difficulty](https://example.com).
 
+{.aside}
 > Nothing in the file said where the ship had gone.
 >
 > > And nothing said who had asked.
