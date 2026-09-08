@@ -445,6 +445,37 @@ pub struct LineSpan {
     pub width: u32,
 }
 
+/// The spans of one line, which reads as a slice of them either way.
+/// A band set undivided holds its own span: the ordinary line of a
+/// book is not worth an allocation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Spans {
+    /// The band was set in one span.
+    One(LineSpan),
+    /// It was divided, and these are its spans in reading order.
+    Many(Vec<LineSpan>),
+}
+
+impl std::ops::Deref for Spans {
+    type Target = [LineSpan];
+
+    fn deref(&self) -> &[LineSpan] {
+        match self {
+            Spans::One(span) => std::slice::from_ref(span),
+            Spans::Many(spans) => spans,
+        }
+    }
+}
+
+impl std::ops::DerefMut for Spans {
+    fn deref_mut(&mut self) -> &mut [LineSpan] {
+        match self {
+            Spans::One(span) => std::slice::from_mut(span),
+            Spans::Many(spans) => spans,
+        }
+    }
+}
+
 /// One typeset line: shaped runs plus its width in font units.
 ///
 /// A line is a band of the page, which is set in one span or in
@@ -454,7 +485,7 @@ pub struct Line {
     /// The line's runs, in visual order.
     pub runs: Vec<ShapedRun>,
     /// The spans the runs are divided between, in reading order.
-    pub spans: Vec<LineSpan>,
+    pub spans: Spans,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
     /// joins the runs when the structured outpur paints it. What hangs
@@ -476,11 +507,11 @@ impl Line {
     pub fn of(runs: Vec<ShapedRun>, box_: LineBox) -> Line {
         let width = runs.iter().map(|run| run.advance).sum();
         Line {
-            spans: vec![LineSpan {
+            spans: Spans::One(LineSpan {
                 runs: 0..runs.len(),
                 offset: 0.0,
                 width,
-            }],
+            }),
             runs,
             width,
             overhang: 0.0,
@@ -493,7 +524,7 @@ impl Line {
     fn empty() -> Line {
         Line {
             runs: Vec::new(),
-            spans: Vec::new(),
+            spans: Spans::Many(Vec::new()),
             width: 0,
             overhang: 0.0,
             protrusion: 0.0,
@@ -1117,6 +1148,8 @@ impl<'a> LineLayout<'a> {
             breaks: &breaks,
             widths: &widths,
             measure,
+            rest: measure.at(measure.settled()),
+            settled: measure.settled(),
             first_band: (0..).find(|slot| measure.at(*slot).ends_band).unwrap_or(0),
             upem,
             size: style.size,
@@ -1132,8 +1165,10 @@ impl<'a> LineLayout<'a> {
         let mut start = 0usize;
         // The band being filled, and where its first span was set:
         // a span's own offset is from there, so a painter handed the
-        // line's leading edge places every span from it.
+        // line's leading edge places every span from it. The spans
+        // are gathered beside it and one buffer serves them all.
         let mut band: Option<(Line, f32)> = None;
+        let mut spans: Vec<LineSpan> = Vec::new();
         for fit in breaker.run() {
             let at = &breaks[fit.at];
             let span = measure.at(fit.slot);
@@ -1151,7 +1186,7 @@ impl<'a> LineLayout<'a> {
                     self.hyphenate(&mut line.runs, style);
                 }
                 let width = line.runs[first..].iter().map(|run| run.advance).sum();
-                line.spans.push(LineSpan {
+                spans.push(LineSpan {
                     runs: first..line.runs.len(),
                     offset: span.origin - *origin,
                     width,
@@ -1167,6 +1202,7 @@ impl<'a> LineLayout<'a> {
             };
             line.overhang = to_points(fit.overhang);
             line.box_ = self.line_box(&line.runs, style);
+            line.spans = gather(&mut spans);
             if lines.is_empty() {
                 extent = at.content_end;
             }
@@ -1176,6 +1212,7 @@ impl<'a> LineLayout<'a> {
         // reached.
         if let Some((mut line, _)) = band.take() {
             line.box_ = self.line_box(&line.runs, style);
+            line.spans = gather(&mut spans);
             lines.push(line);
         }
         tile(&mut lines, &flat);
@@ -1594,6 +1631,10 @@ struct Breaker<'a> {
     breaks: &'a [Break],
     widths: &'a Widths,
     measure: &'a Measure,
+    /// The span every slot past the profile's listed ones is set in,
+    /// which is every slot of most paragraphs, and how many it lists.
+    rest: Span,
+    settled: usize,
     /// The slot the paragraph's first band ends in.
     first_band: usize,
     upem: f32,
@@ -1652,6 +1693,15 @@ struct Candidate {
 }
 
 impl Breaker<'_> {
+    /// The span slot `index` is set in.
+    fn span(&self, index: usize) -> Span {
+        if index < self.settled {
+            self.measure.at(index)
+        } else {
+            self.rest
+        }
+    }
+
     /// Points → the paragraph's font units.
     fn units(&self, points: f32) -> f32 {
         if self.size > 0.0 {
@@ -1669,7 +1719,7 @@ impl Breaker<'_> {
     /// Measures the text that runs from break `a` to break `b`, set
     /// in slot `slot`.
     fn fit(&self, a: usize, b: usize, slot: usize) -> Fit {
-        let span = self.measure.at(slot - 1);
+        let span = self.span(slot - 1);
         let start = self.breaks[a].next;
         let end = self.breaks[b].content_end.max(start);
         let measure = self.units(span.width);
@@ -1683,7 +1733,7 @@ impl Breaker<'_> {
         // A mark hangs into the margin a band starts at and past the
         // one it ends at. The gap between two spans of a band is
         // neither.
-        let protrusion = if self.options.hanging.first && self.measure.opens_band(slot - 1) {
+        let protrusion = if self.options.hanging.first && self.opens_band(slot - 1) {
             self.breaks[a].hang_start
         } else {
             0.0
@@ -1746,6 +1796,11 @@ impl Breaker<'_> {
             protrusion,
             ends_band: span.ends_band,
         }
+    }
+
+    /// Whether the band the span at `index` sits in opens there.
+    fn opens_band(&self, index: usize) -> bool {
+        index == 0 || self.span(index - 1).ends_band
     }
 
     /// What hangs past the measure at break `b`, given how wide the
@@ -1885,7 +1940,7 @@ impl Breaker<'_> {
                 // Only the spans the profile lists make the count
                 // visible from here on; past them every band is the
                 // same one.
-                candidate.slot.min(self.measure.settled() + 1),
+                candidate.slot.min(self.settled + 1),
             )
         };
         match candidates
@@ -2092,6 +2147,14 @@ fn adjust(runs: &mut [ShapedRun], text: &str, ratio: f32, options: LineBreakOpti
             glyph.x_advance = width as u32;
         }
         run.advance = (run.advance as i64 + advance).max(0) as u32;
+    }
+}
+
+/// One band's spans, leaving the buffer to the band after it.
+fn gather(spans: &mut Vec<LineSpan>) -> Spans {
+    match spans.len() {
+        1 => Spans::One(spans.pop().expect("a span")),
+        _ => Spans::Many(std::mem::take(spans)),
     }
 }
 

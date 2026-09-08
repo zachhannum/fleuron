@@ -548,7 +548,7 @@ impl<'a> Paginator<'a> {
     /// each span of the line opened at its own origin.
     fn text_items(&self, line: &Line, x: f32, baseline: f32) -> Vec<DrawItem> {
         let mut items = Vec::new();
-        for span in &line.spans {
+        for span in line.spans.iter() {
             let mut x_cursor = x + span.offset;
             for run in &line.runs[span.runs.clone()] {
                 let upem = self.upem(run.font_id);
