@@ -99,9 +99,9 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 Specificity counts them in buckets of their own: `.plate` outranks `img`, and `#frontispiece` outranks `.plate`.
 
-The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id two nodes carry warns naming both, and both still match.
+The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 
-A text run carries the field like every other node, and a sheet reaches nothing through it, because a text run is not an element.
+A text run carries the field like every other node, and a sheet reaches nothing through it.
 
 ## Node identity
 

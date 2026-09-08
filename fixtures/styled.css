@@ -68,8 +68,8 @@ h3 {
 }
 
 /* The map is one picture rather than every picture: the class the
-   manuscript wrote on it sets it against the outer margin, and the
-   ornament that closes the chapter stays where it was. */
+   manuscript wrote on it moves this one, and the ornament that
+   closes the chapter stays where the built-in sheet put it. */
 .plate {
   text-align: right;
 }

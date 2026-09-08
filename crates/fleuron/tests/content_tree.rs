@@ -1,10 +1,10 @@
 //! The names a sheet reaches an element by, as a host reads them.
 //!
-//! The tree is how a host sees what a frontend made of a manuscript,
-//! and the door a host with a structured source of its own comes in
-//! through. So the classes and the id are checked both ways: the
-//! shape they serialize to is under snapshot, and what the engine
-//! wrote reads back as the tree it wrote it from.
+//! The tree is how a host reads what a frontend made of a
+//! manuscript, and what a host with a structured source of its own
+//! builds. The classes and the id are checked both ways: the shape
+//! they serialize to is under snapshot, and what the engine wrote
+//! reads back as the tree it wrote it from.
 
 use fleuron::content::Book;
 use fleuron_markdown::{Options, assemble, to_sections};

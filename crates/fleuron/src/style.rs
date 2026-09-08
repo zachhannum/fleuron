@@ -665,8 +665,7 @@ fn cascade(
 
 /// Reports every id a book gives to a second element.
 ///
-/// An id names one element. Both still match, because dropping one
-/// would be a page nobody asked for.
+/// An id names one element. Both still match.
 fn repeated_ids(book: &Book) -> Vec<Warning> {
     let mut first: BTreeMap<&str, String> = BTreeMap::new();
     let mut warnings = Vec::new();
@@ -678,7 +677,7 @@ fn repeated_ids(book: &Book) -> Vec<Warning> {
 }
 
 /// The ids of these blocks and everything inside them, in document
-/// order, warning on each one already spoken for.
+/// order, warning on each id already taken.
 fn named_blocks<'a>(
     blocks: &'a [Block],
     source: Option<&str>,
@@ -1093,7 +1092,7 @@ mod tests {
 
     /// An id names one element, so a second element under it is a
     /// mistake. Both still match: the sheet reaches two, and the
-    /// warning says where they were written.
+    /// warning names both places.
     #[test]
     fn an_id_written_twice_warns_naming_both_places() {
         let mut book = plates();

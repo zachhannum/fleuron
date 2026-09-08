@@ -109,7 +109,7 @@ A line holding nothing but a brace run names the block written under it. It take
 
 Every block in the vocabulary takes one, the scene break included. Leave a blank line between the line and a paragraph, since two lines of prose are one paragraph.
 
-Two blocks also take the run written after them. A heading takes it at the end of its line, and an image takes it directly after the image when the image is alone on its line:
+Two blocks also take the run written after them. A heading takes it at the end of its line, and an image alone on its line takes it directly after the url:
 
 ```markdown
 # Chapter One {.opening #ch1}
@@ -117,9 +117,9 @@ Two blocks also take the run written after them. A heading takes it at the end o
 ![a map of Lilliput](plate.jpg){.plate}
 ```
 
-Nothing else takes a trailing run. On a blockquote it lands inside the quote's last paragraph and belongs to either. After `---` it stops the break from being one.
+Nothing else takes a trailing run. On a blockquote it stays inside the quote's last paragraph, as prose. After `---` the line is prose too, and no longer a break.
 
-A line that names nothing, because the source ends under it or another attribute line follows it, is set as the prose it was read as, and warns. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
+A line that names nothing is set as the prose it was read as, and warns: the source ends under it, or another attribute line follows it. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 

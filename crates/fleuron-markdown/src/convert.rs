@@ -1068,9 +1068,9 @@ Ordinary prose.
         assert_eq!(node, *id);
     }
 
-    /// The line above a quote names the quote. The blocks inside it
-    /// are their own, and the first of them is not what was written
-    /// over the `>`.
+    /// The line above a quote names the quote. The blocks inside
+    /// the quote take their own names, and the first of them does
+    /// not take the line's.
     #[test]
     fn an_attribute_line_names_the_blockquote_and_not_its_first_paragraph() {
         let sections = read("# C\n\n{.epigraph}\n> Man is the only animal that blushes.\n");
@@ -1127,8 +1127,8 @@ Ordinary prose.
     }
 
     /// A line that names nothing is the prose it was read as, and
-    /// says so: at the end of a section, and where a second line
-    /// takes its place.
+    /// warns: at the end of a section, and where a second line takes
+    /// its place.
     #[test]
     fn an_attribute_line_over_nothing_stays_prose_and_warns() {
         let (sections, warnings) = to_sections(

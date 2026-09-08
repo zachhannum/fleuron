@@ -80,11 +80,8 @@ impl Sections {
 
 /// Which markdown a source is written in.
 ///
-/// [`Dialect::fleuron`] is the default and the one a manuscript for
-/// this engine is written in: frontmatter, because a manuscript's
-/// metadata has to live somewhere, and attribute lines, because a
-/// sheet has to be able to name one plate. The alternative to both is
-/// a convention smuggled through the prose.
+/// [`Dialect::fleuron`] is the default. The other three are named
+/// after whose markdown they read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dialect {
     /// A leading `---` block is metadata rather than a scene break.

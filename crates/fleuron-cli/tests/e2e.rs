@@ -418,10 +418,9 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
 }
 
 /// The sheet names one picture and moves it, and the picture beside
-/// it stays where the built-in sheet put it. The class is written in
-/// the manuscript, so this is the whole path: an attribute run in
-/// markdown, a class selector in the author's CSS, one image on the
-/// page set somewhere else.
+/// it stays where the built-in sheet put it: a brace run in the
+/// manuscript, a class selector in the author's CSS, one image on
+/// the page set somewhere else.
 #[test]
 fn the_named_plate_is_set_where_the_sheet_put_it() {
     // What `fixtures/styled.css` leaves around the text: the wider

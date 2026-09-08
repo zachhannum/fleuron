@@ -7,8 +7,8 @@
 //! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`,
 //! `a`.
 //!
-//! Beside the name, an element carries the classes and the id the
-//! content tree gave it, which is what `.plate` and `#frontispiece`
+//! An element carries the classes and the id the content tree gave
+//! it alongside the name, which is what `.plate` and `#frontispiece`
 //! match on.
 //!
 //! Text runs are not elements, the same as in CSS: they have no style
@@ -66,8 +66,8 @@ impl PrecomputedHash for Atom {
     }
 }
 
-/// FNV-1a: the bloom filter needs a hash that is a function of the
-/// name, not of where the string happens to live.
+/// FNV-1a: the bloom filter needs a hash of the name itself, not of
+/// where the string is stored.
 fn fnv(name: &str) -> u32 {
     let mut hash = 0x811c_9dc5u32;
     for byte in name.as_bytes() {
