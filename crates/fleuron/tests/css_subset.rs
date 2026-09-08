@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use fleuron::Warning;
-use fleuron::style::subset::{Descriptor, Property, Subset};
+use fleuron::style::subset::{Descriptor, Property, Selector, Subset};
 use fleuron::style::{Source, Stylesheets};
 
 fn warnings(css: &str) -> Vec<Warning> {
@@ -304,6 +304,45 @@ fn a_property_the_engine_reads_is_in_the_description() {
     );
 }
 
+/// Every stylesheet the docs page shows parses without a warning.
+///
+/// The generated regions are excluded: they are value-definition
+/// syntax rather than CSS, and the tests above cover them. What is
+/// left is the snippets written by hand, which is where a page drifts
+/// from the engine.
+#[test]
+fn every_stylesheet_on_the_docs_page_parses() {
+    let path = workspace_root().join("docs/css-subset.mdx");
+    let page = std::fs::read_to_string(&path).expect("the docs page");
+    let snippets = stylesheets(&page);
+    assert!(!snippets.is_empty(), "the page shows no stylesheet");
+    for snippet in snippets {
+        let warnings = warnings(&snippet);
+        assert!(warnings.is_empty(), "{snippet}\nwarned: {warnings:?}");
+    }
+}
+
+/// The ```css blocks outside the generated regions.
+fn stylesheets(page: &str) -> Vec<String> {
+    let mut snippets = Vec::new();
+    for prose in
+        page.split("{/* generated: ")
+            .map(|region| match region.find("{/* end generated */}") {
+                Some(end) => &region[end..],
+                None => region,
+            })
+    {
+        let mut rest = prose;
+        while let Some(open) = rest.find("```css\n") {
+            let from = &rest[open + "```css\n".len()..];
+            let close = from.find("```").expect("a closed code fence");
+            snippets.push(from[..close].to_string());
+            rest = &from[close + "```".len()..];
+        }
+    }
+    snippets
+}
+
 /// The generated regions of the docs page are what the description
 /// renders. Set `FLEURON_UPDATE_DOCS=1` to rewrite them.
 #[test]
@@ -355,20 +394,59 @@ fn render(page: &str, subset: &Subset) -> String {
 }
 
 fn region(name: &str, subset: &Subset) -> String {
+    let selectors = &subset.selectors;
+    let page = &subset.page;
     match name {
-        "selectors" => selectors(subset),
-        "properties" => properties(subset),
+        "elements" => format!(
+            "Element names are the markdown vocabulary: {}.",
+            list(&selectors.elements)
+        ),
+        "compounds" => format!(
+            "A compound is {}, with any of the pseudo-classes {}.",
+            either(&quoted_examples(&selectors.compounds)),
+            list(&names(&selectors.pseudo_classes))
+        ),
+        "combinators" => format!(
+            "Compounds join by the {} combinators, and selectors list with `{}` (`{}`).",
+            joined(&plain_examples(&selectors.combinators)),
+            selectors.list.name,
+            selectors.list.example
+        ),
+        "pseudo-elements" => format!(
+            "The pseudo-elements are {}.",
+            list(&names(&selectors.pseudo_elements))
+        ),
+        "first-line-properties" => format!(
+            "`::first-line` takes {}, and nothing else.",
+            list(&selectors.first_line_properties)
+        ),
+        "declaration" => format!("A declaration is `{}`.", subset.declaration),
+        "defaults" => format!("```css\n{}```", fleuron::style::USER_AGENT_CSS),
+        "text-properties" => properties_table(subset, true),
+        "block-properties" => properties_table(subset, false),
         "units" => format!(
             "Lengths are {}, and everything computes to points.",
             list(&subset.units)
         ),
-        "page" => page(subset),
+        "page-grammar" => page_grammar(subset),
+        "page-sizes" => format!(
+            "`<page-size>` is {}, portrait unless `landscape` follows.",
+            list(&names_of_sizes(&page.sizes))
+        ),
+        "counter-styles" => format!("`<counter-style>` is {}.", list(&page.counter_styles)),
+        "margin-boxes" => margin_boxes(subset),
         "font-face" => {
             let rows = subset
                 .font_face
                 .descriptors
                 .iter()
-                .map(|descriptor| (vec![descriptor.name.as_str()], descriptor.syntax.as_str()))
+                .map(|descriptor| {
+                    (
+                        vec![descriptor.name.as_str()],
+                        descriptor.syntax.as_str(),
+                        first_example(&descriptor.name, &descriptor.examples),
+                    )
+                })
                 .collect();
             table("descriptor", rows)
         }
@@ -376,92 +454,88 @@ fn region(name: &str, subset: &Subset) -> String {
     }
 }
 
-fn selectors(subset: &Subset) -> String {
-    let selectors = &subset.selectors;
-    let compounds: Vec<String> = selectors
-        .compounds
+/// The syntax and an example of each, as `` `name` (`example`) ``.
+fn quoted_examples(selectors: &[Selector]) -> Vec<String> {
+    selectors
         .iter()
-        .map(|compound| format!("`{}` (`{}`)", compound.name, compound.example))
-        .collect();
-    let combinators: Vec<String> = selectors
-        .combinators
-        .iter()
-        .map(|combinator| format!("{} (`{}`)", combinator.name, combinator.example))
-        .collect();
-    let pseudo_classes: Vec<String> = selectors
-        .pseudo_classes
-        .iter()
-        .map(|pseudo| pseudo.name.clone())
-        .collect();
-    let pseudo_elements: Vec<String> = selectors
-        .pseudo_elements
-        .iter()
-        .map(|pseudo| pseudo.name.clone())
-        .collect();
-    [
-        format!(
-            "Element names are the markdown vocabulary: {}.",
-            list(&selectors.elements)
-        ),
-        format!(
-            "A compound is {}, with any of the pseudo-classes {}.",
-            either(&compounds),
-            list(&pseudo_classes)
-        ),
-        format!(
-            "Compounds join by the {} combinators, and selectors list with `{}` (`{}`).",
-            joined(&combinators),
-            selectors.list.name,
-            selectors.list.example
-        ),
-        format!("The pseudo-elements are {}.", list(&pseudo_elements)),
-        format!(
-            "`::first-line` takes {}.",
-            list(&selectors.first_line_properties)
-        ),
-    ]
-    .join("\n\n")
+        .map(|selector| format!("`{}` (`{}`)", selector.name, selector.example))
+        .collect()
 }
 
-fn properties(subset: &Subset) -> String {
-    let (inherited, not_inherited): (Vec<&Property>, Vec<&Property>) = subset
+/// The same, for names that are prose rather than syntax.
+fn plain_examples(selectors: &[Selector]) -> Vec<String> {
+    selectors
+        .iter()
+        .map(|selector| format!("{} (`{}`)", selector.name, selector.example))
+        .collect()
+}
+
+fn names(selectors: &[Selector]) -> Vec<String> {
+    selectors
+        .iter()
+        .map(|selector| selector.name.clone())
+        .collect()
+}
+
+fn names_of_sizes(sizes: &[fleuron::style::subset::PageSize]) -> Vec<String> {
+    sizes.iter().map(|size| size.name.clone()).collect()
+}
+
+/// One table of the properties that do or do not inherit.
+fn properties_table(subset: &Subset, inherited: bool) -> String {
+    let wanted: Vec<&Property> = subset
         .properties
         .iter()
-        .partition(|property| property.inherited);
-    format!(
-        "A declaration is `{}`.\n\nText, inherited:\n\n{}\n\nBlock box, not inherited:\n\n{}",
-        subset.declaration,
-        table("property", merged(&inherited)),
-        table("property", merged(&not_inherited))
-    )
+        .filter(|property| property.inherited == inherited)
+        .collect();
+    table("property", merged(&wanted))
 }
 
-/// Consecutive properties with the same syntax share a row.
-fn merged<'a>(properties: &[&'a Property]) -> Vec<(Vec<&'a str>, &'a str)> {
-    let mut rows: Vec<(Vec<&str>, &str)> = Vec::new();
+/// Consecutive properties with the same syntax share a row, and the
+/// row's example is written for the first of them.
+fn merged<'a>(properties: &[&'a Property]) -> Vec<(Vec<&'a str>, &'a str, String)> {
+    let mut rows: Vec<(Vec<&str>, &str, String)> = Vec::new();
     for property in properties {
         match rows.last_mut() {
-            Some((names, syntax)) if *syntax == property.syntax => names.push(&property.name),
-            _ => rows.push((vec![&property.name], &property.syntax)),
+            Some((names, syntax, _)) if *syntax == property.syntax => names.push(&property.name),
+            _ => rows.push((
+                vec![&property.name],
+                &property.syntax,
+                first_example(&property.name, &property.examples),
+            )),
         }
     }
     rows
 }
 
-fn table(heading: &str, rows: Vec<(Vec<&str>, &str)>) -> String {
-    let mut out = format!("| {heading} | values |\n|---|---|");
-    for (names, syntax) in rows {
+/// One declaration a reader can copy, out of the values the
+/// description says parse. A value that turns the property off shows
+/// nothing about it, so it is taken only where it is all there is.
+fn first_example(name: &str, examples: &[String]) -> String {
+    let off = ["none", "normal", "auto"];
+    let value = examples
+        .iter()
+        .find(|example| !off.contains(&example.as_str()))
+        .or_else(|| examples.first())
+        .unwrap_or_else(|| panic!("`{name}` describes no example value"));
+    format!("{name}: {value}")
+}
+
+fn table(heading: &str, rows: Vec<(Vec<&str>, &str, String)>) -> String {
+    let mut out = format!("| {heading} | values | example |\n|---|---|---|");
+    for (names, syntax, example) in rows {
         let names: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
         out.push_str(&format!(
-            "\n| {} | `{}` |",
+            "\n| {} | `{}` | `{}` |",
             names.join(", "),
-            syntax.replace('|', "\\|")
+            syntax.replace('|', "\\|"),
+            example.replace('|', "\\|")
         ));
     }
     out
 }
 
-fn page(subset: &Subset) -> String {
+fn page_grammar(subset: &Subset) -> String {
     let page = &subset.page;
     let mut grammar = format!("@page {} {{\n", page.prelude);
     for property in &page.properties {
@@ -472,9 +546,12 @@ fn page(subset: &Subset) -> String {
         grammar.push_str(&format!("    {}: {};\n", property.name, property.syntax));
     }
     grammar.push_str("    /* text properties */\n  }\n}");
+    format!("```css\n{grammar}\n```")
+}
 
-    let sizes: Vec<String> = page.sizes.iter().map(|size| size.name.clone()).collect();
-    let (paints, silent): (Vec<_>, Vec<_>) = page
+fn margin_boxes(subset: &Subset) -> String {
+    let (paints, silent): (Vec<_>, Vec<_>) = subset
+        .page
         .margin_boxes
         .iter()
         .partition(|margin_box| margin_box.paints);
@@ -484,20 +561,11 @@ fn page(subset: &Subset) -> String {
             .map(|margin_box| format!("@{}", margin_box.name))
             .collect::<Vec<_>>()
     };
-    [
-        format!("```css\n{grammar}\n```"),
-        format!(
-            "`<page-size>` is {}, portrait unless `landscape` follows.",
-            list(&sizes)
-        ),
-        format!("`<counter-style>` is {}.", list(&page.counter_styles)),
-        format!(
-            "The margin boxes that paint are {}. {} parse and paint nothing.",
-            list(&named(&paints)),
-            list(&named(&silent))
-        ),
-    ]
-    .join("\n\n")
+    format!(
+        "The margin boxes that paint are {}. {} parse and paint nothing.",
+        list(&named(&paints)),
+        list(&named(&silent))
+    )
 }
 
 /// Names in backticks, comma separated, `and` before the last.
