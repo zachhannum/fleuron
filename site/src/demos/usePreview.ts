@@ -67,7 +67,7 @@ export interface Inputs {
   /** The page to show, counting from 1. */
   page?: number;
   /** Which markdown the manuscript is written in. */
-  dialect?: 'commonmark' | 'gfm' | 'obsidian';
+  dialect?: 'fleuron' | 'commonmark' | 'gfm' | 'obsidian';
   /**
    * The images the manuscript refers to, by the url it names them
    * by. Nothing fetches a url for the island, so it fetches each one
