@@ -1,7 +1,7 @@
 //! Property tests for page assembly: determinism, page-count
 //! stability, content-box fit, spread sides.
 
-use fleuron::content::{Block, Book, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::{Paginator, margin_band};
 use fleuron::lines::ParagraphStyle;
@@ -31,9 +31,11 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
             inlines: vec![Inline::Text {
                 id: NodeId::UNASSIGNED,
                 value: "Chapter".into(),
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             }],
+            attributes: Attributes::default(),
             position: None,
             span: None,
         })
@@ -42,9 +44,11 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
             inlines: vec![Inline::Text {
                 id: NodeId::UNASSIGNED,
                 value,
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             }],
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }))
@@ -113,9 +117,11 @@ fn column_master(situation: Situation) -> &'static PageStyle {
                         inlines: vec![Inline::Text {
                             id: NodeId::UNASSIGNED,
                             value: "prose".into(),
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     }],
@@ -152,9 +158,11 @@ fn ua() -> &'static StyleTree {
                     inlines: vec![Inline::Text {
                         id: NodeId::UNASSIGNED,
                         value: "prose".into(),
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     }],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
@@ -492,9 +500,11 @@ fn page_assembly_snapshot() {
         inlines: vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: prose.repeat(60),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     };
@@ -509,9 +519,11 @@ fn page_assembly_snapshot() {
                 inlines: vec![Inline::Text {
                     id: NodeId::UNASSIGNED,
                     value: title.into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             },

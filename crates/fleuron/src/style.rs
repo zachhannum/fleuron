@@ -848,7 +848,7 @@ fn stack(families: &[Family]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Block, HeadingLevel, Inline, Metadata, Section};
+    use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, Section};
     use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
     use crate::lines::{HangEnd, HangingPunctuation};
 
@@ -861,6 +861,7 @@ mod tests {
         Inline::Text {
             id: NodeId::UNASSIGNED,
             value: value.into(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -880,6 +881,7 @@ mod tests {
                         id: NodeId::UNASSIGNED,
                         level: HeadingLevel::H1,
                         inlines: vec![text("Chapter One")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -889,17 +891,20 @@ mod tests {
                             Inline::Emphasis {
                                 id: NodeId::UNASSIGNED,
                                 children: vec![text("In which")],
+                                attributes: Attributes::default(),
                                 position: None,
                                 span: None,
                             },
                             text(" a drawer is opened."),
                         ],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("It was the kind of morning.")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -908,9 +913,11 @@ mod tests {
                         blocks: vec![Block::Paragraph {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("\"Nobody's early here.\"")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -1529,11 +1536,13 @@ mod tests {
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("Before the break.")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
                     Block::ThematicBreak {
                         id: NodeId::UNASSIGNED,
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -1542,9 +1551,11 @@ mod tests {
                         blocks: vec![Block::Paragraph {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("Quoted.")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -1744,15 +1755,18 @@ mod tests {
                                 Inline::Strong {
                                     id: NodeId::UNASSIGNED,
                                     children: vec![text("again")],
+                                    attributes: Attributes::default(),
                                     position: None,
                                     span: None,
                                 },
                             ],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
                         text("."),
                     ],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],

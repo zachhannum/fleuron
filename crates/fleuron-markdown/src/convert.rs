@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use fleuron::Warning;
 use fleuron::content::{
-    Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_span, origin,
+    Attributes, Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_span, origin,
     text as inline_text,
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
@@ -229,6 +229,7 @@ impl<'a> Converter<'a> {
             Event::Code(code) => self.inline(Inline::Code {
                 id: Default::default(),
                 value: code.into_string(),
+                attributes: Attributes::default(),
                 position: Some(at),
                 span: Some(read.span),
             }),
@@ -289,6 +290,7 @@ impl<'a> Converter<'a> {
         self.inline(Inline::Text {
             id: Default::default(),
             value: value.to_string(),
+            attributes: Attributes::default(),
             position: Some(read.position),
             span: Some(read.span),
         });
@@ -315,12 +317,14 @@ impl<'a> Converter<'a> {
             InlineFor::Emphasis => self.inline(Inline::Emphasis {
                 id: Default::default(),
                 children,
+                attributes: Attributes::default(),
                 position: at,
                 span,
             }),
             InlineFor::Strong => self.inline(Inline::Strong {
                 id: Default::default(),
                 children,
+                attributes: Attributes::default(),
                 position: at,
                 span,
             }),
@@ -328,6 +332,7 @@ impl<'a> Converter<'a> {
                 id: Default::default(),
                 url,
                 children,
+                attributes: Attributes::default(),
                 position: at,
                 span,
             }),
@@ -343,6 +348,7 @@ impl<'a> Converter<'a> {
                 id: Default::default(),
                 url,
                 alt: inline_text(&children),
+                attributes: Attributes::default(),
                 position: at,
                 span,
             }),
@@ -355,6 +361,7 @@ impl<'a> Converter<'a> {
                     id: Default::default(),
                     level,
                     inlines: children,
+                    attributes: Attributes::default(),
                     position: at,
                     span,
                 });
@@ -366,6 +373,7 @@ impl<'a> Converter<'a> {
                     self.push_block(Block::Paragraph {
                         id: Default::default(),
                         inlines: children,
+                        attributes: Attributes::default(),
                         position: at,
                         span,
                     });
@@ -418,6 +426,7 @@ impl<'a> Converter<'a> {
         self.push_block(Block::Blockquote {
             id: Default::default(),
             blocks,
+            attributes: Attributes::default(),
             position: Some(read.position),
             span: Some(read.span),
         });
@@ -426,6 +435,7 @@ impl<'a> Converter<'a> {
     fn rule(&mut self, read: Read) {
         self.push_block(Block::ThematicBreak {
             id: Default::default(),
+            attributes: Attributes::default(),
             position: Some(read.position),
             span: Some(read.span),
         });

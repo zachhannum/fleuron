@@ -2228,7 +2228,7 @@ fn cut_runs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::NodeId;
+    use crate::content::{Attributes, NodeId};
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -2267,6 +2267,7 @@ mod tests {
         let inlines = vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }];
@@ -2282,6 +2283,7 @@ mod tests {
         vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }]
@@ -2320,6 +2322,7 @@ mod tests {
         let inlines = vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }];
@@ -2684,12 +2687,14 @@ mod tests {
             Inline::Text {
                 id: NodeId::UNASSIGNED,
                 value: "body ".into(),
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             },
             Inline::Code {
                 id: NodeId::UNASSIGNED,
                 value: "code".into(),
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             },
@@ -2715,6 +2720,7 @@ mod tests {
                         Inline::Text {
                             id: NodeId::UNASSIGNED,
                             value: "He said ".into(),
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
@@ -2724,6 +2730,7 @@ mod tests {
                                 Inline::Text {
                                     id: NodeId::UNASSIGNED,
                                     value: "never ".into(),
+                                    attributes: Attributes::default(),
                                     position: None,
                                     span: None,
                                 },
@@ -2732,23 +2739,28 @@ mod tests {
                                     children: vec![Inline::Text {
                                         id: NodeId::UNASSIGNED,
                                         value: "again".into(),
+                                        attributes: Attributes::default(),
                                         position: None,
                                         span: None,
                                     }],
+                                    attributes: Attributes::default(),
                                     position: None,
                                     span: None,
                                 },
                             ],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
                         Inline::Text {
                             id: NodeId::UNASSIGNED,
                             value: " to her.".into(),
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
                     ],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
@@ -2811,6 +2823,7 @@ mod tests {
         let inlines = vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: text.to_string(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }];
@@ -3322,6 +3335,7 @@ mod tests {
         let inlines = vec![Inline::Text {
             id: NodeId::UNASSIGNED,
             value: "hi Ho".to_string(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }];

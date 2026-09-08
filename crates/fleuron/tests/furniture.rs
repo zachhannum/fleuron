@@ -6,7 +6,7 @@
 //! verso behind it — under an author sheet that asks for the furniture
 //! a book has.
 
-use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page, Side};
@@ -49,6 +49,7 @@ fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -59,6 +60,7 @@ fn heading(value: &str) -> Block {
         id: NodeId::UNASSIGNED,
         level: HeadingLevel::H1,
         inlines: vec![text(value)],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -72,6 +74,7 @@ fn paragraph(sentences: usize) -> Block {
     Block::Paragraph {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(sentence.repeat(sentences).trim_end())],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }

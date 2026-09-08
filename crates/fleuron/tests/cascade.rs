@@ -6,7 +6,7 @@
 //! rules as CSS states them — over selectors of known specificity in
 //! a shuffled order.
 
-use fleuron::content::{Block, Book, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::style::{Source, StyleTree, Stylesheets};
 use proptest::prelude::*;
@@ -30,9 +30,11 @@ fn book() -> Book {
                 inlines: vec![Inline::Text {
                     id: NodeId::UNASSIGNED,
                     value: "prose".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             }],

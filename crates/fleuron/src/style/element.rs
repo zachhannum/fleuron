@@ -16,12 +16,12 @@ use std::fmt;
 use cssparser::{ToCss, serialize_identifier};
 use precomputed_hash::PrecomputedHash;
 use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstraint};
-use selectors::bloom::BloomFilter;
+use selectors::bloom::{BLOOM_HASH_MASK, BloomFilter};
 use selectors::matching::{ElementSelectorFlags, MatchingContext};
 use selectors::parser::{NonTSPseudoClass, PseudoElement as PseudoElementTrait, SelectorImpl};
 use selectors::{Element, OpaqueElement};
 
-use crate::content::{Block, Book, Inline, NodeId};
+use crate::content::{Attributes, Block, Book, Inline, NodeId};
 
 /// An interned CSS identifier: element name, class, id, namespace.
 ///
@@ -162,6 +162,8 @@ pub struct ElementNode {
     pub name: &'static str,
     /// The content node this element stands for.
     pub id: NodeId,
+    /// The classes and id the sheet names it by.
+    pub attributes: Attributes,
     pub parent: Option<usize>,
     pub previous: Option<usize>,
     pub next: Option<usize>,
@@ -182,12 +184,24 @@ impl ElementTree {
     /// index order is reading order.
     pub fn build(book: &Book) -> ElementTree {
         let mut tree = ElementTree::default();
-        let root = tree.push("book", NodeId::UNASSIGNED, None, false);
+        let root = tree.push(
+            "book",
+            NodeId::UNASSIGNED,
+            &Attributes::default(),
+            None,
+            false,
+        );
         let sections: Vec<usize> = book
             .sections
             .iter()
             .map(|section| {
-                let index = tree.push("section", section.id, Some(root), false);
+                let index = tree.push(
+                    "section",
+                    section.id,
+                    &Attributes::default(),
+                    Some(root),
+                    false,
+                );
                 let children = tree.blocks(&section.blocks, index);
                 tree.link(index, &children);
                 index
@@ -212,7 +226,11 @@ impl ElementTree {
             .iter()
             .map(|block| match block {
                 Block::Heading {
-                    id, level, inlines, ..
+                    id,
+                    level,
+                    inlines,
+                    attributes,
+                    ..
                 } => {
                     let name = match u8::from(*level) {
                         1 => "h1",
@@ -222,27 +240,41 @@ impl ElementTree {
                         5 => "h5",
                         _ => "h6",
                     };
-                    let index = self.push(name, *id, Some(parent), false);
+                    let index = self.push(name, *id, attributes, Some(parent), false);
                     let (children, has_text) = self.inlines(inlines, index);
                     self.link(index, &children);
                     self.nodes[index].has_text = has_text;
                     index
                 }
-                Block::Paragraph { id, inlines, .. } => {
-                    let index = self.push("p", *id, Some(parent), false);
+                Block::Paragraph {
+                    id,
+                    inlines,
+                    attributes,
+                    ..
+                } => {
+                    let index = self.push("p", *id, attributes, Some(parent), false);
                     let (children, has_text) = self.inlines(inlines, index);
                     self.link(index, &children);
                     self.nodes[index].has_text = has_text;
                     index
                 }
-                Block::Blockquote { id, blocks, .. } => {
-                    let index = self.push("blockquote", *id, Some(parent), false);
+                Block::Blockquote {
+                    id,
+                    blocks,
+                    attributes,
+                    ..
+                } => {
+                    let index = self.push("blockquote", *id, attributes, Some(parent), false);
                     let children = self.blocks(blocks, index);
                     self.link(index, &children);
                     index
                 }
-                Block::ThematicBreak { id, .. } => self.push("hr", *id, Some(parent), false),
-                Block::Image { id, .. } => self.push("img", *id, Some(parent), false),
+                Block::ThematicBreak { id, attributes, .. } => {
+                    self.push("hr", *id, attributes, Some(parent), false)
+                }
+                Block::Image { id, attributes, .. } => {
+                    self.push("img", *id, attributes, Some(parent), false)
+                }
             })
             .collect()
     }
@@ -253,21 +285,41 @@ impl ElementTree {
         let mut children = Vec::new();
         let mut text = false;
         for inline in inlines {
-            let (name, id, nested): (_, _, Option<&[Inline]>) = match inline {
+            let (name, id, attributes, nested): (_, _, _, Option<&[Inline]>) = match inline {
                 Inline::Text { value, .. } => {
                     text |= !value.is_empty();
                     continue;
                 }
-                Inline::Code { id, value, .. } => {
-                    let index = self.push("code", *id, Some(parent), !value.is_empty());
+                Inline::Code {
+                    id,
+                    value,
+                    attributes,
+                    ..
+                } => {
+                    let index = self.push("code", *id, attributes, Some(parent), !value.is_empty());
                     children.push(index);
                     continue;
                 }
-                Inline::Emphasis { id, children, .. } => ("em", *id, Some(children)),
-                Inline::Strong { id, children, .. } => ("strong", *id, Some(children)),
-                Inline::Link { id, children, .. } => ("a", *id, Some(children)),
+                Inline::Emphasis {
+                    id,
+                    children,
+                    attributes,
+                    ..
+                } => ("em", *id, attributes, Some(children)),
+                Inline::Strong {
+                    id,
+                    children,
+                    attributes,
+                    ..
+                } => ("strong", *id, attributes, Some(children)),
+                Inline::Link {
+                    id,
+                    children,
+                    attributes,
+                    ..
+                } => ("a", *id, attributes, Some(children)),
             };
-            let index = self.push(name, id, Some(parent), false);
+            let index = self.push(name, id, attributes, Some(parent), false);
             if let Some(nested) = nested {
                 let (kids, has_text) = self.inlines(nested, index);
                 self.link(index, &kids);
@@ -282,12 +334,14 @@ impl ElementTree {
         &mut self,
         name: &'static str,
         id: NodeId,
+        attributes: &Attributes,
         parent: Option<usize>,
         has_text: bool,
     ) -> usize {
         self.nodes.push(ElementNode {
             name,
             id,
+            attributes: attributes.clone(),
             parent,
             previous: None,
             next: None,
@@ -424,12 +478,20 @@ impl Element for ElementRef<'_> {
         false
     }
 
-    fn has_id(&self, _id: &Atom, _case_sensitivity: CaseSensitivity) -> bool {
-        false
+    fn has_id(&self, id: &Atom, case_sensitivity: CaseSensitivity) -> bool {
+        self.node()
+            .attributes
+            .id
+            .as_ref()
+            .is_some_and(|mine| case_sensitivity.eq(mine.as_bytes(), id.0.as_bytes()))
     }
 
-    fn has_class(&self, _name: &Atom, _case_sensitivity: CaseSensitivity) -> bool {
-        false
+    fn has_class(&self, name: &Atom, case_sensitivity: CaseSensitivity) -> bool {
+        self.node()
+            .attributes
+            .classes
+            .iter()
+            .any(|mine| case_sensitivity.eq(mine.as_bytes(), name.0.as_bytes()))
     }
 
     fn has_custom_state(&self, _name: &Atom) -> bool {
@@ -452,7 +514,20 @@ impl Element for ElementRef<'_> {
         self.node().parent.is_none()
     }
 
-    fn add_element_unique_hashes(&self, _filter: &mut BloomFilter) -> bool {
-        false
+    /// The hashes a `:has()` filter tests an ancestor by: the name a
+    /// selector reaches this element under, and the names a sheet
+    /// gives it.
+    fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool {
+        let node = self.node();
+        let mut insert =
+            |name: &str| filter.insert_hash(Atom::from(name).precomputed_hash() & BLOOM_HASH_MASK);
+        insert(node.name);
+        if let Some(id) = &node.attributes.id {
+            insert(id);
+        }
+        for class in &node.attributes.classes {
+            insert(class);
+        }
+        true
     }
 }

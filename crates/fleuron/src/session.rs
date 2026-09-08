@@ -832,6 +832,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 level,
                 inlines,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (0u8, level, position).hash(h);
@@ -842,6 +843,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 inlines,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (1u8, position).hash(h);
@@ -852,6 +854,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 blocks,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (2u8, position).hash(h);
@@ -861,6 +864,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
             Block::ThematicBreak {
                 id,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (3u8, position).hash(h);
@@ -871,6 +875,7 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 url,
                 alt,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (4u8, url, alt, position).hash(h);
@@ -887,6 +892,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 value,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (0u8, value, position).hash(h);
@@ -896,6 +902,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 children,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (1u8, position).hash(h);
@@ -906,6 +913,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 children,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (2u8, position).hash(h);
@@ -916,6 +924,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 id,
                 value,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (3u8, value, position).hash(h);
@@ -926,6 +935,7 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 url,
                 children,
                 position,
+                attributes: _,
                 span: _,
             } => {
                 (4u8, url, position).hash(h);
@@ -1049,7 +1059,7 @@ fn hash_nodes(styles: &StyleTree, h: &mut DefaultHasher) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{HeadingLevel, Metadata};
+    use crate::content::{Attributes, HeadingLevel, Metadata};
     use crate::pages::DrawItem;
     use crate::style::{Color, CounterStyle, Source};
 
@@ -1072,6 +1082,7 @@ mod tests {
                     id: NodeId::UNASSIGNED,
                     url: "plate.jpg".into(),
                     alt: "a map".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
@@ -1129,6 +1140,7 @@ mod tests {
                     id: NodeId::UNASSIGNED,
                     url: url.into(),
                     alt: "a picture".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
@@ -1235,6 +1247,7 @@ mod tests {
         Inline::Text {
             id: NodeId::UNASSIGNED,
             value: value.into(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -1244,6 +1257,7 @@ mod tests {
         Block::Paragraph {
             id: NodeId::UNASSIGNED,
             inlines: vec![text(value)],
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -1254,6 +1268,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             level: HeadingLevel::H1,
             inlines: vec![text(value)],
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }

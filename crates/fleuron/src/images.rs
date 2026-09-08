@@ -456,6 +456,7 @@ fn webp(bytes: &[u8]) -> Option<Intrinsic> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::Attributes;
 
     /// A PNG header: signature, `IHDR`, and optionally a `pHYs`
     /// declaring pixels per metre.
@@ -656,6 +657,7 @@ mod tests {
             id: crate::content::NodeId::UNASSIGNED,
             url: url.into(),
             alt: String::new(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         };
@@ -667,6 +669,7 @@ mod tests {
                     Block::Blockquote {
                         id: crate::content::NodeId::UNASSIGNED,
                         blocks: vec![image("b.jpg")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -703,6 +706,7 @@ mod tests {
             id: crate::content::NodeId::UNASSIGNED,
             url: url.into(),
             alt: String::new(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         };

@@ -20,6 +20,14 @@
 //! comes in through, so what the engine writes is what a host may hand
 //! it again.
 //!
+//! # Naming a node
+//!
+//! Every block and inline carries [`Attributes`]: any number of
+//! classes and at most one id, which is what a sheet reaches one
+//! element by. They are empty unless something set them, and a
+//! frontend is not the only thing that can: a host with a structured
+//! source of its own sets them on the tree it builds.
+//!
 //! # Node identity
 //!
 //! `NodeId` is engine-assigned, never frontend-supplied: input can't
@@ -129,6 +137,31 @@ impl SourceSpan {
     }
 }
 
+/// What a sheet names one node by: any number of classes, at most
+/// one id.
+///
+/// Every block and inline carries one, empty unless something set
+/// it. The names are as they are written in CSS, without the `.` or
+/// the `#`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Attributes {
+    /// The id, which the sheet reaches with `#name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The classes, in the order they were written, which the sheet
+    /// reaches with `.name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub classes: Vec<String>,
+}
+
+impl Attributes {
+    /// Whether it names nothing, which is what a node carries until
+    /// something sets one.
+    pub fn is_empty(&self) -> bool {
+        self.id.is_none() && self.classes.is_empty()
+    }
+}
+
 /// A 1-based position in the frontend's source document.
 ///
 /// Line and column are as the markdown parser reported them. This is
@@ -231,6 +264,9 @@ pub enum Block {
         level: HeadingLevel,
         /// The heading's text, in reading order.
         inlines: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -245,6 +281,9 @@ pub enum Block {
         id: NodeId,
         /// The paragraph's text, in reading order.
         inlines: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -260,6 +299,9 @@ pub enum Block {
         id: NodeId,
         /// The quoted blocks, in reading order.
         blocks: Vec<Block>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -272,6 +314,9 @@ pub enum Block {
         /// Engine-assigned identity, for diagnostics; never serialized.
         #[serde(skip)]
         id: NodeId,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -289,6 +334,9 @@ pub enum Block {
         /// Alt text: not laid out, but part of the accessibility
         /// contract.
         alt: String,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -362,6 +410,9 @@ pub enum Inline {
         id: NodeId,
         /// The characters themselves, entities already decoded.
         value: String,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -376,6 +427,9 @@ pub enum Inline {
         id: NodeId,
         /// The emphasised inlines.
         children: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -390,6 +444,9 @@ pub enum Inline {
         id: NodeId,
         /// The strengthened inlines.
         children: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -404,6 +461,9 @@ pub enum Inline {
         id: NodeId,
         /// The literal code text; no markup inside.
         value: String,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -421,6 +481,9 @@ pub enum Inline {
         url: String,
         /// The linked inlines.
         children: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
         position: Option<SourcePos>,
@@ -739,6 +802,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
         Inline::Text {
             id: NodeId::UNASSIGNED,
             value: value.into(),
+            attributes: Attributes::default(),
             position: None,
             span: span(value),
         }
@@ -775,6 +839,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         id: NodeId::UNASSIGNED,
                         level: HeadingLevel::H1,
                         inlines: vec![text("Chapter One")],
+                        attributes: Attributes::default(),
                         position: Some(SourcePos { line: 1, column: 1 }),
                         span: span("# Chapter One\n"),
                     },
@@ -785,11 +850,13 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                             Inline::Emphasis {
                                 id: NodeId::UNASSIGNED,
                                 children: vec![text("clean")],
+                                attributes: Attributes::default(),
                                 position: None,
                                 span: span("*clean*"),
                             },
                             text(", too quiet."),
                         ],
+                        attributes: Attributes::default(),
                         position: Some(SourcePos { line: 3, column: 1 }),
                         span: span(
                             "It was the kind of morning that made you suspicious — too *clean*, too quiet.\n",
@@ -800,14 +867,17 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         blocks: vec![Block::Paragraph {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("\"Nobody's early here.\"")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: span("\"Nobody's early here.\"\n"),
                         }],
+                        attributes: Attributes::default(),
                         position: Some(SourcePos { line: 5, column: 1 }),
                         span: span("> \"Nobody's early here.\"\n"),
                     },
                     Block::ThematicBreak {
                         id: NodeId::UNASSIGNED,
+                        attributes: Attributes::default(),
                         position: Some(SourcePos { line: 7, column: 1 }),
                         span: span("---\n"),
                     },
@@ -815,6 +885,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         id: NodeId::UNASSIGNED,
                         url: "images/drawer.png".into(),
                         alt: "The drawer of knives".into(),
+                        attributes: Attributes::default(),
                         position: Some(SourcePos { line: 9, column: 1 }),
                         span: span("![The drawer of knives](images/drawer.png)"),
                     },
@@ -899,6 +970,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                 Inline::Text {
                     id: NodeId::UNASSIGNED,
                     value: "plain ".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },
@@ -907,13 +979,16 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                     children: vec![Inline::Text {
                         id: NodeId::UNASSIGNED,
                         value: "bold".into(),
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     }],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },
             ],
+            attributes: Attributes::default(),
             position: Some(SourcePos { line: 4, column: 1 }),
             span: Some(SourceSpan { start: 40, end: 58 }),
         };
@@ -1100,9 +1175,11 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                     inlines: vec![Inline::Text {
                         id: NodeId::UNASSIGNED,
                         value: "Built by hand.".into(),
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     }],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],

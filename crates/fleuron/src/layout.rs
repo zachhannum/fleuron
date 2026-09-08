@@ -1772,7 +1772,7 @@ pub fn margin_band(master: &PageStyle, band: Band, style: ParagraphStyle) -> (f3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{HeadingLevel, Inline, NodeId, SourcePos};
+    use crate::content::{Attributes, HeadingLevel, Inline, NodeId, SourcePos};
     use crate::style::StyleTree;
 
     fn registry() -> &'static FontRegistry {
@@ -1784,6 +1784,7 @@ mod tests {
         Inline::Text {
             id: NodeId::UNASSIGNED,
             value: value.into(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -1794,6 +1795,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             level: HeadingLevel::H1,
             inlines: vec![text(value)],
+            attributes: Attributes::default(),
             position: Some(SourcePos { line: 1, column: 1 }),
             span: None,
         }
@@ -1803,6 +1805,7 @@ mod tests {
         Block::Paragraph {
             id: NodeId::UNASSIGNED,
             inlines: vec![text(value)],
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -2349,6 +2352,7 @@ mod tests {
         Block::Blockquote {
             id: NodeId::UNASSIGNED,
             blocks,
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -2357,6 +2361,7 @@ mod tests {
     fn scene_break() -> Block {
         Block::ThematicBreak {
             id: NodeId::UNASSIGNED,
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -3514,6 +3519,7 @@ mod tests {
                 id: NodeId::UNASSIGNED,
                 level: HeadingLevel::H3,
                 inlines: vec![text("A Voyage")],
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             },
@@ -3732,6 +3738,7 @@ mod tests {
             id: NodeId::UNASSIGNED,
             url: url.into(),
             alt: "a drawer of knives".into(),
+            attributes: Attributes::default(),
             position: Some(SourcePos { line: 9, column: 1 }),
             span: None,
         };
