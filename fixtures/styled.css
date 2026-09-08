@@ -66,3 +66,10 @@ h3 {
   padding-bottom: 8pt;
   border-bottom: 1pt solid #8a7a5c;
 }
+
+/* The map is one picture rather than every picture: the class the
+   manuscript wrote on it sets it against the outer margin, and the
+   ornament that closes the chapter stays where it was. */
+.plate {
+  text-align: right;
+}
