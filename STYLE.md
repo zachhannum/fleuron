@@ -86,6 +86,36 @@ After:
 > The following example overrides the default page size, font size,
 > text alignment, and hyphenation:
 
+### Break up a paragraph of code spans
+
+A run of inline code inside prose is a wall. A flat vocabulary goes in
+a block set apart from the text; a list of things with a second column
+of information goes in a table.
+
+Before:
+
+> A compound selector is `<element>` (`p`), `*` (`section > *`),
+> `.<class>` (`p.epigraph`) or `#<id>` (`#frontispiece`), optionally
+> followed by any of these pseudo-classes: `:first-child`,
+> `:last-child`, `:only-child`, `:nth-child()`, and eleven more.
+
+After:
+
+> A compound selector is one of these, optionally followed by any of
+> the pseudo-classes below.
+>
+> | compound | example |
+> |---|---|
+> | `<element>` | `p` |
+> | `.<class>` | `p.epigraph` |
+>
+> ```
+> :first-child :last-child :only-child :nth-child()
+> ```
+
+Four or so code spans across a few sentences is ordinary prose. A
+sentence that is mostly code spans is the problem.
+
 ### Stop before the obvious
 
 A consequence the reader works out unaided is a sentence to cut.

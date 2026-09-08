@@ -68,7 +68,11 @@ book {
 
 {/* generated: page-sizes */}
 
-A named page size is one of `a3`, `a4`, `a5`, `b4`, `b5`, `letter`, `legal` and `ledger`, portrait unless `landscape` follows.
+A named page size is one of these, portrait unless `landscape` follows.
+
+```
+a3 a4 a5 b4 b5 letter legal ledger
+```
 
 {/* end generated */}
 
@@ -130,7 +134,20 @@ A margin box is a rule nested inside `@page`. `content` sets what it shows, and 
 
 {/* generated: margin-boxes */}
 
-The engine draws these margin boxes: `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center` and `@bottom-right`. These parse but draw nothing: `@top-left-corner`, `@top-right-corner`, `@left-top`, `@left-middle`, `@left-bottom`, `@right-top`, `@right-middle`, `@right-bottom`, `@bottom-left-corner` and `@bottom-right-corner`.
+The engine draws these margin boxes:
+
+```
+@top-left @top-center @top-right @bottom-left @bottom-center
+@bottom-right
+```
+
+These parse but draw nothing:
+
+```
+@top-left-corner @top-right-corner @left-top @left-middle
+@left-bottom @right-top @right-middle @right-bottom
+@bottom-left-corner @bottom-right-corner
+```
 
 {/* end generated */}
 
@@ -168,7 +185,11 @@ A page with no text on it draws no margin boxes at all. `@page :blank` still set
 
 {/* generated: counter-styles */}
 
-A counter style is one of `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` and `upper-alpha`.
+A counter style is one of these.
+
+```
+decimal lower-roman upper-roman lower-alpha upper-alpha
+```
 
 {/* end generated */}
 
@@ -184,7 +205,15 @@ The count includes blank pages. Restarting it does not change which side of the 
 
 ### Columns
 
-`column-count` and `column-width` divide the page's content box. `column-count` alone gives that many columns. `column-width` alone gives as many columns of at least that width as will fit. Given both, the count is the maximum. `column-gap` is the space between columns, and `normal` is one em of the book's font size.
+These properties divide the page's content box:
+
+| property | gives |
+|---|---|
+| `column-count` | that many columns |
+| `column-width` | as many columns of at least that width as will fit |
+| `column-gap` | the space between columns, where `normal` is one em of the book's font size |
+
+Given both a count and a width, the count is the maximum.
 
 The following example sets two columns with a thin vertical rule between them:
 
@@ -209,19 +238,45 @@ Running heads and page numbers belong to the page rather than to a column, so di
 
 {/* generated: elements */}
 
-The element names come from markdown: `book`, `section`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `p`, `blockquote`, `hr`, `img`, `code`, `em`, `strong` and `a`.
+The element names come from markdown:
+
+```
+book section h1 h2 h3 h4 h5 h6 p blockquote hr img code em
+strong a
+```
 
 {/* end generated */}
 
 {/* generated: compounds */}
 
-A compound selector is `<element>` (`p`), `*` (`section > *`), `.<class>` (`p.epigraph`) or `#<id>` (`#frontispiece`), optionally followed by any of these pseudo-classes: `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:empty`, `:root`, `:is()`, `:where()`, `:not()` and `:has()`.
+A compound selector is one of these, optionally followed by any of the pseudo-classes below.
+
+| compound | example |
+|---|---|
+| `<element>` | `p` |
+| `*` | `section > *` |
+| `.<class>` | `p.epigraph` |
+| `#<id>` | `#frontispiece` |
+
+```
+:first-child :last-child :only-child :nth-child()
+:nth-last-child() :first-of-type :last-of-type :only-of-type
+:nth-of-type() :nth-last-of-type() :empty :root :is()
+:where() :not() :has()
+```
 
 {/* end generated */}
 
 {/* generated: combinators */}
 
-Combinators join two compound selectors: descendant (`section p`), child (`section > p`), next-sibling (`h1 + p`) and subsequent-sibling (`h1 ~ p`). A `,` separates the selectors in a list (`h1, h2`).
+A combinator joins two compound selectors, and a `,` separates the selectors in a list (`h1, h2`).
+
+| combinator | example |
+|---|---|
+| descendant | `section p` |
+| child | `section > p` |
+| next-sibling | `h1 + p` |
+| subsequent-sibling | `h1 ~ p` |
 
 {/* end generated */}
 
@@ -276,7 +331,11 @@ A declaration is `<property>: <value> !important?`.
 
 {/* generated: units */}
 
-A length can be written in `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em` and `rem`. The engine converts them all to points.
+A length can be written in any of these units, and the engine converts them all to points.
+
+```
+pt px pc in cm mm q em rem
+```
 
 {/* end generated */}
 
@@ -315,7 +374,16 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 
 The engine breaks a paragraph as a whole rather than one line at a time. It costs every possible set of breaks by how far each line falls short of the full width, cubed, and takes the cheapest set. A word that would fill one line stays where it is if moving it leaves a bigger gap in the next.
 
-`text-align: justify` spaces the words out to fill the line exactly, on every line but the last. `text-justify: inter-character` also lets the space between letters change; the default does not. `left`, `right`, and `center` break lines the same way and differ only in where the finished line sits. `start` means `left` and `end` means `right`.
+`text-align` decides where a finished line sits:
+
+| value | |
+|---|---|
+| `left`, `start` | flush left |
+| `right`, `end` | flush right |
+| `center` | centered |
+| `justify` | spaced out to fill the line exactly, on every line but the last |
+
+Lines break the same way under all four. When justifying, `text-justify: inter-character` also lets the space between letters change. The default does not.
 
 ### Hyphenation
 
@@ -417,7 +485,15 @@ blockquote {
 }
 ```
 
-`margin` and `padding` take one to four lengths, with a longhand for each edge. `border` takes a width, a style, and a color in any order, and `border-top`, `border-right`, `border-bottom`, and `border-left` take the same three for a single edge. `border-width`, `border-style`, and `border-color` each set one of the three on all four edges, taking one to four values the way `margin` does. The only border styles are `none` and `solid`.
+| property | takes |
+|---|---|
+| `margin`, `padding` | one to four lengths, clockwise from the top |
+| `margin-top` and the other longhands | one length, for one edge |
+| `border` | a width, a style, and a color, in any order |
+| `border-top`, `border-right`, `border-bottom`, `border-left` | the same three, for one edge |
+| `border-width`, `border-style`, `border-color` | one of the three, in one to four values |
+
+The only border styles are `none` and `solid`.
 
 A border or padding on the left or right narrows the text and moves its left edge inward. On the top and bottom they take vertical space, and they stop the margins on either side from collapsing: a top border on a block quote sits between the quote's own top margin and its first paragraph's margin, and both take space.
 
@@ -492,7 +568,12 @@ h2 + p::first-letter {
 
 {/* generated: first-line-properties */}
 
-`::first-line` accepts only these properties: `color`, `font-size`, `font-variant-caps`, `letter-spacing` and `text-transform`.
+`::first-line` accepts only these properties:
+
+```
+color font-size font-variant-caps letter-spacing
+text-transform
+```
 
 {/* end generated */}
 
@@ -509,7 +590,9 @@ h2 + p::first-line {
 }
 ```
 
-Which words fall on that line depends on the style applied to it. `letter-spacing`, `font-variant-caps`, `text-transform`, and `font-size` all change the width of the text, which moves the break, and the style then applies to whatever words the line ends up holding. `font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
+Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words the line ends up holding.
+
+`font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
 
 ## Fonts
 
@@ -645,11 +728,20 @@ code { font-family: monospace }
 
 ## Not in the subset
 
-Floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
+| area | not supported yet |
+|---|---|
+| layout | floats, tables, grid, flexbox, transforms |
+| at-rules | media queries |
+| custom properties | the `--name` syntax and `var()` |
+| counters | any counter other than `page`, and `counter-increment` |
+| generated content | anything beyond page margin boxes, `string-set`, and `content` on an empty element |
+| fonts | `font-variant` beyond `font-variant-caps: small-caps` |
+| backgrounds | the `background` shorthand, and every background property but `background-color` |
+| borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
+| inline boxes | a border, padding, or background on an inline element, or on `@page` |
+| columns | `column-fill`, `column-rule-color`, `column-span`, the `columns` and `column-rule` shorthands, and columns on any element |
 
-The box model is missing the `background` shorthand and every background property but `background-color`, the border longhands that name both an edge and a value, such as `border-top-width`, `border-radius`, and a border, padding, or background on an inline element or on `@page`.
-
-Columns are missing `column-fill`, so the last page fills its columns in order and stops short rather than balancing them; `column-rule-color`, so a rule uses the book's text color; and `column-span`, so nothing can run the full width with columns above and below it. The `columns` and `column-rule` shorthands are missing too, and so are columns on an element: only `@page` divides the page into columns.
+Three of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color. Nothing can run the full width with columns above and below it.
 
 The engine reports each unsupported declaration on its own, naming the line and column it was written at, and the rest of the stylesheet still applies. See [diagnostics](library/diagnostics.mdx) for how to read a warning. These are properties the engine does not support yet, not ones it refuses.
 

@@ -398,42 +398,49 @@ fn region(name: &str, subset: &Subset) -> String {
     let page = &subset.page;
     match name {
         "elements" => format!(
-            "The element names come from markdown: {}.",
-            list(&selectors.elements)
+            "The element names come from markdown:\n\n{}",
+            block(&selectors.elements)
         ),
         "compounds" => format!(
-            "A compound selector is {}, optionally followed by any of these pseudo-classes: {}.",
-            either(&quoted_examples(&selectors.compounds)),
-            list(&names(&selectors.pseudo_classes))
+            "A compound selector is one of these, optionally followed by any of \
+             the pseudo-classes below.\n\n{}\n\n{}",
+            pairs("compound", true, &selectors.compounds),
+            block(&names(&selectors.pseudo_classes))
         ),
         "combinators" => format!(
-            "Combinators join two compound selectors: {}. A `{}` separates the selectors in a list (`{}`).",
-            joined(&plain_examples(&selectors.combinators)),
+            "A combinator joins two compound selectors, and a `{}` separates the \
+             selectors in a list (`{}`).\n\n{}",
             selectors.list.name,
-            selectors.list.example
+            selectors.list.example,
+            pairs("combinator", false, &selectors.combinators)
         ),
         "pseudo-elements" => format!(
             "The pseudo-elements are {}.",
             list(&names(&selectors.pseudo_elements))
         ),
         "first-line-properties" => format!(
-            "`::first-line` accepts only these properties: {}.",
-            list(&selectors.first_line_properties)
+            "`::first-line` accepts only these properties:\n\n{}",
+            block(&selectors.first_line_properties)
         ),
         "declaration" => format!("A declaration is `{}`.", subset.declaration),
         "defaults" => format!("```css\n{}```", fleuron::style::USER_AGENT_CSS),
         "text-properties" => properties_table(subset, true),
         "block-properties" => properties_table(subset, false),
         "units" => format!(
-            "A length can be written in {}. The engine converts them all to points.",
-            list(&subset.units)
+            "A length can be written in any of these units, and the engine \
+             converts them all to points.\n\n{}",
+            block(&subset.units)
         ),
         "page-grammar" => page_grammar(subset),
         "page-sizes" => format!(
-            "A named page size is one of {}, portrait unless `landscape` follows.",
-            list(&names_of_sizes(&page.sizes))
+            "A named page size is one of these, portrait unless `landscape` \
+             follows.\n\n{}",
+            block(&names_of_sizes(&page.sizes))
         ),
-        "counter-styles" => format!("A counter style is one of {}.", list(&page.counter_styles)),
+        "counter-styles" => format!(
+            "A counter style is one of these.\n\n{}",
+            block(&page.counter_styles)
+        ),
         "margin-boxes" => margin_boxes(subset),
         "font-face" => {
             let rows = subset
@@ -454,20 +461,43 @@ fn region(name: &str, subset: &Subset) -> String {
     }
 }
 
-/// The syntax and an example of each, as `` `name` (`example`) ``.
-fn quoted_examples(selectors: &[Selector]) -> Vec<String> {
-    selectors
-        .iter()
-        .map(|selector| format!("`{}` (`{}`)", selector.name, selector.example))
-        .collect()
+/// A flat vocabulary, set apart from the prose. A paragraph of inline
+/// code spans is a wall; the same names on their own lines are read at
+/// a glance.
+fn block(names: &[String]) -> String {
+    let mut out = String::from("```");
+    let mut line = String::new();
+    for name in names {
+        if !line.is_empty() && line.len() + name.len() + 1 > 60 {
+            out.push('\n');
+            out.push_str(&line);
+            line.clear();
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(name);
+    }
+    out.push('\n');
+    out.push_str(&line);
+    out.push_str("\n```");
+    out
 }
 
-/// The same, for names that are prose rather than syntax.
-fn plain_examples(selectors: &[Selector]) -> Vec<String> {
-    selectors
-        .iter()
-        .map(|selector| format!("{} (`{}`)", selector.name, selector.example))
-        .collect()
+/// Selector syntax against a selector that uses it. `code` is whether
+/// the left column holds syntax, which is set in code, or the name of
+/// a combinator, which is prose.
+fn pairs(heading: &str, code: bool, selectors: &[Selector]) -> String {
+    let mut out = format!("| {heading} | example |\n|---|---|");
+    for selector in selectors {
+        let name = if code {
+            format!("`{}`", selector.name)
+        } else {
+            selector.name.clone()
+        };
+        out.push_str(&format!("\n| {name} | `{}` |", selector.example));
+    }
+    out
 }
 
 fn names(selectors: &[Selector]) -> Vec<String> {
@@ -562,9 +592,10 @@ fn margin_boxes(subset: &Subset) -> String {
             .collect::<Vec<_>>()
     };
     format!(
-        "The engine draws these margin boxes: {}. These parse but draw nothing: {}.",
-        list(&named(&paints)),
-        list(&named(&silent))
+        "The engine draws these margin boxes:\n\n{}\n\nThese parse but draw \
+         nothing:\n\n{}",
+        block(&named(&paints)),
+        block(&named(&silent))
     )
 }
 
@@ -577,11 +608,6 @@ fn list(items: &[String]) -> String {
 /// Comma separated, `and` before the last.
 fn joined(items: &[String]) -> String {
     conjoined(items, "and")
-}
-
-/// Comma separated, `or` before the last.
-fn either(items: &[String]) -> String {
-    conjoined(items, "or")
 }
 
 fn conjoined(items: &[String], conjunction: &str) -> String {
