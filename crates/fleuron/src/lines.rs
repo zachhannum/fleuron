@@ -186,38 +186,82 @@ impl InlineStyles for Inherited {
     }
 }
 
-/// The width lines break to.
+/// One place a line may start and how wide it may run.
 ///
-/// Uniform for a paragraph on its own; a drop cap shortens the lines
-/// it sits beside and leaves the rest of the paragraph at the full
-/// measure.
+/// A band of the page is set in one span or in several, and a band
+/// set in several is still one line: the text crosses from span to
+/// span in reading order, and only the last of them ends where a
+/// line ends.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Measure {
-    /// Points the lines past the shortened ones break to.
-    pub full: f32,
-    /// Points the first `shortened` lines break to.
-    pub narrow: f32,
-    /// How many lines break to `narrow`.
-    pub shortened: usize,
+pub struct Span {
+    /// Points from the block's leading edge the span starts at.
+    pub origin: f32,
+    /// Points the span runs.
+    pub width: f32,
+    /// Whether the band ends here.
+    pub ends_band: bool,
 }
 
-impl Measure {
-    /// One width for every line.
-    pub fn uniform(points: f32) -> Measure {
-        Measure {
-            full: points,
-            narrow: points,
-            shortened: 0,
+impl Span {
+    /// A span that is a band on its own.
+    pub fn band(origin: f32, width: f32) -> Span {
+        Span {
+            origin,
+            width,
+            ends_band: true,
         }
     }
 
-    /// The width line `index` breaks to.
-    pub fn at(self, index: usize) -> f32 {
-        if index < self.shortened {
-            self.narrow
-        } else {
-            self.full
+    /// A band `width` wide ending where a band of `end` points ends.
+    /// A first-line indent and a drop cap beside the line both leave
+    /// one: the line is shortened at its start.
+    pub fn ending(end: f32, width: f32) -> Span {
+        Span::band(end - width, width)
+    }
+}
+
+/// The spans a paragraph breaks to, in reading order.
+///
+/// One entry per span rather than per line, so a band set in several
+/// spans is several entries. The listed spans run out and `rest`
+/// answers for every one past them, so a profile covers a paragraph
+/// before anything has broken it and found its length. `rest` is a
+/// band of its own: a band that never ended would take the rest of
+/// the paragraph.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Measure {
+    leading: Vec<Span>,
+    rest: Span,
+}
+
+impl Measure {
+    /// One band of one width for every line.
+    pub fn uniform(points: f32) -> Measure {
+        Measure {
+            leading: Vec::new(),
+            rest: Span::band(0.0, points),
         }
+    }
+
+    /// The spans a paragraph opens with, and the band every line
+    /// past them is set in.
+    pub fn new(leading: Vec<Span>, rest: Span) -> Measure {
+        Measure {
+            leading,
+            rest: Span::band(rest.origin, rest.width),
+        }
+    }
+
+    /// The span at `index`.
+    pub fn at(&self, index: usize) -> Span {
+        self.leading.get(index).copied().unwrap_or(self.rest)
+    }
+
+    /// Spans past which every span is the same one. Two paths that
+    /// have reached here differ in nothing the rest of the paragraph
+    /// can see.
+    fn settled(&self) -> usize {
+        self.leading.len()
     }
 }
 
@@ -385,11 +429,58 @@ impl ShapedRun {
     }
 }
 
+/// One span of a line: the runs set in it, and where they go.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineSpan {
+    /// The runs of `Line::runs` set here.
+    pub runs: Range<usize>,
+    /// Points from the line's own leading edge the span is set at.
+    pub offset: f32,
+    /// Advance of the span's glyphs, in font units.
+    pub width: u32,
+}
+
+/// The spans of one line, read as a slice either way. A band set
+/// undivided holds its span inline: the ordinary line of a book does
+/// not pay for an allocation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Spans {
+    /// The band was set in one span.
+    One(LineSpan),
+    /// It was divided, and these are its spans in reading order.
+    Many(Vec<LineSpan>),
+}
+
+impl std::ops::Deref for Spans {
+    type Target = [LineSpan];
+
+    fn deref(&self) -> &[LineSpan] {
+        match self {
+            Spans::One(span) => std::slice::from_ref(span),
+            Spans::Many(spans) => spans,
+        }
+    }
+}
+
+impl std::ops::DerefMut for Spans {
+    fn deref_mut(&mut self) -> &mut [LineSpan] {
+        match self {
+            Spans::One(span) => std::slice::from_mut(span),
+            Spans::Many(spans) => spans,
+        }
+    }
+}
+
 /// One typeset line: shaped runs plus its width in font units.
+///
+/// A line is a band of the page, which is set in one span or in
+/// several. The runs are in reading order across all of them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
     /// The line's runs, in visual order.
     pub runs: Vec<ShapedRun>,
+    /// The spans the runs are divided between, in reading order.
+    pub spans: Spans,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
     /// joins the runs when the structured outpur paints it. What hangs
@@ -403,6 +494,42 @@ pub struct Line {
     /// The line's vertical geometry — computed here, in points;
     /// downstream stages position against it, never re-measure.
     pub box_: LineBox,
+}
+
+impl Line {
+    /// Shaped runs as a line of one span: page furniture, an
+    /// ornament, an initial letter, and anything else set rather
+    /// than broken.
+    pub fn of(runs: Vec<ShapedRun>, box_: LineBox) -> Line {
+        let width = runs.iter().map(|run| run.advance).sum();
+        Line {
+            spans: Spans::One(LineSpan {
+                runs: 0..runs.len(),
+                offset: 0.0,
+                width,
+            }),
+            runs,
+            width,
+            overhang: 0.0,
+            protrusion: 0.0,
+            box_,
+        }
+    }
+
+    /// A band with nothing set in it yet.
+    fn empty() -> Line {
+        Line {
+            runs: Vec::new(),
+            spans: Spans::Many(Vec::new()),
+            width: 0,
+            overhang: 0.0,
+            protrusion: 0.0,
+            box_: LineBox {
+                height: 0.0,
+                baseline: 0.0,
+            },
+        }
+    }
 }
 
 /// Flattened paragraph content: the text as it is shaped, the text
@@ -429,7 +556,7 @@ struct FlatParagraph {
     /// reads.
     word_start: bool,
     /// The style spans, in document order.
-    spans: Vec<Span>,
+    spans: Vec<StyleSpan>,
     /// Which node each stretch of the source was written in, in
     /// document order.
     origins: Vec<Origin>,
@@ -452,7 +579,7 @@ struct Origin {
 
 /// One span of uniform shaping: a face, a size, the tracking after
 /// each of its clusters, and the features it is shaped with.
-struct Span {
+struct StyleSpan {
     font_id: u16,
     size: f32,
     /// Extra advance after each cluster, in points.
@@ -463,10 +590,10 @@ struct Span {
     range: Range<usize>,
 }
 
-impl Span {
+impl StyleSpan {
     /// Whether two spans are set the same way, the text they cover
     /// aside.
-    fn same_style(&self, other: &Span) -> bool {
+    fn same_style(&self, other: &StyleSpan) -> bool {
         self.font_id == other.font_id
             && self.size == other.size
             && self.tracking == other.tracking
@@ -677,7 +804,7 @@ impl FlatParagraph {
         if start >= self.text.len() {
             return;
         }
-        let span = Span {
+        let span = StyleSpan {
             font_id: style.font_id,
             size: if small {
                 style.size * SMALL_CAPS_RATIO
@@ -764,11 +891,13 @@ struct Break {
     hang_start: f32,
 }
 
-/// A chosen line end, with the adjustment its glue takes.
+/// A chosen span end, with the adjustment its glue takes.
 #[derive(Debug, Clone, Copy)]
 struct Fitted {
     /// Index into the break list.
     at: usize,
+    /// The slot of the profile the text up to here fills.
+    slot: usize,
     /// The line's adjustment ratio: what fraction of its stretch or
     /// shrink the glue gives up to reach the measure.
     ratio: f32,
@@ -914,7 +1043,7 @@ impl<'a> LineLayout<'a> {
             inlines,
             style,
             &Inherited,
-            measure,
+            &measure.into(),
             options,
             Opening::default(),
         )
@@ -928,11 +1057,11 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        measure: impl Into<Measure>,
+        measure: &Measure,
         options: LineBreakOptions,
         opening: Opening,
     ) -> Vec<Line> {
-        self.broken(inlines, style, styles, measure.into(), options, opening)
+        self.broken(inlines, style, styles, measure, options, opening)
             .0
     }
 
@@ -953,7 +1082,7 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        measure: Measure,
+        measure: &Measure,
         options: LineBreakOptions,
         opening: Opening,
     ) -> (Vec<Line>, u8) {
@@ -991,7 +1120,7 @@ impl<'a> LineLayout<'a> {
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
-        measure: Measure,
+        measure: &Measure,
         options: LineBreakOptions,
         lead: Lead,
     ) -> (Vec<Line>, usize) {
@@ -1015,6 +1144,9 @@ impl<'a> LineLayout<'a> {
             breaks: &breaks,
             widths: &widths,
             measure,
+            rest: measure.at(measure.settled()),
+            settled: measure.settled(),
+            first_band: (0..).find(|slot| measure.at(*slot).ends_band).unwrap_or(0),
             upem,
             size: style.size,
             hyphen,
@@ -1027,22 +1159,57 @@ impl<'a> LineLayout<'a> {
         let mut lines = Vec::new();
         let mut extent = 0usize;
         let mut start = 0usize;
+        // The band being filled, and where its first span was set:
+        // a span's offset is from there, so a painter handed the
+        // line's leading edge places the rest. One buffer gathers the
+        // spans of every band.
+        let mut band: Option<(Line, f32)> = None;
+        let mut spans: Vec<LineSpan> = Vec::new();
         for fit in breaker.run() {
             let at = &breaks[fit.at];
+            let span = measure.at(fit.slot);
             if at.content_end > start {
-                let mut line = self.cut(&flat, &shaped, start, at.content_end, style);
-                self.adjust(&mut line, &flat.text, fit.ratio, options);
+                let (line, origin) = band.get_or_insert_with(|| {
+                    let mut line = Line::empty();
+                    line.protrusion = to_points(fit.protrusion);
+                    (line, span.origin)
+                });
+                let first = line.runs.len();
+                line.runs
+                    .extend(cut_runs(&flat, &shaped, start, at.content_end));
+                adjust(&mut line.runs[first..], &flat.text, fit.ratio, options);
                 if at.hyphen {
-                    self.hyphenate(&mut line, style);
+                    self.hyphenate(&mut line.runs, style);
                 }
-                line.overhang = to_points(fit.overhang);
-                line.protrusion = to_points(fit.protrusion);
-                if lines.is_empty() {
-                    extent = at.content_end;
-                }
-                lines.push(line);
+                let width = line.runs[first..].iter().map(|run| run.advance).sum();
+                spans.push(LineSpan {
+                    runs: first..line.runs.len(),
+                    offset: span.origin - *origin,
+                    width,
+                });
+                line.width += width;
             }
             start = at.next;
+            if !span.ends_band {
+                continue;
+            }
+            let Some((mut line, _)) = band.take() else {
+                continue;
+            };
+            line.overhang = to_points(fit.overhang);
+            line.box_ = self.line_box(&line.runs, style);
+            line.spans = gather(&mut spans);
+            if lines.is_empty() {
+                extent = at.content_end;
+            }
+            lines.push(line);
+        }
+        // A paragraph that ran out inside a band still sets what it
+        // reached.
+        if let Some((mut line, _)) = band.take() {
+            line.box_ = self.line_box(&line.runs, style);
+            line.spans = gather(&mut spans);
+            lines.push(line);
         }
         tile(&mut lines, &flat);
         (lines, extent)
@@ -1203,7 +1370,7 @@ impl<'a> LineLayout<'a> {
     }
 
     /// A span's tracking in its own font units.
-    fn tracking_units(&self, span: &Span) -> i64 {
+    fn tracking_units(&self, span: &StyleSpan) -> i64 {
         if span.tracking == 0.0 || span.size <= 0.0 {
             return 0;
         }
@@ -1228,26 +1395,6 @@ impl<'a> LineLayout<'a> {
             return 1.0;
         }
         size / span_upem * upem / style.size
-    }
-
-    /// One line's runs plus the box they occupy: a run taller than
-    /// the paragraph's strut grows the line around the baseline.
-    fn cut(
-        &self,
-        flat: &FlatParagraph,
-        shaped: &[ShapedSpan],
-        start: usize,
-        end: usize,
-        style: ParagraphStyle,
-    ) -> Line {
-        let runs = cut_runs(flat, shaped, start, end);
-        Line {
-            width: runs.iter().map(|run| run.advance).sum(),
-            overhang: 0.0,
-            protrusion: 0.0,
-            box_: self.line_box(&runs, style),
-            runs,
-        }
     }
 
     /// Break opportunities for the paragraph: UAX #14 always, UAX #29
@@ -1380,51 +1527,13 @@ impl<'a> LineLayout<'a> {
         breaks
     }
 
-    /// Spreads a line's adjustment over the glue it was measured
-    /// with. The ratio was chosen against the shaped advances, so it
-    /// lands on them: a painter is handed positions, not a rule for
-    /// working them out.
-    ///
-    /// The residue is carried from glyph to glyph rather than
-    /// dropped, so a line of rounded advances still totals the
-    /// measure.
-    fn adjust(&self, line: &mut Line, text: &str, ratio: f32, options: LineBreakOptions) {
-        if !options.justify || !ratio.is_finite() || ratio == 0.0 {
-            return;
-        }
-        let ratio = ratio.max(-1.0);
-        let (space, letter) = if ratio > 0.0 {
-            (SPACE_STRETCH, LETTER_STRETCH)
-        } else {
-            (SPACE_SHRINK, LETTER_SHRINK)
-        };
-        let letter = if options.inter_character { letter } else { 0.0 };
-        let bytes = text.as_bytes();
-        let (mut wanted, mut applied) = (0.0f32, 0i64);
-        for run in &mut line.runs {
-            let mut advance = 0i64;
-            for glyph in &mut run.glyphs {
-                let is_space = bytes.get(glyph.cluster as usize) == Some(&b' ');
-                let share = if is_space { space } else { letter };
-                wanted += ratio * share * glyph.x_advance as f32;
-                let step = wanted.round() as i64 - applied;
-                applied += step;
-                let width = (glyph.x_advance as i64 + step).max(0);
-                advance += width - glyph.x_advance as i64;
-                glyph.x_advance = width as u32;
-            }
-            run.advance = (run.advance as i64 + advance).max(0) as u32;
-        }
-        line.width = line.runs.iter().map(|run| run.advance).sum();
-    }
-
     /// Draws the hyphen a break inside a word leaves behind.
     ///
     /// The break was charged for it when it was chosen, so it is
     /// drawn in the same face the charge was read from: a hyphen
     /// taken from one face and paid for out of another is a line
     /// that measures one width and paints a different one.
-    fn hyphenate(&self, line: &mut Line, style: ParagraphStyle) {
+    fn hyphenate(&self, runs: &mut Vec<ShapedRun>, style: ParagraphStyle) {
         let Some(id) = self.registry.char_glyph(style.font_id, '-') else {
             return;
         };
@@ -1432,16 +1541,15 @@ impl<'a> LineLayout<'a> {
             .registry
             .advance_width(style.font_id, id)
             .unwrap_or_default() as u32;
-        let ending = line
-            .runs
+        let ending = runs
             .last()
             .map(|run| run.text_start + run.text.len() as u32)
             .unwrap_or_default();
         // The hyphen takes the last run's colour, because colour
         // costs no width, and the paragraph's face, because that is
         // where its width was charged.
-        let color = line.runs.last().map_or(style.color, |run| run.color);
-        match line.runs.last_mut() {
+        let color = runs.last().map_or(style.color, |run| run.color);
+        match runs.last_mut() {
             Some(run) if run.font_id == style.font_id && run.size == style.size => {
                 run.text.push('-');
                 // A hyphen the breaker drew stands for nothing the
@@ -1460,7 +1568,7 @@ impl<'a> LineLayout<'a> {
             // A break inside an emphasised word: the hyphen is the
             // paragraph's own, so it goes in a run of its own rather
             // than into a face it was not measured in.
-            _ => line.runs.push(ShapedRun {
+            _ => runs.push(ShapedRun {
                 font_id: style.font_id,
                 size: style.size,
                 text: "-".to_string(),
@@ -1478,7 +1586,6 @@ impl<'a> LineLayout<'a> {
                 advance,
             }),
         }
-        line.width += advance;
     }
 
     fn hyphen_advance(&self, style: ParagraphStyle) -> u32 {
@@ -1519,7 +1626,14 @@ fn hang_start(mark: char) -> f32 {
 struct Breaker<'a> {
     breaks: &'a [Break],
     widths: &'a Widths,
-    measure: Measure,
+    measure: &'a Measure,
+    /// The span every slot past the profile's listed ones is set in,
+    /// which is every slot of most paragraphs.
+    rest: Span,
+    /// How many spans the profile lists.
+    settled: usize,
+    /// The slot the paragraph's first band ends in.
+    first_band: usize,
     upem: f32,
     size: f32,
     /// Font units a hyphenated break is charged for.
@@ -1539,14 +1653,16 @@ struct Fit {
     overflow: f32,
     overhang: f32,
     protrusion: f32,
+    /// Whether the span this fills ends the band it sits in.
+    ends_band: bool,
 }
 
 /// A breakpoint reached by a path, and the best path to it.
 struct Node {
     /// Index into the break list.
     at: usize,
-    /// Lines the paragraph has taken to get here.
-    line: usize,
+    /// Slots the paragraph has filled to get here.
+    slot: usize,
     /// Which of the four fitness classes the line ending here fell
     /// in.
     fitness: u8,
@@ -1560,10 +1676,10 @@ struct Node {
     previous: Option<usize>,
 }
 
-/// A line end worth keeping, before it becomes a node.
+/// A span end worth keeping, before it becomes a node.
 struct Candidate {
     at: usize,
-    line: usize,
+    slot: usize,
     fitness: u8,
     hyphens: u8,
     demerits: f64,
@@ -1574,6 +1690,15 @@ struct Candidate {
 }
 
 impl Breaker<'_> {
+    /// The span slot `index` is set in.
+    fn span(&self, index: usize) -> Span {
+        if index < self.settled {
+            self.measure.at(index)
+        } else {
+            self.rest
+        }
+    }
+
     /// Points → the paragraph's font units.
     fn units(&self, points: f32) -> f32 {
         if self.size > 0.0 {
@@ -1588,11 +1713,13 @@ impl Breaker<'_> {
         self.breaks.len() - 1
     }
 
-    /// Measures the line that runs from break `a` to break `b`.
-    fn fit(&self, a: usize, b: usize, line: usize) -> Fit {
+    /// Measures the text that runs from break `a` to break `b`, set
+    /// in slot `slot`.
+    fn fit(&self, a: usize, b: usize, slot: usize) -> Fit {
+        let span = self.span(slot - 1);
         let start = self.breaks[a].next;
         let end = self.breaks[b].content_end.max(start);
-        let measure = self.units(self.measure.at(line - 1));
+        let measure = self.units(span.width);
         let text = self.widths.advance(start, end);
         let spaces = self.widths.spaces[end] - self.widths.spaces[start];
         let hyphen = if self.breaks[b].hyphen {
@@ -1600,13 +1727,20 @@ impl Breaker<'_> {
         } else {
             0.0
         };
-        let protrusion = if self.options.hanging.first {
+        // A mark hangs into the margin a band starts at and past the
+        // one it ends at. The gap between two spans of a band is
+        // neither.
+        let protrusion = if self.options.hanging.first && self.opens_band(slot - 1) {
             self.breaks[a].hang_start
         } else {
             0.0
         };
         let natural = text + hyphen - protrusion;
-        let overhang = self.overhang(b, natural, measure);
+        let overhang = if span.ends_band {
+            self.overhang(b, natural, measure)
+        } else {
+            0.0
+        };
         let width = natural - overhang;
 
         let last = b == self.end();
@@ -1657,7 +1791,13 @@ impl Breaker<'_> {
             overflow: (-gap).max(0.0),
             overhang,
             protrusion,
+            ends_band: span.ends_band,
         }
+    }
+
+    /// Whether the band the span at `index` sits in opens there.
+    fn opens_band(&self, index: usize) -> bool {
+        index == 0 || self.span(index - 1).ends_band
     }
 
     /// What hangs past the measure at break `b`, given how wide the
@@ -1681,7 +1821,7 @@ impl Breaker<'_> {
     fn run(&self) -> Vec<Fitted> {
         let mut nodes = vec![Node {
             at: 0,
-            line: 0,
+            slot: 0,
             fitness: 1,
             hyphens: 0,
             demerits: 0.0,
@@ -1701,15 +1841,15 @@ impl Breaker<'_> {
             let mut index = 0;
             while index < active.len() {
                 let a = active[index];
-                let line = nodes[a].line + 1;
+                let slot = nodes[a].slot + 1;
                 // The opening line ends where the style over it does,
                 // so the text set in that style is the text on it.
-                if line == 1 && self.opening.is_some_and(|end| end != b) {
+                if slot == self.first_band + 1 && self.opening.is_some_and(|end| end != b) {
                     index += 1;
                     continue;
                 }
-                let fit = self.fit(nodes[a].at, b, line);
-                if let Some(candidate) = self.candidate(&nodes[a], a, b, line, &fit) {
+                let fit = self.fit(nodes[a].at, b, slot);
+                if let Some(candidate) = self.candidate(&nodes[a], a, b, slot, &fit) {
                     self.keep_best(&mut candidates, candidate);
                 }
                 let long = fit.ratio < -1.0;
@@ -1719,7 +1859,7 @@ impl Breaker<'_> {
                             + OVERFULL_DEMERITS * (1.0 + (fit.overflow / self.upem) as f64),
                         ratio: -1.0,
                         fitness: 0,
-                        ..self.forced(&nodes[a], a, b, line, &fit)
+                        ..self.forced(&nodes[a], a, b, slot, &fit)
                     };
                     if overfull
                         .as_ref()
@@ -1745,7 +1885,7 @@ impl Breaker<'_> {
             for candidate in candidates.drain(..) {
                 nodes.push(Node {
                     at: candidate.at,
-                    line: candidate.line,
+                    slot: candidate.slot,
                     fitness: candidate.fitness,
                     hyphens: candidate.hyphens,
                     demerits: candidate.demerits,
@@ -1773,6 +1913,7 @@ impl Breaker<'_> {
             }
             chosen.push(Fitted {
                 at: node.at,
+                slot: node.slot - 1,
                 ratio: node.ratio,
                 overhang: node.overhang,
                 protrusion: node.protrusion,
@@ -1793,10 +1934,10 @@ impl Breaker<'_> {
             (
                 candidate.fitness,
                 candidate.hyphens,
-                // Only a shortened measure makes the line number
-                // visible from here on; past it every line is the
-                // same width.
-                candidate.line.min(self.measure.shortened + 1),
+                // Only the spans the profile lists make the count
+                // visible from here on; past them every band is the
+                // same one.
+                candidate.slot.min(self.settled + 1),
             )
         };
         match candidates
@@ -1812,10 +1953,10 @@ impl Breaker<'_> {
     /// Break `b` reached from node `a` whatever it costs: the line
     /// between them is wider than the measure, and setting it is
     /// still better than losing the words.
-    fn forced(&self, from: &Node, a: usize, b: usize, line: usize, fit: &Fit) -> Candidate {
+    fn forced(&self, from: &Node, a: usize, b: usize, slot: usize, fit: &Fit) -> Candidate {
         Candidate {
             at: b,
-            line,
+            slot,
             fitness: 0,
             hyphens: self.hyphens(from, b),
             demerits: from.demerits,
@@ -1843,7 +1984,7 @@ impl Breaker<'_> {
         from: &Node,
         a: usize,
         b: usize,
-        line: usize,
+        slot: usize,
         fit: &Fit,
     ) -> Option<Candidate> {
         if fit.ratio < -1.0 {
@@ -1868,7 +2009,10 @@ impl Breaker<'_> {
             0.0
         };
         let fitness = fitness(ratio);
-        let mut demerits = (LINE_PENALTY + fit.badness + penalty).powi(2);
+        // Crossing from one span of a band to the next is not a line
+        // break, and the surcharge a line costs is not charged there.
+        let line_penalty = if fit.ends_band { LINE_PENALTY } else { 0.0 };
+        let mut demerits = (line_penalty + fit.badness + penalty).powi(2);
         if hyphens > 1 {
             demerits += DOUBLE_HYPHEN_DEMERITS;
         }
@@ -1877,7 +2021,7 @@ impl Breaker<'_> {
         }
         Some(Candidate {
             at: b,
-            line,
+            slot,
             fitness,
             hyphens,
             demerits: from.demerits + demerits,
@@ -1964,6 +2108,50 @@ fn tile(lines: &mut [Line], flat: &FlatParagraph) {
         let to = ends.next().unwrap_or(flat.text.len());
         run.origin = flat.origin_of(after, run.text_start as usize, to);
         after = run.origin.as_ref().map(|origin| origin.node);
+    }
+}
+
+/// Spreads one span's adjustment over the glue it was measured
+/// with. The ratio was chosen against the shaped advances, so it
+/// lands on them: a painter is handed positions, not a rule for
+/// working them out.
+///
+/// The residue is carried from glyph to glyph rather than dropped,
+/// so a span of rounded advances still totals its width.
+fn adjust(runs: &mut [ShapedRun], text: &str, ratio: f32, options: LineBreakOptions) {
+    if !options.justify || !ratio.is_finite() || ratio == 0.0 {
+        return;
+    }
+    let ratio = ratio.max(-1.0);
+    let (space, letter) = if ratio > 0.0 {
+        (SPACE_STRETCH, LETTER_STRETCH)
+    } else {
+        (SPACE_SHRINK, LETTER_SHRINK)
+    };
+    let letter = if options.inter_character { letter } else { 0.0 };
+    let bytes = text.as_bytes();
+    let (mut wanted, mut applied) = (0.0f32, 0i64);
+    for run in runs {
+        let mut advance = 0i64;
+        for glyph in &mut run.glyphs {
+            let is_space = bytes.get(glyph.cluster as usize) == Some(&b' ');
+            let share = if is_space { space } else { letter };
+            wanted += ratio * share * glyph.x_advance as f32;
+            let step = wanted.round() as i64 - applied;
+            applied += step;
+            let width = (glyph.x_advance as i64 + step).max(0);
+            advance += width - glyph.x_advance as i64;
+            glyph.x_advance = width as u32;
+        }
+        run.advance = (run.advance as i64 + advance).max(0) as u32;
+    }
+}
+
+/// One band's spans, leaving the buffer to the band after it.
+fn gather(spans: &mut Vec<LineSpan>) -> Spans {
+    match spans.len() {
+        1 => Spans::One(spans.pop().expect("a span")),
+        _ => Spans::Many(std::mem::take(spans)),
     }
 }
 
@@ -2110,7 +2298,7 @@ mod tests {
             &one_run(OPENING),
             body(),
             &Inherited,
-            measure_pt,
+            &Measure::uniform(measure_pt),
             LineBreakOptions::default(),
             Opening {
                 first_line,
@@ -2144,6 +2332,88 @@ mod tests {
     /// hyphenated line ends in a character the paragraph never had.
     fn line_text(line: &Line) -> String {
         line.runs.iter().map(|run| run.text.as_str()).collect()
+    }
+
+    /// A band of two spans of `width`, a gutter between them, and
+    /// one undivided band of the whole width under it.
+    fn divided_band(width: f32, gutter: f32) -> Measure {
+        Measure::new(
+            vec![
+                Span {
+                    origin: 0.0,
+                    width,
+                    ends_band: false,
+                },
+                Span::band(width + gutter, width),
+            ],
+            Span::band(0.0, width * 2.0 + gutter),
+        )
+    }
+
+    /// One span's text, read off the runs set in it.
+    fn span_text(line: &Line, index: usize) -> String {
+        line.runs[line.spans[index].runs.clone()]
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect()
+    }
+
+    /// One span's width in points.
+    fn span_width_pt(line: &Line, index: usize) -> f32 {
+        line.spans[index].width as f32 / units_per_em() as f32 * body().size
+    }
+
+    /// A band set in two spans sets text in both, in reading order:
+    /// the paragraph crosses from the first to the second and comes
+    /// back off them in the order it was written.
+    #[test]
+    fn a_band_of_two_spans_sets_text_in_both() {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(
+            &one_run(OPENING),
+            body(),
+            divided_band(80.0, 20.0),
+            LineBreakOptions::default(),
+        );
+        let first = &lines[0];
+        assert_eq!(first.spans.len(), 2, "the band was set in one span");
+        assert!(
+            !span_text(first, 0).is_empty() && !span_text(first, 1).is_empty(),
+            "a span of the band holds no text: {first:?}"
+        );
+        assert_eq!(
+            OPENING
+                .replace(' ', "")
+                .find(&span_text(first, 1).replace(' ', "")),
+            Some(span_text(first, 0).replace(' ', "").len()),
+            "the second span does not carry on from the first"
+        );
+        // The second span opens where the profile put it, which is
+        // past the gutter rather than at the line's own edge.
+        assert_eq!(first.spans[1].offset, 100.0);
+        assert!(
+            lines[1..].iter().all(|line| line.spans.len() == 1),
+            "a band under the divided one was set in more than one span"
+        );
+    }
+
+    /// Justification flushes an interior span at both edges: the
+    /// text in the first span of a band fills it, and only the last
+    /// line of a paragraph is left short.
+    #[test]
+    fn justification_flushes_an_interior_span() {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(
+            &one_run(OPENING),
+            body(),
+            divided_band(80.0, 20.0),
+            justified(),
+        );
+        assert!(
+            (span_width_pt(&lines[0], 0) - 80.0).abs() < 0.01,
+            "the first span of the band is {}pt of 80pt",
+            span_width_pt(&lines[0], 0),
+        );
     }
 
     /// A run's glyphs map back to the characters they were shaped
@@ -2495,7 +2765,7 @@ mod tests {
             inlines,
             styles.paragraph(*id),
             &styles,
-            400.0,
+            &Measure::uniform(400.0),
             Default::default(),
             Opening::default(),
         );
@@ -2536,11 +2806,7 @@ mod tests {
     #[test]
     fn a_shortened_measure_only_holds_for_the_lines_it_names() {
         let text = "one two three four five six seven eight nine ten eleven twelve";
-        let measure = Measure {
-            full: 120.0,
-            narrow: 40.0,
-            shortened: 2,
-        };
+        let measure = Measure::new(vec![Span::band(80.0, 40.0); 2], Span::band(0.0, 120.0));
         let layout = LineLayout::new(registry());
         let inlines = vec![Inline::Text {
             id: NodeId::UNASSIGNED,
@@ -2548,11 +2814,11 @@ mod tests {
             position: None,
             span: None,
         }];
-        let lines = layout.layout(&inlines, body(), measure, Default::default());
+        let lines = layout.layout(&inlines, body(), measure.clone(), Default::default());
         assert!(lines.len() > 3, "expected several lines: {lines:?}");
         let width_pt = |line: &Line| line.width as f32 / units_per_em() as f32 * body().size;
         for (index, line) in lines.iter().enumerate() {
-            let allowed = measure.at(index);
+            let allowed = measure.at(index).width;
             assert!(
                 width_pt(line) <= allowed,
                 "line {index} is {}pt against a measure of {allowed}pt",
@@ -2563,7 +2829,7 @@ mod tests {
         // shortened ones could not: nothing is lost, and the same
         // text set at one measure breaks differently.
         assert!(
-            width_pt(&lines[2]) > measure.narrow,
+            width_pt(&lines[2]) > measure.at(0).width,
             "the measure never widened"
         );
         let uniform = layout.layout(&inlines, body(), 120.0, Default::default());
@@ -2854,7 +3120,7 @@ mod tests {
                     &inlines,
                     body(),
                     &Inherited,
-                    Measure::uniform(160.0),
+                    &Measure::uniform(160.0),
                     LineBreakOptions::default(),
                     Opening {
                         first_line,

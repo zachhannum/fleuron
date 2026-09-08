@@ -3,7 +3,9 @@
 
 use fleuron::content::{Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::lines::{FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle};
+use fleuron::lines::{
+    FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Span,
+};
 use fleuron::style::{FontVariantCaps, TextTransform};
 use proptest::prelude::*;
 
@@ -73,6 +75,49 @@ fn width_of(line: &Line) -> f32 {
 fn is_single_word(line: &Line) -> bool {
     let space = registry().char_glyph(0, ' ').unwrap();
     line.runs.len() == 1 && line.runs[0].glyphs.iter().all(|g| g.id != space)
+}
+
+/// The same of one span of a line: a word wider than the span it
+/// fell in runs past it rather than being dropped.
+fn is_single_word_span(line: &Line, index: usize) -> bool {
+    let space = registry().char_glyph(0, ' ').unwrap();
+    let runs = &line.runs[line.spans[index].runs.clone()];
+    runs.len() == 1 && runs[0].glyphs.iter().all(|g| g.id != space)
+}
+
+/// A band set in two spans of `width`, a gutter between them, and
+/// one undivided band of the whole width under it.
+fn divided_band(width: f32, gutter: f32) -> Measure {
+    Measure::new(
+        vec![
+            Span {
+                origin: 0.0,
+                width,
+                ends_band: false,
+            },
+            Span::band(width + gutter, width),
+        ],
+        Span::band(0.0, width * 2.0 + gutter),
+    )
+}
+
+/// One span's width in points, hanging marks taken off the two ends
+/// of the band the way the measure takes them off.
+fn span_width(line: &Line, index: usize) -> f32 {
+    let span = &line.spans[index];
+    let ink = line.runs[span.runs.clone()]
+        .iter()
+        .map(|run| {
+            let upem = registry().metrics(run.font_id).unwrap().units_per_em as f32;
+            run.advance as f32 / upem * run.size
+        })
+        .sum::<f32>();
+    let overhang = if index + 1 == line.spans.len() {
+        line.overhang
+    } else {
+        0.0
+    };
+    ink - overhang - if index == 0 { line.protrusion } else { 0.0 }
 }
 
 fn width_pt(line: &Line) -> f32 {
@@ -213,21 +258,24 @@ proptest! {
         measure in 60.0f32..300.0,
         indent in 0.0f32..50.0,
     ) {
-        let spec = Measure { full: measure, narrow: measure - indent, shortened: 1 };
+        let spec = Measure::new(
+            vec![Span::band(indent, measure - indent)],
+            Span::band(0.0, measure),
+        );
         let layout = LineLayout::new(registry());
         for options in [LineBreakOptions::default(), justified()] {
-            let lines = layout.layout(&inlines_of(&text), body(), spec, options);
+            let lines = layout.layout(&inlines_of(&text), body(), spec.clone(), options);
             for (i, line) in lines.iter().enumerate() {
                 if is_single_word(line) {
                     continue;
                 }
                 let width = width_pt(line);
-                let allowed = spec.at(i);
+                let allowed = spec.at(i).width;
                 prop_assert!(
                     width <= allowed + 0.01,
                     "line {i} is {width}pt, measure {allowed}pt"
                 );
-                let start = if i == 0 { indent } else { 0.0 };
+                let start = spec.at(i).origin;
                 prop_assert!(
                     start + width <= measure + 0.01,
                     "line {i} runs {}pt past a {measure}pt measure",
@@ -364,7 +412,7 @@ proptest! {
             &inlines_of(&text),
             body(),
             &fleuron::lines::Inherited,
-            measure,
+            &Measure::uniform(measure),
             LineBreakOptions::default(),
             fleuron::lines::Opening {
                 first_line,
@@ -401,5 +449,66 @@ proptest! {
         let first = layout.layout(&inlines_of(&text), style, measure, justified());
         let second = layout.layout(&inlines_of(&text), style, measure, justified());
         prop_assert_eq!(first, second);
+    }
+
+    /// No span's content exceeds that span's width, whichever span
+    /// of whichever band it was set in. A word wider than the span
+    /// itself overflows rather than being dropped, as it does on a
+    /// line of its own.
+    #[test]
+    fn no_span_exceeds_its_own_width(
+        text in text_strategy(),
+        width in 40.0f32..150.0,
+        gutter in 4.0f32..40.0,
+    ) {
+        let spec = divided_band(width, gutter);
+        let layout = LineLayout::new(registry());
+        for options in [LineBreakOptions::default(), justified()] {
+            let lines = layout.layout(&inlines_of(&text), body(), spec.clone(), options);
+            let mut slot = 0;
+            for line in &lines {
+                for index in 0..line.spans.len() {
+                    let allowed = spec.at(slot + index).width;
+                    let set = span_width(line, index);
+                    prop_assert!(
+                        set <= allowed + 0.01 || is_single_word_span(line, index),
+                        "a span holds {set}pt of a {allowed}pt span"
+                    );
+                }
+                slot += line.spans.len();
+            }
+        }
+    }
+
+    /// Two runs over a profile of several spans are byte-identical:
+    /// which span a word lands in is a function of the profile and
+    /// the text, not of anything a pass keeps between runs.
+    #[test]
+    fn a_divided_band_is_deterministic(
+        text in text_strategy(),
+        width in 40.0f32..150.0,
+        gutter in 4.0f32..40.0,
+    ) {
+        let spec = divided_band(width, gutter);
+        let layout = LineLayout::new(registry());
+        let broken = || layout.layout(&inlines_of(&text), body(), spec.clone(), justified());
+        prop_assert_eq!(broken(), broken());
+    }
+
+    /// A profile whose spans are all one band of one width breaks
+    /// the paragraph the way a uniform measure of that width does.
+    #[test]
+    fn a_profile_of_one_span_breaks_as_a_uniform_measure_does(
+        text in text_strategy(),
+        measure in 20.0f32..300.0,
+    ) {
+        let spec = Measure::new(vec![Span::band(0.0, measure); 3], Span::band(0.0, measure));
+        let layout = LineLayout::new(registry());
+        for options in [LineBreakOptions::default(), justified()] {
+            prop_assert_eq!(
+                layout.layout(&inlines_of(&text), body(), spec.clone(), options),
+                layout.layout(&inlines_of(&text), body(), measure, options),
+            );
+        }
     }
 }
