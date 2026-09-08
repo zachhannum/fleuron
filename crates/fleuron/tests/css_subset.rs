@@ -398,16 +398,16 @@ fn region(name: &str, subset: &Subset) -> String {
     let page = &subset.page;
     match name {
         "elements" => format!(
-            "Element names are the markdown vocabulary: {}.",
+            "The element names come from markdown: {}.",
             list(&selectors.elements)
         ),
         "compounds" => format!(
-            "A compound is {}, with any of the pseudo-classes {}.",
+            "A compound selector is {}, optionally followed by any of these pseudo-classes: {}.",
             either(&quoted_examples(&selectors.compounds)),
             list(&names(&selectors.pseudo_classes))
         ),
         "combinators" => format!(
-            "Compounds join by the {} combinators, and selectors list with `{}` (`{}`).",
+            "Combinators join two compound selectors: {}. A `{}` separates the selectors in a list (`{}`).",
             joined(&plain_examples(&selectors.combinators)),
             selectors.list.name,
             selectors.list.example
@@ -417,7 +417,7 @@ fn region(name: &str, subset: &Subset) -> String {
             list(&names(&selectors.pseudo_elements))
         ),
         "first-line-properties" => format!(
-            "`::first-line` takes {}, and nothing else.",
+            "`::first-line` accepts only these properties: {}.",
             list(&selectors.first_line_properties)
         ),
         "declaration" => format!("A declaration is `{}`.", subset.declaration),
@@ -425,15 +425,15 @@ fn region(name: &str, subset: &Subset) -> String {
         "text-properties" => properties_table(subset, true),
         "block-properties" => properties_table(subset, false),
         "units" => format!(
-            "Lengths are {}, and everything computes to points.",
+            "A length can be written in {}. The engine converts them all to points.",
             list(&subset.units)
         ),
         "page-grammar" => page_grammar(subset),
         "page-sizes" => format!(
-            "`<page-size>` is {}, portrait unless `landscape` follows.",
+            "A named page size is one of {}, portrait unless `landscape` follows.",
             list(&names_of_sizes(&page.sizes))
         ),
-        "counter-styles" => format!("`<counter-style>` is {}.", list(&page.counter_styles)),
+        "counter-styles" => format!("A counter style is one of {}.", list(&page.counter_styles)),
         "margin-boxes" => margin_boxes(subset),
         "font-face" => {
             let rows = subset
@@ -562,7 +562,7 @@ fn margin_boxes(subset: &Subset) -> String {
             .collect::<Vec<_>>()
     };
     format!(
-        "The margin boxes that paint are {}. {} parse and paint nothing.",
+        "The engine draws these margin boxes: {}. These parse but draw nothing: {}.",
         list(&named(&paints)),
         list(&named(&silent))
     )
