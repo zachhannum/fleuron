@@ -94,10 +94,10 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 `attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that carries neither leaves the field out.
 
 ```json
-{ "attributes": { "id": "frontispiece", "classes": ["plate"] } }
+{ "attributes": { "id": "frontispiece", "classes": ["map"] } }
 ```
 
-Specificity counts them in buckets of their own: `.plate` outranks `img`, and `#frontispiece` outranks `.plate`.
+Specificity counts them in buckets of their own: `.map` outranks `img`, and `#frontispiece` outranks `.map`.
 
 The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 

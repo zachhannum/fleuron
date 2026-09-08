@@ -90,7 +90,7 @@ expression: json
           "attributes": {
             "id": "frontispiece",
             "classes": [
-              "plate"
+              "map"
             ]
           },
           "position": {
@@ -99,7 +99,7 @@ expression: json
           },
           "span": {
             "start": 85,
-            "end": 139
+            "end": 137
           }
         },
         {
@@ -114,8 +114,8 @@ expression: json
             "column": 1
           },
           "span": {
-            "start": 140,
-            "end": 156
+            "start": 138,
+            "end": 154
           }
         },
         {
@@ -129,8 +129,8 @@ expression: json
                 "column": 1
               },
               "span": {
-                "start": 157,
-                "end": 185
+                "start": 155,
+                "end": 183
               }
             }
           ],
@@ -139,8 +139,8 @@ expression: json
             "column": 1
           },
           "span": {
-            "start": 157,
-            "end": 186
+            "start": 155,
+            "end": 184
           }
         }
       ],
@@ -150,7 +150,7 @@ expression: json
       },
       "span": {
         "start": 0,
-        "end": 186
+        "end": 184
       }
     }
   ]

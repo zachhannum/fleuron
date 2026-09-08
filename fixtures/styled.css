@@ -67,9 +67,9 @@ h3 {
   border-bottom: 1pt solid #8a7a5c;
 }
 
-/* The map is one picture rather than every picture: the class the
+/* The map is one image rather than every image: the class the
    manuscript wrote on it moves this one, and the ornament that
    closes the chapter stays where the built-in sheet put it. */
-.plate {
+.map {
   text-align: right;
 }

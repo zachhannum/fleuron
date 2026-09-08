@@ -1036,12 +1036,12 @@ mod tests {
         nth(tree, element, 0)
     }
 
-    /// A book of two plates, the first of them named.
-    fn plates() -> Book {
-        let plate = |named: Attributes| Block::Image {
+    /// A book of two images, the first of them named.
+    fn images() -> Book {
+        let image = |named: Attributes| Block::Image {
             id: NodeId::UNASSIGNED,
             url: "plate.jpg".into(),
-            alt: "a plate".into(),
+            alt: "a map".into(),
             attributes: named,
             position: None,
             span: None,
@@ -1053,11 +1053,11 @@ mod tests {
                 source: Some("chapter-01.md".into()),
                 title: None,
                 blocks: vec![
-                    plate(Attributes {
+                    image(Attributes {
                         id: Some("frontispiece".into()),
-                        classes: vec!["plate".into()],
+                        classes: vec!["map".into()],
                     }),
-                    plate(Attributes::default()),
+                    image(Attributes::default()),
                 ],
                 position: None,
                 span: None,
@@ -1067,12 +1067,12 @@ mod tests {
         book
     }
 
-    /// A class names one element out of a kind of them: the plate
-    /// that carries it is set, and the plate beside it is not.
+    /// A class names one element out of a kind of them: the image
+    /// that carries it is set, and the image beside it is not.
     #[test]
     fn a_class_reaches_the_element_that_carries_it_and_no_other() {
-        let book = plates();
-        let tree = compile(&book, ".plate { text-align: right }");
+        let book = images();
+        let tree = compile(&book, ".map { text-align: right }");
         assert_eq!(nth(&tree, "img", 0).text_align, TextAlign::Right);
         assert_eq!(nth(&tree, "img", 1).text_align, TextAlign::Left);
     }
@@ -1081,10 +1081,10 @@ mod tests {
     /// class on the same element.
     #[test]
     fn an_id_reaches_the_element_that_carries_it_and_outranks_a_class() {
-        let book = plates();
+        let book = images();
         let tree = compile(
             &book,
-            ".plate { break-before: page } #frontispiece { break-before: recto }",
+            ".map { break-before: page } #frontispiece { break-before: recto }",
         );
         assert_eq!(nth(&tree, "img", 0).break_before, Break::Side(Side::Recto));
         assert_eq!(nth(&tree, "img", 1).break_before, Break::Auto);
@@ -1095,7 +1095,7 @@ mod tests {
     /// warning names both places.
     #[test]
     fn an_id_written_twice_warns_naming_both_places() {
-        let mut book = plates();
+        let mut book = images();
         let Block::Image {
             attributes,
             position,

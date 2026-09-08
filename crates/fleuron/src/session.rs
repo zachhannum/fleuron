@@ -1139,7 +1139,7 @@ mod tests {
                 blocks: vec![Block::Image {
                     id: NodeId::UNASSIGNED,
                     url: url.into(),
-                    alt: "a picture".into(),
+                    alt: "an image".into(),
                     attributes: Attributes::default(),
                     position: None,
                     span: None,

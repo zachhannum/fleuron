@@ -417,15 +417,15 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
     }
 }
 
-/// The sheet names one picture and moves it, and the picture beside
+/// The sheet names one image and moves it, and the image beside
 /// it stays where the built-in sheet put it: a brace run in the
 /// manuscript, a class selector in the author's CSS, one image on
 /// the page set somewhere else.
 #[test]
-fn the_named_plate_is_set_where_the_sheet_put_it() {
+fn the_named_image_is_set_where_the_sheet_put_it() {
     // What `fixtures/styled.css` leaves around the text: the wider
     // margin is the spine, so which edge is which follows the side
-    // the picture landed on.
+    // the image landed on.
     const SPINE: f32 = 60.0;
     const FORE_EDGE: f32 = 40.0;
 
@@ -439,19 +439,19 @@ fn the_named_plate_is_set_where_the_sheet_put_it() {
             })
         })
         .collect();
-    let [plate, ornament] = images.as_slice() else {
+    let [map, ornament] = images.as_slice() else {
         panic!("the fixture book has a map and an ornament: {images:?}");
     };
 
-    let (side, width, x, w) = *plate;
+    let (side, width, x, w) = *map;
     let far = match side {
         Side::Verso => width - SPINE,
         Side::Recto => width - FORE_EDGE,
     };
-    assert!(w < far, "the plate fills the measure: {plate:?}");
+    assert!(w < far, "the map fills the measure: {map:?}");
     assert!(
         (x + w - far).abs() < 0.5,
-        "the named plate is not against the far edge: {plate:?}",
+        "the named image is not against the far edge: {map:?}",
     );
 
     let (side, _, x, _) = *ornament;
@@ -461,7 +461,7 @@ fn the_named_plate_is_set_where_the_sheet_put_it() {
     };
     assert!(
         (x - near).abs() < 0.5,
-        "the picture the sheet did not name moved: {ornament:?}",
+        "the image the sheet did not name moved: {ornament:?}",
     );
 }
 

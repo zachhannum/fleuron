@@ -541,7 +541,7 @@ impl<'a> Converter<'a> {
     /// An image is a block in the vocabulary and inline in markdown,
     /// so one written among prose is set after the prose it was
     /// written in, which is a move worth reporting. An image written on a
-    /// line of its own displaces nothing, and reporting every picture
+    /// line of its own displaces nothing, and reporting every image
     /// in the book would be noise.
     fn displaced(&mut self, siblings: &[Inline]) {
         if siblings.is_empty() {
@@ -1051,14 +1051,14 @@ Ordinary prose.
 
     /// An image written among prose is set after the paragraph it was
     /// written in, and its span stays where it was written, so the
-    /// bytes of the picture answer with the picture.
+    /// bytes of the image answer with the image.
     #[test]
     fn a_displaced_image_answers_for_the_bytes_it_was_written_at() {
-        let markdown = "# C\n\nProse ![a plate](plate.png) more.\n";
+        let markdown = "# C\n\nProse ![a map](map.png) more.\n";
         let (sections, _) = to_sections(markdown, "test.md", &Options::default());
         let book = crate::assemble(Default::default(), sections);
 
-        let at = markdown.find("plate.png").expect("the fixture holds it") as u32;
+        let at = markdown.find("map.png").expect("the fixture holds it") as u32;
         let node = book
             .node_at("test.md", at)
             .expect("the image was read there");
@@ -1115,7 +1115,7 @@ Ordinary prose.
     #[test]
     fn an_image_alone_on_its_line_takes_the_run_after_it() {
         let (sections, warnings) = to_sections(
-            "# C\n\n![a plate](plate.jpg){.plate}\n",
+            "# C\n\n![a map](plate.jpg){.map}\n",
             "test.md",
             &Options::default(),
         );
@@ -1123,7 +1123,7 @@ Ordinary prose.
         let Block::Image { attributes, .. } = &sections[0].blocks[1] else {
             panic!("expected an image");
         };
-        assert_eq!(attributes.classes, ["plate"]);
+        assert_eq!(attributes.classes, ["map"]);
     }
 
     /// A line that names nothing is the prose it was read as, and
@@ -1167,7 +1167,7 @@ Ordinary prose.
     /// the tree is the tree that dialect always read.
     #[test]
     fn common_mark_reads_a_brace_run_as_prose() {
-        let markdown = "# C {.opening}\n\n{.epigraph}\n\n> Quoted.\n\n![a plate](p.jpg){.plate}\n";
+        let markdown = "# C {.opening}\n\n{.epigraph}\n\n> Quoted.\n\n![a map](p.jpg){.map}\n";
         let plain = Options {
             dialect: Dialect::common_mark(),
             ..Options::default()
@@ -1185,7 +1185,7 @@ Ordinary prose.
         assert_eq!(text_of(&sections[0].blocks[1]), "{.epigraph}");
         // The trailing run is prose too, which is the paragraph the
         // image is broken out of.
-        assert_eq!(text_of(&sections[0].blocks[3]), "{.plate}");
+        assert_eq!(text_of(&sections[0].blocks[3]), "{.map}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         assert!(warnings[0].message.contains("an inline image"));
     }
@@ -1193,7 +1193,7 @@ Ordinary prose.
     #[test]
     fn an_inline_image_becomes_a_block_after_the_paragraph_that_held_it() {
         let (sections, warnings) = to_sections(
-            "# C\n\nProse ![a plate](plate.png) more.\n",
+            "# C\n\nProse ![a map](map.png) more.\n",
             "test.md",
             &Options::default(),
         );
@@ -1201,7 +1201,7 @@ Ordinary prose.
         let Block::Image { url, alt, .. } = &sections[0].blocks[2] else {
             panic!("expected an image block");
         };
-        assert_eq!((url.as_str(), alt.as_str()), ("plate.png", "a plate"));
+        assert_eq!((url.as_str(), alt.as_str()), ("map.png", "a map"));
         assert_eq!(warnings.len(), 1);
     }
 }

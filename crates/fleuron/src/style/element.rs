@@ -8,8 +8,7 @@
 //! `a`.
 //!
 //! An element carries the classes and the id the content tree gave
-//! it alongside the name, which is what `.plate` and `#frontispiece`
-//! match on.
+//! it alongside the name.
 //!
 //! Text runs are not elements, the same as in CSS: they have no style
 //! of their own and never count towards `:first-child`.

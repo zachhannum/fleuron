@@ -18,7 +18,7 @@ const MANUSCRIPT: &str = "\
 {.epigraph}
 > Man is the only animal that blushes.
 
-![a map of Lilliput](plate.jpg){.plate #frontispiece}
+![a map of Lilliput](plate.jpg){.map #frontispiece}
 
 {.ornament}
 ---
