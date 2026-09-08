@@ -386,10 +386,14 @@ starlight-menu-button button {
   border-radius: 0;
 }
 
+/* The keyline goes round the span, so a span broken across two lines
+   leaves two boxes with open ends. A property name breaks at its own
+   hyphen without this. */
 .sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
   border: 2px solid var(--f-rule);
   padding: 0.05em 0.3em;
   color: var(--f-ink);
+  white-space: nowrap;
 }
 
 /* The keyline goes round the frame, so the title bar and the code
@@ -441,10 +445,16 @@ starlight-menu-button button {
   border-inline-start: 3px solid var(--f-ink-m);
 }
 
+/* A column of value syntax is wider than the prose it sits in, and the
+   spans in it do not break, so the table scrolls on its own. */
 .sl-markdown-content table:not(:where(.not-content *)) {
   border-collapse: collapse;
   font-family: var(--f-chrome);
   font-size: 0.82rem;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .sl-markdown-content :is(th, td):not(:where(.not-content *)) {

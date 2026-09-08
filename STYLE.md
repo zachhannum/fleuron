@@ -116,6 +116,13 @@ After:
 Four or so code spans across a few sentences is ordinary prose. A
 sentence that is mostly code spans is the problem.
 
+### Inline code does not wrap
+
+A code span carries a keyline, so a span broken over two lines is two
+boxes with open ends. Spans do not break, which means a table column
+cannot hold anything wide. Value syntax goes in a block under the
+table rather than in a column of it.
+
 ### Stop before the obvious
 
 A consequence the reader works out unaided is a sentence to cut.

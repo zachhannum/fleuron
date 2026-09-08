@@ -349,24 +349,44 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 
 {/* generated: text-properties */}
 
-| property | values | example |
-|---|---|---|
-| `font-family` | `[ <family-name> \| serif \| sans-serif \| monospace ]#` | `font-family: "Author Serif", serif` |
-| `font-size` | `<length> \| <percentage>` | `font-size: 11pt` |
-| `font-style` | `normal \| italic \| oblique` | `font-style: italic` |
-| `font-weight` | `normal \| bold \| <number [1,1000]>` | `font-weight: bold` |
-| `color` | `<color>` | `color: darkslategray` |
-| `line-height` | `normal \| <number> \| <length> \| <percentage>` | `line-height: 1.4` |
-| `letter-spacing` | `normal \| <length>` | `letter-spacing: 0.05em` |
-| `font-variant-caps` | `normal \| small-caps` | `font-variant-caps: small-caps` |
-| `text-transform` | `none \| uppercase \| lowercase \| capitalize` | `text-transform: uppercase` |
-| `text-align` | `left \| right \| center \| justify \| start \| end` | `text-align: justify` |
-| `text-justify` | `auto \| inter-word \| inter-character \| distribute` | `text-justify: inter-character` |
-| `text-indent` | `<length> \| <percentage>` | `text-indent: 1.2em` |
-| `hanging-punctuation` | `none \| [ first \|\| [ force-end \| allow-end ] \|\| last ]` | `hanging-punctuation: first` |
-| `hyphens` | `none \| manual \| auto` | `hyphens: auto` |
-| `orphans`, `widows` | `<integer>` | `orphans: 3` |
-| `page` | `auto \| <name>` | `page: chapter` |
+| property | example |
+|---|---|
+| `font-family` | `font-family: "Author Serif", serif` |
+| `font-size` | `font-size: 11pt` |
+| `font-style` | `font-style: italic` |
+| `font-weight` | `font-weight: bold` |
+| `color` | `color: darkslategray` |
+| `line-height` | `line-height: 1.4` |
+| `letter-spacing` | `letter-spacing: 0.05em` |
+| `font-variant-caps` | `font-variant-caps: small-caps` |
+| `text-transform` | `text-transform: uppercase` |
+| `text-align` | `text-align: justify` |
+| `text-justify` | `text-justify: inter-character` |
+| `text-indent` | `text-indent: 1.2em` |
+| `hanging-punctuation` | `hanging-punctuation: first` |
+| `hyphens` | `hyphens: auto` |
+| `orphans`, `widows` | `orphans: 3` |
+| `page` | `page: chapter` |
+
+```css
+font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
+font-size:           <length> | <percentage>;
+font-style:          normal | italic | oblique;
+font-weight:         normal | bold | <number [1,1000]>;
+color:               <color>;
+line-height:         normal | <number> | <length> | <percentage>;
+letter-spacing:      normal | <length>;
+font-variant-caps:   normal | small-caps;
+text-transform:      none | uppercase | lowercase | capitalize;
+text-align:          left | right | center | justify | start | end;
+text-justify:        auto | inter-word | inter-character | distribute;
+text-indent:         <length> | <percentage>;
+hanging-punctuation: none | [ first || [ force-end | allow-end ] || last ];
+hyphens:             none | manual | auto;
+orphans:             <integer>;
+widows:              <integer>;
+page:                auto | <name>;
+```
 
 {/* end generated */}
 
@@ -450,23 +470,53 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 
 {/* generated: block-properties */}
 
-| property | values | example |
-|---|---|---|
-| `content` | `none \| <string>` | `content: "\2766"` |
-| `string-set` | `none \| [ <name> [ content() \| <string> ]+ ]#` | `string-set: chapter content()` |
-| `counter-reset` | `none \| page <integer>?` | `counter-reset: page` |
-| `initial-letter` | `<integer>` | `initial-letter: 3` |
-| `margin` | `[ <length> \| <percentage> ]{1,4}` | `margin: 1em` |
-| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length> \| <percentage>` | `margin-top: 1em` |
-| `padding` | `[ <length> \| <percentage> ]{1,4}` | `padding: 12pt` |
-| `padding-top`, `padding-right`, `padding-bottom`, `padding-left` | `<length> \| <percentage>` | `padding-top: 6pt` |
-| `border`, `border-top`, `border-right`, `border-bottom`, `border-left` | `[ <length> \| thin \| medium \| thick ] \|\| [ none \| solid ] \|\| <color>` | `border: 2pt solid` |
-| `border-width` | `[ <length> \| thin \| medium \| thick ]{1,4}` | `border-width: 2pt` |
-| `border-style` | `[ none \| solid ]{1,4}` | `border-style: solid` |
-| `border-color` | `<color>{1,4}` | `border-color: crimson` |
-| `background-color` | `<color> \| transparent` | `background-color: #f4f1ea` |
-| `box-decoration-break` | `slice \| clone` | `box-decoration-break: slice` |
-| `break-before`, `break-after`, `break-inside` | `auto \| avoid \| avoid-page \| avoid-column \| column \| page \| always \| left \| right \| recto \| verso` | `break-before: recto` |
+| property | example |
+|---|---|
+| `content` | `content: "\2766"` |
+| `string-set` | `string-set: chapter content()` |
+| `counter-reset` | `counter-reset: page` |
+| `initial-letter` | `initial-letter: 3` |
+| `margin` | `margin: 1em` |
+| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
+| `padding` | `padding: 12pt` |
+| `padding-top`, `padding-right`, `padding-bottom`, `padding-left` | `padding-top: 6pt` |
+| `border`, `border-top`, `border-right`, `border-bottom`, `border-left` | `border: 2pt solid` |
+| `border-width` | `border-width: 2pt` |
+| `border-style` | `border-style: solid` |
+| `border-color` | `border-color: crimson` |
+| `background-color` | `background-color: #f4f1ea` |
+| `box-decoration-break` | `box-decoration-break: slice` |
+| `break-before`, `break-after`, `break-inside` | `break-before: recto` |
+
+```css
+content:              none | <string>;
+string-set:           none | [ <name> [ content() | <string> ]+ ]#;
+counter-reset:        none | page <integer>?;
+initial-letter:       <integer>;
+margin:               [ <length> | <percentage> ]{1,4};
+margin-top:           <length> | <percentage>;
+margin-right:         <length> | <percentage>;
+margin-bottom:        <length> | <percentage>;
+margin-left:          <length> | <percentage>;
+padding:              [ <length> | <percentage> ]{1,4};
+padding-top:          <length> | <percentage>;
+padding-right:        <length> | <percentage>;
+padding-bottom:       <length> | <percentage>;
+padding-left:         <length> | <percentage>;
+border:               [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-top:           [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-right:         [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-bottom:        [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-left:          [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-width:         [ <length> | thin | medium | thick ]{1,4};
+border-style:         [ none | solid ]{1,4};
+border-color:         <color>{1,4};
+background-color:     <color> | transparent;
+box-decoration-break: slice | clone;
+break-before:         auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+break-after:          auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+break-inside:         auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+```
 
 {/* end generated */}
 
@@ -615,12 +665,19 @@ book {
 
 {/* generated: font-face */}
 
-| descriptor | values | example |
-|---|---|---|
-| `font-family` | `<family-name>` | `font-family: "Author Serif"` |
-| `font-style` | `normal \| italic \| oblique` | `font-style: italic` |
-| `font-weight` | `normal \| bold \| <number [1,1000]>` | `font-weight: bold` |
-| `src` | `[ <url> format(<string>)? \| local(<string>) ]#` | `src: url(fonts/serif.otf)` |
+| descriptor | example |
+|---|---|
+| `font-family` | `font-family: "Author Serif"` |
+| `font-style` | `font-style: italic` |
+| `font-weight` | `font-weight: bold` |
+| `src` | `src: url(fonts/serif.otf)` |
+
+```css
+font-family: <family-name>;
+font-style:  normal | italic | oblique;
+font-weight: normal | bold | <number [1,1000]>;
+src:         [ <url> format(<string>)? | local(<string>) ]#;
+```
 
 {/* end generated */}
 

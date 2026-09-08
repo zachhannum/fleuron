@@ -443,7 +443,7 @@ fn region(name: &str, subset: &Subset) -> String {
         ),
         "margin-boxes" => margin_boxes(subset),
         "font-face" => {
-            let rows = subset
+            let rows: Vec<(Vec<&str>, &str, String)> = subset
                 .font_face
                 .descriptors
                 .iter()
@@ -455,7 +455,7 @@ fn region(name: &str, subset: &Subset) -> String {
                     )
                 })
                 .collect();
-            table("descriptor", rows)
+            format!("{}\n\n{}", table("descriptor", &rows), syntax(&rows))
         }
         other => panic!("no generator for region `{other}`"),
     }
@@ -511,14 +511,37 @@ fn names_of_sizes(sizes: &[fleuron::style::subset::PageSize]) -> Vec<String> {
     sizes.iter().map(|size| size.name.clone()).collect()
 }
 
-/// One table of the properties that do or do not inherit.
+/// The properties that do or do not inherit: a table of what to write,
+/// then the value syntax as a block. The syntax is too wide for a
+/// column, and a cell it overflows scrolls the example out of sight.
 fn properties_table(subset: &Subset, inherited: bool) -> String {
     let wanted: Vec<&Property> = subset
         .properties
         .iter()
         .filter(|property| property.inherited == inherited)
         .collect();
-    table("property", merged(&wanted))
+    let rows = merged(&wanted);
+    format!("{}\n\n{}", table("property", &rows), syntax(&rows))
+}
+
+/// The value syntax, aligned into one block. A row that merged several
+/// properties into one line of the table gets a line each here, which
+/// is what a reader looking a property up expects to find.
+fn syntax(rows: &[(Vec<&str>, &str, String)]) -> String {
+    let width = rows
+        .iter()
+        .flat_map(|(names, _, _)| names)
+        .map(|name| name.len() + 1)
+        .max()
+        .unwrap_or(0);
+    let mut out = String::from("```css\n");
+    for (names, syntax, _) in rows {
+        for name in names {
+            out.push_str(&format!("{:width$} {syntax};\n", format!("{name}:")));
+        }
+    }
+    out.push_str("```");
+    out
 }
 
 /// Consecutive properties with the same syntax share a row, and the
@@ -551,14 +574,15 @@ fn first_example(name: &str, examples: &[String]) -> String {
     format!("{name}: {value}")
 }
 
-fn table(heading: &str, rows: Vec<(Vec<&str>, &str, String)>) -> String {
-    let mut out = format!("| {heading} | values | example |\n|---|---|---|");
-    for (names, syntax, example) in rows {
+/// What to write, one row per property. The value syntax is not a
+/// column: it is wider than the content the page is set in.
+fn table(heading: &str, rows: &[(Vec<&str>, &str, String)]) -> String {
+    let mut out = format!("| {heading} | example |\n|---|---|");
+    for (names, _, example) in rows {
         let names: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
         out.push_str(&format!(
-            "\n| {} | `{}` | `{}` |",
+            "\n| {} | `{}` |",
             names.join(", "),
-            syntax.replace('|', "\\|"),
             example.replace('|', "\\|")
         ));
     }
