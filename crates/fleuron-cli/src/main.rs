@@ -20,7 +20,9 @@ const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css
   -s, --split <n|none> where a markdown file's sections begin: at a
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
-  -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
+  -d, --dialect <name> fleuron, commonmark, gfm or obsidian (default
+                       fleuron: CommonMark, frontmatter and attribute
+                       lines)
   --title <text>       the book's title
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`
@@ -210,6 +212,7 @@ fn split(value: &str) -> Result<Sections> {
 
 fn dialect(value: &str) -> Result<Dialect> {
     match value.to_ascii_lowercase().as_str() {
+        "fleuron" => Ok(Dialect::fleuron()),
         "commonmark" => Ok(Dialect::common_mark()),
         "gfm" => Ok(Dialect::gfm()),
         "obsidian" => Ok(Dialect::obsidian()),
@@ -512,6 +515,17 @@ mod tests {
         };
         assert_eq!(reading.sections, Sections::AtHeading(HeadingLevel::H2));
         assert_eq!(reading.dialect, Dialect::obsidian());
+
+        // The dialect a run reads under unless it names another is
+        // the one the usage names, and it can be asked for by that
+        // name.
+        let Command::Render { reading, .. } =
+            render_of(&["book.md", "-o", "out.pdf", "-d", "fleuron"])
+        else {
+            panic!("expected a render");
+        };
+        assert_eq!(reading.dialect, Dialect::fleuron());
+        assert_eq!(Dialect::fleuron(), Dialect::default());
 
         let Command::Render { reading, .. } =
             render_of(&["book.md", "-o", "out.pdf", "-s", "none"])

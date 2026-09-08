@@ -401,7 +401,7 @@ async function comparedWithTheExport(what: string, compared: number): Promise<vo
     document.querySelector('.sheet')?.setAttribute('style', 'line-height: 0');
     scrollTo(0, 0);
   }, [ZOOM, compared] as [number, number]);
-  const pictures = await page.evaluate(
+  const images = await page.evaluate(
     () => document.querySelectorAll('#preview svg image').length,
   );
   const pdf = await page.evaluate(async () => {
@@ -442,8 +442,8 @@ async function comparedWithTheExport(what: string, compared: number): Promise<vo
   } else {
     check(
       `${what}: the page the two rasters are compared on has no image`,
-      pictures === 0,
-      `${pictures} on page ${compared}`,
+      images === 0,
+      `${images} on page ${compared}`,
     );
     const reference = readFileSync(join(work, 'page.png'));
     const difference = await page.evaluate(

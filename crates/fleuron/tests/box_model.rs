@@ -5,7 +5,7 @@
 //! carry over a page turn, set under a sheet that boxes the
 //! quotation and rules the heading.
 
-use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page};
@@ -42,6 +42,7 @@ fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -51,6 +52,7 @@ fn paragraph(value: &str) -> Block {
     Block::Paragraph {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(value)],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -72,12 +74,14 @@ fn fixture() -> Book {
                     id: NodeId::UNASSIGNED,
                     level: HeadingLevel::H1,
                     inlines: vec![text("The Quay")],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },
                 Block::Blockquote {
                     id: NodeId::UNASSIGNED,
                     blocks: (0..4).map(|_| paragraph(quoted)).collect(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },

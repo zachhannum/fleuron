@@ -46,7 +46,7 @@ export type Op =
    */
   | { op: 'image'; url: string; bytes: Uint8Array }
   /** Which markdown the sources are written in. */
-  | { op: 'dialect'; dialect: 'commonmark' | 'gfm' | 'obsidian' }
+  | { op: 'dialect'; dialect: 'fleuron' | 'commonmark' | 'gfm' | 'obsidian' }
   /** Where a source's sections begin: a heading level, or 0 for a file per section. */
   | { op: 'split'; level: number }
   /** One markdown source as the whole book. */

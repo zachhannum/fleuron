@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
-use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, SourceRange};
+use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, SourceRange};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page};
@@ -38,6 +38,7 @@ fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -65,6 +66,7 @@ fn heading(title: &str) -> Block {
         id: NodeId::UNASSIGNED,
         level: HeadingLevel::H1,
         inlines: vec![text(title)],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -74,6 +76,7 @@ fn paragraph(inlines: Vec<Inline>) -> Block {
     Block::Paragraph {
         id: NodeId::UNASSIGNED,
         inlines,
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }

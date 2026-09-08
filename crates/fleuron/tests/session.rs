@@ -2,7 +2,7 @@
 //! edits got it there, a session's output is the output a one-shot
 //! run over the same inputs would have produced.
 
-use fleuron::content::{Block, Book, HeadingLevel, Inline, Metadata, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, Metadata, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::images::Assets;
 use fleuron::layout::layout_book;
@@ -19,6 +19,7 @@ fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -29,6 +30,7 @@ fn heading(value: &str) -> Block {
         id: NodeId::UNASSIGNED,
         level: HeadingLevel::H1,
         inlines: vec![text(value)],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -38,6 +40,7 @@ fn paragraph(value: &str) -> Block {
     Block::Paragraph {
         id: NodeId::UNASSIGNED,
         inlines: vec![text(value)],
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }

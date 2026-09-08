@@ -83,11 +83,13 @@ impl Session {
         self.engine.add_font(source).map_err(js_error)
     }
 
-    /// Which markdown the sources are written in: `commonmark`,
-    /// `gfm` or `obsidian`.
+    /// Which markdown the sources are written in: `fleuron`,
+    /// `commonmark`, `gfm` or `obsidian`. `fleuron` is what a session
+    /// reads until it is told otherwise.
     #[wasm_bindgen(js_name = setDialect)]
     pub fn set_dialect(&mut self, dialect: &str) -> Result<(), JsError> {
         self.reading.dialect = match dialect {
+            "fleuron" => Dialect::fleuron(),
             "commonmark" => Dialect::common_mark(),
             "gfm" => Dialect::gfm(),
             "obsidian" => Dialect::obsidian(),

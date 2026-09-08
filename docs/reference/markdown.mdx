@@ -90,10 +90,40 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `> …` | `blockquote`, nesting |
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
+| `{.class #id}` on a line of its own | the classes and id of the block under it |
 
 An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
 
 The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
+
+## Naming a block
+
+A stylesheet reaches a kind of element by its name: every `img`, every `blockquote`. A class or an id names one of them instead, this image rather than every image.
+
+A line holding nothing but a brace run names the block written under it. It takes any number of classes and at most one id, in any order:
+
+```markdown
+{.epigraph}
+> Man is the only animal that blushes.
+```
+
+Every block in the vocabulary takes one, the scene break included. Leave a blank line between the line and a paragraph, since two lines of prose are one paragraph.
+
+Two blocks also take the run written after them. A heading takes it at the end of its line, and an image alone on its line takes it directly after the url:
+
+```markdown
+# Chapter One {.opening #ch1}
+
+![a map of Lilliput](plate.jpg){.plate}
+```
+
+Nothing else takes a trailing run. On a blockquote it stays inside the quote's last paragraph, as prose. After `---` the line is prose too, and no longer a break.
+
+A line that names nothing is set as the prose it was read as, and warns: the source ends under it, or another attribute line follows it. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
+
+An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
+
+`Dialect::attributes` is the switch. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
 
 ## Inlines
 
@@ -131,6 +161,8 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | math | plain text |
 | an image among prose | a block after the paragraph |
 | html, a footnote reference, a task marker | nothing; there is no prose in them |
+| an attribute line naming nothing | a paragraph of its own |
+| a brace run that is not classes and an id | a paragraph of its own |
 
 ## Dialects
 
@@ -139,11 +171,12 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | switch | |
 |---|---|
 | `frontmatter` | A leading `---` block is metadata rather than a scene break. On by default. |
+| `attributes` | An attribute line names the block under it, and a heading or an image takes the run written after it. On by default. |
 | `gfm` | Tables, strikethrough, task lists. |
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 
-`Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the three named combinations.
+`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run is prose.
 
 A switch that is off turns its syntax into prose rather than an error. `[[Another Note]]` without `wikilinks` is four brackets and a title.
 

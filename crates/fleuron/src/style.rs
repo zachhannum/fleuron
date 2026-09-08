@@ -27,7 +27,10 @@ use selectors::matching::{MatchingContext, matches_selector};
 use serde::Serialize;
 
 use crate::Warning;
-use crate::content::{Book, NodeId};
+use crate::content::{
+    Attributes, Block, Book, Inline, NodeId, block_attributes, block_position, inline_attributes,
+    inline_position, origin,
+};
 use crate::fonts::{FaceAttributes, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
@@ -554,6 +557,7 @@ fn cascade(
     mut warnings: Vec<Warning>,
 ) -> StyleTree {
     let elements = ElementTree::build(book);
+    warnings.extend(repeated_ids(book));
     let mut caches = SelectorCaches::default();
 
     let mut styles: Vec<ComputedStyle> = Vec::new();
@@ -656,6 +660,88 @@ fn cascade(
         initial_by_node,
         first_line_by_node,
         warnings,
+    }
+}
+
+/// Reports every id a book gives to a second element.
+///
+/// An id names one element. Both still match.
+fn repeated_ids(book: &Book) -> Vec<Warning> {
+    let mut first: BTreeMap<&str, String> = BTreeMap::new();
+    let mut warnings = Vec::new();
+    for section in &book.sections {
+        let source = section.source.as_deref();
+        named_blocks(&section.blocks, source, &mut first, &mut warnings);
+    }
+    warnings
+}
+
+/// The ids of these blocks and everything inside them, in document
+/// order, warning on each id already taken.
+fn named_blocks<'a>(
+    blocks: &'a [Block],
+    source: Option<&str>,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    for block in blocks {
+        claim(
+            block_attributes(block),
+            origin(source, block_position(block)),
+            first,
+            warnings,
+        );
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                named_inlines(inlines, source, first, warnings)
+            }
+            Block::Blockquote { blocks, .. } => named_blocks(blocks, source, first, warnings),
+            Block::ThematicBreak { .. } | Block::Image { .. } => {}
+        }
+    }
+}
+
+/// The same, over the inlines of one block.
+fn named_inlines<'a>(
+    inlines: &'a [Inline],
+    source: Option<&str>,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    for inline in inlines {
+        claim(
+            inline_attributes(inline),
+            origin(source, inline_position(inline)),
+            first,
+            warnings,
+        );
+        match inline {
+            Inline::Text { .. } | Inline::Code { .. } => {}
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. } => named_inlines(children, source, first, warnings),
+        }
+    }
+}
+
+/// Takes one node's id, or reports the element that has it already.
+fn claim<'a>(
+    attributes: &'a Attributes,
+    at: String,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    let Some(id) = attributes.id.as_deref() else {
+        return;
+    };
+    match first.get(id) {
+        Some(taken) => warnings.push(Warning {
+            message: format!("id `{id}` is written twice, at {taken} and {at}"),
+            origin: Some(at),
+        }),
+        None => {
+            first.insert(id, at);
+        }
     }
 }
 
@@ -848,7 +934,7 @@ fn stack(families: &[Family]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Block, HeadingLevel, Inline, Metadata, Section};
+    use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, Section, SourcePos};
     use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
     use crate::lines::{HangEnd, HangingPunctuation};
 
@@ -861,6 +947,7 @@ mod tests {
         Inline::Text {
             id: NodeId::UNASSIGNED,
             value: value.into(),
+            attributes: Attributes::default(),
             position: None,
             span: None,
         }
@@ -880,6 +967,7 @@ mod tests {
                         id: NodeId::UNASSIGNED,
                         level: HeadingLevel::H1,
                         inlines: vec![text("Chapter One")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -889,17 +977,20 @@ mod tests {
                             Inline::Emphasis {
                                 id: NodeId::UNASSIGNED,
                                 children: vec![text("In which")],
+                                attributes: Attributes::default(),
                                 position: None,
                                 span: None,
                             },
                             text(" a drawer is opened."),
                         ],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("It was the kind of morning.")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -908,9 +999,11 @@ mod tests {
                         blocks: vec![Block::Paragraph {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("\"Nobody's early here.\"")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -941,6 +1034,101 @@ mod tests {
 
     fn first(tree: &StyleTree, element: &str) -> ComputedStyle {
         nth(tree, element, 0)
+    }
+
+    /// A book of two images, the first of them named.
+    fn images() -> Book {
+        let image = |named: Attributes| Block::Image {
+            id: NodeId::UNASSIGNED,
+            url: "plate.jpg".into(),
+            alt: "a map".into(),
+            attributes: named,
+            position: None,
+            span: None,
+        };
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                id: NodeId::UNASSIGNED,
+                source: Some("chapter-01.md".into()),
+                title: None,
+                blocks: vec![
+                    image(Attributes {
+                        id: Some("frontispiece".into()),
+                        classes: vec!["map".into()],
+                    }),
+                    image(Attributes::default()),
+                ],
+                position: None,
+                span: None,
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// A class names one element out of a kind of them: the image
+    /// that carries it is set, and the image beside it is not.
+    #[test]
+    fn a_class_reaches_the_element_that_carries_it_and_no_other() {
+        let book = images();
+        let tree = compile(&book, ".map { text-align: right }");
+        assert_eq!(nth(&tree, "img", 0).text_align, TextAlign::Right);
+        assert_eq!(nth(&tree, "img", 1).text_align, TextAlign::Left);
+    }
+
+    /// An id names one element and nothing else, and outranks the
+    /// class on the same element.
+    #[test]
+    fn an_id_reaches_the_element_that_carries_it_and_outranks_a_class() {
+        let book = images();
+        let tree = compile(
+            &book,
+            ".map { break-before: page } #frontispiece { break-before: recto }",
+        );
+        assert_eq!(nth(&tree, "img", 0).break_before, Break::Side(Side::Recto));
+        assert_eq!(nth(&tree, "img", 1).break_before, Break::Auto);
+    }
+
+    /// An id names one element, so a second element under it is a
+    /// mistake. Both still match: the sheet reaches two, and the
+    /// warning names both places.
+    #[test]
+    fn an_id_written_twice_warns_naming_both_places() {
+        let mut book = images();
+        let Block::Image {
+            attributes,
+            position,
+            ..
+        } = &mut book.sections[0].blocks[1]
+        else {
+            panic!("expected an image");
+        };
+        attributes.id = Some("frontispiece".into());
+        *position = Some(SourcePos {
+            line: 12,
+            column: 1,
+        });
+        let Block::Image { position, .. } = &mut book.sections[0].blocks[0] else {
+            panic!("expected an image");
+        };
+        *position = Some(SourcePos { line: 3, column: 1 });
+
+        let tree = compile(&book, "#frontispiece { break-before: recto }");
+        assert_eq!(nth(&tree, "img", 0).break_before, Break::Side(Side::Recto));
+        assert_eq!(nth(&tree, "img", 1).break_before, Break::Side(Side::Recto));
+        let repeated: Vec<&Warning> = tree
+            .warnings()
+            .iter()
+            .filter(|warning| warning.message.contains("frontispiece"))
+            .collect();
+        assert_eq!(repeated.len(), 1, "{:?}", tree.warnings());
+        assert!(
+            repeated[0].message.contains("chapter-01.md:3:1")
+                && repeated[0].message.contains("chapter-01.md:12:1"),
+            "{:?}",
+            repeated[0],
+        );
     }
 
     /// The built-in sheet sets the body, chapter and folio styles, and
@@ -1529,11 +1717,13 @@ mod tests {
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
                         inlines: vec![text("Before the break.")],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
                     Block::ThematicBreak {
                         id: NodeId::UNASSIGNED,
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -1542,9 +1732,11 @@ mod tests {
                         blocks: vec![Block::Paragraph {
                             id: NodeId::UNASSIGNED,
                             inlines: vec![text("Quoted.")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -1744,15 +1936,18 @@ mod tests {
                                 Inline::Strong {
                                     id: NodeId::UNASSIGNED,
                                     children: vec![text("again")],
+                                    attributes: Attributes::default(),
                                     position: None,
                                     span: None,
                                 },
                             ],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
                         text("."),
                     ],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],

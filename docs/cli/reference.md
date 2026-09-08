@@ -12,7 +12,9 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
   -s, --split <n|none> where a markdown file's sections begin: at a
                        heading of level n or shallower, or nowhere at
                        all, one section per file (default 1)
-  -d, --dialect <name> commonmark, gfm or obsidian (default commonmark)
+  -d, --dialect <name> fleuron, commonmark, gfm or obsidian (default
+                       fleuron: CommonMark, frontmatter and attribute
+                       lines)
   --title <text>       the book's title
   --author <text>      the book's author
   --meta <key=value>   any other metadata field; repeatable. `language`
@@ -33,7 +35,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 | `-o`, `--output` | Where the PDF goes. Required, except under `--dump-tree`. The path is written whole and nothing is created alongside it. |
 | `-c`, `--css` | An author stylesheet. Repeatable. Sheets parse in the order given and cascade in that order, all of them over the built-in user-agent sheet. With no `-c`, the built-in sheet does all the styling. |
 | `-s`, `--split` | Where a markdown file's sections begin. A level of 1 to 6 opens a section at every heading of that level or shallower. `none` opens none, so the file is one section. Default 1. |
-| `-d`, `--dialect` | Which markdown is being read: `commonmark`, `gfm` or `obsidian`. See [the markdown mapping](../reference/markdown.mdx). |
+| `-d`, `--dialect` | Which markdown is being read: `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines. `commonmark` is that without the attribute lines, so a brace run is prose. See [the markdown mapping](../reference/markdown.mdx). |
 | `--title`, `--author`, `--meta` | The book's own metadata. `--meta` takes `key=value` and is repeatable. The engine reads three fields in all: `title` and `author` become the PDF's document information, and `--meta language=en` becomes its language and picks the hyphenation patterns. |
 | `--dump-tree` | Writes the [content tree](../reference/content-tree.md) the frontend read to stdout as JSON, and lays nothing out. The same manuscript dumps the same bytes every time. |
 | `--css-subset` | Writes the [CSS subset](../css-subset.mdx) the engine accepts to stdout as JSON, with the engine version it came from, and reads nothing. A host pins the file for the version it embeds. |

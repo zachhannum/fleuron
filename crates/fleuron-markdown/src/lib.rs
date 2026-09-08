@@ -80,13 +80,15 @@ impl Sections {
 
 /// Which markdown a source is written in.
 ///
-/// Frontmatter is on by default because a manuscript's metadata has
-/// to live somewhere, and the alternative is a convention smuggled
-/// through the prose.
+/// [`Dialect::fleuron`] is the default. The other three are named
+/// after whose markdown they read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dialect {
     /// A leading `---` block is metadata rather than a scene break.
     pub frontmatter: bool,
+    /// A line of nothing but `{.class #id}` names the block under it,
+    /// and a heading or an image takes the same run written after it.
+    pub attributes: bool,
     /// GitHub's additions: tables, strikethrough, task lists.
     pub gfm: bool,
     /// `[[wikilinks]]`, as Obsidian writes them.
@@ -98,28 +100,39 @@ pub struct Dialect {
 
 impl Default for Dialect {
     fn default() -> Dialect {
+        Dialect::fleuron()
+    }
+}
+
+impl Dialect {
+    /// CommonMark, a frontmatter block and attribute lines: the
+    /// markdown a manuscript for this engine is written in, and what
+    /// a source is read as unless the host says otherwise.
+    pub fn fleuron() -> Dialect {
         Dialect {
             frontmatter: true,
+            attributes: true,
             gfm: false,
             wikilinks: false,
             smart_punctuation: false,
         }
     }
-}
 
-impl Dialect {
-    /// CommonMark and nothing else, frontmatter included.
+    /// CommonMark, frontmatter included, and nothing besides. A brace
+    /// run is prose here.
     pub fn common_mark() -> Dialect {
-        Dialect::default()
+        Dialect {
+            attributes: false,
+            ..Dialect::fleuron()
+        }
     }
 
     /// What an Obsidian vault contains.
     pub fn obsidian() -> Dialect {
         Dialect {
-            frontmatter: true,
             gfm: true,
             wikilinks: true,
-            smart_punctuation: false,
+            ..Dialect::fleuron()
         }
     }
 
@@ -127,7 +140,7 @@ impl Dialect {
     pub fn gfm() -> Dialect {
         Dialect {
             gfm: true,
-            ..Dialect::default()
+            ..Dialect::fleuron()
         }
     }
 }

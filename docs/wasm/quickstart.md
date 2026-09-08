@@ -108,7 +108,7 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `style` | the author's stylesheets, named, in cascade order |
 | `font` | font bytes, registered for the session's life |
 | `image` | one image's bytes, by the url the manuscript names it by |
-| `dialect` | `commonmark`, `gfm` or `obsidian` |
+| `dialect` | `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines |
 | `split` | the heading level a section begins at, or `0` for one section per file |
 
 A book of one source takes its title and author from that source's frontmatter. A book of several has no frontmatter of its own, so `metadata` is how it gets a name. Only the PDF writer reads it, so sending it costs no layout.

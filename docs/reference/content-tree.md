@@ -28,7 +28,8 @@ The dump, abridged:
         {
           "type": "heading",
           "level": 1,
-          "inlines": [{ "type": "text", "value": "CHAPTER I." }]
+          "inlines": [{ "type": "text", "value": "CHAPTER I." }],
+          "attributes": { "id": "opening", "classes": ["grand"] }
         },
         {
           "type": "paragraph",
@@ -66,7 +67,7 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 
 ## Blocks
 
-`type` is the tag. Every block takes an optional `position` and `span`.
+`type` is the tag. Every block takes an optional `position`, `span` and `attributes`.
 
 | type | |
 |---|---|
@@ -87,6 +88,20 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `link` | `url` and `children`. The text lays out; the url reaches painters that can express one. |
 
 Text runs are not elements as far as CSS is concerned. They take the style of the inline or block around them, and never count towards `:first-child`.
+
+## Naming a node
+
+`attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that carries neither leaves the field out.
+
+```json
+{ "attributes": { "id": "frontispiece", "classes": ["map"] } }
+```
+
+Specificity counts them in buckets of their own: `.map` outranks `img`, and `#frontispiece` outranks `.map`.
+
+The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
+
+A text run carries the field like every other node, and a sheet reaches nothing through it.
 
 ## Node identity
 

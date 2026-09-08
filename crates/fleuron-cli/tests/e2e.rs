@@ -24,7 +24,7 @@ use std::process::{Command, Output};
 
 use fleuron::content::{Block, Book, Inline};
 use fleuron::images::{Assets, ImageLoader};
-use fleuron::pages::{DrawItem, Page};
+use fleuron::pages::{DrawItem, Page, Side};
 use fleuron::style::Color;
 use fleuron_markdown::Options;
 
@@ -415,6 +415,54 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
             color.to_hex(),
         );
     }
+}
+
+/// The sheet names one image and moves it, and the image beside
+/// it stays where the built-in sheet put it: a brace run in the
+/// manuscript, a class selector in the author's CSS, one image on
+/// the page set somewhere else.
+#[test]
+fn the_named_image_is_set_where_the_sheet_put_it() {
+    // What `fixtures/styled.css` leaves around the text: the wider
+    // margin is the spine, so which edge is which follows the side
+    // the image landed on.
+    const SPINE: f32 = 60.0;
+    const FORE_EDGE: f32 = 40.0;
+
+    let pages = styled_pages();
+    let images: Vec<(Side, f32, f32, f32)> = pages
+        .iter()
+        .flat_map(|page| {
+            page.items.iter().filter_map(|item| match item {
+                DrawItem::Image { x, w, .. } => Some((page.side, page.width, *x, *w)),
+                _ => None,
+            })
+        })
+        .collect();
+    let [map, ornament] = images.as_slice() else {
+        panic!("the fixture book has a map and an ornament: {images:?}");
+    };
+
+    let (side, width, x, w) = *map;
+    let far = match side {
+        Side::Verso => width - SPINE,
+        Side::Recto => width - FORE_EDGE,
+    };
+    assert!(w < far, "the map fills the measure: {map:?}");
+    assert!(
+        (x + w - far).abs() < 0.5,
+        "the named image is not against the far edge: {map:?}",
+    );
+
+    let (side, _, x, _) = *ornament;
+    let near = match side {
+        Side::Verso => FORE_EDGE,
+        Side::Recto => SPINE,
+    };
+    assert!(
+        (x - near).abs() < 0.5,
+        "the image the sheet did not name moved: {ornament:?}",
+    );
 }
 
 /// One channel as a PDF writes it: krilla's own rounding of a byte

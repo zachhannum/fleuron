@@ -6,7 +6,7 @@
 //! rules as CSS states them — over selectors of known specificity in
 //! a shuffled order.
 
-use fleuron::content::{Block, Book, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::style::{Source, StyleTree, Stylesheets};
 use proptest::prelude::*;
@@ -16,8 +16,9 @@ fn registry() -> &'static FontRegistry {
     REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
 }
 
-/// One paragraph inside one section: enough tree for every selector
-/// below to have something to match.
+/// One paragraph inside one section, named the way a sheet names
+/// one: enough tree for every selector below to have something to
+/// match.
 fn book() -> Book {
     let mut book = Book {
         metadata: Default::default(),
@@ -30,9 +31,14 @@ fn book() -> Book {
                 inlines: vec![Inline::Text {
                     id: NodeId::UNASSIGNED,
                     value: "prose".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
+                attributes: Attributes {
+                    id: Some("colophon".into()),
+                    classes: vec!["opening".into()],
+                },
                 position: None,
                 span: None,
             }],
@@ -46,14 +52,19 @@ fn book() -> Book {
 
 /// Selectors that all match the paragraph, with the specificity CSS
 /// gives them as `(id, class, type)` packed the way the cascade
-/// compares it.
-const SELECTORS: [(&str, u32); 6] = [
+/// compares it. A class outweighs any number of element names and an
+/// id outweighs any number of classes, which is what the two named
+/// buckets are for.
+const SELECTORS: [(&str, u32); 9] = [
     ("*", 0),
     ("p", 1),
     ("section p", 2),
     ("book section p", 3),
     ("p:first-child", 1 << 10 | 1),
     ("section p:first-child", 1 << 10 | 2),
+    (".opening", 1 << 10),
+    ("p.opening", 1 << 10 | 1),
+    ("#colophon", 1 << 20),
 ];
 
 /// The paragraph's computed size under one set of rules.

@@ -37,6 +37,7 @@ fn options() -> impl Strategy<Value = Options> {
             ))
         ],
         prop_oneof![
+            Just(Dialect::fleuron()),
             Just(Dialect::common_mark()),
             Just(Dialect::gfm()),
             Just(Dialect::obsidian())

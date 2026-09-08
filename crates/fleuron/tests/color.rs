@@ -5,7 +5,7 @@
 //! twice: once under a sheet that names no colour, and once under one
 //! that colours the section and the heading in it.
 
-use fleuron::content::{Block, Book, HeadingLevel, Inline, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page};
@@ -45,6 +45,7 @@ fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }
@@ -64,6 +65,7 @@ fn fixture() -> Book {
                     id: NodeId::UNASSIGNED,
                     level: HeadingLevel::H1,
                     inlines: vec![text("The Quay")],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },
@@ -74,11 +76,13 @@ fn fixture() -> Book {
                         Inline::Emphasis {
                             id: NodeId::UNASSIGNED,
                             children: vec![text("harbour lights")],
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         },
                         text(" went out."),
                     ],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 },
@@ -117,9 +121,11 @@ fn hyphenated() -> Book {
                         "The extraordinarily inconsiderate lamplighter considered \
                          the incomprehensible correspondence.",
                     )],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             }],

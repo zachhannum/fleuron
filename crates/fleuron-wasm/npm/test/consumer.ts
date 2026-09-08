@@ -97,7 +97,7 @@ const said = JSON.parse(execFileSync(process.execPath, ['render.mjs'], { cwd: ho
 
 check('the installed package sets the fixture book', said.pages > 1, `${said.pages} pages`);
 check('every page of it has something to paint', said.bare === 0, `${said.bare} empty`);
-check('the pictures the host handed over are placed', said.images === 2, `${said.images} images`);
+check('the images the host handed over are placed', said.images === 2, `${said.images} images`);
 check('the prose is all there', said.characters > 10000, `${said.characters} characters`);
 check(
   'and the PDF it wrote is a PDF',

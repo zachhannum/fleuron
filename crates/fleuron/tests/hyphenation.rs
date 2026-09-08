@@ -3,7 +3,7 @@
 //! left whole with a word about it.
 
 use fleuron::LayoutOutput;
-use fleuron::content::{Block, Book, Inline, Metadata, NodeId, Section};
+use fleuron::content::{Attributes, Block, Book, Inline, Metadata, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::images::Assets;
 use fleuron::layout::layout_book;
@@ -40,9 +40,11 @@ fn book(language: Option<&str>, prose: &str) -> Book {
                 inlines: vec![Inline::Text {
                     id: NodeId::UNASSIGNED,
                     value: prose.to_string(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
+                attributes: Attributes::default(),
                 position: None,
                 span: None,
             }],

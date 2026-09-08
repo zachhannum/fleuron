@@ -1654,7 +1654,12 @@ pub(crate) const PSEUDO_CLASSES: &[(&str, &str)] = &[
 
 /// What a compound selector is made of besides pseudo-classes, with
 /// one use of each that parses.
-pub(crate) const COMPOUNDS: &[(&str, &str)] = &[("<element>", "p"), ("*", "section > *")];
+pub(crate) const COMPOUNDS: &[(&str, &str)] = &[
+    ("<element>", "p"),
+    ("*", "section > *"),
+    (".<class>", "p.epigraph"),
+    ("#<id>", "#frontispiece"),
+];
 
 /// How selectors join in a list, with one use that parses.
 pub(crate) const SELECTOR_LIST: (&str, &str) = (",", "h1, h2");

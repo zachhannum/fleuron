@@ -411,7 +411,7 @@ fn clamp_range(range: std::ops::Range<u32>, text: &str) -> std::ops::Range<usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Block, Book, HeadingLevel, Inline, Section};
+    use crate::content::{Attributes, Block, Book, HeadingLevel, Inline, Section};
     use crate::fonts::{BUNDLED_FONT, Features, bundled_registry};
     use crate::pages::{Glyph, Side};
 
@@ -445,9 +445,11 @@ mod tests {
                     inlines: vec![Inline::Text {
                         id: Default::default(),
                         value: text.into(),
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     }],
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],
@@ -470,9 +472,11 @@ mod tests {
                         inlines: vec![Inline::Text {
                             id: Default::default(),
                             value: "Chapter One".into(),
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -481,9 +485,11 @@ mod tests {
                         inlines: vec![Inline::Text {
                             id: Default::default(),
                             value: "The wind came off the water.".into(),
+                            attributes: Attributes::default(),
                             position: None,
                             span: None,
                         }],
+                        attributes: Attributes::default(),
                         position: None,
                         span: None,
                     },
@@ -834,6 +840,7 @@ mod tests {
                     id: Default::default(),
                     url: "missing.png".into(),
                     alt: "a map".into(),
+                    attributes: Attributes::default(),
                     position: None,
                     span: None,
                 }],

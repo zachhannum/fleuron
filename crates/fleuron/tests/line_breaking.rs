@@ -1,7 +1,7 @@
 //! Property tests for line breaking: measure fit, determinism,
 //! content preservation.
 
-use fleuron::content::{Inline, NodeId};
+use fleuron::content::{Attributes, Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::lines::{
     FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Span,
@@ -34,6 +34,7 @@ fn inlines_of(text: &str) -> Vec<Inline> {
     vec![Inline::Text {
         id: NodeId::UNASSIGNED,
         value: text.to_string(),
+        attributes: Attributes::default(),
         position: None,
         span: None,
     }]
