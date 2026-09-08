@@ -1,11 +1,11 @@
 ---
 title: Display structure
-description: The engine's only product, and the contract every painter shares.
+description: Every type the engine's output holds, and what a painter does with it.
 ---
 
-The display structure is what the engine produces. Painters consume it and never re-derive layout, so a preview and an export cannot disagree.
+The display structure is what the engine produces: every glyph, rule, and image of a book, at the position layout decided for it. A painter draws from it and works nothing out for itself, so a preview and an export cannot disagree. This page describes every type in it.
 
-Coordinates are points, with the origin at the top left of the trimmed page.
+Coordinates are in points, with the origin at the top left of the page.
 
 ## `LayoutOutput`
 
@@ -37,9 +37,9 @@ pub struct Page {
 }
 ```
 
-`number` is the folio, counting from 1. `side` is `recto` or `verso`; books open on a right-hand page, so odd numbers are recto. `width` and `height` are the trim, in points, per page, because a book may change page size at a named page.
+`number` is the page number, counting from 1. `side` is `recto` or `verso`, the CSS names for a right-hand and a left-hand page. Books open on a right-hand page, so odd numbers are rectos. `width` and `height` are the page size in points, carried per page, since a book may change page size at a named page.
 
-`sections` names the content-tree sections that appear on the page, in the order their content appears on it. A chapter that ends mid-page is followed there by the next one opening, so the page names both. A blank leaf names none.
+`sections` names the content-tree sections that appear on the page, in the order their content appears on it. A chapter that ends mid-page is followed on that page by the next one opening, so the page names both. A blank page names none.
 
 Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this.
 
@@ -47,7 +47,7 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 
 ## `DrawItem`
 
-Three variants. A painter that handles all three can paint any page the engine produces.
+An item is a text run, a rectangle, or an image. A painter that handles all three can paint any page the engine produces.
 
 ### `Text`
 
@@ -78,42 +78,13 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 
 `text` is the string the glyphs were shaped from, and the glyphs' ranges index it. It travels with the run because only the shaper knew which glyph came from which character. A painter that draws characters rather than glyphs draws these.
 
-`source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped, and empty where the two are the same. Extraction, selection and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` records the offset in `source` of every byte boundary of `text`, and is empty alongside it: a glyph's range taken through the map is the source that glyph stands for.
+`source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped. It is empty where the two are the same. Extraction, selection, and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` records the offset in `source` of every byte boundary of `text`, and is empty alongside it. A glyph's range taken through the map is the source that glyph stands for.
 
-`origin` is where the run was written: the content node it was shaped from, and the bytes of that node's own text it stands for. The runs that name one node tile it, so a byte of the manuscript falls in exactly one of them, and a paragraph broken over a page turn gives two ranges that meet at the break. A hyphen a line break drew stands for nothing anybody wrote, so its range is empty. It is `None` on text the engine wrote itself: a folio, a running head, a scene break's ornament.
+`origin` is where the run was written: the content node it was shaped from, and the bytes of that node's own text it stands for. The runs that name one node cover it between them, so a byte of the manuscript falls in exactly one of them, and a paragraph broken over a page turn gives two ranges that meet at the break. A hyphen that a line break introduced stands for nothing anybody wrote, so its range is empty. `origin` is `None` on text the engine wrote itself: a page number, a running head, the ornament on a scene break.
 
-`color` is what the run is filled with: three eight-bit channels, and no alpha. A sheet that names no colour leaves it black.
+`color` is what the run is filled with: three eight-bit channels, and no alpha. A run whose stylesheet named no color is black.
 
-`features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
-
-### `Glyph`
-
-```rust
-pub struct Glyph {
-    pub id: u32,
-    pub x: f32,
-    pub range: Range<u32>,
-}
-```
-
-`id` is a glyph id in the run's font, not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
-
-`range` is the byte range in the run's `text` that this glyph stands for. A ligature spans several characters; a decomposed cluster puts several glyphs on one range. A painter that treats the range as a mapping rather than a bijection handles both.
-
-### `SourceRange`
-
-```rust
-pub struct SourceRange {
-    pub node: NodeId,
-    pub range: Range<u32>,
-}
-```
-
-`node` is a content-tree [node id](content-tree.md#node-identity). `range` indexes that node's own text as the frontend read it, before `text-transform` or a synthesized small capital changed what was shaped, so a run's `origin` and its `source` cover the same bytes.
-
-A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range hold the byte, and the glyph on it whose range does.
-
-A node id is the engine's own name for a place in the book, and a host that handed over markdown holds a file and a byte of it instead. [The content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor becomes a node, and the runs that name it are on the page the cursor is set on; a run under the pointer becomes a place in the manuscript.
+`features` is what the run was shaped with beyond the OpenType features the shaper turns on for every run. A painter that draws characters has to ask the face for the same ones, and to pin the face's variations, or the browser picks glyphs of its own and draws them at positions measured for other glyphs. A painter that draws glyph ids has the answer already.
 
 ### `Rect`
 
@@ -133,13 +104,44 @@ A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the h
 
 `w` and `h` are what layout decided, which is the intrinsic size at the header's own resolution unless the page had no room for it. A painter scales the image into that box; it does not read the header again.
 
+## Inside a text run
+
+### `Glyph`
+
+```rust
+pub struct Glyph {
+    pub id: u32,
+    pub x: f32,
+    pub range: Range<u32>,
+}
+```
+
+`id` is a glyph id in the run's font, not a character. `x` is absolute, per glyph. Kerning and justification mean no two glyphs are uniformly spaced, so there is no advance for a painter to accumulate.
+
+`range` is the byte range in the run's `text` that this glyph stands for. One glyph may stand for several characters, as a ligature does, and several glyphs may share one range, as a decomposed cluster does. A painter that reads a range as a correspondence rather than a one-to-one mapping handles both.
+
+### `SourceRange`
+
+```rust
+pub struct SourceRange {
+    pub node: NodeId,
+    pub range: Range<u32>,
+}
+```
+
+`node` is a content-tree [node id](content-tree.md#node-identity). `range` indexes that node's own text as the frontend read it, before `text-transform` or a synthesized small capital changed what was shaped, so a run's `origin` and its `source` cover the same bytes.
+
+A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range hold the byte, and the glyph on it whose range does.
+
+A node id is the engine's own name for a place in the book. A host that handed over markdown holds a file and a byte of it instead, and [the content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor in the manuscript becomes a node, and the runs that name that node are on the page the cursor is set on. A run under the pointer goes back the other way.
+
 ## Writing a painter
 
 For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
 
-For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, fill with the run's `color`, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
+For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, fill with the run's `color`, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that shapes again disagrees with the export.
 
-A painter that cannot place glyphs by id, and draws characters instead, draws `text` and turns the run's `features` on, which is how it reaches the glyphs the engine measured. It reads `source` back rather than `text` wherever the reader gets the words: selection, extraction and copy and paste.
+A painter that cannot place glyphs by id draws characters instead. It draws `text` with the run's `features` turned on, which is how it reaches the glyphs the engine measured, and it reads `source` back rather than `text` wherever the reader gets the words: selection, extraction, and copy and paste.
 
 For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
 

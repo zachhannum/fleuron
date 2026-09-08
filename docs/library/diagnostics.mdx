@@ -3,21 +3,19 @@ title: Diagnostics
 description: What warns, what fails, and what to do about it.
 ---
 
-fleuron reports trouble two ways: warnings and errors. Unsupported CSS, a font that would not load,
-a family that resolved nothing, all are reported as warnings. Whatever caused the warning is ignored by
-the engine, and the book is still successfully rendered.
+Fleuron reports two kinds of problem: warnings and errors.
 
-Any errors prevent the book from being rendered. Malformed input, a face that cannot be embedded,
-or geometry a PDF cannot express.
+A warning is something the engine could not use. Unsupported CSS, a font that would not load, and a family that resolved nothing are all warnings. The engine ignores whatever caused the warning and lays the book out without it.
 
-The stylesheet below has two declarations the engine does not support. Both are reported, with the line and
-column they were written at, and the content still renders.
+An error stops the run, and nothing is written. Malformed input, a face that cannot be embedded, and geometry a PDF cannot express are all errors.
+
+The stylesheet below has two declarations the engine does not support. Both are reported with the line and column they were written at, and the content is still set.
 
 <Playground
   demo="warnings"
   editors="css"
   warnings
-  caption="A stylesheet outside the subset, and the page it did not stop."
+  caption="A stylesheet with two unsupported declarations, and the page it was set into anyway."
 />
 
 ## Reading warnings
@@ -34,39 +32,33 @@ for warning in &output.warnings {
 }
 ```
 
-`origin` is a source location when one exists. For CSS it is the sheet's name with a line and column,
-the name being whatever you passed to `Source::author`. For content it is the source file and position,
-like `chapter-01.md:12:3`, recorded on the node the markdown was read into. A node with no position degrades
-to the bare file name.
+`origin` is a source location where there is one. For CSS it is the stylesheet's name with a line and column, the name being whatever you passed to `Source::author`. For content it is the source file and the position recorded on the node the markdown was read into, such as `chapter-01.md:12:3`. A node with no position degrades to the bare file name.
 
-Style compilation collects its own warnings before layout runs, and `Stylesheets::warnings()`
-has them as soon as parsing and font loading are done. `LayoutOutput::warnings` is the whole run's,
-compilation included, so reading it once at the end is enough.
+Style compilation collects its own warnings before layout runs, and `Stylesheets::warnings()` holds them as soon as parsing and font loading are done. `LayoutOutput::warnings` is the whole run's, compilation included, so reading it once at the end is enough.
 
 ## What warns
 
-|                                                    |                                                                                                                                                                                                                                                           |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a construct the content structure does not support | A list, a table, a code block. The frontend falls back to plain prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.mdx) is the full list. |
-| a CSS declaration outside the supported subset     | The property, the at-rule or the selector, at the line and column it was written at. See [the CSS subset](../css-subset.mdx).                                                                                                                             |
-| a font that would not load                         | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a readable font. Text falls back to the next family in the list.                                                                                              |
-| a family that resolved nothing                     | The whole `font-family` stack came up empty. Usually a spelling mistake, or a loader rooted in the wrong directory.                                                                                                                                       |
-| a missing font style                               | An italic or a weight the family does not have. Nothing is synthesised, so the text is rendered with the closest style and the warning names the style that was asked for.                                                                                         |
-| a language with no hyphenation patterns            | The book declares a language the engine has no patterns for. The warning names the tag, and every word is left whole. See [`hyphens: auto`](../css-subset.mdx).                                                                                                     |
-| an image not supplied to the engine                | A url the manuscript names that is missing, or bytes the header probe doesn't recognize. The image is skipped.                                                                                                                                            |
-| an image taller than the page                      | The image is scaled down to the content box.                                                                                                                                                                                     |
+| | |
+| --- | --- |
+| a construct the content tree has no node for | A list, a table, a code block. The frontend falls back to plain prose and names the line and column. Prose is never dropped, so the page has changed shape rather than lost anything. [The markdown mapping](../reference/markdown.mdx) is the full list. |
+| a CSS declaration outside the supported subset | The property, the at-rule, or the selector, at the line and column it was written at. See [the CSS subset](../css-subset.mdx). |
+| a font that would not load | An `@font-face` whose `src` the loader could not resolve, or resolved to bytes that are not a readable font. The text falls back to the next family in the list. |
+| a family that resolved nothing | The whole `font-family` stack came up empty. Usually a spelling mistake, or a loader rooted in the wrong directory. |
+| a missing font style | An italic or a weight the family does not have. The engine synthesizes nothing, so the text is set in the closest style the family holds and the warning names the style that was asked for. |
+| a language with no hyphenation patterns | The book declares a language the engine has no patterns for. The warning names the tag, and every word is left whole. See [`hyphens: auto`](../css-subset.mdx). |
+| an image not supplied to the engine | A url the manuscript names that nothing was supplied for, or bytes the header probe does not recognize. The image is skipped. |
+| an image taller than the page | The image is scaled down to fit the content box. |
 
 ## What fails
 
-|                                     |                                                                                                                                                                                                       |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| input that is not markdown          | A file the CLI cannot read.                                                                                                                                                                           |
-| a font that could not be embedded   | `PdfError::Font`, naming the face. Usually a font whose licence bits or table layout the writer cannot embed.                                                                                              |
-| an image that could not be embedded | `PdfError::Image`, naming the url. The header probe and the writer read the same file, so this is a format one supports and the other does not.                                                          |
-| geometry a PDF cannot express       | `PdfError::Geometry`, naming the folio and the kind of item. A non-finite coordinate reaching the writer is the usual cause, and that is a bug in the engine rather than a problem with the document. |
-| serialization                       | `PdfError::Serialize`, with the writer's own message.                                                                                                                                                 |
+| | |
+| --- | --- |
+| input that is not markdown | A file the CLI cannot read. |
+| a font that could not be embedded | `PdfError::Font`, naming the face. Usually a font whose license bits or table layout the writer cannot embed. |
+| an image that could not be embedded | `PdfError::Image`, naming the url. The header probe and the writer read the same file, so this is a format one supports and the other does not. |
+| geometry a PDF cannot express | `PdfError::Geometry`, naming the page number and the kind of item. The usual cause is a non-finite coordinate reaching the writer, which is a bug in the engine rather than a problem with the document. |
+| serialization | `PdfError::Serialize`, with the writer's own message. |
 
 ## From the command line
 
-The CLI prints warnings to stderr, one per line, prefixed with the input they came from, and then a count.
-It still exits 0, because the PDF was written. [The CLI reference](../cli/reference.md) has the exit codes.
+The CLI prints warnings to stderr, one per line, prefixed with the input they came from, and then a count. It still exits 0, because the PDF was written. [The CLI reference](../cli/reference.md) has the exit codes.
