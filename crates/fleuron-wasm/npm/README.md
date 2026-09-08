@@ -4,16 +4,19 @@ Paged-media layout in a worker: markdown and CSS in, a display
 structure or PDF bytes out.
 
 [fleuron](https://fleuron.typeworks.dev/) is a layout engine for
-book-shaped documents, compiled to WebAssembly. It shapes text, breaks
-and hyphenates lines, fragments the result into pages, and paints the
-preview and the PDF from the same numbers. It touches no DOM and opens
-no files.
+book-shaped documents, compiled to WebAssembly. It shapes the text,
+breaks and hyphenates the lines, and fragments the result into pages.
+The preview and the PDF are painted from the same numbers. The engine
+touches no DOM and opens no files.
 
 ```sh
 npm install fleuron
 ```
 
 ## On screen
+
+The following program mounts a preview, sets a manuscript and a
+stylesheet, and turns to page 12:
 
 ```js
 import { Preview } from 'fleuron';
@@ -31,10 +34,13 @@ session, fetches the fonts the book was set in, and paints a page as
 SVG. The encoded buffer, the worker messages and the display structure
 are handled internally, and all three stay exported.
 
-`fleuron-react` is the same thing as a component, with no engine logic
-of its own.
+`fleuron-react` is the same preview as a component, with no engine
+logic of its own.
 
 ## In a worker
+
+The package ships a worker at `fleuron/worker`. Write one of your own
+when something else has to run in there too:
 
 ```js
 // fleuron.worker.js
@@ -47,6 +53,9 @@ self.onmessage = ({ data }) => {
   );
 };
 ```
+
+The host keeps a `Client`, which pairs replies with calls and decides
+which renders are still worth painting:
 
 ```js
 // the host
@@ -69,14 +78,12 @@ if (output !== null) {
 paint. Every render raises a generation, the worker echoes it back, and
 a reply that arrives behind the current one is dropped.
 
-The package ships the worker in the shape above, so a host that wants
-no worker file of its own can point at `fleuron/worker`.
-
 ## Sending what changed
 
 The module keeps a session between calls: the content tree, the
 styling, and every stage between them and the page. A second render
-pays for the edit rather than for the book.
+pays for the edit rather than for the book. The following calls
+restyle, edit one chapter, and register a face:
 
 ```js
 await client.preview([styleOp('@page { margin-bottom: 84pt }')]);
@@ -90,7 +97,10 @@ leaves every other section's lines alone. Font bytes cross once and
 stay registered. `client.stages` reports how many times each stage has
 run, which shows when a cache served.
 
-## Batch
+## Without a worker
+
+Nothing about the module needs a worker. The following program lays a
+book out and writes a PDF on whatever thread it is called on:
 
 ```js
 import { decodeDisplayList, initWasm, render, renderPdf } from 'fleuron';
@@ -105,7 +115,7 @@ const pdf = renderPdf(markdown, css);
 `client.preview` hands back pages of text runs, rules and images, in
 points, origin top left. Each text run has the string it was shaped
 from and each glyph a byte range into it, which is what a painter needs
-for selection and copy-and-paste.
+for selection and copy and paste.
 
 `paintPage` draws one of them as SVG. Each run becomes one `<text>`
 with an x for every character in it, so the browser places the
@@ -125,8 +135,7 @@ registered from, which is how a painter draws with the bundled one.
 Layout never decodes an image. It places one from the size the host
 gives it, and the host draws the pixels.
 
-The host starts the worker. A book-scale manuscript is hundreds of
-milliseconds of work, and that much time on the main thread drops
-interactions.
+The host starts the worker. Setting a whole book is a long enough job
+that running it on the main thread drops interactions.
 
 MIT or Apache-2.0.

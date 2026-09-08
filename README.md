@@ -4,10 +4,11 @@ A paged-media layout engine for book-shaped documents, in Rust.
 
 [Documentation](https://fleuron.typeworks.dev/) · [Demos](https://fleuron.typeworks.dev/demos/) · [API](https://fleuron.typeworks.dev/api/fleuron/)
 
-fleuron takes markdown and CSS and gives back a typeset book. It shapes
-the text, breaks and hyphenates the lines, fragments the result into
-pages, and emits a display structure for preview and a PDF for export.
-The same source compiles to native and to WebAssembly.
+fleuron takes markdown and CSS and typesets a book from them. It shapes
+the text, breaks and hyphenates the lines, and fragments the result into
+pages. What comes back is a display structure, which a preview draws on
+screen and the PDF writer writes to a file. The same source compiles to
+native and to WebAssembly.
 
 A fleuron is the printer's flower ❦, the ornament set into a page to
 mark a pause.
@@ -27,15 +28,14 @@ library, so it builds for any target Rust does.
 
 ## Scope
 
-fleuron handles book-shaped documents: flowing prose with headings,
-block quotes, scene breaks, drop caps, images, running heads, footnotes,
-multi-column pages, and page furniture like recto and verso, page
-counters and named pages.
+fleuron typesets book-shaped documents: flowing prose with headings,
+block quotes, scene breaks, drop caps, images, running heads,
+multi-column pages, page numbers, and named pages.
 
 It is not a browser engine. There is no float layout, no tables, no grid
-or flexbox, no transforms. CSS the engine does not support is reported
-with the line and column it was written at, and the book lays out
-anyway.
+or flexbox, and no transforms. CSS the engine does not support is
+reported with the line and column it was written at, and the book is
+laid out anyway.
 
 ## Architecture
 
