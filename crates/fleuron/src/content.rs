@@ -683,6 +683,50 @@ fn span_in_inlines(inlines: &[Inline], node: NodeId) -> Option<SourceSpan> {
     None
 }
 
+/// What a sheet names one block by.
+pub fn block_attributes(block: &Block) -> &Attributes {
+    match block {
+        Block::Heading { attributes, .. }
+        | Block::Paragraph { attributes, .. }
+        | Block::Blockquote { attributes, .. }
+        | Block::ThematicBreak { attributes, .. }
+        | Block::Image { attributes, .. } => attributes,
+    }
+}
+
+/// The same, for one inline.
+pub fn inline_attributes(inline: &Inline) -> &Attributes {
+    match inline {
+        Inline::Text { attributes, .. }
+        | Inline::Code { attributes, .. }
+        | Inline::Emphasis { attributes, .. }
+        | Inline::Strong { attributes, .. }
+        | Inline::Link { attributes, .. } => attributes,
+    }
+}
+
+/// Where in its source one block was read from.
+pub fn block_position(block: &Block) -> Option<SourcePos> {
+    match block {
+        Block::Heading { position, .. }
+        | Block::Paragraph { position, .. }
+        | Block::Blockquote { position, .. }
+        | Block::ThematicBreak { position, .. }
+        | Block::Image { position, .. } => *position,
+    }
+}
+
+/// The same, for one inline.
+pub fn inline_position(inline: &Inline) -> Option<SourcePos> {
+    match inline {
+        Inline::Text { position, .. }
+        | Inline::Code { position, .. }
+        | Inline::Emphasis { position, .. }
+        | Inline::Strong { position, .. }
+        | Inline::Link { position, .. } => *position,
+    }
+}
+
 /// One block's identity.
 pub fn block_id(block: &Block) -> NodeId {
     match block {

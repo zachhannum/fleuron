@@ -80,13 +80,17 @@ impl Sections {
 
 /// Which markdown a source is written in.
 ///
-/// Frontmatter is on by default because a manuscript's metadata has
-/// to live somewhere, and the alternative is a convention smuggled
-/// through the prose.
+/// Frontmatter and attributes are on by default because a
+/// manuscript's metadata has to live somewhere and a sheet has to be
+/// able to name one plate, and the alternative to both is a
+/// convention smuggled through the prose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dialect {
     /// A leading `---` block is metadata rather than a scene break.
     pub frontmatter: bool,
+    /// A line of nothing but `{.class #id}` names the block under it,
+    /// and a heading or an image takes the same run written after it.
+    pub attributes: bool,
     /// GitHub's additions: tables, strikethrough, task lists.
     pub gfm: bool,
     /// `[[wikilinks]]`, as Obsidian writes them.
@@ -100,6 +104,7 @@ impl Default for Dialect {
     fn default() -> Dialect {
         Dialect {
             frontmatter: true,
+            attributes: true,
             gfm: false,
             wikilinks: false,
             smart_punctuation: false,
@@ -108,18 +113,21 @@ impl Default for Dialect {
 }
 
 impl Dialect {
-    /// CommonMark and nothing else, frontmatter included.
+    /// CommonMark and nothing else, frontmatter included. A brace run
+    /// is prose here.
     pub fn common_mark() -> Dialect {
-        Dialect::default()
+        Dialect {
+            attributes: false,
+            ..Dialect::default()
+        }
     }
 
     /// What an Obsidian vault contains.
     pub fn obsidian() -> Dialect {
         Dialect {
-            frontmatter: true,
             gfm: true,
             wikilinks: true,
-            smart_punctuation: false,
+            ..Dialect::default()
         }
     }
 

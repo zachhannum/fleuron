@@ -19,7 +19,7 @@ The stylesheet below is written in this vocabulary: mirrored margins, a folio, a
 
 Element names are the markdown vocabulary: `book`, `section`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `p`, `blockquote`, `hr`, `img`, `code`, `em`, `strong` and `a`.
 
-A compound is `<element>` (`p`) or `*` (`section > *`), with any of the pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:empty`, `:root`, `:is()`, `:where()`, `:not()` and `:has()`.
+A compound is `<element>` (`p`), `*` (`section > *`), `.<class>` (`p.epigraph`) or `#<id>` (`#frontispiece`), with any of the pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:empty`, `:root`, `:is()`, `:where()`, `:not()` and `:has()`.
 
 Compounds join by the descendant (`section p`), child (`section > p`), next-sibling (`h1 + p`) and subsequent-sibling (`h1 ~ p`) combinators, and selectors list with `,` (`h1, h2`).
 
@@ -29,7 +29,9 @@ The pseudo-elements are `::first-letter` and `::first-line`.
 
 {/* end generated */}
 
-There are no classes, ids, attributes or namespaces, because the content tree has none, and no interaction pseudo-classes, because nothing here is interactive.
+There are no attributes or namespaces, and no interaction pseudo-classes, because nothing here is interactive.
+
+A class or an id is how a sheet names one element rather than a kind of them: the frontispiece, the plate, this epigraph. An element takes any number of classes and at most one id, written as an attribute line above the block, or after a heading or an image. Two elements under one id both match, and the second one warns.
 
 `::first-letter` is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size. `::first-line` cascades the same way, and takes the properties listed above and nothing else. A declaration outside that set warns naming the property and is dropped.
 

@@ -1,11 +1,17 @@
 //! Markdown events to blocks, and the mapping's degradations.
+//!
+//! An attribute line is a paragraph whose whole content is one brace
+//! run, so it is an event to match rather than a tail of prose to
+//! scan, and it reaches every block in the vocabulary. It is held
+//! until the block under it arrives; a line that annotates nothing is
+//! prose again, and says so.
 
 use std::ops::Range;
 
 use fleuron::Warning;
 use fleuron::content::{
-    Attributes, Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_span, origin,
-    text as inline_text,
+    Attributes, Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_position,
+    block_span, origin, text as inline_text,
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
@@ -43,6 +49,7 @@ fn parser_options(options: &Options) -> ParserOptions {
     parser.set(ParserOptions::ENABLE_STRIKETHROUGH, dialect.gfm);
     parser.set(ParserOptions::ENABLE_TASKLISTS, dialect.gfm);
     parser.set(ParserOptions::ENABLE_WIKILINKS, dialect.wikilinks);
+    parser.set(ParserOptions::ENABLE_HEADING_ATTRIBUTES, dialect.attributes);
     parser.set(
         ParserOptions::ENABLE_SMART_PUNCTUATION,
         dialect.smart_punctuation,
@@ -92,10 +99,21 @@ impl LineIndex {
     }
 }
 
+/// An attribute line, held until the block it names arrives.
+///
+/// The inlines it was read as come with it, because a line that
+/// names nothing is prose again and prose is never dropped.
+struct Pending {
+    attributes: Attributes,
+    inlines: Vec<Inline>,
+    read: Read,
+}
+
 /// What an inline frame is collecting for.
 enum InlineFor {
     Paragraph,
-    Heading(HeadingLevel),
+    /// A heading, with what its own trailing brace run named.
+    Heading(HeadingLevel, Attributes),
     Emphasis,
     Strong,
     Link {
@@ -110,6 +128,10 @@ enum InlineFor {
 }
 
 struct Converter<'a> {
+    /// The markdown being read, for the constructs whose shape is in
+    /// the source rather than in the events.
+    text: &'a str,
+    /// The file the source is named by, for diagnostics.
     source: &'a str,
     options: &'a Options,
     lines: LineIndex,
@@ -125,6 +147,11 @@ struct Converter<'a> {
     /// Blocks an inline construct produced, flushed once the block
     /// that contained it closes.
     deferred: Vec<Block>,
+    /// The attribute line waiting for the block it names.
+    pending: Option<Pending>,
+    /// One held attribute line per open blockquote: the line before a
+    /// quote names the quote, and the blocks inside it are their own.
+    quoted: Vec<Option<Pending>>,
     /// Depth of metadata blocks, whose text is not content.
     metadata: u32,
 }
@@ -132,6 +159,7 @@ struct Converter<'a> {
 impl<'a> Converter<'a> {
     fn new(text: &'a str, source: &'a str, options: &'a Options) -> Converter<'a> {
         Converter {
+            text,
             source,
             options,
             lines: LineIndex::new(text),
@@ -140,6 +168,8 @@ impl<'a> Converter<'a> {
             blocks: vec![Vec::new()],
             inlines: Vec::new(),
             deferred: Vec::new(),
+            pending: None,
+            quoted: Vec::new(),
             metadata: 0,
         }
     }
@@ -152,8 +182,20 @@ impl<'a> Converter<'a> {
             Event::End(TagEnd::MetadataBlock(_)) => self.metadata -= 1,
 
             Event::Start(Tag::Paragraph) => self.push_inlines(InlineFor::Paragraph, read),
-            Event::Start(Tag::Heading { level, .. }) => {
-                self.push_inlines(InlineFor::Heading(heading_level(level)), read)
+            Event::Start(Tag::Heading {
+                level,
+                id,
+                classes,
+                attrs,
+            }) => {
+                if !attrs.is_empty() {
+                    self.drops("an attribute that is not a class or an id", at);
+                }
+                let named = Attributes {
+                    id: id.map(|id| id.into_string()),
+                    classes: classes.into_iter().map(|c| c.into_string()).collect(),
+                };
+                self.push_inlines(InlineFor::Heading(heading_level(level), named), read)
             }
             Event::Start(Tag::Image { dest_url, .. }) => self.push_inlines(
                 InlineFor::Image {
@@ -181,7 +223,10 @@ impl<'a> Converter<'a> {
                 self.degrades("a subscript", "plain text", at);
                 self.push_inlines(InlineFor::Plain, read)
             }
-            Event::Start(Tag::BlockQuote(_)) => self.blocks.push(Vec::new()),
+            Event::Start(Tag::BlockQuote(_)) => {
+                self.quoted.push(self.pending.take());
+                self.blocks.push(Vec::new());
+            }
 
             Event::Start(Tag::List(_)) => self.degrades("a list", "one paragraph per item", at),
             Event::Start(Tag::Table(_)) => self.degrades("a table", "one paragraph per cell", at),
@@ -352,35 +397,143 @@ impl<'a> Converter<'a> {
                 position: at,
                 span,
             }),
-            InlineFor::Heading(level) => {
-                self.displaced(&children);
-                if self.options.sections.opens(level) {
-                    self.open_section(read.position);
-                }
-                self.push_block(Block::Heading {
+            // A brace run over a line of dashes is a setext heading
+            // in CommonMark, and an empty heading is not what was
+            // written: it is an attribute line over a scene break.
+            InlineFor::Heading(_, named)
+                if children.is_empty() && !named.is_empty() && self.underlined(read) =>
+            {
+                self.push_block(Block::ThematicBreak {
                     id: Default::default(),
-                    level,
-                    inlines: children,
-                    attributes: Attributes::default(),
-                    position: at,
+                    attributes: named,
+                    position: Some(self.dashes_at(read)),
                     span,
                 });
                 self.flush_deferred();
             }
-            InlineFor::Paragraph => {
+            InlineFor::Heading(level, named) => {
                 self.displaced(&children);
-                if !children.is_empty() {
-                    self.push_block(Block::Paragraph {
-                        id: Default::default(),
-                        inlines: children,
-                        attributes: Attributes::default(),
-                        position: at,
-                        span,
-                    });
+                // The line above the heading is taken before the
+                // section opens, so the heading that opens one is
+                // still named by it.
+                let line = self.pending.take();
+                if self.options.sections.opens(level) {
+                    self.open_section(read.position);
+                }
+                let mut heading = Block::Heading {
+                    id: Default::default(),
+                    level,
+                    inlines: children,
+                    attributes: named,
+                    position: at,
+                    span,
+                };
+                if let Some(line) = line {
+                    annotate(&mut heading, line);
+                }
+                self.push_block(heading);
+                self.flush_deferred();
+            }
+            InlineFor::Paragraph => {
+                if let Some(children) = self.brace_run(children, read) {
+                    self.displaced(&children);
+                    if !children.is_empty() {
+                        self.push_block(Block::Paragraph {
+                            id: Default::default(),
+                            inlines: children,
+                            attributes: Attributes::default(),
+                            position: at,
+                            span,
+                        });
+                    }
                 }
                 self.flush_deferred();
             }
         }
+    }
+
+    /// Whether a heading was written as a line of text underlined by
+    /// dashes, which is how `---` under an attribute line parses.
+    fn underlined(&mut self, read: Read) -> bool {
+        self.options.dialect.attributes && self.dashes(read).is_some()
+    }
+
+    /// The dashes of an underlined heading, as an offset into the
+    /// source.
+    fn dashes(&self, read: Read) -> Option<usize> {
+        let text = &self.text[read.span.start as usize..read.span.end as usize];
+        let under = text.trim_end().rfind('\n')? + 1;
+        let dashes = text[under..].trim_end();
+        (dashes.len() >= 3 && dashes.chars().all(|c| c == '-')).then_some(under)
+    }
+
+    /// Where those dashes were written.
+    fn dashes_at(&self, read: Read) -> SourcePos {
+        let under = self.dashes(read).unwrap_or_default();
+        self.lines.position(read.span.start as usize + under)
+    }
+
+    /// A paragraph that is one brace run and nothing else names
+    /// something rather than saying it: the image it was written
+    /// after, or the block written under it. Everything else is the
+    /// prose it was read as, handed back to be filed.
+    fn brace_run(&mut self, children: Vec<Inline>, read: Read) -> Option<Vec<Inline>> {
+        if !self.options.dialect.attributes {
+            return Some(children);
+        }
+        let read_as = match brace_text(&children) {
+            None => return Some(children),
+            Some(inside) => named(inside),
+        };
+        let Some(attributes) = read_as else {
+            self.degrades(
+                "an attribute the syntax cannot hold",
+                "plain text",
+                read.position,
+            );
+            return Some(children);
+        };
+        // An image is a block written inline, so a run after one
+        // alone on its line is that block's.
+        if let [Block::Image { .. }] = self.deferred.as_slice() {
+            let image = &mut self.deferred[0];
+            let (mine, span) = slots(image);
+            merge(mine, attributes);
+            if let Some(span) = span {
+                span.end = span.end.max(read.span.end);
+            }
+            return None;
+        }
+        if !self.deferred.is_empty() {
+            return Some(children);
+        }
+        self.dangling();
+        self.pending = Some(Pending {
+            attributes,
+            inlines: children,
+            read,
+        });
+        None
+    }
+
+    /// Files an attribute line that named nothing as the prose it was
+    /// read as.
+    fn dangling(&mut self) {
+        let Some(line) = self.pending.take() else {
+            return;
+        };
+        self.degrades(
+            "an attribute line with no block under it",
+            "plain text",
+            line.read.position,
+        );
+        self.push_block(Block::Paragraph {
+            id: Default::default(),
+            inlines: line.inlines,
+            attributes: Attributes::default(),
+            position: Some(line.read.position),
+            span: Some(line.read.span),
+        });
     }
 
     /// Reports the images a block is about to be broken around.
@@ -417,9 +570,13 @@ impl<'a> Converter<'a> {
     }
 
     fn close_blockquote(&mut self, read: Read) {
+        // A line at the end of the quote is inside it, and names
+        // nothing; the line before the quote was held when it opened.
+        self.dangling();
         let Some(blocks) = self.blocks.pop() else {
             return;
         };
+        self.pending = self.quoted.pop().flatten();
         if blocks.is_empty() {
             return;
         }
@@ -458,8 +615,12 @@ impl<'a> Converter<'a> {
     }
 
     /// Files a block into the innermost open frame, opening a section
-    /// for content that precedes the first one.
-    fn push_block(&mut self, block: Block) {
+    /// for content that precedes the first one. The block takes the
+    /// names of the attribute line above it, if one was held.
+    fn push_block(&mut self, mut block: Block) {
+        if let Some(line) = self.pending.take() {
+            annotate(&mut block, line);
+        }
         if self.sections.is_empty() {
             let position = block_position(&block);
             self.sections.push(Section {
@@ -492,19 +653,87 @@ impl<'a> Converter<'a> {
     }
 
     fn finish(mut self) -> (Vec<Section>, Vec<Warning>) {
+        self.dangling();
         self.flush_section();
         (self.sections, self.warnings)
     }
 }
 
-fn block_position(block: &Block) -> Option<SourcePos> {
-    match block {
-        Block::Heading { position, .. }
-        | Block::Paragraph { position, .. }
-        | Block::Blockquote { position, .. }
-        | Block::ThematicBreak { position, .. }
-        | Block::Image { position, .. } => *position,
+/// Puts what an attribute line named on the block under it, the
+/// line's own bytes included in what the block was read from.
+fn annotate(block: &mut Block, line: Pending) {
+    let (mine, span) = slots(block);
+    merge(mine, line.attributes);
+    if let Some(span) = span {
+        span.start = span.start.min(line.read.span.start);
     }
+}
+
+/// Adds what a brace run named to what a block carries already.
+/// Classes gather; an id written both above a heading and after it
+/// is the line's.
+fn merge(into: &mut Attributes, from: Attributes) {
+    into.id = from.id.or_else(|| into.id.take());
+    into.classes.extend(from.classes);
+}
+
+/// The names one block carries and the bytes it was read from.
+fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
+    match block {
+        Block::Heading {
+            attributes, span, ..
+        }
+        | Block::Paragraph {
+            attributes, span, ..
+        }
+        | Block::Blockquote {
+            attributes, span, ..
+        }
+        | Block::ThematicBreak {
+            attributes, span, ..
+        }
+        | Block::Image {
+            attributes, span, ..
+        } => (attributes, span),
+    }
+}
+
+/// The inside of a brace run, when the whole of an inline sequence
+/// is one.
+fn brace_text(inlines: &[Inline]) -> Option<&str> {
+    let [Inline::Text { value, .. }] = inlines else {
+        return None;
+    };
+    value.trim().strip_prefix('{')?.strip_suffix('}')
+}
+
+/// The classes and id a brace run holds: `.class` and `#id`, in any
+/// order, at most one id. Nothing for a run holding anything else,
+/// which is a run the vocabulary has no room for.
+fn named(inside: &str) -> Option<Attributes> {
+    let mut read = Attributes::default();
+    for word in inside.split_whitespace() {
+        if let Some(class) = word.strip_prefix('.') {
+            read.classes.push(identifier(class)?);
+        } else if let Some(id) = word.strip_prefix('#') {
+            if read.id.is_some() {
+                return None;
+            }
+            read.id = Some(identifier(id)?);
+        } else {
+            return None;
+        }
+    }
+    Some(read)
+}
+
+/// A name a selector can reach the node back by: a CSS identifier,
+/// which is letters, digits, `-` and `_`, and does not open with a
+/// digit.
+fn identifier(word: &str) -> Option<String> {
+    let opens = word.chars().next()?;
+    let plain = |c: char| c.is_alphanumeric() || c == '-' || c == '_';
+    (!opens.is_ascii_digit() && word.chars().all(plain)).then(|| word.to_string())
 }
 
 fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {

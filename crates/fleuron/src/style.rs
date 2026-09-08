@@ -27,7 +27,10 @@ use selectors::matching::{MatchingContext, matches_selector};
 use serde::Serialize;
 
 use crate::Warning;
-use crate::content::{Book, NodeId};
+use crate::content::{
+    Attributes, Block, Book, Inline, NodeId, block_attributes, block_position, inline_attributes,
+    inline_position, origin,
+};
 use crate::fonts::{FaceAttributes, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
@@ -554,6 +557,7 @@ fn cascade(
     mut warnings: Vec<Warning>,
 ) -> StyleTree {
     let elements = ElementTree::build(book);
+    warnings.extend(repeated_ids(book));
     let mut caches = SelectorCaches::default();
 
     let mut styles: Vec<ComputedStyle> = Vec::new();
@@ -656,6 +660,90 @@ fn cascade(
         initial_by_node,
         first_line_by_node,
         warnings,
+    }
+}
+
+/// Reports every id a book gives to a second element.
+///
+/// An id names one element, and a sheet that reaches two through it
+/// is not saying what its author meant. Both still match: dropping
+/// one silently would be a page nobody asked for.
+fn repeated_ids(book: &Book) -> Vec<Warning> {
+    let mut first: BTreeMap<&str, String> = BTreeMap::new();
+    let mut warnings = Vec::new();
+    for section in &book.sections {
+        let source = section.source.as_deref();
+        named_blocks(&section.blocks, source, &mut first, &mut warnings);
+    }
+    warnings
+}
+
+/// The ids of these blocks and everything inside them, in document
+/// order, warning on each one already spoken for.
+fn named_blocks<'a>(
+    blocks: &'a [Block],
+    source: Option<&str>,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    for block in blocks {
+        claim(
+            block_attributes(block),
+            origin(source, block_position(block)),
+            first,
+            warnings,
+        );
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                named_inlines(inlines, source, first, warnings)
+            }
+            Block::Blockquote { blocks, .. } => named_blocks(blocks, source, first, warnings),
+            Block::ThematicBreak { .. } | Block::Image { .. } => {}
+        }
+    }
+}
+
+/// The same, over the inlines of one block.
+fn named_inlines<'a>(
+    inlines: &'a [Inline],
+    source: Option<&str>,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    for inline in inlines {
+        claim(
+            inline_attributes(inline),
+            origin(source, inline_position(inline)),
+            first,
+            warnings,
+        );
+        match inline {
+            Inline::Text { .. } | Inline::Code { .. } => {}
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. } => named_inlines(children, source, first, warnings),
+        }
+    }
+}
+
+/// Takes one node's id, or reports the element that has it already.
+fn claim<'a>(
+    attributes: &'a Attributes,
+    at: String,
+    first: &mut BTreeMap<&'a str, String>,
+    warnings: &mut Vec<Warning>,
+) {
+    let Some(id) = attributes.id.as_deref() else {
+        return;
+    };
+    match first.get(id) {
+        Some(taken) => warnings.push(Warning {
+            message: format!("id `{id}` is written twice, at {taken} and {at}"),
+            origin: Some(at),
+        }),
+        None => {
+            first.insert(id, at);
+        }
     }
 }
 
