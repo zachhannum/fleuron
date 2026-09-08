@@ -977,8 +977,6 @@ impl Builder<'_, '_> {
             line.spans[last].offset += offset;
             let origin = spec.at(slot).origin;
             slot += line.spans.len();
-            // A line beside the cap starts where the cap's own
-            // measure ended.
             let inner = if index < orphans || count - index < widows || index < sunk {
                 BreakPoint::Forbidden
             } else {

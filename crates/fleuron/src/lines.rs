@@ -188,9 +188,10 @@ impl InlineStyles for Inherited {
 
 /// One place a line may start and how wide it may run.
 ///
-/// A band of the page is set in one span or in several. Several is
-/// one line: the text crosses from span to span in reading order,
-/// and only the last of them ends where a line ends.
+/// A band of the page is set in one span or in several, and a band
+/// set in several is still one line: the text crosses from span to
+/// span in reading order, and only the last of them ends where a
+/// line ends.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span {
     /// Points from the block's leading edge the span starts at.
@@ -211,10 +212,9 @@ impl Span {
         }
     }
 
-    /// A band that ends where one `end` points wide does and runs
-    /// `width` back from there: a line shortened at its start, which
-    /// is what a first-line indent and a drop cap beside the line
-    /// both leave.
+    /// A band `width` wide ending where a band of `end` points ends.
+    /// A first-line indent and a drop cap beside the line both leave
+    /// one: the line is shortened at its start.
     pub fn ending(end: f32, width: f32) -> Span {
         Span::band(end - width, width)
     }
@@ -222,12 +222,12 @@ impl Span {
 
 /// The spans a paragraph breaks to, in reading order.
 ///
-/// One entry per span rather than per line, so a band set in
-/// several spans is several entries. The listed ones run out and
-/// `rest` answers for everything past them, which is how a profile
-/// describes a paragraph whose length nothing knows until it is
-/// broken. `rest` is a band of its own: a band that never ended
-/// would swallow the paragraph.
+/// One entry per span rather than per line, so a band set in several
+/// spans is several entries. The listed spans run out and `rest`
+/// answers for every one past them, so a profile covers a paragraph
+/// before anything has broken it and found its length. `rest` is a
+/// band of its own: a band that never ended would take the rest of
+/// the paragraph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measure {
     leading: Vec<Span>,
@@ -255,11 +255,6 @@ impl Measure {
     /// The span at `index`.
     pub fn at(&self, index: usize) -> Span {
         self.leading.get(index).copied().unwrap_or(self.rest)
-    }
-
-    /// Whether the band at `index` opens there.
-    pub fn opens_band(&self, index: usize) -> bool {
-        index == 0 || self.at(index - 1).ends_band
     }
 
     /// Spans past which every span is the same one. Two paths that
@@ -445,9 +440,9 @@ pub struct LineSpan {
     pub width: u32,
 }
 
-/// The spans of one line, which reads as a slice of them either way.
-/// A band set undivided holds its own span: the ordinary line of a
-/// book is not worth an allocation.
+/// The spans of one line, read as a slice either way. A band set
+/// undivided holds its span inline: the ordinary line of a book does
+/// not pay for an allocation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Spans {
     /// The band was set in one span.
@@ -502,8 +497,9 @@ pub struct Line {
 }
 
 impl Line {
-    /// Shaped runs as a line of one span: text that was set rather
-    /// than broken — page furniture, an ornament, an initial letter.
+    /// Shaped runs as a line of one span: page furniture, an
+    /// ornament, an initial letter, and anything else set rather
+    /// than broken.
     pub fn of(runs: Vec<ShapedRun>, box_: LineBox) -> Line {
         let width = runs.iter().map(|run| run.advance).sum();
         Line {
@@ -1164,9 +1160,9 @@ impl<'a> LineLayout<'a> {
         let mut extent = 0usize;
         let mut start = 0usize;
         // The band being filled, and where its first span was set:
-        // a span's own offset is from there, so a painter handed the
-        // line's leading edge places every span from it. The spans
-        // are gathered beside it and one buffer serves them all.
+        // a span's offset is from there, so a painter handed the
+        // line's leading edge places the rest. One buffer gathers the
+        // spans of every band.
         let mut band: Option<(Line, f32)> = None;
         let mut spans: Vec<LineSpan> = Vec::new();
         for fit in breaker.run() {
@@ -1632,8 +1628,9 @@ struct Breaker<'a> {
     widths: &'a Widths,
     measure: &'a Measure,
     /// The span every slot past the profile's listed ones is set in,
-    /// which is every slot of most paragraphs, and how many it lists.
+    /// which is every slot of most paragraphs.
     rest: Span,
+    /// How many spans the profile lists.
     settled: usize,
     /// The slot the paragraph's first band ends in.
     first_band: usize,
@@ -2013,7 +2010,7 @@ impl Breaker<'_> {
         };
         let fitness = fitness(ratio);
         // Crossing from one span of a band to the next is not a line
-        // break, and the surcharge a line costs is not owed there.
+        // break, and the surcharge a line costs is not charged there.
         let line_penalty = if fit.ends_band { LINE_PENALTY } else { 0.0 };
         let mut demerits = (line_penalty + fit.badness + penalty).powi(2);
         if hyphens > 1 {
@@ -2401,8 +2398,8 @@ mod tests {
     }
 
     /// Justification flushes an interior span at both edges: the
-    /// text between two spans of a band fills the first of them, as
-    /// only the last line of a paragraph is left short.
+    /// text in the first span of a band fills it, and only the last
+    /// line of a paragraph is left short.
     #[test]
     fn justification_flushes_an_interior_span() {
         let layout = LineLayout::new(registry());
