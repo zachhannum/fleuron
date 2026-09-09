@@ -41,7 +41,7 @@ pub struct Page {
 
 `sections` names the content-tree sections that appear on the page, in the order their content appears on it. A chapter that ends mid-page is followed there by the next one opening, so the page names both. A blank page names none.
 
-Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this.
+Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this. `Session::folios` answers the same question for a handful of nodes without handing back a page: see [sessions](../library/sessions.md).
 
 `items` is in paint order.
 

@@ -131,3 +131,5 @@ A cursor becomes a node, and the runs of the [display structure](display-structu
 Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host that keeps one across an edit asks again rather than reusing it.
 
 A node the engine synthesized, or one from a tree built rather than parsed, was read from nothing, and both questions answer with nothing rather than guessing.
+
+Which pages a node's content is on is a question about the book once it is laid out, so a [session](../library/sessions.md) answers that one rather than the tree.

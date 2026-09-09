@@ -159,11 +159,11 @@ export class Client {
    * does not hold, one the engine synthesized, or one whose content
    * reaches no page.
    *
-   * This is the direction a reflow invalidates. Setting a book in
-   * another face repaginates it, and a host that puts the reader
-   * back where they were, or turns to a chapter, or names the
-   * chapter on screen, asks where a node went. No page comes back
-   * with the answer.
+   * This is the direction a reflow invalidates. A new face
+   * repaginates the book, and a host that puts the reader back where
+   * they were, or turns to a chapter, or names the chapter on
+   * screen, asks where a node went. No page comes back with the
+   * answer.
    *
    * A node covers itself and everything under it, so a heading
    * answers with the page its own text is on, and a chapter with the

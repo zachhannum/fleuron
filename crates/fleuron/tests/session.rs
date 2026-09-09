@@ -6,6 +6,7 @@ use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, Metadata, 
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::images::Assets;
 use fleuron::layout::layout_book;
+use fleuron::pages::{DrawItem, Folios};
 use fleuron::session::Session;
 use fleuron::style::{Source, Stylesheets};
 use proptest::prelude::*;
@@ -198,6 +199,21 @@ fn edit_strategy() -> impl Strategy<Value = Edit> {
     ]
 }
 
+/// One edit, made to a session.
+fn make(session: &mut Session<'_>, edit: &Edit) {
+    match edit {
+        Edit::Content(index) => session.set_content(book(BOOKS[*index])),
+        Edit::Source(index) => {
+            let (name, tag, paragraphs) = SOURCES[*index];
+            session.replace_source(name, vec![section(name, tag, paragraphs)]);
+        }
+        Edit::Style(index) => session.set_style(parse(SHEETS[*index])),
+        Edit::Preview => {
+            session.preview();
+        }
+    }
+}
+
 /// The book an edit sequence leaves, built without the session's
 /// help: the same rule, written a second time.
 fn replay(edits: &[Edit]) -> (Book, &'static str) {
@@ -303,19 +319,7 @@ proptest! {
         let mut session = Session::new(registry());
         session.set_style(parse(""));
         for edit in &edits {
-            match edit {
-                Edit::Content(index) => session.set_content(book(BOOKS[*index])),
-                Edit::Source(index) => {
-                    let (name, tag, paragraphs) = SOURCES[*index];
-                    session.replace_source(name, vec![section(name, tag, paragraphs)]);
-                }
-                Edit::Style(index) => {
-                    session.set_style(parse(SHEETS[*index]));
-                }
-                Edit::Preview => {
-                    session.preview();
-                }
-            }
+            make(&mut session, edit);
         }
 
         let (expected_book, css) = replay(&edits);
@@ -328,6 +332,73 @@ proptest! {
         prop_assert_eq!(retained, one_shot(&expected_book, css));
     }
 
+    /// Ids renumber on every edit, and the answer to where a node is
+    /// set is read off those numbers. However the session got where
+    /// it is: a chapter answers with the pages that name it, and the
+    /// node a run was shaped from answers with a range that holds
+    /// the page the run is on.
+    #[test]
+    fn a_node_answers_with_the_pages_it_reaches(
+        edits in proptest::collection::vec(edit_strategy(), 1..8),
+    ) {
+        let mut session = Session::new(registry());
+        session.set_style(parse(""));
+        for edit in &edits {
+            make(&mut session, edit);
+        }
+
+        let chapters: Vec<NodeId> = session.book().sections.iter().map(|s| s.id).collect();
+        let answers = session.folios(&chapters);
+        let output = session.preview();
+        for (chapter, answer) in chapters.iter().zip(&answers) {
+            let named: Vec<u32> = output
+                .pages
+                .iter()
+                .filter(|page| page.sections.contains(chapter))
+                .map(|page| page.number)
+                .collect();
+            prop_assert_eq!(
+                *answer,
+                named.first().map(|first| Folios {
+                    first: *first,
+                    last: *named.last().expect("a page named it"),
+                }),
+                "chapter {} is named on {:?}",
+                chapter.get(),
+                named
+            );
+        }
+
+        let runs: Vec<(NodeId, u32)> = output
+            .pages
+            .iter()
+            .flat_map(|page| {
+                page.items.iter().filter_map(move |item| match item {
+                    DrawItem::Text { origin: Some(origin), .. } => Some((origin.node, page.number)),
+                    _ => None,
+                })
+            })
+            .collect();
+        let written: Vec<NodeId> = runs
+            .iter()
+            .map(|(node, _)| node.get())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(NodeId::new)
+            .collect();
+        let answers = session.folios(&written);
+        for (node, folios) in written.iter().zip(&answers) {
+            let folios = folios.expect("a node a run was shaped from reaches a page");
+            for (_, number) in runs.iter().filter(|(named, _)| named == node) {
+                prop_assert!(
+                    folios.first <= *number && *number <= folios.last,
+                    "node {} is set on page {number} and answered {folios:?}",
+                    node.get()
+                );
+            }
+        }
+    }
+
     /// The session is deterministic in its own right: the same edits
     /// twice over two sessions leave the same bytes.
     #[test]
@@ -338,19 +409,7 @@ proptest! {
             let mut session = Session::new(registry());
             session.set_style(parse(""));
             for edit in edits {
-                match edit {
-                    Edit::Content(index) => session.set_content(book(BOOKS[*index])),
-                    Edit::Source(index) => {
-                        let (name, tag, paragraphs) = SOURCES[*index];
-                        session.replace_source(name, vec![section(name, tag, paragraphs)]);
-                    }
-                    Edit::Style(index) => {
-                        session.set_style(parse(SHEETS[*index]));
-                    }
-                    Edit::Preview => {
-                        session.preview();
-                    }
-                }
+                make(&mut session, edit);
             }
             serde_json::to_vec(session.preview()).expect("the output serializes")
         };
