@@ -1,4 +1,4 @@
-//! Property tests for anchored images: prose keeps clear of the
+//! Property tests for anchored images: the prose keeps clear of the
 //! image, the flow terminates, and a paragraph is broken again a
 //! bounded number of times.
 
@@ -65,10 +65,10 @@ fn image() -> Block {
     }
 }
 
-/// Words short enough for the narrowest band these sheets leave. A
-/// word wider than the band it is set in overflows it rather than
-/// being dropped, which is the engine's answer to that everywhere,
-/// and it is not what these properties are about.
+/// Words short enough for the narrowest band these sheets leave. A word
+/// wider than the band it is set in overflows the band rather than
+/// falls out of the text. That is the engine's answer everywhere, and
+/// it is not what these properties are about.
 fn word_strategy() -> impl Strategy<Value = String> {
     "[a-z]{1,6}"
 }
@@ -110,8 +110,8 @@ fn illustrated_strategy() -> impl Strategy<Value = Book> {
         .prop_map(|(paragraphs, at)| book_of(paragraphs, at))
 }
 
-/// The sheet under test: one page box on both sides of the spread,
-/// and the image anchored at a corner of the page area with prose set
+/// The sheet under test: one page box on both sides of the spread. The
+/// image is anchored at a corner of the page area, with the prose set
 /// on one side of it.
 fn sheet(inset: &str, wrap: &str, margin: f32) -> String {
     format!(
@@ -185,7 +185,7 @@ fn overlaps(one: Rect, other: Rect) -> bool {
 }
 
 /// The insets and wrap side the properties are checked over: an image
-/// at either edge of the page area, with prose beside it.
+/// at either edge of the page area, with the prose beside it.
 fn sheets() -> Vec<String> {
     vec![
         sheet("top: 0; left: 0", "end", 6.0),
@@ -199,9 +199,9 @@ fn sheets() -> Vec<String> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(24))]
 
-    /// No line is set where an image stands: every run of every line
-    /// is clear of every image on its page, whichever side the sheet
-    /// sets prose on.
+    /// No line is set where an image stands: every run of every line is
+    /// clear of every image on its page, whichever side the sheet sets
+    /// the prose on.
     ///
     /// An image that excludes nothing is the one exception, and the
     /// sheet that asks for that is not in this list.
@@ -272,8 +272,8 @@ proptest! {
         }
     }
 
-    /// A illustrated book lays out the same way twice, page for page and
-    /// item for item.
+    /// An illustrated book lays out the same way twice, page for page
+    /// and item for item.
     #[test]
     fn an_illustrated_book_lays_out_the_same_way_twice(book in illustrated_strategy()) {
         let css = sheet("top: 0; left: 0", "end", 6.0);

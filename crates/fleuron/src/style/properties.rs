@@ -880,13 +880,13 @@ pub enum Position {
     Absolute,
 }
 
-/// How far one edge of a positioned box sits from the page area's own,
-/// from `top`, `right`, `bottom` and `left`.
+/// How far one edge of a positioned box sits from the matching edge of
+/// the page area, from `top`, `right`, `bottom` and `left`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Inset {
-    /// `auto`: the opposite edge places the box, and where that is
-    /// `auto` too the page area's own edge does.
+    /// `auto`: the opposite edge places the box. Where that edge is
+    /// `auto` as well, the box sits at the edge of the page area.
     Auto,
     /// A length in points, negative where the box reaches into the
     /// margin.
@@ -903,17 +903,18 @@ impl Inset {
     }
 }
 
-/// Which side of an exclusion prose sets on, from `wrap-flow`.
+/// Which side of an exclusion the prose sets on, from `wrap-flow`. An
+/// exclusion is a box that the text keeps clear of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WrapFlow {
-    /// `auto`: the box excludes nothing, and prose runs under it.
+    /// `auto`: the box excludes nothing, and the text runs under it.
     Auto,
-    /// `both`: prose sets on either side of it.
+    /// `both`: the prose sets on either side of it.
     Both,
-    /// `start`: prose sets on the side the line starts at.
+    /// `start`: the prose sets on the side the line starts at.
     Start,
-    /// `end`: prose sets on the side the line ends at.
+    /// `end`: the prose sets on the side the line ends at.
     End,
 }
 
@@ -981,7 +982,7 @@ pub struct ComputedStyle {
     /// What the insets say, for an element that is against the page.
     #[serde(skip_serializing_if = "unplaced")]
     pub inset: Edges<Inset>,
-    /// Which side of this element prose sets on, from `wrap-flow`.
+    /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
     /// Margins in points.

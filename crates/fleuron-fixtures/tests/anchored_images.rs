@@ -1,9 +1,9 @@
 //! A whole novel with an image at the head of every chapter.
 //!
 //! The properties exclusions have to hold are about where an image
-//! lands and what the prose beside it does, and a book-scale run is
-//! where a flow that sets a line over an image shows: one page in
-//! three hundred is enough.
+//! lands and what the prose beside it does. A book-scale run is where a
+//! flow that sets a line over an image shows. One page in three hundred
+//! is enough.
 
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page};

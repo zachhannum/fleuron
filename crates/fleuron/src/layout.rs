@@ -108,7 +108,7 @@ pub enum Piece {
     /// rather than in an ornament comes to.
     Blank,
     /// Where an image the sheet lifted out of the flow was written.
-    /// It takes no space and paints nothing: the page the flow
+    /// It takes no space and paints nothing. The page the flow
     /// reaches here is the page that places the image.
     Anchor(NodeId),
 }
@@ -153,9 +153,9 @@ pub struct Fragment {
     /// for the same reason: most fragments decorate nothing.
     pub decorations: Option<Box<Decorations>>,
     /// The paragraph this line came out of, shared by every line of
-    /// it, and `None` on everything else. The flow reads it where a
-    /// image narrows the bands the paragraph would be set in; a book
-    /// that anchors nothing keeps none of this.
+    /// it, and `None` on everything else. The flow reads it where an
+    /// image narrows the bands the paragraph is set in. A book that
+    /// anchors nothing keeps none of this.
     pub reflow: Option<Arc<Reflow>>,
 }
 
@@ -290,8 +290,7 @@ pub struct Paginator<'a> {
     warnings: RefCell<Vec<Warning>>,
     /// Whether the sheet anchors anything to the page, answered once.
     wraps: OnceCell<bool>,
-    /// How many times the flow has set a paragraph again beside a
-    /// image.
+    /// How many times the flow set a paragraph again beside an image.
     rebreaks: Cell<u32>,
 }
 
@@ -356,8 +355,8 @@ impl<'a> Paginator<'a> {
         self.warnings.borrow().clone()
     }
 
-    /// How many times the flow has set a paragraph again beside a
-    /// image. A book that anchors nothing never does.
+    /// How many times the flow set a paragraph again beside an image.
+    /// A book that anchors nothing never does.
     pub fn rebreaks(&self) -> u32 {
         self.rebreaks.get()
     }
@@ -365,8 +364,8 @@ impl<'a> Paginator<'a> {
     /// Whether the sheet takes anything out of the flow and against
     /// the page.
     ///
-    /// A book that anchors nothing never has a paragraph set twice,
-    /// so its fragments keep nothing to set one from.
+    /// A book that anchors nothing never sets a paragraph twice, so
+    /// its fragments keep nothing to set one from.
     fn wraps(&self) -> bool {
         *self.wraps.get_or_init(|| {
             self.styles
@@ -437,9 +436,9 @@ impl<'a> Paginator<'a> {
         anchored
     }
 
-    /// Says so where the host supplied no image for a url. A url the
-    /// table probed and refused was complained about there; one it
-    /// was never offered is a host that supplied nothing at all.
+    /// Says so where the host supplied no image for a url. The table
+    /// complains about a url it probed and refused. A url the table
+    /// was never offered means the host supplied nothing at all.
     fn missing(&self, url: &str, origin: String) {
         if !self.assets.probed(url) {
             self.warn(
@@ -458,7 +457,7 @@ impl<'a> Paginator<'a> {
         self.language(&book.metadata);
         let anchored = self.anchored_images(book);
         // The pass that answers where the anchors land keeps no
-        // fragments either: it builds a section, flows it, and drops
+        // fragments either. It builds a section, flows it, and drops
         // it, the same way the pass that keeps the pages does.
         let bare = AnchoredImages::default();
         let anchors = if anchored.is_empty() {
@@ -784,7 +783,7 @@ struct Cap {
 }
 
 /// What one paragraph's lines are set against once they are broken:
-/// where they start, how they fill a band, and what may not be split
+/// where they start, how they fill a band, and what must not be split
 /// from what.
 #[derive(Debug, Clone)]
 struct Setting {
@@ -801,9 +800,9 @@ struct Setting {
 }
 
 impl Setting {
-    /// The same over the bands a profile left: an initial letter
+    /// The same over the bands a profile left. An initial letter
     /// belongs to the line a paragraph opens on rather than to the
-    /// line the rest of it opens on, and an image may have moved it.
+    /// line the rest of it opens on, and an image can move it.
     fn wrapped(&self, opening: bool, letter: Option<f32>) -> Cow<'_, Setting> {
         if opening && letter.is_none() {
             return Cow::Borrowed(self);
@@ -820,9 +819,9 @@ impl Setting {
 ///
 /// The lines a section is built with are broken against the measure
 /// with nothing in the way. A paragraph that lands beside an image is
-/// broken again against the bands the image leaves, and this is what
-/// that takes: the shaped runs, which the measure has no say in, and
-/// everything that was settled around them.
+/// broken again against the bands the image leaves. This is what that
+/// takes: the shaped runs, which the measure has no say in, and
+/// everything settled around them.
 #[derive(Debug)]
 pub struct Reflow {
     shaped: Shaped,
@@ -866,7 +865,7 @@ impl Rect {
 }
 
 /// One image the sheet lifted out of the flow: what it paints, how
-/// far its insets put it from the page area, and which side prose
+/// far its insets put it from the page area, and which side the prose
 /// sets on.
 #[derive(Debug, Clone)]
 struct AnchoredImage {
@@ -882,7 +881,7 @@ struct AnchoredImage {
     inset: Edges<Inset>,
     /// What it keeps clear of prose around itself.
     margin: Edges,
-    /// Which side of it prose sets on.
+    /// Which side of it the prose sets on.
     wrap: WrapFlow,
 }
 
@@ -890,10 +889,11 @@ impl AnchoredImage {
     /// What it keeps to itself on a page of this geometry: the image
     /// and the margins around it.
     ///
-    /// An inset is measured from the page area, the box the margins
-    /// leave, and a negative one reaches into the margin. Where both
-    /// insets of an axis are lengths the leading one places the box,
-    /// and where neither is the page area's own edge does.
+    /// An inset measures from the page area, the box the margins
+    /// leave, and a negative inset reaches into the margin. Where
+    /// both insets of an axis are lengths, the leading one places the
+    /// box. Where neither is a length, the box sits at the edge of
+    /// the page area.
     fn rect(&self, geometry: PageGeometry) -> Rect {
         let (left, top) = geometry.content_origin();
         let (width, height) = geometry.content_size();
@@ -942,11 +942,11 @@ impl AnchoredImage {
 
 /// The images one book anchors, and the page each one landed on.
 ///
-/// Which page an image falls on comes from the flow; where it sits on
+/// Which page an image falls on comes from the flow. Where it sits on
 /// that page comes from the sheet. The flow runs once with nothing in
-/// the way to answer the first question, and the answer is then held:
-/// an image narrows the page it was given, and the page it would be
-/// given if the flow ran again is not asked for.
+/// the way to answer the first question, and it then holds the
+/// answer. An image narrows the page it was given, and the flow never
+/// asks that page again.
 #[derive(Debug, Default)]
 pub(crate) struct AnchoredImages {
     all: Vec<AnchoredImage>,
@@ -973,7 +973,7 @@ impl AnchoredImages {
 }
 
 /// One image as the column being filled sees it: the rectangle it
-/// covers, and which side of it prose sets on.
+/// covers, and which side of it the prose sets on.
 #[derive(Debug, Clone, Copy)]
 struct Hole {
     rect: Rect,
@@ -981,8 +981,8 @@ struct Hole {
 }
 
 /// The bands a paragraph is set in beside an image: what each of them
-/// is left of the measure, and the space above one that had to move
-/// past an image covering the whole of it.
+/// is left of the measure, and the space above a band that had to
+/// move past an image that covers the whole of it.
 struct Profile {
     measure: Measure,
     gaps: Vec<f32>,
@@ -1224,8 +1224,8 @@ impl Builder<'_, '_> {
     }
 
     /// Marks where an image the sheet lifted out of the flow was
-    /// written. The fragment takes no space; the page the flow has
-    /// reached when it passes here is the page that carries the
+    /// written. The fragment takes no space. The page the flow
+    /// reaches when it passes here is the page that carries the
     /// image.
     fn anchor(&mut self, id: NodeId) {
         self.fragments
@@ -1272,8 +1272,12 @@ impl Builder<'_, '_> {
         }
     }
 
-    /// One paragraph or heading: its lines, the drop cap beside the
-    /// first of them, and where a page may end between them.
+    /// One paragraph's lines as fragments: alignment against each
+    /// band, the initial letter beside the first of them, and where a
+    /// page can end between them.
+    ///
+    /// `spec` is the profile the lines were broken to, and `gaps` the
+    /// space above a band the profile had to move past an image.
     fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
         let computed = self.styles().style(id).clone();
         let start = self.open(&computed, inlines, x, measure);
@@ -1878,8 +1882,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         });
         // A book with nothing anchored places one fragment at a time.
         // One with an image on the page places a paragraph at a time,
-        // because an image narrows the bands the paragraph is set in
-        // and the whole of it is broken again.
+        // because an image narrows the bands the paragraph is set in.
+        // The whole of it is then broken again.
         let mut index = 0;
         while index < fragments.len() {
             index = match fragments[index].reflow.as_ref() {
@@ -1896,31 +1900,31 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// Places one paragraph, breaking it again where an image narrows
-    /// the bands it would be set in.
+    /// Places one paragraph, and breaks it again where an image
+    /// narrows the bands it is set in.
     ///
     /// This is the one thing the flow measures. Everywhere else a
-    /// fragment arrives with its box decided; here the box depends on
-    /// where the paragraph lands, so the paragraph is broken again
-    /// through `LineLayout` and what comes back is what is placed.
+    /// fragment arrives with its box decided. Here the box depends on
+    /// where the paragraph lands. The flow breaks the paragraph again
+    /// through `LineLayout`, and what comes back is what it places.
     ///
-    /// A page boundary inside the paragraph starts it over: the lines
-    /// that crossed are taken off the fresh column and the rest of
-    /// the paragraph is set again from where they now sit. The page
-    /// index only rises, so the paragraph is broken at most twice on
-    /// any page it is tried on.
+    /// A page boundary inside the paragraph starts it over. The flow
+    /// takes the lines that crossed off the fresh column and sets the
+    /// rest of the paragraph again from where they now sit. The page
+    /// index only rises, so the flow breaks the paragraph at most
+    /// twice on any page it tries.
     fn paragraph(&mut self, original: &[Fragment], reflow: &Reflow) {
         let mut set: Cow<'_, [Fragment]> = Cow::Borrowed(original);
         let mut ends: Cow<'_, [usize]> = Cow::Borrowed(&reflow.ends);
         let mut at = 0;
         // Whether what is in hand was broken beside an image. The
-        // lines a section arrives with fit any page; lines broken
-        // against a notch fit the one they were broken on, so a page
+        // lines a section arrives with fit any page. Lines broken
+        // against a notch fit the page they were broken on, so a page
         // boundary under them is a break to do again.
         let mut narrowed = false;
         while at < set.len() {
-            // Where the line would sit is what the profile is read
-            // against, and it is where `place` is about to put it.
+            // The profile is read against where the line sits, which
+            // is where `place` is about to put it.
             let lead = if self.column_empty() {
                 0.0
             } else {
@@ -2004,16 +2008,16 @@ impl<'a, 'p> Flow<'a, 'p> {
             .collect()
     }
 
-    /// The bands a paragraph starting at `top` in the column being
+    /// The bands a paragraph that starts at `top` in the column being
     /// filled is set in, and `None` where no image reaches them.
     ///
-    /// An image covers whole bands: it is snapped to the paragraph's
-    /// own leading, so a line is either set beside it or clear of it.
-    /// A band it covers the whole of is a band nothing is set in, and
-    /// the paragraph goes on below it.
+    /// An image covers whole bands. The flow snaps it to the
+    /// paragraph's own leading, so a line is either set beside it or
+    /// clear of it. A band it covers the whole of is a band nothing
+    /// is set in, and the paragraph goes on below it.
     fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
-        // The bands are the paragraph's own, from its leading edge;
-        // the images are the column's. One of them has to move.
+        // The bands are the paragraph's own, from its leading edge.
+        // The images are the column's. One of them has to move.
         let holes: Vec<Hole> = self
             .holes()
             .into_iter()
@@ -2034,10 +2038,10 @@ impl<'a, 'p> Flow<'a, 'p> {
         // An initial letter is one box over the bands it is sunk
         // over, so it goes where they are clear for the whole of its
         // height, with room for a line beside it. Its own bands are
-        // read against the plain band and give up its column, rather
-        // than against the bands the profile was built with, which
-        // hold the column it would have taken with nothing in the
-        // way.
+        // read against the plain band and give up its column. The
+        // bands the profile was built with hold the column the letter
+        // takes with nothing in the way, which is not the column to
+        // read here.
         let column = |cap: &Cap, y: f32| {
             let bottom = y + cap.lines as f32 * leading;
             clear(plain, &holes, y, bottom, cap.reserved + narrowest)
@@ -2146,7 +2150,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
         }
         // Nothing laid on the page yet means the page the section is
-        // waiting for is this one. Either way the section has had its
+        // waiting for is this one. Either way the section had its
         // chance to claim one.
         if self.placed.is_empty()
             && let Some(slot) = self.pending_slot.take()
@@ -2536,7 +2540,7 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
 }
 
 /// What one band has left of it where the images on its page cover
-/// it: the stretches prose may be set in, in reading order.
+/// it: the stretches the prose can be set in, in reading order.
 ///
 /// A stretch narrower than `narrowest` holds nothing worth setting
 /// and is not one.
@@ -4643,7 +4647,7 @@ mod tests {
         );
     }
 
-    /// A book laid out with one image in it, which the sheet may
+    /// A book laid out with one image in it, which the sheet can
     /// anchor to the page. The image is 2in square at 96dpi.
     fn with_image(css: &str, sections: Vec<Section>) -> LayoutOutput {
         struct Png;
@@ -4684,12 +4688,12 @@ mod tests {
     /// The image the tests anchor is 144pt square.
     const IMAGE: f32 = 144.0;
 
-    /// Acceptance: prose sets around an image anchored to the page,
-    /// on the side the sheet asks for.
+    /// Acceptance: the prose sets around an image anchored to the
+    /// page, on the side the sheet asks for.
     ///
     /// The same image is anchored at either edge of the page area.
     /// `wrap-flow: end` puts the prose beside it at the end of the
-    /// line, and `wrap-flow: start` at the start; either way the
+    /// line, and `wrap-flow: start` at the start. Either way the
     /// lines below it run the full measure.
     #[test]
     fn prose_sets_around_an_anchored_image_on_the_side_the_sheet_asks_for() {
@@ -4773,7 +4777,7 @@ mod tests {
     }
 
     /// Acceptance: an image that asks for no wrapping is positioned
-    /// and painted, and the prose under it breaks as though it were
+    /// and painted, and the prose under it breaks as if the image is
     /// not there.
     #[test]
     fn an_image_that_asks_for_no_wrapping_leaves_the_prose_where_it_was() {
@@ -4832,8 +4836,8 @@ mod tests {
     }
 
     /// An initial letter goes where the bands it is sunk over are
-    /// clear. An image reaching those bands moves the letter along
-    /// with them rather than leaving it behind on the image.
+    /// clear. An image that reaches those bands moves the letter with
+    /// them rather than leaves it behind on the image.
     #[test]
     fn an_initial_letter_moves_to_the_bands_an_anchored_image_leaves() {
         let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
@@ -4908,8 +4912,8 @@ mod tests {
 
     /// Acceptance: the anchor map is settled with nothing in the way
     /// and then held. An image that narrows its own page can push the
-    /// paragraph it hangs from onto the next one, and it stays where
-    /// the settle put it rather than following.
+    /// paragraph it hangs from onto the next page. The image stays
+    /// where the settle put it.
     #[test]
     fn the_anchor_map_is_settled_once_and_held() {
         let css = |wrap| {
@@ -4939,7 +4943,7 @@ mod tests {
         );
     }
 
-    /// The two ways through the pipeline agree over a book with a
+    /// The two ways through the pipeline agree over a book with an
     /// image on it as well: the settle the flow runs first sees the
     /// same pages whether the sections were built one at a time or
     /// all at once.

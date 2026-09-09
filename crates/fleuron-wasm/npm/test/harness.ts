@@ -794,8 +794,8 @@ check(
   `${columns[turn]?.y} against ${columns[turn - 1]?.y}`,
 );
 
-// An anchored image: the sheet takes the map out of the text and
-// against the page, the prose of that page sets beside it, and the
+// An anchored image. The sheet takes the map out of the text and
+// against the page. The prose of that page sets beside it, and the
 // painter draws both where the display structure put them. The PDF
 // writer places the same items, so this is the preview half of that
 // agreement.

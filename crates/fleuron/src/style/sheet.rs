@@ -1361,7 +1361,7 @@ fn inset(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
 }
 
 /// `wrap-flow: auto | both | start | end`: which side of an exclusion
-/// prose sets on.
+/// the prose sets on.
 fn wrap_flow(input: &mut Parser<'_, '_>) -> Option<WrapFlow> {
     let keyword = input.expect_ident().ok()?.clone();
     match_ignore_ascii_case! { &keyword,

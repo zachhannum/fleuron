@@ -90,8 +90,8 @@ fn main() -> ExitCode {
 
 /// What the gate measures for one book: every page box, and the gate
 /// book once more with images anchored to it. An image is a different
-/// path through the flow rather than a different page box, so it is
-/// measured on one page box only.
+/// path through the flow rather than a different page box. The gate
+/// measures it on one page box only.
 fn measurements(divisions: &[Division], gate: bool) -> Vec<(Division, Illustration)> {
     let mut measurements: Vec<(Division, Illustration)> = divisions
         .iter()

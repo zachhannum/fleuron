@@ -417,11 +417,11 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
     }
 }
 
-/// The sheet names one image and anchors it to the page, and the
-/// image beside it stays where the built-in sheet put it: a brace run
-/// in the manuscript, a class selector in the author's CSS, one image
-/// against the page with the prose of that page wrapping down its
-/// right.
+/// The sheet names one image and anchors it to the page. The image
+/// beside it stays where the built-in sheet put it. The manuscript
+/// holds a brace run, and the author's CSS holds a class selector. One
+/// image sits against the page, with the prose of that page wrapped
+/// down its right.
 #[test]
 fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
     // What `fixtures/styled.css` leaves around the text: the wider
@@ -465,7 +465,8 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
         "the map is not against the foot of the page area: {map:?}",
     );
 
-    // Every line the map reaches is set clear of it, and something is.
+    // Every line the map reaches is set clear of it, and at least one
+    // line reaches it.
     let mut beside = 0;
     for item in &page.items {
         let DrawItem::Text {

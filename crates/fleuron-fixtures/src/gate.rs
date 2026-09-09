@@ -48,12 +48,12 @@ pub mod budget {
     /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
-    /// The same for a book with images on it. The one-shot call
-    /// builds every section twice: the pass that settles which page
-    /// each image lands on needs the whole book, and holding every
-    /// section's fragments for it would cost more memory than the
-    /// second build costs time. A session builds them once and
-    /// settles over what it has, which is what the worker does.
+    /// The same for a book with images on it. The one-shot call builds
+    /// every section twice. The pass that settles which page each image
+    /// lands on needs the whole book, and to hold every section's
+    /// fragments for it costs more memory than the second build costs
+    /// time. A session builds them once and settles over what it has,
+    /// which is what the worker does.
     pub const WASM_ANCHORED_LAYOUT: Duration = Duration::from_millis(900);
 
     /// Bytes a book-scale layout may allocate at its peak, over what the
@@ -76,12 +76,12 @@ pub mod budget {
     /// should see the page turn over rather than wait on it.
     pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
 
-    /// The same for a book with images anchored to its pages, which
-    /// is a longer way round. An image makes the page's own height an
-    /// input to line breaking, so a sheet that moves the page box
-    /// breaks every section again rather than re-fragmenting over the
-    /// lines it has, and the paragraphs beside an image are then
-    /// broken once more in the flow.
+    /// The same for a book with images anchored to its pages, which is
+    /// a longer way round. An image makes the page's own height an
+    /// input to line breaking. A sheet that moves the page box breaks
+    /// every section again rather than re-fragments over the lines it
+    /// has. The flow then breaks the paragraphs beside an image once
+    /// more.
     pub const ANCHORED_RERENDER: Duration = Duration::from_millis(500);
 }
 
@@ -122,8 +122,8 @@ impl Division {
 /// What a measurement anchors to the page beside the prose.
 ///
 /// A book with an image on it pays for two things a book without one
-/// does not: the pass that settles which page each image lands on,
-/// and the paragraphs beside an image being broken again.
+/// does not: the pass that settles which page each image lands on, and
+/// the second break of the paragraphs beside an image.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Illustration {
     /// Prose alone.

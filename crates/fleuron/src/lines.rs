@@ -1072,7 +1072,7 @@ impl<'a> LineLayout<'a> {
 
     /// The same, handing back the shaped paragraph beside the lines.
     ///
-    /// A caller that may have to break this paragraph again keeps it:
+    /// A caller that can break this paragraph again keeps it.
     /// [`LineLayout::rebreak`] sets the same text to a different
     /// profile without shaping it twice.
     pub fn layout_shaped(
@@ -1094,8 +1094,8 @@ impl<'a> LineLayout<'a> {
     /// whole of it.
     ///
     /// The style over the opening line is not held to the text it
-    /// covered before: the profile decides where the lines end, and a
-    /// line pinned to a width it no longer has would run past it.
+    /// covered before. The profile decides where the lines end. A
+    /// line pinned to a width it no longer has runs past that width.
     pub fn rebreak(&self, shaped: &Shaped, measure: &Measure, from: usize) -> Broken {
         self.break_shaped(shaped, measure, from, None)
     }
@@ -1700,16 +1700,14 @@ fn hang_start(mark: char) -> f32 {
     }
 }
 
-/// One paragraph's total-fit pass: break list in, chosen line ends
-/// out.
 /// A paragraph shaped once, and everything about it the measure does
 /// not decide: the flattened text, the runs it shaped into, and the
 /// style and options it was set with.
 ///
-/// Shaping is the expensive half of setting a paragraph and it does
-/// not depend on where the lines end. A caller that may have to break
-/// the same paragraph again against a different profile keeps this
-/// and breaks it through [`LineLayout::rebreak`].
+/// Shaping is the expensive half of setting a paragraph, and it does
+/// not depend on where the lines end. A caller that can break the
+/// same paragraph again against a different profile keeps this. It
+/// breaks the paragraph through [`LineLayout::rebreak`].
 pub struct Shaped {
     flat: FlatParagraph,
     spans: Vec<ShapedSpan>,
@@ -1743,13 +1741,15 @@ pub struct Broken {
     /// The lines, in reading order.
     pub lines: Vec<Line>,
     /// Where each line ended, as the paragraph counts the places it
-    /// may be broken. Breaking again from the end of a line sets the
-    /// text that line left.
+    /// can be broken. A break from the end of a line sets the text
+    /// that line left.
     pub ends: Vec<usize>,
     /// Where the first line ended in the shaped text.
     extent: usize,
 }
 
+/// One paragraph's total-fit pass: break list in, chosen line ends
+/// out.
 struct Breaker<'a> {
     breaks: &'a [Break],
     widths: &'a Widths,
@@ -1766,8 +1766,8 @@ struct Breaker<'a> {
     /// Font units a hyphenated break is charged for.
     hyphen: f32,
     options: LineBreakOptions,
-    /// The break the first line starts from. Everything before it
-    /// has been set already.
+    /// The break the first line starts from. Everything before it is
+    /// set already.
     from: usize,
     /// Where the opening line has to end, when an opening style
     /// covers exactly that much of the text.
@@ -2404,7 +2404,7 @@ mod tests {
         layout.layout(&inlines, body(), measure_pt, options)
     }
 
-    /// Text as one paragraph would draw it, run by run.
+    /// Text as one paragraph draws it, run by run.
     fn drawn(lines: &[Line]) -> Vec<String> {
         lines
             .iter()
@@ -2417,9 +2417,9 @@ mod tests {
             .collect()
     }
 
-    /// A paragraph shaped once breaks to the lines the same text
-    /// broke to when it was shaped and broken together, and breaking
-    /// again from the end of one line sets the text that line left.
+    /// A paragraph shaped once breaks to the same lines as the same
+    /// text shaped and broken together. A break from the end of one
+    /// line sets the text that line left.
     #[test]
     fn a_shaped_paragraph_breaks_again_to_the_same_lines() {
         let layout = LineLayout::new(registry());
@@ -2445,8 +2445,8 @@ mod tests {
     }
 
     /// The same paragraph broken to a narrower measure holds the same
-    /// words in more lines, and no line runs past the measure it was
-    /// set to.
+    /// words in more lines. No line runs past the measure it was set
+    /// to.
     #[test]
     fn a_shaped_paragraph_breaks_again_to_a_narrower_measure() {
         let layout = LineLayout::new(registry());

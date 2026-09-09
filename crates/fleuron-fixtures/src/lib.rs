@@ -33,8 +33,8 @@ pub fn styles(book: &fleuron::content::Book) -> fleuron::style::StyleTree {
 }
 
 /// The same on the page box `division` asks for, with whatever
-/// `illustration` anchors to it. The undivided, bare pair is the built-in
-/// sheet alone.
+/// `illustration` anchors to it. The undivided, bare pair is the
+/// built-in sheet alone.
 pub fn styles_on(
     book: &fleuron::content::Book,
     division: gate::Division,

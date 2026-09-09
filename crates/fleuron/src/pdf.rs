@@ -830,16 +830,13 @@ mod tests {
         );
     }
 
-    /// An image nothing supplied is no draw item, and one warning
-    /// naming the url.
     /// Acceptance: the preview and the export of a wrapped page
     /// agree.
     ///
-    /// Both painters are handed the same display structure, so the
-    /// question is whether the export puts what is on it where it
-    /// says. The image lands at the box the item carries, and the
-    /// line set beside it starts at the x and the baseline the item
-    /// carries.
+    /// Both painters read the same display structure. The question is
+    /// whether the export puts each item where that structure says.
+    /// The image lands at the box its item carries. The line beside
+    /// it starts at the x and the baseline its own item carries.
     #[test]
     fn a_wrapped_page_exports_where_the_display_structure_put_it() {
         let mut book = book(
@@ -891,8 +888,8 @@ mod tests {
 
         let pdf = content(&with_images(&output, &table, &Metadata::default()));
         // krilla draws an image into the unit square, so the box is
-        // the transform: the size the item carries, at the corner it
-        // carries, measured up from the foot of the page.
+        // the transform. It carries the size and the corner of the
+        // item, measured up from the foot of the page.
         let box_ = format!(
             "{} 0 0 {} {} {} cm",
             image.2,
@@ -904,7 +901,7 @@ mod tests {
             pdf.contains(&box_),
             "the image is not placed at {box_}:\n{pdf}",
         );
-        // Text is written under a flip, so the line is set at the x
+        // krilla writes text under a flip, so the line sits at the x
         // and the baseline the item carries.
         let text = format!("1 0 0 -1 {x} {baseline} Tm");
         assert!(
@@ -913,6 +910,8 @@ mod tests {
         );
     }
 
+    /// An image nothing supplied is no draw item, and one warning
+    /// names the url.
     #[test]
     fn an_image_no_host_supplied_is_reported_and_skipped() {
         let mut book = Book {

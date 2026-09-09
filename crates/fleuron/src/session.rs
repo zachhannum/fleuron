@@ -737,10 +737,9 @@ fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOutput {
 /// was.
 ///
 /// A book that anchors an image to the page carries the exclusions as
-/// well. Their geometry is the flow's to resolve, but a section whose
-/// paragraphs may have to be set again beside one keeps what it takes
-/// to set them, so a book that gains its first image builds its
-/// sections again.
+/// well. The flow resolves their geometry. A section whose paragraphs
+/// can be set again beside an image keeps what it takes to set them.
+/// A book that gains its first image builds its sections again.
 #[derive(Debug, Clone, Copy)]
 struct Against {
     measure: f32,
@@ -1091,8 +1090,8 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         counter_reset,
         initial_letter,
         // Whether an image is in the flow decides whether the section
-        // holds a fragment for it or an anchor. Where it then sits on
-        // the page, and which side prose sets on, are the flow's.
+        // holds a fragment for it or an anchor. Where the image then
+        // sits, and which side the prose sets on, belong to the flow.
         position,
         inset: _,
         wrap_flow: _,
@@ -1571,10 +1570,10 @@ mod tests {
         session
     }
 
-    /// A session sets the prose around an image the sheet anchors,
-    /// and a sheet that moves the image builds the sections it
-    /// narrows again: where an image sits is not something the lines
-    /// beside it can be kept through.
+    /// A session sets the prose around an image the sheet anchors. A
+    /// sheet that moves the image builds the narrowed sections again,
+    /// because the lines beside an image cannot be kept when the
+    /// image moves.
     #[test]
     fn a_sheet_that_moves_an_anchored_image_builds_the_sections_again() {
         let mut book = book(vec![section(
@@ -1639,9 +1638,9 @@ mod tests {
         let before = session.stages();
         assert_eq!(before.lines, 3, "one break per section, once");
 
-        // A sheet that says something about anchoring, over a book
-        // with no image to anchor: nothing it says reaches a node, so
-        // no stage runs again.
+        // This sheet says something about anchoring, but the book
+        // has no image to anchor. Nothing the sheet says reaches a
+        // node, so no stage runs again.
         session.set_style(sheets("img { position: absolute; wrap-flow: end }"));
         session.preview();
         assert_eq!(
@@ -1653,7 +1652,7 @@ mod tests {
             "a sheet that reaches no node reached a stage",
         );
 
-        // The page box moving still re-fragments over the lines it
+        // A page box that moves still re-fragments over the lines it
         // has.
         session.set_style(sheets("@page { margin-bottom: 108pt }"));
         session.preview();

@@ -1,9 +1,9 @@
 //! The corpus books with images anchored to the page.
 //!
 //! A book with images anchored to its pages reaches a path a book
-//! without them never does: the flow settles where each one lands,
+//! without them never does. The flow settles where each image lands,
 //! places it, and breaks the paragraphs beside it again. The gate
-//! measures the same book both ways so the cost of that path is a
+//! measures the same book both ways, so the cost of that path is a
 //! number rather than a guess.
 
 use fleuron::content::{Attributes, Block, Book, NodeId};
@@ -47,7 +47,7 @@ pub fn illustrated(book: &Book) -> Book {
     illustrated
 }
 
-/// The image itself, as a table layout can size from.
+/// The image itself, in an asset table that layout can size from.
 pub fn assets(book: &Book) -> Assets {
     struct Image;
     impl ImageLoader for Image {

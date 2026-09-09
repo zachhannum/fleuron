@@ -67,9 +67,9 @@ h3 {
   border-bottom: 1pt solid #8a7a5c;
 }
 
-/* The map is one image rather than every image: the class the
+/* The map is one image rather than every image. The class the
    manuscript wrote on it takes this one out of the text and against
-   the page, with the prose of that page wrapping down its right. The
+   the page, and the prose of that page wraps down its right. The
    ornament that closes the chapter stays where the built-in sheet
    put it. */
 .map {
