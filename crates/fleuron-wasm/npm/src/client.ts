@@ -6,6 +6,7 @@
 import {
   isFailed,
   isRendered,
+  type Folios,
   type NodeSource,
   type Op,
   type Request,
@@ -152,6 +153,26 @@ export class Client {
     return this.ask<NodeSource | null>({ ops: [], want: 'source', node });
   }
 
+  /**
+   * The folios each of these nodes' content is set on: one answer
+   * per node, in the order asked about. `null` for a node the book
+   * does not hold, one the engine synthesized, or one whose content
+   * reaches no page.
+   *
+   * This is the direction a reflow invalidates. Setting a book in
+   * another face repaginates it, and a host that puts the reader
+   * back where they were, or turns to a chapter, or names the
+   * chapter on screen, asks where a node went. No page comes back
+   * with the answer.
+   *
+   * A node covers itself and everything under it, so a heading
+   * answers with the page its own text is on, and a chapter with the
+   * pages it runs across.
+   */
+  async foliosOf(nodes: number[]): Promise<(Folios | null)[]> {
+    return this.ask<(Folios | null)[]>({ ops: [], want: 'folios', nodes });
+  }
+
   /** Applies inputs and asks for nothing back. */
   async apply(ops: Op[]): Promise<void> {
     await this.send({ ops });
@@ -185,7 +206,14 @@ export class Client {
   }
 
   /** One question, and the JSON the worker answered it with. */
-  private async ask<T>(what: { ops: Op[]; want: Want; source?: string; byte?: number; node?: number }): Promise<T> {
+  private async ask<T>(what: {
+    ops: Op[];
+    want: Want;
+    source?: string;
+    byte?: number;
+    node?: number;
+    nodes?: number[];
+  }): Promise<T> {
     const response = await this.send(what);
     if (!isRendered(response)) {
       throw new Error(`the engine answered no ${what.want}`);
@@ -201,6 +229,7 @@ export class Client {
     source?: string;
     byte?: number;
     node?: number;
+    nodes?: number[];
     first?: number;
     count?: number;
   }): Promise<Response> {
@@ -214,6 +243,7 @@ export class Client {
       ...(what.source === undefined ? {} : { source: what.source }),
       ...(what.byte === undefined ? {} : { byte: what.byte }),
       ...(what.node === undefined ? {} : { node: what.node }),
+      ...(what.nodes === undefined ? {} : { nodes: what.nodes }),
       ...(what.first === undefined ? {} : { first: what.first }),
       ...(what.count === undefined ? {} : { count: what.count }),
     };

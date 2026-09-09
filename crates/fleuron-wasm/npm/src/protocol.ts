@@ -78,15 +78,24 @@ export interface NodeSource {
   end: number;
 }
 
+/** The pages one node's content is set on. */
+export interface Folios {
+  /** The folio the node's content begins on. */
+  first: number;
+  /** The folio it ends on, the same number for a node that fits on one page. */
+  last: number;
+}
+
 /**
  * What a request wants back, if anything: a display structure, a PDF,
  * the file a face was registered from, the node one byte of a source
- * was read into, or the source one node was read from.
+ * was read into, the source one node was read from, or the folios
+ * some nodes are set on.
  *
  * The first two are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
  */
-export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source';
+export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source' | 'folios';
 
 /** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
@@ -106,6 +115,8 @@ export interface Request {
   byte?: number;
   /** Which node `want: 'source'` is asking about. */
   node?: number;
+  /** Which nodes `want: 'folios'` is asking about. */
+  nodes?: number[];
   /**
    * With `count`, which pages of `want: 'preview'`'s answer to send:
    * `first` pages counting from 0, `count` of them. Leaving either

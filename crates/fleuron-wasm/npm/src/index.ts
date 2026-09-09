@@ -19,6 +19,7 @@ export {
   styleOp,
   type Applied,
   type Failed,
+  type Folios,
   type Metadata,
   type NodeSource,
   type Op,
