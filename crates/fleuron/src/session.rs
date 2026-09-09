@@ -1571,6 +1571,39 @@ mod tests {
         session
     }
 
+    /// Acceptance: a book with nothing anchored to the page breaks
+    /// its lines as often as it did before exclusions existed. The
+    /// pass that settles where a plate lands is a cost only a book
+    /// with a plate pays.
+    #[test]
+    fn a_book_with_nothing_anchored_breaks_its_lines_as_often_as_ever() {
+        let mut session = three_chapters();
+        let before = session.stages();
+        assert_eq!(before.lines, 3, "one break per section, once");
+
+        // A sheet that says something about anchoring, over a book
+        // with no image to anchor: nothing it says reaches a node, so
+        // no stage runs again.
+        session.set_style(sheets("img { position: absolute; wrap-flow: end }"));
+        session.preview();
+        assert_eq!(
+            session.stages(),
+            Stages {
+                style: before.style + 1,
+                ..before
+            },
+            "a sheet that reaches no node reached a stage",
+        );
+
+        // The page box moving still re-fragments over the lines it
+        // has.
+        session.set_style(sheets("@page { margin-bottom: 108pt }"));
+        session.preview();
+        let after = session.stages();
+        assert_eq!(after.lines, before.lines, "the lines were broken again");
+        assert_eq!(after.flow, before.flow + 1, "fragmentation did not run");
+    }
+
     /// Naming a book costs nothing: a rename that leaves the
     /// hyphenation where it was reaches no stage between the content
     /// tree and the page, so the pages already laid out are the ones

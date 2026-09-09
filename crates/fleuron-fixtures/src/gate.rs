@@ -67,6 +67,14 @@ pub mod budget {
     /// the lines it already has, and a reader dragging a margin
     /// should see the page turn over rather than wait on it.
     pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
+
+    /// The same for a book with plates anchored to its pages, which
+    /// is a longer way round. An image makes the page's own height an
+    /// input to line breaking, so a sheet that moves the page box
+    /// breaks every section again rather than re-fragmenting over the
+    /// lines it has, and the paragraphs beside a plate are then
+    /// broken once more in the flow.
+    pub const PLATED_RERENDER: Duration = Duration::from_millis(300);
 }
 
 /// The page box a book is measured on. The budgets are the same on
@@ -99,6 +107,41 @@ impl Division {
         match self {
             Division::Undivided => "one column",
             Division::TwoColumn => "two columns",
+        }
+    }
+}
+
+/// What a measurement anchors to the page beside the prose.
+///
+/// A book with a plate on it pays for two things a book without one
+/// does not: the pass that settles which page each plate lands on,
+/// and the paragraphs beside a plate being broken again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Plating {
+    /// Prose alone.
+    Bare,
+    /// A plate at the head of every chapter, with the prose beside it
+    /// set around it.
+    Plated,
+}
+
+impl Plating {
+    /// Both, in the order the gate reports them.
+    pub const ALL: [Plating; 2] = [Plating::Bare, Plating::Plated];
+
+    /// The author CSS this plating adds to the sheet.
+    pub fn css(self) -> &'static str {
+        match self {
+            Plating::Bare => "",
+            Plating::Plated => crate::plates::CSS,
+        }
+    }
+
+    /// What reports call it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Plating::Bare => "no plates",
+            Plating::Plated => "a plate a chapter",
         }
     }
 }
@@ -151,6 +194,8 @@ pub struct Report {
     pub corpus: Corpus,
     /// The page box it was measured on.
     pub division: Division,
+    /// What it anchored to the page.
+    pub plating: Plating,
     /// Pages the book fragmented into.
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
@@ -195,6 +240,14 @@ impl Report {
         self.parse + self.style + self.layout + self.pdf
     }
 
+    /// What a re-render of this book is allowed to cost.
+    fn rerender_budget(&self) -> Duration {
+        match self.plating {
+            Plating::Bare => budget::STYLE_RERENDER,
+            Plating::Plated => budget::PLATED_RERENDER,
+        }
+    }
+
     /// The budgets this report is checked against on `target`.
     pub fn checks(&self, target: Target) -> Vec<Check> {
         let (label, ceiling) = target.time_budget();
@@ -224,7 +277,7 @@ impl Report {
             Check {
                 label: "re-render",
                 measured: self.style_rerender.as_secs_f64() * 1000.0,
-                ceiling: budget::STYLE_RERENDER.as_secs_f64() * 1000.0,
+                ceiling: self.rerender_budget().as_secs_f64() * 1000.0,
                 unit: "ms",
             },
             Check {
@@ -290,20 +343,30 @@ impl fmt::Display for Check {
 /// work. Memory goes the other way — a ceiling is only met if it is
 /// met every time.
 pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
-    measure_on(corpus, Division::Undivided, registry, runs)
+    measure_on(corpus, Division::Undivided, Plating::Bare, registry, runs)
 }
 
-/// The same on a page box the sheet divides.
+/// The same on a page box the sheet divides, with or without plates
+/// anchored to it.
 pub fn measure_on(
     corpus: Corpus,
     division: Division,
+    plating: Plating,
     registry: &FontRegistry,
     runs: usize,
 ) -> Report {
     let markdown = corpus.markdown();
-    let book = corpus.book();
-    let styles = crate::styles_on(&book, division);
-    let paginator = Paginator::new(registry, &styles);
+    let bare = corpus.book();
+    let book = match plating {
+        Plating::Bare => bare,
+        Plating::Plated => crate::plates::plated(&bare),
+    };
+    let styles = crate::styles_on(&book, division, plating);
+    let assets = match plating {
+        Plating::Bare => Assets::none(),
+        Plating::Plated => crate::plates::assets(&book),
+    };
+    let paginator = Paginator::with_assets(registry, &styles, &assets);
 
     let mut parse = Duration::MAX;
     let mut style = Duration::MAX;
@@ -327,7 +390,7 @@ pub fn measure_on(
         parse = parse.min(start.elapsed());
 
         let start = Instant::now();
-        black_box(crate::styles_on(&book, division));
+        black_box(crate::styles_on(&book, division, plating));
         style = style.min(start.elapsed());
 
         let start = Instant::now();
@@ -350,7 +413,7 @@ pub fn measure_on(
 
         let (output, peak) = crate::alloc::measure(|| {
             let start = Instant::now();
-            let output = fleuron::layout::layout_book(&book, &styles, registry, &Assets::none());
+            let output = fleuron::layout::layout_book(&book, &styles, registry, &assets);
             layout = layout.min(start.elapsed());
             output
         });
@@ -365,7 +428,7 @@ pub fn measure_on(
 
         let start = Instant::now();
         let bytes = black_box(
-            pdf::write(&output, registry, &Assets::none(), &book.metadata)
+            pdf::write(&output, registry, &assets, &book.metadata)
                 .expect("fixture book writes PDF"),
         );
         pdf_time = pdf_time.min(start.elapsed());
@@ -377,13 +440,11 @@ pub fn measure_on(
         // ceiling is about what it builds over one, so the tree is
         // cloned before the measurement opens and moved in.
         let owned = book.clone();
+        let css = sheet(division, plating);
         let (mut session, peak) = crate::alloc::measure(|| {
-            let mut session = Session::new(registry);
+            let mut session = Session::with_assets(registry, &assets);
             session.set_content(owned);
-            session.set_style(Stylesheets::parse(&[Source::author(
-                "gate.css",
-                division.css(),
-            )]));
+            session.set_style(Stylesheets::parse(&[Source::author("gate.css", &css)]));
             session.preview();
             session
         });
@@ -396,7 +457,7 @@ pub fn measure_on(
         // re-render rather than a cache that was already warm.
         let css = format!(
             "{}@page {{ margin-bottom: {}pt }}",
-            division.css(),
+            sheet(division, plating),
             60 + index
         );
         let sheets = Stylesheets::parse(&[Source::author("gate.css", &css)]);
@@ -409,6 +470,7 @@ pub fn measure_on(
     Report {
         corpus,
         division,
+        plating,
         pages,
         lines,
         parse,
@@ -427,6 +489,11 @@ pub fn measure_on(
     }
 }
 
+/// The author CSS one measurement is laid out under.
+fn sheet(division: Division, plating: Plating) -> String {
+    format!("{}{}", division.css(), plating.css())
+}
+
 /// FNV-1a over the encoded display structure: a number two runs can be
 /// compared on without a hash crate in the harness.
 fn digest(bytes: &[u8]) -> u64 {
@@ -442,9 +509,10 @@ impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "{} — {}, {} pages, {} lines, {} KiB of PDF",
+            "{} — {}, {}, {} pages, {} lines, {} KiB of PDF",
             self.corpus.slug(),
             self.division.name(),
+            self.plating.name(),
             self.pages,
             self.lines,
             self.pdf_bytes / 1024,
@@ -527,6 +595,7 @@ mod tests {
         let report = Report {
             corpus: Corpus::GATE,
             division: Division::Undivided,
+            plating: Plating::Bare,
             pages: 300,
             lines: 10_000,
             parse: Duration::from_millis(30),

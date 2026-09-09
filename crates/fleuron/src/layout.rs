@@ -464,7 +464,7 @@ impl<'a> Paginator<'a> {
         let anchors = if plates.is_empty() {
             BTreeMap::new()
         } else {
-            let mut flow = Flow::new(self, &bare);
+            let mut flow = Flow::settling(self, &bare);
             for section in &book.sections {
                 let fragments = self.section_fragments(section);
                 flow.section(section, &fragments);
@@ -526,7 +526,7 @@ impl<'a> Paginator<'a> {
         let plates = if plates.is_empty() {
             Plates::default()
         } else {
-            let mut flow = Flow::new(self, &bare);
+            let mut flow = Flow::settling(self, &bare);
             for (section, fragments) in book.sections.iter().zip(&sections) {
                 flow.section(section, fragments);
             }
@@ -1782,6 +1782,10 @@ struct Flow<'a, 'p> {
     anchors: BTreeMap<NodeId, usize>,
     /// Anchors waiting for the fragment whose page they take.
     pending_anchors: Vec<NodeId>,
+    /// Whether what is placed is painted. The pass that settles where
+    /// the anchors land keeps no pages, so it paints nothing: which
+    /// page a fragment falls on is a question about heights.
+    paints: bool,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -1810,6 +1814,15 @@ impl<'a, 'p> Flow<'a, 'p> {
             plates,
             anchors: BTreeMap::new(),
             pending_anchors: Vec::new(),
+            paints: true,
+        }
+    }
+
+    /// A flow that answers where the anchors land and nothing else.
+    fn settling(paginator: &'p Paginator<'a>, bare: &'p Plates) -> Flow<'a, 'p> {
+        Flow {
+            paints: false,
+            ..Flow::new(paginator, bare)
         }
     }
 
@@ -1960,7 +1973,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         let narrowest = reflow.shaped.style().size;
         let mut spans = Vec::new();
         let mut gaps = Vec::new();
-        let mut narrowed = false;
+        // How far down the plate reaches. Every band under it is the
+        // band it would have been, and the profile ends at the last
+        // one that is not: the shorter the profile, the fewer states
+        // the break has to keep.
+        let mut narrowed = (0, 0);
         let (mut y, mut band, mut gap) = (top, 0, 0.0);
         while y < self.height {
             let base = reflow.base.at(band);
@@ -1977,10 +1994,8 @@ impl<'a, 'p> Flow<'a, 'p> {
                 }
                 gap += below - y;
                 y = below;
-                narrowed = true;
                 continue;
             };
-            narrowed = narrowed || free.len() > 1 || *last != (base.origin, base.width);
             for (origin, width) in rest {
                 spans.push(Span {
                     origin: *origin,
@@ -1992,8 +2007,17 @@ impl<'a, 'p> Flow<'a, 'p> {
             gaps.push(std::mem::take(&mut gap));
             y += leading;
             band += 1;
+            if free.len() > 1 || *last != (base.origin, base.width) || gaps[band - 1] != 0.0 {
+                narrowed = (spans.len(), band);
+            }
         }
-        narrowed.then(|| Profile {
+        let (spans_to, bands_to) = narrowed;
+        if bands_to == 0 {
+            return None;
+        }
+        spans.truncate(spans_to);
+        gaps.truncate(bands_to);
+        Some(Profile {
             measure: Measure::new(spans, reflow.base.rest()),
             gaps,
         })
@@ -2119,6 +2143,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let (x, y) = self.origin();
         let top = self.cursor + lead + fragment.fixed;
         let items = match &fragment.piece {
+            _ if !self.paints => Vec::new(),
             Piece::Line { line, cap } => {
                 let baseline = y + top + line.box_.baseline;
                 let mut items = self.paginator.text_items(line, x + fragment.x, baseline);
@@ -2294,9 +2319,12 @@ impl<'a, 'p> Flow<'a, 'p> {
         // Backgrounds, borders, column rules and plates go in front
         // of the page's text: `DrawItem` order is paint order, and
         // the display structure has no layers.
-        let mut items = self.decorate(&placed);
-        items.append(&mut self.rules(&placed));
-        items.append(&mut self.plate_items());
+        let mut items = Vec::new();
+        if self.paints {
+            items = self.decorate(&placed);
+            items.append(&mut self.rules(&placed));
+            items.append(&mut self.plate_items());
+        }
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
         for placed in placed {

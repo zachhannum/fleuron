@@ -8,7 +8,7 @@ use fleuron::images::Assets;
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page};
 use fleuron::style::PageGeometry;
-use fleuron_fixtures::gate::Division;
+use fleuron_fixtures::gate::{Division, Plating};
 use fleuron_fixtures::{Corpus, registry, styles_on};
 
 /// The page box the gate novel is set on, which is the same on both
@@ -50,7 +50,7 @@ fn glyphs(page: &Page, geometry: PageGeometry, foot: f32) -> Vec<(u32, f32, f32)
 #[test]
 fn a_novel_in_two_columns_fills_every_page_column_by_column() {
     let book = Corpus::GATE.book();
-    let styles = styles_on(&book, Division::TwoColumn);
+    let styles = styles_on(&book, Division::TwoColumn, Plating::Bare);
     let output = layout_book(&book, &styles, registry(), &Assets::none());
     let mut divided = 0;
     for page in &output.pages {
