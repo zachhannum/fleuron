@@ -11,9 +11,9 @@ The display structure crosses as [postcard](https://postcard.jamesmunns.com/), a
 
 Inputs are a different contract. [The content tree](../reference/content-tree.md) is a Rust type a frontend builds, and it serializes to JSON, which is how a host hands one over with the `content` op.
 
-A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks the fields in the order they were written and cannot detect a change to that order. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` rejects a version it does not know, and `wireVersion()` is the version the module writes.
+A version leads the encoding, and a host reads it before anything else. The encoding is positional: a reader walks the fields in the order they were written and cannot detect a change to that order. So a module and a host that disagree about the shape of the display structure have to fail at the first byte. `decodeDisplayList` rejects an unknown version, and `wireVersion()` is the version the module writes.
 
-`WIRE_VERSION` is the shape of what crosses, and it moves whenever the ops or the display structure change shape. What it refuses is a display structure it cannot read. An op in a shape the module no longer takes is answered on the error channel instead. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest. The two move independently.
+`WIRE_VERSION` is the shape of what crosses, and it moves whenever either the ops or the display structure changes shape. What it refuses is a display structure it cannot read. An op in a shape the module no longer takes is answered on the error channel instead. `VERSION` is the release the package was published at, and it is the one to quote in a bug report or to pin in a host's manifest. The two move independently.
 
 ## What crosses
 

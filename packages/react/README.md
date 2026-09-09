@@ -22,7 +22,7 @@ warnings and the PDF export.
 
 There is no engine logic in here. This package hands `fleuron`'s
 `Preview` an element and passes props along to it. React stays out of
-the binding package, so a host that does not use React downloads none
-of it.
+the binding package, and deleting this one leaves a preview a plain
+page can still mount.
 
 MIT or Apache-2.0.

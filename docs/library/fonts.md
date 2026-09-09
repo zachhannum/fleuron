@@ -40,7 +40,7 @@ impl FontLoader for Files {
 sheets.load_fonts(&mut registry, &Files(PathBuf::from("assets")));
 ```
 
-`NoFonts` is a loader that answers `None` for every url, for a host with nothing to read from, such as a sandbox with no filesystem. Only the bundled faces are used.
+`NoFonts` is a loader that returns `None` for every url, for a host with nothing to read from, such as a sandbox with no filesystem. Only the bundled faces are used.
 
 ```rust
 use fleuron::style::NoFonts;
@@ -48,7 +48,7 @@ use fleuron::style::NoFonts;
 sheets.load_fonts(&mut registry, &NoFonts);
 ```
 
-Load the fonts before compiling. A computed style can only resolve to a face already in the registry. A [session](sessions.md) borrows the registry for its whole life.
+Load the fonts before compiling. A computed style can only resolve to a font face the registry has already loaded. A [session](sessions.md) borrows the registry for its whole life.
 
 A face registers under the family the stylesheet declared rather than the name inside the file, so a stylesheet's selectors always match the name it wrote.
 
@@ -74,7 +74,7 @@ Declaring `font-style` or `font-weight` on the `@font-face` rule overrides that,
 }
 ```
 
-Both rules name one family, so a stylesheet asking for `"Author Serif"` reaches both styles, and an emphasis in the document resolves to the italic.
+Both rules name one family, so a stylesheet asking for `"Author Serif"` can use both styles, and an emphasis in the document resolves to the italic.
 
 ## Matching
 
@@ -86,7 +86,7 @@ body {
 }
 ```
 
-If `"Author Serif"` is registered it answers, and `"Fallback Serif"` is never consulted, even where the emphasis on the page needs an italic that `"Author Serif"` has no style for. The stack names families to try in order, and the family that answers has to supply the style.
+If `"Author Serif"` is registered it answers, and `"Fallback Serif"` is never consulted, even when the emphasis on the page needs an italic that `"Author Serif"` has no style for. The stack names families to try in order, and the family that answers has to supply the style.
 
 Within a family, slope decides before weight. A family with an italic style never answers an italic request with the upright one, whatever weights are available. Weight then follows CSS: between 400 and 500 the search looks up before it looks down, and outside that range it looks away from it.
 
@@ -107,8 +107,8 @@ let scale = 11.0 / f32::from(metrics.units_per_em);
 let ascender = f32::from(metrics.ascender) * scale;
 ```
 
-Both answer `None` for a family the registry does not contain. `face.attributes` is what was found rather than what was asked for, so a caller can see that a family answered a request for an italic with an upright.
+Both return `None` for a family the registry does not contain. `face.attributes` is what was found rather than what was asked for, so a caller can see that a family answered a request for an italic with an upright.
 
-Ascender, descender, and line gap come from the OS/2 typographic values where the face has them, and from hhea otherwise. Descender is negative, which is how the tables record it. Cap height is zero where the face declares none.
+Ascender, descender, and line gap come from the OS/2 typographic values when the face has them, and from hhea otherwise. Descender is negative, which is how the tables record it. Cap height is zero when the face declares none.
 
 These are what `line-height: normal` resolves against. A face whose vertical metrics disagree with its optical size gives lines that are too loose or too tight, and a `line-height` in the stylesheet is the fix.

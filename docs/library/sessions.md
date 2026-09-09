@@ -28,7 +28,7 @@ let bytes = session.export()?;       // the same run, as PDF
 | a property the engine models nothing of | the display structure | nothing |
 | margin box content, page counters | the page boxes | the margin boxes |
 | `@page` geometry, counters, named pages | the lines | fragmentation, then the margin boxes |
-| font, size, line width, line height | the style tree | line breaking, and everything under it |
+| face, size, line width, line height | the style tree | line breaking, and everything under it |
 | one file's content | every other section's lines | that file's sections, then fragmentation |
 | the whole book | nothing | all of it |
 
@@ -59,11 +59,11 @@ A content edit re-breaks only the sections it changed, and the rest keep the lin
 
 ## What is in the cache
 
-The cache stores line breaks, shaped glyph runs, and advance widths, and no coordinates at all. Where a line breaks depends on the line width, the font and the text, and none of those depend on pagination. Which page a line lands on and at what baseline is fragmentation's answer, and fragmentation runs every time. A chapter that an edit above it pushed onto a different page is painted at new coordinates from the same breaks.
+The cache stores line breaks, shaped glyph runs, and advance widths, and no coordinates at all. Where a line breaks depends on the line width, the font and the text, and none of those depend on pagination. Which page a line lands on and at what baseline is fragmentation's answer, and fragmentation runs every time. A chapter that an edit above it pushed onto a different page paints at new coordinates with the same breaks.
 
 Two conditions have to be true for those breaks to be reusable, and the session checks both.
 
-The first is that the book has one line width. Page rules with different widths make where a line breaks depend on which page it lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are that case, so is a named page set narrower, and so is one that divides its content box into a different number of columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread, so both sides come to the same width.
+The first is a single line width. Page rules with different widths make where a line breaks depend on which page it lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are that case, so is a named page set narrower, and so is one that divides its content box into a different number of columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread, so both sides come to the same width.
 
 The second is that no prose depends on pagination. `counter(page)` and `string()` are legal only inside a margin box, so nothing in the text can depend on where the text fell. An index, or a table of contents with real page numbers, would make inline text depend on pagination and pagination on line breaking, and that has no fixed point a cache can serve.
 

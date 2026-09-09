@@ -7,7 +7,7 @@ The content tree is what the engine lays out: a semantic document rather than ma
 
 Most callers never build one. [Markdown](markdown.mdx) is the usual input and the frontend produces the tree from it. The types are public for a host whose source is already structured, such as a CMS or a docx converter, which builds a `Book` in Rust directly.
 
-The tree serializes, internally tagged, so the shape maps one to one onto [mdast](https://github.com/syntax-tree/mdast). That is an output only. `fleuron manuscript.md --dump-tree` reads back what the frontend made of a manuscript, and nothing parses a tree back into a `Book`.
+The tree serializes, internally tagged, so the shape maps one-to-one onto [mdast](https://github.com/syntax-tree/mdast). That is an output only. `fleuron manuscript.md --dump-tree` reads back what the frontend made of a manuscript, and nothing parses a tree back into a `Book`.
 
 ## Shape
 
@@ -55,7 +55,7 @@ All three are optional. A book with no metadata lays out.
 
 ## `sections`
 
-A section is a chapter or a file. It is the unit of markdown input, and it is what a diagnostic names as the source of a problem. Sections are in reading order, and each one opens a new page.
+A section is a chapter or a file. It is the unit of markdown input and the unit of source attribution for diagnostics. Sections are in reading order, and each one opens a new page.
 
 | field | |
 |---|---|
@@ -111,13 +111,13 @@ Call it once, after building the tree. Calling it again renumbers. A [session](.
 
 ## Source positions
 
-`position` is a 1-based line and column into the markdown the frontend read the node out of, exactly as its parser reported them. Paired with the section's `source`, it is what a diagnostic names: `chapter-01.md:12:3`.
+`position` is a 1-based line and column into the markdown the frontend read the node out of, exactly as its parser reported them. Paired with the section's `source`, it is what a diagnostic points at: `chapter-01.md:12:3`.
 
 Positions are diagnostic data and never layout input, so a missing one never fails a run. A node with no position degrades to the bare file name, and a node with neither still warns, without a location.
 
 ## Where a node was read from
 
-`span` is the other half: the bytes of `source` the node was read from, markup and all. A file and the text of the nodes read from it are different bytes, since markup is not text, so a span is the node's extent rather than a letter-by-letter map. One byte of the file lands on the node written there rather than on a letter of it. A node that contains another was read from a stretch of the file that contains its own, and the innermost nodes cover the file between them, so every byte belongs to exactly one node.
+`span` is the other half: the bytes of `source` the node was read from, markup and all. A file and the text of the nodes read from it are different bytes, since markup is not text, so a span is the node's extent rather than a letter-by-letter map. One byte of the file lands on the node written there rather than on a letter of it. A node that contains another was read from a stretch of the file that contains its own, and the innermost nodes tile the file, so every byte belongs to exactly one node.
 
 Spans answer two questions:
 
@@ -126,7 +126,7 @@ Spans answer two questions:
 | `Book::node_at(source, byte)` | The node one byte of one source was read into, innermost first: a byte of prose answers with the run it was typed into, a byte of markup with the construct it opens, a byte between two blocks with the section around them. |
 | `Book::source_of(node)` | The source a node was read from, and the bytes of it. |
 
-Together they take a cursor onto a page and back. A cursor in the manuscript becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page the cursor is set on. A run under the pointer becomes a place in the manuscript. Only the sections read from the source being asked about are searched, so one file's cursor is answered by one file's nodes.
+Together they take a cursor onto a page and back. A cursor in the manuscript becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page the cursor is set on. A run under the pointer goes the other way. Only the sections read from the source being asked about are searched, so one file's cursor is answered by one file's nodes.
 
 Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host asks again after an edit rather than reusing an id it already has.
 

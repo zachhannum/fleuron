@@ -1,9 +1,9 @@
 ---
 title: Display structure
-description: Every type in the engine's output, and what a painter does with it.
+description: The engine's only product, and the contract every painter shares.
 ---
 
-The display structure is what the engine produces: every glyph, rule, and image of a book, at the position layout decided for it. A painter draws from it and works nothing out for itself, so a preview and an export cannot disagree. This page describes every type in it.
+The display structure is what the engine produces. Painters consume it and never re-derive layout, so a preview and an export cannot disagree. This page describes every type in it.
 
 Coordinates are in points, with the origin at the top left of the page.
 
@@ -80,7 +80,7 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 
 `source` is what the author wrote, where `text-transform` or small capitals made that differ from what was shaped. It is empty where the two are the same. Extraction, selection, and copy and paste return it, so a chapter title set in capitals is read back in the case it was written in. `source_map` records the offset in `source` of every byte boundary of `text`, and is empty alongside it. A glyph's range taken through the map is the source that glyph stands for.
 
-`origin` is where the run was written: the content node it was shaped from, and the bytes of that node's own text it stands for. The runs that name one node cover it between them, so a byte of the manuscript falls in exactly one of them, and a paragraph broken over a page turn gives two ranges that meet at the break. A hyphen that a line break introduced stands for nothing anybody wrote, so its range is empty. `origin` is `None` on text the engine wrote itself: a page number, a running head, the ornament on a scene break.
+`origin` is where the run was written: the content node it was shaped from, and the bytes of that node's own text it stands for. The runs that name one node tile it, so a byte of the manuscript falls in exactly one of them, and a paragraph broken over a page turn gives two ranges that meet at the break. A hyphen that a line break introduced stands for nothing anybody wrote, so its range is empty. `origin` is `None` on text the engine wrote itself: a page number, a running head, the ornament on a scene break.
 
 `color` is what the run is filled with: three eight-bit channels, and no alpha. A run whose stylesheet named no color is black.
 
