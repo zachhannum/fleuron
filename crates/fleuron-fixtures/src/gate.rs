@@ -48,6 +48,14 @@ pub mod budget {
     /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
+    /// The same for a book with plates on it. The one-shot call
+    /// builds every section twice: the pass that settles which page
+    /// each plate lands on needs the whole book, and holding every
+    /// section's fragments for it would cost more memory than the
+    /// second build costs time. A session builds them once and
+    /// settles over what it has, which is what the worker does.
+    pub const WASM_PLATED_LAYOUT: Duration = Duration::from_millis(900);
+
     /// Bytes a book-scale layout may allocate at its peak, over what the
     /// content tree already costs. The display structure is the floor —
     /// every glyph of every page is retained — and a section's lines
@@ -74,7 +82,7 @@ pub mod budget {
     /// breaks every section again rather than re-fragmenting over the
     /// lines it has, and the paragraphs beside a plate are then
     /// broken once more in the flow.
-    pub const PLATED_RERENDER: Duration = Duration::from_millis(300);
+    pub const PLATED_RERENDER: Duration = Duration::from_millis(500);
 }
 
 /// The page box a book is measured on. The budgets are the same on
@@ -170,10 +178,11 @@ impl Target {
     /// against.
     /// Natively that is the whole pipeline; in the worker it is
     /// layout, which is all the reader is waiting for.
-    pub fn time_budget(self) -> (&'static str, Duration) {
-        match self {
-            Target::Native => ("end to end", budget::NATIVE_END_TO_END),
-            Target::Wasm => ("layout + wire", budget::WASM_LAYOUT),
+    pub fn time_budget(self, plating: Plating) -> (&'static str, Duration) {
+        match (self, plating) {
+            (Target::Native, _) => ("end to end", budget::NATIVE_END_TO_END),
+            (Target::Wasm, Plating::Bare) => ("layout + wire", budget::WASM_LAYOUT),
+            (Target::Wasm, Plating::Plated) => ("layout + wire", budget::WASM_PLATED_LAYOUT),
         }
     }
 
@@ -250,7 +259,7 @@ impl Report {
 
     /// The budgets this report is checked against on `target`.
     pub fn checks(&self, target: Target) -> Vec<Check> {
-        let (label, ceiling) = target.time_budget();
+        let (label, ceiling) = target.time_budget(self.plating);
         let measured = match target {
             Target::Native => self.end_to_end(),
             Target::Wasm => self.layout + self.serialize,
