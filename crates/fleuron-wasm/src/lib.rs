@@ -338,6 +338,32 @@ impl Session {
         )
     }
 
+    /// Where each of these nodes' content is set, as JSON: one
+    /// answer per node, in the order asked about, each
+    /// `{"first": 38, "last": 52, "at": 37, "count": 15}` or `null`.
+    ///
+    /// This is the direction a reflow invalidates. A new face
+    /// repaginates the book, and a host that puts the reader back
+    /// where they were, or turns to a chapter, or names the chapter
+    /// on screen, asks where a node went. No page crosses to answer
+    /// it.
+    ///
+    /// `first` and `last` are the folios, which is what a host puts
+    /// on screen. `at` and `count` are where those pages fall in the
+    /// book, counting from 0, which is what
+    /// [`Session::preview`]'s own `first` and `count` take. A page
+    /// counter that restarts makes the two differ.
+    ///
+    /// A node covers itself and everything under it, so a heading
+    /// answers with the page its own text is on. `null` for a node
+    /// the book does not hold, one the engine synthesized, or one
+    /// whose content reaches no page.
+    #[wasm_bindgen(js_name = nodeFolios)]
+    pub fn node_folios(&mut self, nodes: Vec<u32>) -> Result<String, JsError> {
+        let nodes: Vec<NodeId> = nodes.into_iter().map(NodeId::new).collect();
+        serde_json::to_string(&self.engine.folios(&nodes)).map_err(js_error)
+    }
+
     /// How many times each stage has run since the session was made,
     /// as `[style, lines, flow, paint]`.
     ///

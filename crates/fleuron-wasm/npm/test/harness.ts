@@ -20,6 +20,7 @@ import { Worker } from 'node:worker_threads';
 import {
   Client,
   Session,
+  isRendered,
   WIRE_VERSION,
   decodeDisplayList,
   faceFamily,
@@ -27,6 +28,7 @@ import {
   paintPage,
   styleOp,
   wireVersion,
+  type Folios,
   type LayoutOutput,
   type Op,
   type Page,
@@ -333,6 +335,37 @@ function misplacedSelection(page: Page, output: LayoutOutput): string | null {
 }
 
 /**
+ * Where a node is named directly, walked the way a host would have to
+ * walk it without a question to ask: the pages a run of that node is
+ * set on, and the pages that name it as a section, by their place in
+ * the book.
+ */
+function pagesByWalking(pages: Page[], node: number): number[] {
+  return pages.flatMap((page, at) =>
+    page.sections.includes(node) ||
+    page.items.some((item) => item.kind === 'text' && item.origin?.node === node)
+      ? [at]
+      : [],
+  );
+}
+
+/** The same, as the answer the question gives for it. */
+function foliosByWalking(pages: Page[], node: number): Folios | null {
+  const on = pagesByWalking(pages, node);
+  const at = on[0];
+  const last = on[on.length - 1];
+  if (at === undefined || last === undefined) {
+    return null;
+  }
+  return {
+    first: pages[at]?.number ?? 0,
+    last: pages[last]?.number ?? 0,
+    at,
+    count: last - at + 1,
+  };
+}
+
+/**
  * The source ranges as they arrive over the wire: the runs that name
  * one node cover it from its first byte on, without a gap and
  * without overlapping, so a cursor in the manuscript falls in exactly
@@ -411,6 +444,99 @@ check(
 check(
   'a node the book does not have was read from nothing',
   (await client.sourceOf(0)) === null,
+);
+
+// Where a node went. The fourth direction: the folios a node's
+// content is set on, for several nodes at once, answered without a
+// page crossing the wall.
+const chapters = [...new Set(preview.pages.flatMap((page) => page.sections))];
+const missing = [0, 4294967295];
+const asked = [...chapters, run.node, ...missing];
+const folioReplies: Response[] = [];
+const tapFolios = (response: Response): void => {
+  folioReplies.push(response);
+};
+worker.on('message', tapFolios);
+const folios = await client.foliosOf(asked);
+worker.off('message', tapFolios);
+check('every node asked about is answered, in the order asked', folios.length === asked.length);
+check(
+  'a node answers with the first and last folio its content is set on',
+  asked.every(
+    (node, at) =>
+      JSON.stringify(folios[at] ?? null) ===
+      JSON.stringify(foliosByWalking(preview.pages, node)),
+  ),
+  JSON.stringify(folios),
+);
+check(
+  'a chapter that runs across pages answers with both of its ends',
+  folios.some((answer) => answer !== null && answer !== undefined && answer.first < answer.last),
+);
+check(
+  'a node the book does not hold answers with nothing rather than failing the call',
+  missing.every((_, at) => folios[chapters.length + 1 + at] === null),
+);
+
+// A page carries about 17 KB of glyphs. The answer is two numbers a
+// node, and the point of asking is not to pay for a page to learn
+// them.
+const onePage = await client.render([], 'preview', { first: 0, count: 1 });
+const folioBytes = folioReplies
+  .filter(isRendered)
+  .reduce((bytes, response) => bytes + response.bytes.byteLength, 0);
+check(
+  'answering costs no page over the wire',
+  onePage !== null && folioBytes > 0 && folioBytes < onePage.byteLength,
+  `${folioBytes} bytes for ${asked.length} nodes, against ${onePage?.byteLength ?? 0} for one page`,
+);
+
+// A folio is printed on a page and a page is fetched by its place in
+// the book, and the two part company wherever the page counter
+// restarts. The answer carries both, so the range it names is the
+// range that brings back the pages it named the folios of.
+const chapter = folios[0];
+if (chapter === null || chapter === undefined) {
+  throw new Error('the fixture book opens with a chapter that reaches no page');
+}
+const turned = await client.preview([], { first: chapter.at, count: chapter.count });
+check(
+  'the range the answer names fetches the pages whose folios it named',
+  turned !== null &&
+    turned.pages.length === chapter.count &&
+    turned.pages[0]?.number === chapter.first &&
+    turned.pages[turned.pages.length - 1]?.number === chapter.last,
+  `${JSON.stringify(chapter)} fetched ${turned?.pages.length ?? 0} pages, ${turned?.pages[0]?.number ?? 0} to ${turned?.pages[turned.pages.length - 1]?.number ?? 0}`,
+);
+
+// A heading's runs are shaped from the text inside it, so no run
+// names the heading itself. The node above the run is answered from
+// what is under it.
+const above = run.node - 1;
+const held = await client.sourceOf(above);
+const [reached] = await client.foliosOf([above]);
+check(
+  'a node no run names answers with the page its content is on',
+  held !== null &&
+    foliosByWalking(preview.pages, above) === null &&
+    reached !== null &&
+    reached !== undefined &&
+    reached.at <= run.page &&
+    run.page < reached.at + reached.count,
+);
+
+// Two questions asked together are both answered: neither overtakes
+// the other, and a render in the same batch overtakes neither.
+const [alone, alongside, rendered] = await Promise.all([
+  client.foliosOf(chapters),
+  client.foliosOf([run.node]),
+  client.preview([{ op: 'markdown', name: 'gulliver-excerpt.md', text: markdown }]),
+]);
+check(
+  'a question is neither overtaken by a render nor overtakes one',
+  JSON.stringify(alone) === JSON.stringify(folios.slice(0, chapters.length)) &&
+    JSON.stringify(alongside) === JSON.stringify([folios[chapters.length]]) &&
+    rendered !== null,
 );
 
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);

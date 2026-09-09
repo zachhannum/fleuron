@@ -132,6 +132,8 @@ export class Engine {
         return answer(this.session.nodeAt(request.source ?? '', request.byte ?? 0) ?? null);
       case 'source':
         return answer(this.session.nodeSource(request.node ?? 0) ?? null);
+      case 'folios':
+        return answer(this.session.nodeFolios(new Uint32Array(request.nodes ?? [])));
       default:
         return this.session.preview(request.first, request.count);
     }
@@ -203,10 +205,11 @@ function answer(json: string | number | null): Uint8Array {
 /**
  * Whether a request is a question rather than a render: asking for a
  * face's bytes, asking where a node was read from or what was read at
- * a byte, or asking which pages of the book as it stands (no `ops`
- * of its own) fall in a range. None of them overtakes a render nor
- * is overtaken by one, or by a sibling question, since none says
- * what the last edit produced.
+ * a byte, asking which folios some nodes are set on, or asking which
+ * pages of the book as it stands (no `ops` of its own) fall in a
+ * range. None of them overtakes a render nor is overtaken by one, or
+ * by a sibling question, since none says what the last edit
+ * produced.
  *
  * A range alone does not make a question: an edit that also names a
  * range, to fetch the one page it changed rather than the whole
@@ -218,6 +221,7 @@ function isQuestion(request: Request): boolean {
     request.want === 'font' ||
     request.want === 'node' ||
     request.want === 'source' ||
+    request.want === 'folios' ||
     (request.want === 'preview' &&
       request.ops.length === 0 &&
       request.first !== undefined &&

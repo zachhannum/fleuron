@@ -64,6 +64,36 @@ A content edit re-breaks only the sections it changed. The rest keep their lines
 and the whole book is fragmented from the top. Page assembly then resolves counters, recto opens, 
 running heads and blank pages.
 
+## Which pages a node is on
+
+`Session::folios(nodes)` answers where each node's content is set, one answer per node, in the order asked about.
+
+A new face repaginates the book. The chapter that opened on page 41 opens on 38, and a reader who was looking at page 41 is now looking at words that were somewhere else a moment ago. This is the question a host asks to put the reader back, to turn to a chapter, or to name the chapter on screen.
+
+An answer names four numbers, because what is printed on a page and where that page falls in the book are two different things. `counter-reset: page` restarts the count, so page 1 of a chapter can be the fortieth page of the book.
+
+| | |
+|---|---|
+| `first`, `last` | The folios the content runs between, as printed. This is what a host puts on screen. |
+| `at`, `count` | Where those pages fall in the book, counting from 0. These are the numbers a host fetches the pages by. |
+
+The following example prints the page range of every chapter of a book:
+
+```rust
+let chapters: Vec<NodeId> = session.book().sections.iter().map(|section| section.id).collect();
+for (chapter, folios) in chapters.iter().zip(session.folios(&chapters)) {
+    if let Some(folios) = folios {
+        println!("node {} runs from page {} to {}", chapter.get(), folios.first, folios.last);
+    }
+}
+```
+
+A node covers itself and everything under it. A heading's text is a node inside the heading, so the heading answers with the page that text is on, and a chapter answers with the pages it runs across.
+
+The answer is nothing for a node the book does not hold, for one the engine synthesized, and for one whose content reaches no page.
+
+The answer is a walk over the pages the session already holds. Asking runs a stage only when an edit has left one to run.
+
 ## What is in the cache
 
 Breaks, shaped glyph runs and advance widths, and no coordinates at all. Where a line breaks 
