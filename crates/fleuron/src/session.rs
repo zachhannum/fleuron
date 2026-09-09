@@ -1571,6 +1571,64 @@ mod tests {
         session
     }
 
+    /// A session sets the prose around a plate the sheet anchors,
+    /// and a sheet that moves the plate builds the sections it
+    /// narrows again: where a plate sits is not something the lines
+    /// beside it can be kept through.
+    #[test]
+    fn a_sheet_that_moves_a_plate_builds_the_sections_again() {
+        let mut book = book(vec![section(
+            "one.md",
+            [
+                vec![Block::Image {
+                    id: NodeId::UNASSIGNED,
+                    url: "plate.jpg".into(),
+                    alt: "a map".into(),
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                }],
+                prose("alpha", 6),
+            ]
+            .concat(),
+        )]);
+        book.assign_node_ids();
+        let mut session =
+            Session::owning(crate::fonts::bundled_registry().expect("bundled font parses"));
+        session.set_content(book);
+        session.add_image("plate.jpg", MAP.to_vec()).unwrap();
+        session.set_style(sheets(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
+        ));
+        let output = session.preview();
+        let plate = output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Image { x, w, .. } => Some((*x, *w)),
+                _ => None,
+            })
+            .expect("the plate is painted");
+        let beside = output.pages[0]
+            .items
+            .iter()
+            .filter(|item| matches!(item, DrawItem::Text { x, .. } if *x >= plate.0 + plate.1))
+            .count();
+        assert!(beside > 0, "no line is set beside the plate");
+
+        let before = session.stages();
+        session.set_style(sheets(
+            "img { position: absolute; top: 0; right: 0; margin-left: 12pt; wrap-flow: start }",
+        ));
+        session.preview();
+        assert_eq!(
+            session.stages().lines,
+            before.lines + 1,
+            "the section was kept over a plate that moved",
+        );
+    }
+
     /// Acceptance: a book with nothing anchored to the page breaks
     /// its lines as often as it did before exclusions existed. The
     /// pass that settles where a plate lands is a cost only a book

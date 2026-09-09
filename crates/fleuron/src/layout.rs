@@ -851,7 +851,7 @@ impl Rect {
     }
 
     /// The same rectangle read from another origin.
-    fn from(self, origin: (f32, f32)) -> Rect {
+    fn from_origin(self, origin: (f32, f32)) -> Rect {
         Rect {
             x: self.x - origin.0,
             y: self.y - origin.1,
@@ -967,8 +967,8 @@ impl Plates {
     }
 }
 
-/// What one band of a page has left of it, and which side of the
-/// plate that cleared it prose sets on.
+/// One plate as the column being filled sees it: the rectangle it
+/// covers, and which side of it prose sets on.
 #[derive(Debug, Clone, Copy)]
 struct Hole {
     rect: Rect,
@@ -1991,7 +1991,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             .map(|at| &self.plates.all[*at])
             .filter(|plate| plate.wrap != WrapFlow::Auto)
             .map(|plate| Hole {
-                rect: plate.rect(geometry).from(origin),
+                rect: plate.rect(geometry).from_origin(origin),
                 wrap: plate.wrap,
             })
             .collect()
@@ -2005,30 +2005,59 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// A band it covers the whole of is a band nothing is set in, and
     /// the paragraph goes on below it.
     fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
-        let holes = self.holes();
+        // The bands are the paragraph's own, from its leading edge;
+        // the plates are the column's. One of them has to move.
+        let holes: Vec<Hole> = self
+            .holes()
+            .into_iter()
+            .map(|hole| Hole {
+                rect: hole.rect.from_origin((reflow.setting.x, 0.0)),
+                ..hole
+            })
+            .collect();
         if holes.is_empty() {
             return None;
         }
         let leading = reflow.leading.max(1.0);
         let narrowest = reflow.shaped.style().size;
+        // The band every band past the profile is set in, and the one
+        // the profile has to list a band that differs from.
+        let plain = reflow.base.rest();
         let mut spans = Vec::new();
         let mut gaps = Vec::new();
-        // How far down the plate reaches. Every band under it is the
-        // band it would have been, and the profile ends at the last
-        // one that is not: the shorter the profile, the fewer states
-        // the break has to keep.
-        let mut narrowed = (0, 0);
+        // Whether a plate reached any band at all, and how far down
+        // the profile has to be listed: the shorter it is, the fewer
+        // states the break has to keep.
+        let mut reached = false;
+        let mut listed = (0, 0);
         let (mut y, mut band, mut gap) = (top, 0, 0.0);
         while y < self.height {
             // A first-line indent and a drop cap belong to the line
             // the paragraph opens on. What is left of it opens on a
             // band like any other.
-            let base = if opening {
-                reflow.base.at(band)
+            let base = if opening { reflow.base.at(band) } else { plain };
+            // The initial letter sits at the head of the bands it is
+            // sunk over. A plate standing where the letter goes is
+            // not something the letter can be set beside, so the
+            // paragraph starts under the plate instead.
+            let letter = reflow
+                .setting
+                .cap
+                .as_ref()
+                .filter(|cap| opening && band < cap.lines);
+            let over_letter = letter.is_some_and(|cap| {
+                holes.iter().any(|hole| {
+                    hole.rect.y < y + leading
+                        && hole.rect.bottom() > y
+                        && hole.rect.x < cap.reserved
+                        && hole.rect.right() > 0.0
+                })
+            });
+            let free = if over_letter {
+                Vec::new()
             } else {
-                reflow.base.rest()
+                clear(base, &holes, y, y + leading, narrowest)
             };
-            let free = clear(base, &holes, y, y + leading, narrowest);
             let Some((last, rest)) = free.split_last() else {
                 // Nothing is set in a band a plate covers the whole
                 // of, so the next band is the first one under it.
@@ -2051,21 +2080,23 @@ impl<'a, 'p> Flow<'a, 'p> {
                 });
             }
             spans.push(Span::band(last.0, last.1));
-            gaps.push(std::mem::take(&mut gap));
-            y += leading;
+            let above = std::mem::take(&mut gap);
+            gaps.push(above);
             band += 1;
-            if free.len() > 1 || *last != (base.origin, base.width) || gaps[band - 1] != 0.0 {
-                narrowed = (spans.len(), band);
+            y += leading;
+            let alone = |span: Span| free.len() == 1 && *last == (span.origin, span.width);
+            reached = reached || above != 0.0 || !alone(base);
+            if above != 0.0 || !alone(plain) {
+                listed = (spans.len(), band);
             }
         }
-        let (spans_to, bands_to) = narrowed;
-        if bands_to == 0 {
+        if !reached {
             return None;
         }
-        spans.truncate(spans_to);
-        gaps.truncate(bands_to);
+        spans.truncate(listed.0);
+        gaps.truncate(listed.1);
         Some(Profile {
-            measure: Measure::new(spans, reflow.base.rest()),
+            measure: Measure::new(spans, plain),
             gaps,
         })
     }
@@ -4723,6 +4754,80 @@ mod tests {
         );
     }
 
+    /// A plate reaches the prose of a quotation as it reaches any
+    /// other prose: the bands a quotation is set in are its own, and
+    /// the plate is the page's.
+    #[test]
+    fn a_plate_narrows_a_quotation_from_its_own_edge() {
+        let quote = Block::Blockquote {
+            id: NodeId::UNASSIGNED,
+            blocks: long_prose(3),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let output = plated(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end } \
+             blockquote { margin-left: 36pt }",
+            vec![section(vec![plate(), quote])],
+        );
+        let page = &output.pages[0];
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        for (baseline, runs) in content_lines(page)
+            .iter()
+            .filter(|(baseline, _)| *baseline < 54.0 + PLATE)
+        {
+            assert!(
+                runs[0].0 >= left + PLATE + 12.0 - 1e-3,
+                "the quoted line at {baseline} starts at {}, over the plate",
+                runs[0].0,
+            );
+        }
+    }
+
+    /// An initial letter is not set beside a plate standing where the
+    /// letter goes. The paragraph starts under the plate instead, and
+    /// the letter keeps the lines it is sunk over.
+    #[test]
+    fn a_paragraph_whose_initial_letter_meets_a_plate_starts_under_it() {
+        let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
+                   wrap-flow: end } p::first-letter { initial-letter: 3 }";
+        let output = plated(
+            css,
+            vec![section(vec![plate(), paragraph(&"prose ".repeat(60))])],
+        );
+        let page = &output.pages[0];
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let lines = content_lines(page);
+        let (baseline, runs) = lines.first().expect("the paragraph is set");
+        assert!(
+            *baseline > 54.0 + PLATE,
+            "the paragraph opens at {baseline}, beside the plate",
+        );
+        assert!(
+            runs[0].0 > left,
+            "the first line is not shortened for the letter",
+        );
+        // The letter itself is set at the paragraph's own edge, and
+        // sunk, so it is the one item on the page below its own line
+        // and larger than the prose.
+        let letter = content_items(page)
+            .into_iter()
+            .find(|(_, _, size, _)| *size > body_size())
+            .expect("the initial letter is drawn");
+        assert!(
+            (letter.0 - left).abs() < 1e-3,
+            "the initial letter is at {} rather than {left}",
+            letter.0,
+        );
+    }
+
     /// Acceptance: the anchor map is settled with nothing in the way
     /// and then held. A plate that narrows its own page can push the
     /// paragraph it hangs from onto the next one, and it stays where
@@ -4754,6 +4859,45 @@ mod tests {
             tagged_lines(&wrapped.pages[0]).len() < tagged_lines(&settled.pages[0]).len(),
             "the plate did not narrow the page it landed on",
         );
+    }
+
+    /// The two ways through the pipeline agree over a book with a
+    /// plate on it as well: the settle the flow runs first sees the
+    /// same pages whether the sections were built one at a time or
+    /// all at once.
+    #[test]
+    fn the_stages_compose_over_a_plated_book_too() {
+        struct Png;
+        impl crate::images::ImageLoader for Png {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "plate.png").then(|| png(192, 192))
+            }
+        }
+        let book = book_of(vec![
+            section([vec![plate()], long_prose(20)].concat()),
+            section([vec![heading("Two"), plate()], long_prose(16)].concat()),
+        ]);
+        let styles = styled(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
+            &book,
+        );
+        let assets = crate::images::Assets::probe(&book, &Png);
+        let paginator = Paginator::with_assets(registry(), &styles, &assets);
+
+        let staged: Vec<Vec<Fragment>> = book
+            .sections
+            .iter()
+            .map(|section| paginator.section_fragments(section))
+            .collect();
+        let by_stage = paginator.flow(&book, &staged);
+        let in_one = paginator.paginate(&book);
+
+        assert!(in_one.len() > 2, "a book worth splitting");
+        assert!(paginator.rebreaks() > 0, "no paragraph met a plate");
+        assert_eq!(by_stage.len(), in_one.len());
+        for (staged, whole) in by_stage.iter().zip(&in_one) {
+            assert_eq!(format!("{:?}", staged.items), format!("{:?}", whole.items));
+        }
     }
 
     /// Acceptance: the paragraph beside a plate is broken by total
