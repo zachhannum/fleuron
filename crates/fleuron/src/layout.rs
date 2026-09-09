@@ -795,17 +795,22 @@ struct Setting {
     widows: usize,
     /// The initial letter beside the lines it is sunk over.
     cap: Option<Cap>,
+    /// Where the letter goes, from `x`. A plate in the way of the
+    /// bands it is sunk over moves it along with them.
+    cap_x: f32,
 }
 
 impl Setting {
-    /// The same, for the line a paragraph opens on or for the line
-    /// the rest of it opens on.
-    fn opening(&self, opening: bool) -> Cow<'_, Setting> {
-        if opening {
+    /// The same over the bands a profile left: an initial letter
+    /// belongs to the line a paragraph opens on rather than to the
+    /// line the rest of it opens on, and a plate may have moved it.
+    fn wrapped(&self, opening: bool, letter: Option<f32>) -> Cow<'_, Setting> {
+        if opening && letter.is_none() {
             return Cow::Borrowed(self);
         }
         Cow::Owned(Setting {
-            cap: None,
+            cap: opening.then(|| self.cap.clone()).flatten(),
+            cap_x: letter.unwrap_or(0.0),
             ..self.clone()
         })
     }
@@ -981,6 +986,9 @@ struct Hole {
 struct Profile {
     measure: Measure,
     gaps: Vec<f32>,
+    /// Where the initial letter goes, from the paragraph's leading
+    /// edge, when a plate moved it.
+    letter: Option<f32>,
 }
 
 impl Profile {
@@ -994,6 +1002,7 @@ impl Profile {
                 Measure::new(Vec::new(), reflow.base.rest())
             },
             gaps: Vec::new(),
+            letter: None,
         }
     }
 }
@@ -1322,6 +1331,7 @@ impl Builder<'_, '_> {
             orphans: computed.orphans as usize,
             widows: computed.widows as usize,
             cap: cap.map(|(cap, _)| cap),
+            cap_x: 0.0,
         };
         let fragments = set_lines(self.paginator, broken.lines, &spec, &[], &setting);
         let reflow = shaped.filter(|_| self.paginator.wraps()).map(|shaped| {
@@ -1444,7 +1454,7 @@ fn set_lines(
     };
     let mut cap = setting.cap.as_ref().map(|cap| DropCap {
         line: cap.line.clone(),
-        x: setting.x,
+        x: setting.x + setting.cap_x,
         drop,
     });
 
@@ -1935,10 +1945,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                     broken.lines,
                     &profile.measure,
                     &profile.gaps,
-                    // The initial letter belongs to the line the
-                    // paragraph opens on, not to the line the rest of
-                    // it opens on.
-                    &reflow.setting.opening(from == 0),
+                    &reflow.setting.wrapped(from == 0, profile.letter),
                 );
                 carry_over(&mut fresh, &set[at..]);
                 set = Cow::Owned(fresh);
@@ -2023,6 +2030,21 @@ impl<'a, 'p> Flow<'a, 'p> {
         // The band every band past the profile is set in, and the one
         // the profile has to list a band that differs from.
         let plain = reflow.base.rest();
+        let cap = reflow.setting.cap.as_ref().filter(|_| opening);
+        // An initial letter is one box over the bands it is sunk
+        // over, so it goes where they are clear for the whole of its
+        // height, with room for a line beside it. Its own bands are
+        // read against the plain band and give up its column, rather
+        // than against the bands the profile was built with, which
+        // hold the column it would have taken with nothing in the
+        // way.
+        let column = |cap: &Cap, y: f32| {
+            let bottom = y + cap.lines as f32 * leading;
+            clear(plain, &holes, y, bottom, cap.reserved + narrowest)
+                .first()
+                .map(|(origin, _)| *origin)
+        };
+        let mut letter = None;
         let mut spans = Vec::new();
         let mut gaps = Vec::new();
         // Whether a plate reached any band at all, and how far down
@@ -2032,32 +2054,29 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut listed = (0, 0);
         let (mut y, mut band, mut gap) = (top, 0, 0.0);
         while y < self.height {
+            let sunk = cap.filter(|cap| band < cap.lines);
             // A first-line indent and a drop cap belong to the line
             // the paragraph opens on. What is left of it opens on a
             // band like any other.
-            let base = if opening { reflow.base.at(band) } else { plain };
-            // The initial letter sits at the head of the bands it is
-            // sunk over. A plate standing where the letter goes is
-            // not something the letter can be set beside, so the
-            // paragraph starts under the plate instead.
-            let letter = reflow
-                .setting
-                .cap
-                .as_ref()
-                .filter(|cap| opening && band < cap.lines);
-            let over_letter = letter.is_some_and(|cap| {
-                holes.iter().any(|hole| {
-                    hole.rect.y < y + leading
-                        && hole.rect.bottom() > y
-                        && hole.rect.x < cap.reserved
-                        && hole.rect.right() > 0.0
-                })
-            });
-            let free = if over_letter {
-                Vec::new()
-            } else {
-                clear(base, &holes, y, y + leading, narrowest)
+            let base = match (opening, sunk) {
+                (_, Some(_)) => plain,
+                (true, None) => reflow.base.at(band),
+                (false, None) => plain,
             };
+            let mut free = clear(base, &holes, y, y + leading, narrowest);
+            if let Some(cap) = sunk {
+                // Where the letter goes is settled on the first of
+                // its bands and held for the rest of them.
+                let at = match letter {
+                    Some(at) => Some(at),
+                    None => column(cap, y),
+                };
+                free = match at {
+                    Some(at) => taking(free, at, cap.reserved, narrowest),
+                    None => Vec::new(),
+                };
+                letter = at;
+            }
             let Some((last, rest)) = free.split_last() else {
                 // Nothing is set in a band a plate covers the whole
                 // of, so the next band is the first one under it.
@@ -2085,7 +2104,11 @@ impl<'a, 'p> Flow<'a, 'p> {
             band += 1;
             y += leading;
             let alone = |span: Span| free.len() == 1 && *last == (span.origin, span.width);
-            reached = reached || above != 0.0 || !alone(base);
+            let unmoved = match (opening, sunk) {
+                (true, Some(_)) => alone(reflow.base.at(band - 1)),
+                _ => alone(base),
+            };
+            reached = reached || above != 0.0 || !unmoved;
             if above != 0.0 || !alone(plain) {
                 listed = (spans.len(), band);
             }
@@ -2098,6 +2121,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         Some(Profile {
             measure: Measure::new(spans, plain),
             gaps,
+            letter,
         })
     }
 
@@ -2541,6 +2565,25 @@ fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> V
     }
     free.into_iter()
         .map(|(start, end)| (start, end - start))
+        .collect()
+}
+
+/// What one band has left of it once the initial letter beside it
+/// takes its column, which starts at `at` and runs `reserved` wide.
+///
+/// A stretch narrower than `narrowest` holds nothing worth setting
+/// and is not one.
+fn taking(free: Vec<(f32, f32)>, at: f32, reserved: f32, narrowest: f32) -> Vec<(f32, f32)> {
+    free.into_iter()
+        .map(|(origin, width)| {
+            let end = origin + width;
+            if at + reserved <= origin || at >= end {
+                return (origin, width);
+            }
+            let start = origin.max(at + reserved);
+            (start, end - start)
+        })
+        .filter(|(_, width)| *width >= narrowest)
         .collect()
 }
 
@@ -4788,11 +4831,11 @@ mod tests {
         }
     }
 
-    /// An initial letter is not set beside a plate standing where the
-    /// letter goes. The paragraph starts under the plate instead, and
-    /// the letter keeps the lines it is sunk over.
+    /// An initial letter goes where the bands it is sunk over are
+    /// clear. A plate reaching those bands moves the letter along
+    /// with them rather than leaving it behind on the plate.
     #[test]
-    fn a_paragraph_whose_initial_letter_meets_a_plate_starts_under_it() {
+    fn an_initial_letter_moves_to_the_bands_a_plate_leaves() {
         let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
                    wrap-flow: end } p::first-letter { initial-letter: 3 }";
         let output = plated(
@@ -4804,19 +4847,54 @@ mod tests {
             .geometry
             .content_origin()
             .0;
+        let beside = left + PLATE + 12.0;
         let lines = content_lines(page);
         let (baseline, runs) = lines.first().expect("the paragraph is set");
         assert!(
-            *baseline > 54.0 + PLATE,
-            "the paragraph opens at {baseline}, beside the plate",
+            *baseline < 54.0 + PLATE,
+            "the paragraph opens at {baseline}, under the plate",
+        );
+        // The letter is the one item larger than the prose, and it
+        // stands at the head of the bands the plate left.
+        let letter = content_items(page)
+            .into_iter()
+            .find(|(_, _, size, _)| *size > body_size())
+            .expect("the initial letter is drawn");
+        assert!(
+            (letter.0 - beside).abs() < 1e-3,
+            "the initial letter is at {} rather than {beside}",
+            letter.0,
         );
         assert!(
-            runs[0].0 > left,
-            "the first line is not shortened for the letter",
+            runs[0].0 > beside,
+            "the first line does not open beside the letter",
         );
-        // The letter itself is set at the paragraph's own edge, and
-        // sunk, so it is the one item on the page below its own line
-        // and larger than the prose.
+    }
+
+    /// Where the bands a letter is sunk over have no room for it, the
+    /// paragraph starts under the plate instead.
+    #[test]
+    fn an_initial_letter_with_no_room_beside_it_starts_under_the_plate() {
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let (left, measure) = (geometry.content_origin().0, geometry.measure());
+        // A gutter wide enough that what is left of the measure holds
+        // the letter but not a line beside it.
+        let gutter = measure - PLATE - 30.0;
+        let css = format!(
+            "img {{ position: absolute; top: 0; left: 0; margin-right: {gutter}pt; \
+             wrap-flow: end }} p::first-letter {{ initial-letter: 3 }}"
+        );
+        let output = plated(
+            &css,
+            vec![section(vec![plate(), paragraph(&"prose ".repeat(60))])],
+        );
+        let page = &output.pages[0];
+        let lines = content_lines(page);
+        let (baseline, _) = lines.first().expect("the paragraph is set");
+        assert!(
+            *baseline > 54.0 + PLATE,
+            "the paragraph opens at {baseline}, beside a plate with no room for the letter",
+        );
         let letter = content_items(page)
             .into_iter()
             .find(|(_, _, size, _)| *size > body_size())
