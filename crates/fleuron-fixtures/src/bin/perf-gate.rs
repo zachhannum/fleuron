@@ -14,7 +14,7 @@
 
 use std::process::ExitCode;
 
-use fleuron_fixtures::gate::{self, Division, Plating, Target};
+use fleuron_fixtures::gate::{self, Division, Illustration, Target};
 use fleuron_fixtures::{Corpus, alloc, registry};
 
 /// The gate is the one place the tracker belongs: a binary imposes a
@@ -56,8 +56,8 @@ fn main() -> ExitCode {
         } else {
             &[Division::Undivided]
         };
-        for (division, plating) in measurements(divisions, *corpus == Corpus::GATE) {
-            let report = gate::measure_on(*corpus, division, plating, registry(), runs);
+        for (division, illustration) in measurements(divisions, *corpus == Corpus::GATE) {
+            let report = gate::measure_on(*corpus, division, illustration, registry(), runs);
             println!("\n{report}");
             // Only the gate book has budgets. The big book is there to
             // show the curve, and a book four times the size failing a
@@ -89,16 +89,16 @@ fn main() -> ExitCode {
 }
 
 /// What the gate measures for one book: every page box, and the gate
-/// book once more with plates anchored to it. A plate is a different
+/// book once more with images anchored to it. An image is a different
 /// path through the flow rather than a different page box, so it is
 /// measured on one page box only.
-fn measurements(divisions: &[Division], gate: bool) -> Vec<(Division, Plating)> {
-    let mut measurements: Vec<(Division, Plating)> = divisions
+fn measurements(divisions: &[Division], gate: bool) -> Vec<(Division, Illustration)> {
+    let mut measurements: Vec<(Division, Illustration)> = divisions
         .iter()
-        .map(|division| (*division, Plating::Bare))
+        .map(|division| (*division, Illustration::Bare))
         .collect();
     if gate {
-        measurements.push((Division::Undivided, Plating::Plated));
+        measurements.push((Division::Undivided, Illustration::Anchored));
     }
     measurements
 }

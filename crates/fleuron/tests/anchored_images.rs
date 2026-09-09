@@ -1,6 +1,6 @@
-//! Property tests for exclusions: prose keeps clear of the plate, the
-//! flow terminates, and a paragraph is broken again a bounded number
-//! of times.
+//! Property tests for anchored images: prose keeps clear of the
+//! image, the flow terminates, and a paragraph is broken again a
+//! bounded number of times.
 
 use fleuron::content::{Attributes, Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
@@ -21,7 +21,7 @@ struct Png(u32, u32);
 
 impl ImageLoader for Png {
     fn load(&self, url: &str) -> Option<Vec<u8>> {
-        if url != "plate.png" {
+        if url != "image.png" {
             return None;
         }
         let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
@@ -54,11 +54,11 @@ fn paragraph(value: String) -> Block {
     }
 }
 
-fn plate() -> Block {
+fn image() -> Block {
     Block::Image {
         id: NodeId::UNASSIGNED,
-        url: "plate.png".into(),
-        alt: "a plate".into(),
+        url: "image.png".into(),
+        alt: "an image".into(),
         attributes: Attributes::default(),
         position: None,
         span: None,
@@ -77,14 +77,14 @@ fn paragraph_strategy() -> impl Strategy<Value = String> {
     proptest::collection::vec(word_strategy(), 1..60).prop_map(|words| words.join(" "))
 }
 
-/// One book of prose with plates written into it at `at`.
+/// One book of prose with images written into it at `at`.
 fn book_of(paragraphs: Vec<String>, at: Vec<usize>) -> Book {
     let mut blocks: Vec<Block> = paragraphs.into_iter().map(paragraph).collect();
     let mut written: Vec<usize> = at.iter().map(|index| index % (blocks.len() + 1)).collect();
     written.sort_unstable();
     written.dedup();
     for (offset, index) in written.into_iter().enumerate() {
-        blocks.insert(index + offset, plate());
+        blocks.insert(index + offset, image());
     }
     let mut book = Book {
         metadata: Default::default(),
@@ -101,8 +101,8 @@ fn book_of(paragraphs: Vec<String>, at: Vec<usize>) -> Book {
     book
 }
 
-/// A book of prose with one or two plates anchored in it.
-fn plated_strategy() -> impl Strategy<Value = Book> {
+/// A book of prose with one or two images anchored in it.
+fn illustrated_strategy() -> impl Strategy<Value = Book> {
     (
         proptest::collection::vec(paragraph_strategy(), 1..12),
         proptest::collection::vec(0usize..24, 1..3),
@@ -111,7 +111,7 @@ fn plated_strategy() -> impl Strategy<Value = Book> {
 }
 
 /// The sheet under test: one page box on both sides of the spread,
-/// and the plate anchored at a corner of the page area with prose set
+/// and the image anchored at a corner of the page area with prose set
 /// on one side of it.
 fn sheet(inset: &str, wrap: &str, margin: f32) -> String {
     format!(
@@ -121,7 +121,7 @@ fn sheet(inset: &str, wrap: &str, margin: f32) -> String {
 }
 
 fn styles(book: &Book, css: &str) -> StyleTree {
-    Stylesheets::parse(&[fleuron::style::Source::author("plates.css", css)])
+    Stylesheets::parse(&[fleuron::style::Source::author("anchored.css", css)])
         .compile(book, registry())
 }
 
@@ -138,7 +138,7 @@ fn paginate(book: &Book, css: &str, size: (u32, u32)) -> (Vec<Page>, u32) {
 /// A rectangle: `(left, top, right, bottom)`.
 type Rect = (f32, f32, f32, f32);
 
-fn plates(page: &Page) -> Vec<Rect> {
+fn painted(page: &Page) -> Vec<Rect> {
     page.items
         .iter()
         .filter_map(|item| match item {
@@ -184,7 +184,7 @@ fn overlaps(one: Rect, other: Rect) -> bool {
         && other.1 < one.3 - 1e-3
 }
 
-/// The insets and wrap side the properties are checked over: a plate
+/// The insets and wrap side the properties are checked over: an image
 /// at either edge of the page area, with prose beside it.
 fn sheets() -> Vec<String> {
     vec![
@@ -199,23 +199,23 @@ fn sheets() -> Vec<String> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(24))]
 
-    /// No line is set where a plate stands: the ink of every run is
-    /// clear of every plate on its page, whichever side the sheet
+    /// No line is set where an image stands: every run of every line
+    /// is clear of every image on its page, whichever side the sheet
     /// sets prose on.
     ///
-    /// A plate that excludes nothing is the one exception, and the
+    /// An image that excludes nothing is the one exception, and the
     /// sheet that asks for that is not in this list.
     #[test]
-    fn no_line_is_set_where_a_plate_stands(book in plated_strategy()) {
+    fn no_line_is_set_where_an_anchored_image_stands(book in illustrated_strategy()) {
         for css in sheets().iter().take(4) {
             let (pages, _) = paginate(&book, css, (192, 192));
             for page in &pages {
-                let plates = plates(page);
+                let images = painted(page);
                 for run in inked(page) {
-                    for plate in &plates {
+                    for image in &images {
                         prop_assert!(
-                            !overlaps(run, *plate),
-                            "{css}\na run at {run:?} is set over the plate at {plate:?}",
+                            !overlaps(run, *image),
+                            "{css}\na run at {run:?} is set over the image at {image:?}",
                         );
                     }
                 }
@@ -223,10 +223,10 @@ proptest! {
         }
     }
 
-    /// Every line stays inside the measure it was set to, plate or no
-    /// plate.
+    /// Every line stays inside the measure it was set to, image or no
+    /// image.
     #[test]
-    fn no_line_runs_past_the_measure(book in plated_strategy()) {
+    fn no_line_runs_past_the_measure(book in illustrated_strategy()) {
         for css in sheets() {
             let (pages, _) = paginate(&book, &css, (192, 192));
             let geometry = styles(&book, &css)
@@ -255,7 +255,7 @@ proptest! {
     /// boundary it crosses.
     #[test]
     fn the_flow_terminates_and_breaks_a_paragraph_a_bounded_number_of_times(
-        book in plated_strategy(),
+        book in illustrated_strategy(),
     ) {
         let paragraphs = book.sections[0]
             .blocks
@@ -272,10 +272,10 @@ proptest! {
         }
     }
 
-    /// A plated book lays out the same way twice, page for page and
+    /// A illustrated book lays out the same way twice, page for page and
     /// item for item.
     #[test]
-    fn a_plated_book_lays_out_the_same_way_twice(book in plated_strategy()) {
+    fn an_illustrated_book_lays_out_the_same_way_twice(book in illustrated_strategy()) {
         let css = sheet("top: 0; left: 0", "end", 6.0);
         let (once, _) = paginate(&book, &css, (192, 192));
         let (twice, _) = paginate(&book, &css, (192, 192));

@@ -154,7 +154,7 @@ pub struct Fragment {
     pub decorations: Option<Box<Decorations>>,
     /// The paragraph this line came out of, shared by every line of
     /// it, and `None` on everything else. The flow reads it where a
-    /// plate narrows the bands the paragraph would be set in; a book
+    /// image narrows the bands the paragraph would be set in; a book
     /// that anchors nothing keeps none of this.
     pub reflow: Option<Arc<Reflow>>,
 }
@@ -291,7 +291,7 @@ pub struct Paginator<'a> {
     /// Whether the sheet anchors anything to the page, answered once.
     wraps: OnceCell<bool>,
     /// How many times the flow has set a paragraph again beside a
-    /// plate.
+    /// image.
     rebreaks: Cell<u32>,
 }
 
@@ -357,7 +357,7 @@ impl<'a> Paginator<'a> {
     }
 
     /// How many times the flow has set a paragraph again beside a
-    /// plate. A book that anchors nothing never does.
+    /// image. A book that anchors nothing never does.
     pub fn rebreaks(&self) -> u32 {
         self.rebreaks.get()
     }
@@ -381,16 +381,16 @@ impl<'a> Paginator<'a> {
     /// Each is sized as CSS 2.1 sizes a replaced element with no
     /// width or height of its own: its intrinsic size, scaled down
     /// where that does not fit the page area.
-    fn plates(&self, book: &Book) -> Vec<Plate> {
+    fn anchored_images(&self, book: &Book) -> Vec<AnchoredImage> {
         fn walk(
             paginator: &Paginator,
             blocks: &[Block],
             source: Option<&str>,
-            plates: &mut Vec<Plate>,
+            anchored: &mut Vec<AnchoredImage>,
         ) {
             for block in blocks {
                 match block {
-                    Block::Blockquote { blocks, .. } => walk(paginator, blocks, source, plates),
+                    Block::Blockquote { blocks, .. } => walk(paginator, blocks, source, anchored),
                     Block::Image {
                         id, url, position, ..
                     } => {
@@ -411,7 +411,7 @@ impl<'a> Paginator<'a> {
                             (available - margin.inline()).max(0.0),
                             (height - margin.top - margin.bottom).max(0.0),
                         );
-                        plates.push(Plate {
+                        anchored.push(AnchoredImage {
                             node: *id,
                             asset,
                             width,
@@ -425,16 +425,16 @@ impl<'a> Paginator<'a> {
                 }
             }
         }
-        let mut plates = Vec::new();
+        let mut anchored = Vec::new();
         for section in &book.sections {
             walk(
                 self,
                 &section.blocks,
                 section.source.as_deref(),
-                &mut plates,
+                &mut anchored,
             );
         }
-        plates
+        anchored
     }
 
     /// Says so where the host supplied no image for a url. A url the
@@ -456,12 +456,12 @@ impl<'a> Paginator<'a> {
     /// pages, not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         self.language(&book.metadata);
-        let plates = self.plates(book);
+        let anchored = self.anchored_images(book);
         // The pass that answers where the anchors land keeps no
         // fragments either: it builds a section, flows it, and drops
         // it, the same way the pass that keeps the pages does.
-        let bare = Plates::default();
-        let anchors = if plates.is_empty() {
+        let bare = AnchoredImages::default();
+        let anchors = if anchored.is_empty() {
             BTreeMap::new()
         } else {
             let mut flow = Flow::settling(self, &bare);
@@ -471,8 +471,8 @@ impl<'a> Paginator<'a> {
             }
             flow.finish().anchors
         };
-        let plates = Plates::on(plates, &anchors);
-        let mut flow = Flow::new(self, &plates);
+        let anchored = AnchoredImages::on(anchored, &anchors);
+        let mut flow = Flow::new(self, &anchored);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
@@ -521,18 +521,18 @@ impl<'a> Paginator<'a> {
         sections: impl IntoIterator<Item = &'f [Fragment]>,
     ) -> Paged {
         let sections: Vec<&[Fragment]> = sections.into_iter().collect();
-        let plates = self.plates(book);
-        let bare = Plates::default();
-        let plates = if plates.is_empty() {
-            Plates::default()
+        let anchored = self.anchored_images(book);
+        let bare = AnchoredImages::default();
+        let anchored = if anchored.is_empty() {
+            AnchoredImages::default()
         } else {
             let mut flow = Flow::settling(self, &bare);
             for (section, fragments) in book.sections.iter().zip(&sections) {
                 flow.section(section, fragments);
             }
-            Plates::on(plates, &flow.finish().anchors)
+            AnchoredImages::on(anchored, &flow.finish().anchors)
         };
-        let mut flow = Flow::new(self, &plates);
+        let mut flow = Flow::new(self, &anchored);
         for (section, fragments) in book.sections.iter().zip(&sections) {
             flow.section(section, fragments);
         }
@@ -795,7 +795,7 @@ struct Setting {
     widows: usize,
     /// The initial letter beside the lines it is sunk over.
     cap: Option<Cap>,
-    /// Where the letter goes, from `x`. A plate in the way of the
+    /// Where the letter goes, from `x`. An image in the way of the
     /// bands it is sunk over moves it along with them.
     cap_x: f32,
 }
@@ -803,7 +803,7 @@ struct Setting {
 impl Setting {
     /// The same over the bands a profile left: an initial letter
     /// belongs to the line a paragraph opens on rather than to the
-    /// line the rest of it opens on, and a plate may have moved it.
+    /// line the rest of it opens on, and an image may have moved it.
     fn wrapped(&self, opening: bool, letter: Option<f32>) -> Cow<'_, Setting> {
         if opening && letter.is_none() {
             return Cow::Borrowed(self);
@@ -819,8 +819,8 @@ impl Setting {
 /// A paragraph the flow can set again.
 ///
 /// The lines a section is built with are broken against the measure
-/// with nothing in the way. A paragraph that lands beside a plate is
-/// broken again against the bands the plate leaves, and this is what
+/// with nothing in the way. A paragraph that lands beside an image is
+/// broken again against the bands the image leaves, and this is what
 /// that takes: the shaped runs, which the measure has no say in, and
 /// everything that was settled around them.
 #[derive(Debug)]
@@ -830,7 +830,7 @@ pub struct Reflow {
     /// The bands with nothing in the way. A first-line indent and a
     /// drop cap are already in them.
     base: Measure,
-    /// Height of one band, which is what a plate is snapped to.
+    /// Height of one band, which is what an image is snapped to.
     leading: f32,
     /// Where each line ended, so the rest of the paragraph can be set
     /// from any of them.
@@ -869,7 +869,7 @@ impl Rect {
 /// far its insets put it from the page area, and which side prose
 /// sets on.
 #[derive(Debug, Clone)]
-struct Plate {
+struct AnchoredImage {
     /// The node it was written at, which is what decides its page.
     node: NodeId,
     /// Index into the asset table.
@@ -886,9 +886,9 @@ struct Plate {
     wrap: WrapFlow,
 }
 
-impl Plate {
-    /// What the plate keeps to itself on a page of this geometry:
-    /// the image and the margins around it.
+impl AnchoredImage {
+    /// What it keeps to itself on a page of this geometry: the image
+    /// and the margins around it.
     ///
     /// An inset is measured from the page area, the box the margins
     /// leave, and a negative one reaches into the margin. Where both
@@ -940,31 +940,31 @@ impl Plate {
     }
 }
 
-/// The plates one book anchors, and the page each one landed on.
+/// The images one book anchors, and the page each one landed on.
 ///
-/// Which page a plate falls on comes from the flow; where it sits on
+/// Which page an image falls on comes from the flow; where it sits on
 /// that page comes from the sheet. The flow runs once with nothing in
 /// the way to answer the first question, and the answer is then held:
-/// a plate narrows the page it was given, and the page it would be
+/// an image narrows the page it was given, and the page it would be
 /// given if the flow ran again is not asked for.
 #[derive(Debug, Default)]
-pub(crate) struct Plates {
-    all: Vec<Plate>,
-    /// Which plates a page carries, by page index.
+pub(crate) struct AnchoredImages {
+    all: Vec<AnchoredImage>,
+    /// Which images a page carries, by page index.
     by_page: BTreeMap<usize, Vec<usize>>,
 }
 
-impl Plates {
-    /// The plates of a book, on the pages the anchor pass gave them.
-    fn on(all: Vec<Plate>, anchors: &BTreeMap<NodeId, usize>) -> Plates {
+impl AnchoredImages {
+    /// The images of a book, on the pages the anchor pass gave them.
+    fn on(all: Vec<AnchoredImage>, anchors: &BTreeMap<NodeId, usize>) -> AnchoredImages {
         let mut by_page: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for (index, plate) in all.iter().enumerate() {
-            let Some(page) = anchors.get(&plate.node) else {
+        for (index, image) in all.iter().enumerate() {
+            let Some(page) = anchors.get(&image.node) else {
                 continue;
             };
             by_page.entry(*page).or_default().push(index);
         }
-        Plates { all, by_page }
+        AnchoredImages { all, by_page }
     }
 
     fn is_empty(&self) -> bool {
@@ -972,7 +972,7 @@ impl Plates {
     }
 }
 
-/// One plate as the column being filled sees it: the rectangle it
+/// One image as the column being filled sees it: the rectangle it
 /// covers, and which side of it prose sets on.
 #[derive(Debug, Clone, Copy)]
 struct Hole {
@@ -980,14 +980,14 @@ struct Hole {
     wrap: WrapFlow,
 }
 
-/// The bands a paragraph is set in beside a plate: what each of them
+/// The bands a paragraph is set in beside an image: what each of them
 /// is left of the measure, and the space above one that had to move
-/// past a plate covering the whole of it.
+/// past an image covering the whole of it.
 struct Profile {
     measure: Measure,
     gaps: Vec<f32>,
     /// Where the initial letter goes, from the paragraph's leading
-    /// edge, when a plate moved it.
+    /// edge, when an image moved it.
     letter: Option<f32>,
 }
 
@@ -1426,7 +1426,7 @@ impl Builder<'_, '_> {
 /// end between them.
 ///
 /// `spec` is the profile the lines were broken to, and `gaps` the
-/// space above a band the profile had to move past a plate.
+/// space above a band the profile had to move past an image.
 fn set_lines(
     paginator: &Paginator,
     lines: Vec<Line>,
@@ -1689,7 +1689,7 @@ struct Placed {
     marks: Option<Box<Marks>>,
     /// The decorated blocks it opens and closes.
     decorations: Option<Box<Decorations>>,
-    /// The plates anchored above it, which land on the page it ends
+    /// The images anchored above it, which land on the page it ends
     /// on.
     anchors: Vec<NodeId>,
 }
@@ -1814,9 +1814,9 @@ struct Flow<'a, 'p> {
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
     carried: Vec<Decoration>,
-    /// The plates to place, and the page each one landed on. Empty
+    /// The images to place, and the page each one landed on. Empty
     /// on the pass that answers where they land.
-    plates: &'p Plates,
+    anchored: &'p AnchoredImages,
     /// Where each anchor landed, filled in as pages close.
     anchors: BTreeMap<NodeId, usize>,
     /// Anchors waiting for the fragment whose page they take.
@@ -1828,7 +1828,7 @@ struct Flow<'a, 'p> {
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
-    fn new(paginator: &'p Paginator<'a>, plates: &'p Plates) -> Flow<'a, 'p> {
+    fn new(paginator: &'p Paginator<'a>, anchored: &'p AnchoredImages) -> Flow<'a, 'p> {
         let slot = PageSlot {
             name: None,
             first: true,
@@ -1850,7 +1850,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             columns: geometry.column_count(),
             column_start: 0,
             carried: Vec::new(),
-            plates,
+            anchored,
             anchors: BTreeMap::new(),
             pending_anchors: Vec::new(),
             paints: true,
@@ -1858,7 +1858,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// A flow that answers where the anchors land and nothing else.
-    fn settling(paginator: &'p Paginator<'a>, bare: &'p Plates) -> Flow<'a, 'p> {
+    fn settling(paginator: &'p Paginator<'a>, bare: &'p AnchoredImages) -> Flow<'a, 'p> {
         Flow {
             paints: false,
             ..Flow::new(paginator, bare)
@@ -1877,13 +1877,13 @@ impl<'a, 'p> Flow<'a, 'p> {
             blank: false,
         });
         // A book with nothing anchored places one fragment at a time.
-        // One with a plate on the page places a paragraph at a time,
-        // because a plate narrows the bands the paragraph is set in
+        // One with an image on the page places a paragraph at a time,
+        // because an image narrows the bands the paragraph is set in
         // and the whole of it is broken again.
         let mut index = 0;
         while index < fragments.len() {
             index = match fragments[index].reflow.as_ref() {
-                Some(reflow) if !self.plates.is_empty() => {
+                Some(reflow) if !self.anchored.is_empty() => {
                     let end = paragraph_end(fragments, index, reflow);
                     self.paragraph(&fragments[index..end], reflow);
                     end
@@ -1896,7 +1896,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// Places one paragraph, breaking it again where a plate narrows
+    /// Places one paragraph, breaking it again where an image narrows
     /// the bands it would be set in.
     ///
     /// This is the one thing the flow measures. Everywhere else a
@@ -1913,7 +1913,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut set: Cow<'_, [Fragment]> = Cow::Borrowed(original);
         let mut ends: Cow<'_, [usize]> = Cow::Borrowed(&reflow.ends);
         let mut at = 0;
-        // Whether what is in hand was broken beside a plate. The
+        // Whether what is in hand was broken beside an image. The
         // lines a section arrives with fit any page; lines broken
         // against a notch fit the one they were broken on, so a page
         // boundary under them is a break to do again.
@@ -1984,36 +1984,36 @@ impl<'a, 'p> Flow<'a, 'p> {
             .unwrap_or(0.0);
     }
 
-    /// The plates on the page being built, in the coordinates of the
+    /// The images on the page being built, in the coordinates of the
     /// column being filled.
     fn holes(&self) -> Vec<Hole> {
         let index = self.pages.len();
-        let Some(plates) = self.plates.by_page.get(&index) else {
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
             return Vec::new();
         };
         let geometry = self.paginator.master(index, &self.slot).geometry;
         let origin = geometry.column_origin(self.column);
-        plates
+        anchored
             .iter()
-            .map(|at| &self.plates.all[*at])
-            .filter(|plate| plate.wrap != WrapFlow::Auto)
-            .map(|plate| Hole {
-                rect: plate.rect(geometry).within(origin),
-                wrap: plate.wrap,
+            .map(|at| &self.anchored.all[*at])
+            .filter(|image| image.wrap != WrapFlow::Auto)
+            .map(|image| Hole {
+                rect: image.rect(geometry).within(origin),
+                wrap: image.wrap,
             })
             .collect()
     }
 
     /// The bands a paragraph starting at `top` in the column being
-    /// filled is set in, and `None` where no plate reaches them.
+    /// filled is set in, and `None` where no image reaches them.
     ///
-    /// A plate covers whole bands: it is snapped to the paragraph's
+    /// An image covers whole bands: it is snapped to the paragraph's
     /// own leading, so a line is either set beside it or clear of it.
     /// A band it covers the whole of is a band nothing is set in, and
     /// the paragraph goes on below it.
     fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
         // The bands are the paragraph's own, from its leading edge;
-        // the plates are the column's. One of them has to move.
+        // the images are the column's. One of them has to move.
         let holes: Vec<Hole> = self
             .holes()
             .into_iter()
@@ -2047,7 +2047,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut letter = None;
         let mut spans = Vec::new();
         let mut gaps = Vec::new();
-        // Whether a plate reached any band at all, and how far down
+        // Whether an image reached any band at all, and how far down
         // the profile has to be listed: the shorter it is, the fewer
         // states the break has to keep.
         let mut reached = false;
@@ -2078,7 +2078,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 letter = at;
             }
             let Some((last, rest)) = free.split_last() else {
-                // Nothing is set in a band a plate covers the whole
+                // Nothing is set in a band an image covers the whole
                 // of, so the next band is the first one under it.
                 let below = holes
                     .iter()
@@ -2392,16 +2392,16 @@ impl<'a, 'p> Flow<'a, 'p> {
             .collect()
     }
 
-    /// The plates the page being built carries, as paint ops.
-    fn plate_items(&self) -> Vec<DrawItem> {
+    /// The images the page being built carries, as paint ops.
+    fn anchored_items(&self) -> Vec<DrawItem> {
         let index = self.pages.len();
-        let Some(plates) = self.plates.by_page.get(&index) else {
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
             return Vec::new();
         };
         let geometry = self.paginator.master(index, &self.slot).geometry;
-        plates
+        anchored
             .iter()
-            .map(|at| self.plates.all[*at].item(geometry))
+            .map(|at| self.anchored.all[*at].item(geometry))
             .collect()
     }
 
@@ -2418,14 +2418,14 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let placed = std::mem::take(&mut self.placed);
-        // Backgrounds, borders, column rules and plates go in front
+        // Backgrounds, borders, column rules and images go in front
         // of the page's text: `DrawItem` order is paint order, and
         // the display structure has no layers.
         let mut items = Vec::new();
         if self.paints {
             items = self.decorate(&placed);
             items.append(&mut self.rules(&placed));
-            items.append(&mut self.plate_items());
+            items.append(&mut self.anchored_items());
         }
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
@@ -2535,7 +2535,7 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
         .unwrap_or(fragments.len())
 }
 
-/// What one band has left of it where the plates on its page cover
+/// What one band has left of it where the images on its page cover
 /// it: the stretches prose may be set in, in reading order.
 ///
 /// A stretch narrower than `narrowest` holds nothing worth setting
@@ -4645,11 +4645,11 @@ mod tests {
 
     /// A book laid out with one image in it, which the sheet may
     /// anchor to the page. The image is 2in square at 96dpi.
-    fn plated(css: &str, sections: Vec<Section>) -> LayoutOutput {
+    fn with_image(css: &str, sections: Vec<Section>) -> LayoutOutput {
         struct Png;
         impl crate::images::ImageLoader for Png {
             fn load(&self, url: &str) -> Option<Vec<u8>> {
-                (url == "plate.png").then(|| png(192, 192))
+                (url == "image.png").then(|| png(192, 192))
             }
         }
         let book = book_of(sections);
@@ -4659,10 +4659,10 @@ mod tests {
     }
 
     /// The image the anchoring tests place.
-    fn plate() -> Block {
+    fn image() -> Block {
         Block::Image {
             id: NodeId::UNASSIGNED,
-            url: "plate.png".into(),
+            url: "image.png".into(),
             alt: "a map of Lilliput".into(),
             attributes: Attributes::default(),
             position: Some(SourcePos { line: 3, column: 1 }),
@@ -4670,8 +4670,8 @@ mod tests {
         }
     }
 
-    /// The plates one page paints: `(x, y, width, height)`.
-    fn plates(page: &Page) -> Vec<(f32, f32, f32, f32)> {
+    /// The images one page paints: `(x, y, width, height)`.
+    fn painted(page: &Page) -> Vec<(f32, f32, f32, f32)> {
         page.items
             .iter()
             .filter_map(|item| match item {
@@ -4681,13 +4681,13 @@ mod tests {
             .collect()
     }
 
-    /// The plate the tests anchor is 144pt square.
-    const PLATE: f32 = 144.0;
+    /// The image the tests anchor is 144pt square.
+    const IMAGE: f32 = 144.0;
 
     /// Acceptance: prose sets around an image anchored to the page,
     /// on the side the sheet asks for.
     ///
-    /// The same plate is anchored at either edge of the page area.
+    /// The same image is anchored at either edge of the page area.
     /// `wrap-flow: end` puts the prose beside it at the end of the
     /// line, and `wrap-flow: start` at the start; either way the
     /// lines below it run the full measure.
@@ -4697,50 +4697,50 @@ mod tests {
             let geometry = master(Situation::First(Side::Recto)).geometry;
             (geometry.content_origin().0, geometry.measure())
         };
-        let blocks = || std::iter::once(plate()).chain(long_prose(8)).collect();
+        let blocks = || std::iter::once(image()).chain(long_prose(8)).collect();
 
-        let beside = plated(
+        let beside = with_image(
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
              wrap-flow: end }",
             vec![section(blocks())],
         );
         let page = &beside.pages[0];
-        assert_eq!(plates(page), vec![(left, 54.0, PLATE, PLATE)]);
+        assert_eq!(painted(page), vec![(left, 54.0, IMAGE, IMAGE)]);
         let lines = content_lines(page);
         let leading = lines[1].0 - lines[0].0;
-        let beside = |runs: &[Run<'_>]| (runs[0].0 - (left + PLATE + 12.0)).abs() < 1e-3;
+        let beside = |runs: &[Run<'_>]| (runs[0].0 - (left + IMAGE + 12.0)).abs() < 1e-3;
         let narrowed = lines.iter().take_while(|(_, runs)| beside(runs)).count();
-        assert!(narrowed > 0, "no line was set beside the plate");
+        assert!(narrowed > 0, "no line was set beside the image");
         assert!(narrowed < lines.len(), "every line was");
         for (baseline, runs) in &lines[narrowed..] {
             assert!(
                 !beside(runs),
-                "the line at {baseline} is set beside the plate under it",
+                "the line at {baseline} is set beside the image under it",
             );
         }
-        // A line is set beside the plate when its own band meets it,
+        // A line is set beside the image when its own band meets it,
         // which the baseline a leading above stands for.
-        assert!(lines[narrowed - 1].0 - leading < 54.0 + PLATE);
-        assert!(lines[narrowed].0 - leading >= 54.0 + PLATE);
+        assert!(lines[narrowed - 1].0 - leading < 54.0 + IMAGE);
+        assert!(lines[narrowed].0 - leading >= 54.0 + IMAGE);
 
-        let before = plated(
+        let before = with_image(
             "img { position: absolute; top: 0; right: 0; margin-left: 12pt; \
              wrap-flow: start }",
             vec![section(blocks())],
         );
         let page = &before.pages[0];
         assert_eq!(
-            plates(page),
-            vec![(left + measure - PLATE, 54.0, PLATE, PLATE)],
+            painted(page),
+            vec![(left + measure - IMAGE, 54.0, IMAGE, IMAGE)],
         );
         for (baseline, _) in content_lines(page)
             .iter()
-            .filter(|(baseline, _)| *baseline < 54.0 + PLATE)
+            .filter(|(baseline, _)| *baseline < 54.0 + IMAGE)
         {
             let edge = right_edge(page, *baseline);
             assert!(
-                edge <= left + measure - PLATE - 12.0 + 1e-3,
-                "the line at {baseline} reaches {edge}, into the plate",
+                edge <= left + measure - IMAGE - 12.0 + 1e-3,
+                "the line at {baseline} reaches {edge}, into the image",
             );
         }
     }
@@ -4752,8 +4752,8 @@ mod tests {
     fn an_anchored_image_lands_on_the_page_the_paragraph_after_it_flows_onto() {
         let css = "img { position: absolute; top: 0; left: 0; wrap-flow: auto }";
         // Which paragraph opens the second page, with nothing
-        // anchored: the plate goes above that one.
-        let bare = plated(css, vec![section(tagged_prose(30))]);
+        // anchored: the image goes above that one.
+        let bare = with_image(css, vec![section(tagged_prose(30))]);
         assert!(bare.pages.len() > 1, "one page proves nothing here");
         let above: Vec<String> = tagged_lines(&bare.pages[0]);
         let opening = tagged_lines(&bare.pages[1])
@@ -4766,10 +4766,10 @@ mod tests {
             .expect("the tag counts the paragraph");
 
         let mut blocks = tagged_prose(30);
-        blocks.insert(nth, plate());
-        let plated = plated(css, vec![section(blocks)]);
-        assert!(plates(&plated.pages[0]).is_empty(), "the plate waited");
-        assert_eq!(plates(&plated.pages[1]).len(), 1, "for the page it opens");
+        blocks.insert(nth, image());
+        let output = with_image(css, vec![section(blocks)]);
+        assert!(painted(&output.pages[0]).is_empty(), "the image waited");
+        assert_eq!(painted(&output.pages[1]).len(), 1, "for the page it opens");
     }
 
     /// Acceptance: an image that asks for no wrapping is positioned
@@ -4777,11 +4777,11 @@ mod tests {
     /// not there.
     #[test]
     fn an_image_that_asks_for_no_wrapping_leaves_the_prose_where_it_was() {
-        let blocks = || std::iter::once(plate()).chain(long_prose(6)).collect();
-        let bare = plated("img { position: absolute; top: 0; left: 0 }", vec![]);
+        let blocks = || std::iter::once(image()).chain(long_prose(6)).collect();
+        let bare = with_image("img { position: absolute; top: 0; left: 0 }", vec![]);
         assert!(bare.pages.is_empty());
 
-        let over = plated(
+        let over = with_image(
             "img { position: absolute; top: 0; left: 0 }",
             vec![section(blocks())],
         );
@@ -4789,19 +4789,19 @@ mod tests {
         let page = &over.pages[0];
         let geometry = master(Situation::First(Side::Recto)).geometry;
         let (left, top) = geometry.content_origin();
-        assert_eq!(plates(page), vec![(left, top, PLATE, PLATE)]);
+        assert_eq!(painted(page), vec![(left, top, IMAGE, IMAGE)]);
         assert_eq!(
             content_items(page),
             content_items(&without[0]),
-            "the prose broke around a plate that excludes nothing",
+            "the prose broke around an image that excludes nothing",
         );
     }
 
-    /// A plate reaches the prose of a quotation as it reaches any
+    /// An image reaches the prose of a quotation as it reaches any
     /// other prose: the bands a quotation is set in are its own, and
-    /// the plate is the page's.
+    /// the image is the page's.
     #[test]
-    fn a_plate_narrows_a_quotation_from_its_own_edge() {
+    fn an_anchored_image_narrows_a_quotation_from_its_own_edge() {
         let quote = Block::Blockquote {
             id: NodeId::UNASSIGNED,
             blocks: long_prose(3),
@@ -4809,10 +4809,10 @@ mod tests {
             position: None,
             span: None,
         };
-        let output = plated(
+        let output = with_image(
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end } \
              blockquote { margin-left: 36pt }",
-            vec![section(vec![plate(), quote])],
+            vec![section(vec![image(), quote])],
         );
         let page = &output.pages[0];
         let left = master(Situation::First(Side::Recto))
@@ -4821,41 +4821,41 @@ mod tests {
             .0;
         for (baseline, runs) in content_lines(page)
             .iter()
-            .filter(|(baseline, _)| *baseline < 54.0 + PLATE)
+            .filter(|(baseline, _)| *baseline < 54.0 + IMAGE)
         {
             assert!(
-                runs[0].0 >= left + PLATE + 12.0 - 1e-3,
-                "the quoted line at {baseline} starts at {}, over the plate",
+                runs[0].0 >= left + IMAGE + 12.0 - 1e-3,
+                "the quoted line at {baseline} starts at {}, over the image",
                 runs[0].0,
             );
         }
     }
 
     /// An initial letter goes where the bands it is sunk over are
-    /// clear. A plate reaching those bands moves the letter along
-    /// with them rather than leaving it behind on the plate.
+    /// clear. An image reaching those bands moves the letter along
+    /// with them rather than leaving it behind on the image.
     #[test]
-    fn an_initial_letter_moves_to_the_bands_a_plate_leaves() {
+    fn an_initial_letter_moves_to_the_bands_an_anchored_image_leaves() {
         let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
                    wrap-flow: end } p::first-letter { initial-letter: 3 }";
-        let output = plated(
+        let output = with_image(
             css,
-            vec![section(vec![plate(), paragraph(&"prose ".repeat(60))])],
+            vec![section(vec![image(), paragraph(&"prose ".repeat(60))])],
         );
         let page = &output.pages[0];
         let left = master(Situation::First(Side::Recto))
             .geometry
             .content_origin()
             .0;
-        let beside = left + PLATE + 12.0;
+        let beside = left + IMAGE + 12.0;
         let lines = content_lines(page);
         let (baseline, runs) = lines.first().expect("the paragraph is set");
         assert!(
-            *baseline < 54.0 + PLATE,
-            "the paragraph opens at {baseline}, under the plate",
+            *baseline < 54.0 + IMAGE,
+            "the paragraph opens at {baseline}, under the image",
         );
         // The letter is the one item larger than the prose, and it
-        // stands at the head of the bands the plate left.
+        // stands at the head of the bands the image left.
         let letter = content_items(page)
             .into_iter()
             .find(|(_, _, size, _)| *size > body_size())
@@ -4872,28 +4872,28 @@ mod tests {
     }
 
     /// Where the bands a letter is sunk over have no room for it, the
-    /// paragraph starts under the plate instead.
+    /// paragraph starts under the image instead.
     #[test]
-    fn an_initial_letter_with_no_room_beside_it_starts_under_the_plate() {
+    fn an_initial_letter_with_no_room_beside_it_starts_under_the_image() {
         let geometry = master(Situation::First(Side::Recto)).geometry;
         let (left, measure) = (geometry.content_origin().0, geometry.measure());
         // A gutter wide enough that what is left of the measure holds
         // the letter but not a line beside it.
-        let gutter = measure - PLATE - 30.0;
+        let gutter = measure - IMAGE - 30.0;
         let css = format!(
             "img {{ position: absolute; top: 0; left: 0; margin-right: {gutter}pt; \
              wrap-flow: end }} p::first-letter {{ initial-letter: 3 }}"
         );
-        let output = plated(
+        let output = with_image(
             &css,
-            vec![section(vec![plate(), paragraph(&"prose ".repeat(60))])],
+            vec![section(vec![image(), paragraph(&"prose ".repeat(60))])],
         );
         let page = &output.pages[0];
         let lines = content_lines(page);
         let (baseline, _) = lines.first().expect("the paragraph is set");
         assert!(
-            *baseline > 54.0 + PLATE,
-            "the paragraph opens at {baseline}, beside a plate with no room for the letter",
+            *baseline > 54.0 + IMAGE,
+            "the paragraph opens at {baseline}, beside an image with no room for the letter",
         );
         let letter = content_items(page)
             .into_iter()
@@ -4907,7 +4907,7 @@ mod tests {
     }
 
     /// Acceptance: the anchor map is settled with nothing in the way
-    /// and then held. A plate that narrows its own page can push the
+    /// and then held. An image that narrows its own page can push the
     /// paragraph it hangs from onto the next one, and it stays where
     /// the settle put it rather than following.
     #[test]
@@ -4919,41 +4919,41 @@ mod tests {
             )
         };
         let mut blocks = tagged_prose(30);
-        // Anchored on a page the plate then narrows, so the
-        // paragraph under the anchor moves and the plate does not.
-        blocks.insert(4, plate());
-        let settled = plated(&css("auto"), vec![section(blocks.clone())]);
-        let wrapped = plated(&css("end"), vec![section(blocks)]);
+        // Anchored on a page the image then narrows, so the
+        // paragraph under the anchor moves and the image does not.
+        blocks.insert(4, image());
+        let settled = with_image(&css("auto"), vec![section(blocks.clone())]);
+        let wrapped = with_image(&css("end"), vec![section(blocks)]);
 
         let page_of = |output: &LayoutOutput| {
             output
                 .pages
                 .iter()
-                .position(|page| !plates(page).is_empty())
-                .expect("the plate is painted")
+                .position(|page| !painted(page).is_empty())
+                .expect("the image is painted")
         };
         assert_eq!(page_of(&settled), page_of(&wrapped));
         assert!(
             tagged_lines(&wrapped.pages[0]).len() < tagged_lines(&settled.pages[0]).len(),
-            "the plate did not narrow the page it landed on",
+            "the image did not narrow the page it landed on",
         );
     }
 
     /// The two ways through the pipeline agree over a book with a
-    /// plate on it as well: the settle the flow runs first sees the
+    /// image on it as well: the settle the flow runs first sees the
     /// same pages whether the sections were built one at a time or
     /// all at once.
     #[test]
-    fn the_stages_compose_over_a_plated_book_too() {
+    fn the_stages_compose_over_an_illustrated_book_too() {
         struct Png;
         impl crate::images::ImageLoader for Png {
             fn load(&self, url: &str) -> Option<Vec<u8>> {
-                (url == "plate.png").then(|| png(192, 192))
+                (url == "image.png").then(|| png(192, 192))
             }
         }
         let book = book_of(vec![
-            section([vec![plate()], long_prose(20)].concat()),
-            section([vec![heading("Two"), plate()], long_prose(16)].concat()),
+            section([vec![image()], long_prose(20)].concat()),
+            section([vec![heading("Two"), image()], long_prose(16)].concat()),
         ]);
         let styles = styled(
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
@@ -4971,14 +4971,14 @@ mod tests {
         let in_one = paginator.paginate(&book);
 
         assert!(in_one.len() > 2, "a book worth splitting");
-        assert!(paginator.rebreaks() > 0, "no paragraph met a plate");
+        assert!(paginator.rebreaks() > 0, "no paragraph met an image");
         assert_eq!(by_stage.len(), in_one.len());
         for (staged, whole) in by_stage.iter().zip(&in_one) {
             assert_eq!(format!("{:?}", staged.items), format!("{:?}", whole.items));
         }
     }
 
-    /// Acceptance: the paragraph beside a plate is broken by total
+    /// Acceptance: the paragraph beside an image is broken by total
     /// fit, not filled band by band.
     ///
     /// The greedy break of the same text against the same bands packs
@@ -4994,19 +4994,19 @@ mod tests {
                     fortune";
         let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
                    wrap-flow: end } p { text-indent: 0 }";
-        let book = book_of(vec![section(vec![plate(), paragraph(text)])]);
+        let book = book_of(vec![section(vec![image(), paragraph(text)])]);
         let styles = styled(css, &book);
-        let output = plated(css, vec![section(vec![plate(), paragraph(text)])]);
+        let output = with_image(css, vec![section(vec![image(), paragraph(text)])]);
         let page = &output.pages[0];
 
         let geometry = master(Situation::First(Side::Recto)).geometry;
         let measure = geometry.measure();
-        let narrow = measure - PLATE - 12.0;
+        let narrow = measure - IMAGE - 12.0;
         let lines = content_lines(page);
         let bands: Vec<f32> = lines
             .iter()
             .map(|(baseline, _)| {
-                if *baseline < 54.0 + PLATE {
+                if *baseline < 54.0 + IMAGE {
                     narrow
                 } else {
                     measure

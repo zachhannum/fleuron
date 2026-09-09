@@ -1,20 +1,19 @@
-//! Plates: the corpus books with images anchored to the page.
+//! The corpus books with images anchored to the page.
 //!
-//! An illustrated edition puts a plate at the head of a chapter and
-//! sets the opening prose around it. That is the path a book without
-//! images never reaches: the flow settles where each plate lands,
+//! A book with images anchored to its pages reaches a path a book
+//! without them never does: the flow settles where each one lands,
 //! places it, and breaks the paragraphs beside it again. The gate
-//! measures the same book both ways so the cost of the path is a
+//! measures the same book both ways so the cost of that path is a
 //! number rather than a guess.
 
 use fleuron::content::{Attributes, Block, Book, NodeId};
 use fleuron::images::{Assets, ImageLoader};
 
-/// The plate every chapter of a plated book opens with: the map that
-/// faces page 1 of the fixture book, 180pt wide.
-pub const PLATE: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
+/// The image every chapter of an illustrated book opens with: the map
+/// that faces page 1 of the fixture book, 180pt wide.
+pub const IMAGE: &[u8] = include_bytes!("../../../fixtures/images/plate.jpg");
 
-/// What the plated book calls it.
+/// What the book calls it.
 pub const URL: &str = "plate.jpg";
 
 /// The sheet that anchors it: at the outer corner of the page area,
@@ -22,11 +21,11 @@ pub const URL: &str = "plate.jpg";
 pub const CSS: &str = "img { position: absolute; top: 0; right: 0; \
                        margin-left: 12pt; margin-bottom: 6pt; wrap-flow: start }";
 
-/// The same book with a plate at the head of every chapter, anchored
+/// The same book with an image at the head of every chapter, anchored
 /// above the prose the chapter opens with.
-pub fn plated(book: &Book) -> Book {
-    let mut plated = book.clone();
-    for section in &mut plated.sections {
+pub fn illustrated(book: &Book) -> Book {
+    let mut illustrated = book.clone();
+    for section in &mut illustrated.sections {
         let at = section
             .blocks
             .iter()
@@ -44,19 +43,19 @@ pub fn plated(book: &Book) -> Book {
             },
         );
     }
-    plated.assign_node_ids();
-    plated
+    illustrated.assign_node_ids();
+    illustrated
 }
 
-/// The plate itself, as a table layout can size from.
+/// The image itself, as a table layout can size from.
 pub fn assets(book: &Book) -> Assets {
-    struct Plate;
-    impl ImageLoader for Plate {
+    struct Image;
+    impl ImageLoader for Image {
         fn load(&self, url: &str) -> Option<Vec<u8>> {
-            (url == URL).then(|| PLATE.to_vec())
+            (url == URL).then(|| IMAGE.to_vec())
         }
     }
-    Assets::probe(book, &Plate)
+    Assets::probe(book, &Image)
 }
 
 #[cfg(test)]
@@ -64,18 +63,18 @@ mod tests {
     use super::*;
     use crate::Corpus;
 
-    /// Every chapter of a plated book carries one plate, and it sits
-    /// above the prose rather than under the heading.
+    /// Every chapter of an illustrated book carries one image, and it
+    /// sits above the prose rather than under the heading.
     #[test]
-    fn every_chapter_of_a_plated_book_opens_with_one() {
-        let book = plated(&Corpus::GATE.book());
+    fn every_chapter_of_an_illustrated_book_opens_with_one() {
+        let book = illustrated(&Corpus::GATE.book());
         for section in &book.sections {
             let images = section
                 .blocks
                 .iter()
                 .filter(|block| matches!(block, Block::Image { .. }))
                 .count();
-            assert_eq!(images, 1, "one plate a chapter");
+            assert_eq!(images, 1, "one image a chapter");
         }
         let assets = assets(&book);
         assert_eq!(assets.assets().len(), 1, "one image, however often placed");

@@ -837,7 +837,7 @@ mod tests {
     ///
     /// Both painters are handed the same display structure, so the
     /// question is whether the export puts what is on it where it
-    /// says. The plate lands at the box the item carries, and the
+    /// says. The image lands at the box the item carries, and the
     /// line set beside it starts at the x and the baseline the item
     /// carries.
     #[test]
@@ -860,7 +860,7 @@ mod tests {
         );
         book.assign_node_ids();
         let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
-            "plate.css",
+            "anchored.css",
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
         )])
         .compile(&book, registry());
@@ -868,25 +868,25 @@ mod tests {
         let output = crate::layout::layout_book(&book, &styles, registry(), &table);
         let page = &output.pages[0];
 
-        let plate = page
+        let image = page
             .items
             .iter()
             .find_map(|item| match item {
                 DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
                 _ => None,
             })
-            .expect("the plate is on the page");
+            .expect("the image is on the page");
         let (x, baseline) = page
             .items
             .iter()
             .find_map(|item| match item {
-                DrawItem::Text { x, y, .. } if *x > plate.0 + plate.2 => Some((*x, *y)),
+                DrawItem::Text { x, y, .. } if *x > image.0 + image.2 => Some((*x, *y)),
                 _ => None,
             })
-            .expect("a line is set beside the plate");
+            .expect("a line is set beside the image");
         assert!(
-            baseline > plate.1 && baseline < plate.1 + plate.3,
-            "the line at {baseline} is not beside the plate at {plate:?}",
+            baseline > image.1 && baseline < image.1 + image.3,
+            "the line at {baseline} is not beside the image at {image:?}",
         );
 
         let pdf = content(&with_images(&output, &table, &Metadata::default()));
@@ -895,21 +895,21 @@ mod tests {
         // carries, measured up from the foot of the page.
         let box_ = format!(
             "{} 0 0 {} {} {} cm",
-            plate.2,
-            plate.3,
-            plate.0,
-            page.height - plate.1 - plate.3,
+            image.2,
+            image.3,
+            image.0,
+            page.height - image.1 - image.3,
         );
         assert!(
             pdf.contains(&box_),
-            "the plate is not placed at {box_}:\n{pdf}",
+            "the image is not placed at {box_}:\n{pdf}",
         );
         // Text is written under a flip, so the line is set at the x
         // and the baseline the item carries.
         let text = format!("1 0 0 -1 {x} {baseline} Tm");
         assert!(
             pdf.contains(&text),
-            "the line beside the plate is not set at {text}:\n{pdf}",
+            "the line beside the image is not set at {text}:\n{pdf}",
         );
     }
 

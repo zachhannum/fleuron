@@ -739,7 +739,7 @@ fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOutput {
 /// A book that anchors an image to the page carries the exclusions as
 /// well. Their geometry is the flow's to resolve, but a section whose
 /// paragraphs may have to be set again beside one keeps what it takes
-/// to set them, so a book that gains its first plate builds its
+/// to set them, so a book that gains its first image builds its
 /// sections again.
 #[derive(Debug, Clone, Copy)]
 struct Against {
@@ -1571,12 +1571,12 @@ mod tests {
         session
     }
 
-    /// A session sets the prose around a plate the sheet anchors,
-    /// and a sheet that moves the plate builds the sections it
-    /// narrows again: where a plate sits is not something the lines
+    /// A session sets the prose around an image the sheet anchors,
+    /// and a sheet that moves the image builds the sections it
+    /// narrows again: where an image sits is not something the lines
     /// beside it can be kept through.
     #[test]
-    fn a_sheet_that_moves_a_plate_builds_the_sections_again() {
+    fn a_sheet_that_moves_an_anchored_image_builds_the_sections_again() {
         let mut book = book(vec![section(
             "one.md",
             [
@@ -1601,7 +1601,7 @@ mod tests {
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
         ));
         let output = session.preview();
-        let plate = output
+        let image = output
             .pages
             .iter()
             .flat_map(|page| &page.items)
@@ -1609,13 +1609,13 @@ mod tests {
                 DrawItem::Image { x, w, .. } => Some((*x, *w)),
                 _ => None,
             })
-            .expect("the plate is painted");
+            .expect("the image is painted");
         let beside = output.pages[0]
             .items
             .iter()
-            .filter(|item| matches!(item, DrawItem::Text { x, .. } if *x >= plate.0 + plate.1))
+            .filter(|item| matches!(item, DrawItem::Text { x, .. } if *x >= image.0 + image.1))
             .count();
-        assert!(beside > 0, "no line is set beside the plate");
+        assert!(beside > 0, "no line is set beside the image");
 
         let before = session.stages();
         session.set_style(sheets(
@@ -1625,14 +1625,14 @@ mod tests {
         assert_eq!(
             session.stages().lines,
             before.lines + 1,
-            "the section was kept over a plate that moved",
+            "the section was kept over an image that moved",
         );
     }
 
     /// Acceptance: a book with nothing anchored to the page breaks
     /// its lines as often as it did before exclusions existed. The
-    /// pass that settles where a plate lands is a cost only a book
-    /// with a plate pays.
+    /// pass that settles where an image lands is a cost only a book
+    /// with an image pays.
     #[test]
     fn a_book_with_nothing_anchored_breaks_its_lines_as_often_as_ever() {
         let mut session = three_chapters();

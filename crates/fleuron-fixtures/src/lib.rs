@@ -12,9 +12,9 @@
 #![deny(missing_docs)]
 
 pub mod alloc;
+pub mod anchored_images;
 pub mod corpus;
 pub mod gate;
-pub mod plates;
 
 pub use corpus::Corpus;
 
@@ -33,14 +33,14 @@ pub fn styles(book: &fleuron::content::Book) -> fleuron::style::StyleTree {
 }
 
 /// The same on the page box `division` asks for, with whatever
-/// `plating` anchors to it. The undivided, bare pair is the built-in
+/// `illustration` anchors to it. The undivided, bare pair is the built-in
 /// sheet alone.
 pub fn styles_on(
     book: &fleuron::content::Book,
     division: gate::Division,
-    plating: gate::Plating,
+    illustration: gate::Illustration,
 ) -> fleuron::style::StyleTree {
-    let css = format!("{}{}", division.css(), plating.css());
+    let css = format!("{}{}", division.css(), illustration.css());
     if css.is_empty() {
         return styles(book);
     }

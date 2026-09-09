@@ -1,22 +1,22 @@
-//! A whole novel with a plate at the head of every chapter.
+//! A whole novel with an image at the head of every chapter.
 //!
-//! The properties exclusions have to hold are about where a plate
+//! The properties exclusions have to hold are about where an image
 //! lands and what the prose beside it does, and a book-scale run is
-//! where a flow that sets a line over a plate shows: one page in
+//! where a flow that sets a line over an image shows: one page in
 //! three hundred is enough.
 
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page};
-use fleuron_fixtures::gate::{Division, Plating};
-use fleuron_fixtures::{Corpus, plates, registry, styles_on};
+use fleuron_fixtures::gate::{Division, Illustration};
+use fleuron_fixtures::{Corpus, anchored_images, registry, styles_on};
 
-/// One page's plates and one page's text, as the boxes they cover.
+/// One page's images and one page's text, as the boxes they cover.
 fn boxes(page: &Page) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
-    let mut plates = Vec::new();
+    let mut images = Vec::new();
     let mut runs = Vec::new();
     for item in &page.items {
         match item {
-            DrawItem::Image { x, y, w, h, .. } => plates.push([*x, *y, *x + *w, *y + *h]),
+            DrawItem::Image { x, y, w, h, .. } => images.push([*x, *y, *x + *w, *y + *h]),
             DrawItem::Text {
                 x,
                 y,
@@ -41,30 +41,30 @@ fn boxes(page: &Page) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
             _ => {}
         }
     }
-    (plates, runs)
+    (images, runs)
 }
 
-/// The gate novel with a plate a chapter: every chapter's plate is
+/// The gate novel with an image a chapter: every chapter's image is
 /// painted, and no line of prose is set where one stands.
 #[test]
-fn a_novel_of_plates_sets_every_page_clear_of_them() {
-    let book = plates::plated(&Corpus::GATE.book());
-    let styles = styles_on(&book, Division::Undivided, Plating::Plated);
-    let assets = plates::assets(&book);
+fn a_novel_of_images_sets_every_page_clear_of_them() {
+    let book = anchored_images::illustrated(&Corpus::GATE.book());
+    let styles = styles_on(&book, Division::Undivided, Illustration::Anchored);
+    let assets = anchored_images::assets(&book);
     let output = layout_book(&book, &styles, registry(), &assets);
 
     let mut painted = 0;
     for (index, page) in output.pages.iter().enumerate() {
-        let (plates, runs) = boxes(page);
-        painted += plates.len();
-        for plate in &plates {
+        let (images, runs) = boxes(page);
+        painted += images.len();
+        for image in &images {
             for run in &runs {
                 assert!(
-                    run[0] >= plate[2] - 1e-3
-                        || plate[0] >= run[2] - 1e-3
-                        || run[1] >= plate[3] - 1e-3
-                        || plate[1] >= run[3] - 1e-3,
-                    "page {}: a run at {run:?} is set over the plate at {plate:?}",
+                    run[0] >= image[2] - 1e-3
+                        || image[0] >= run[2] - 1e-3
+                        || run[1] >= image[3] - 1e-3
+                        || image[1] >= run[3] - 1e-3,
+                    "page {}: a run at {run:?} is set over the image at {image:?}",
                     index + 1,
                 );
             }
@@ -73,7 +73,7 @@ fn a_novel_of_plates_sets_every_page_clear_of_them() {
     assert_eq!(
         painted,
         book.sections.len(),
-        "every chapter's plate is painted once",
+        "every chapter's image is painted once",
     );
     assert!(output.warnings.is_empty(), "{:?}", output.warnings);
 }
@@ -82,10 +82,10 @@ fn a_novel_of_plates_sets_every_page_clear_of_them() {
 /// item for item: two runs are byte-identical and the page count does
 /// not move.
 #[test]
-fn a_novel_of_plates_lays_out_the_same_way_twice() {
-    let book = plates::plated(&Corpus::GATE.book());
-    let styles = styles_on(&book, Division::Undivided, Plating::Plated);
-    let assets = plates::assets(&book);
+fn a_novel_of_images_lays_out_the_same_way_twice() {
+    let book = anchored_images::illustrated(&Corpus::GATE.book());
+    let styles = styles_on(&book, Division::Undivided, Illustration::Anchored);
+    let assets = anchored_images::assets(&book);
     let once = layout_book(&book, &styles, registry(), &assets);
     let twice = layout_book(&book, &styles, registry(), &assets);
     assert_eq!(once.pages.len(), twice.pages.len());
