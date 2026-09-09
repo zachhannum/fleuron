@@ -1057,6 +1057,12 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         string_set,
         counter_reset,
         initial_letter,
+        // Whether an image is in the flow decides whether the section
+        // holds a fragment for it or an anchor. Where it then sits on
+        // the page, and which side prose sets on, are the flow's.
+        position,
+        inset: _,
+        wrap_flow: _,
         margin,
         padding,
         border,
@@ -1071,6 +1077,7 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
+    position.hash(h);
     (break_before, break_after, break_inside).hash(h);
     (background_color, box_decoration_break).hash(h);
     hash_edges(*margin, h);

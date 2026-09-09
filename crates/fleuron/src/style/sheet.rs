@@ -21,7 +21,7 @@ use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     BorderStyle, BoxDecorationBreak, Break, Color, Content, CounterStyle, Declaration, Edge,
     Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, MEDIUM,
-    MarginBox, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
+    MarginBox, Position, StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -804,6 +804,64 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         read: |name, input| longhand(name, input, count, Declaration::InitialLetter),
     },
     Spec {
+        name: "position",
+        inherited: false,
+        syntax: "static | absolute",
+        examples: &["absolute"],
+        read: |name, input| longhand(name, input, positioning, Declaration::Position),
+    },
+    Spec {
+        name: "top",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "0", "54pt"],
+        read: |name, input| {
+            longhand(name, input, inset, |inset| {
+                Declaration::Inset(Edge::Top, inset)
+            })
+        },
+    },
+    Spec {
+        name: "right",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "0", "54pt"],
+        read: |name, input| {
+            longhand(name, input, inset, |inset| {
+                Declaration::Inset(Edge::Right, inset)
+            })
+        },
+    },
+    Spec {
+        name: "bottom",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "0", "54pt"],
+        read: |name, input| {
+            longhand(name, input, inset, |inset| {
+                Declaration::Inset(Edge::Bottom, inset)
+            })
+        },
+    },
+    Spec {
+        name: "left",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "0", "54pt"],
+        read: |name, input| {
+            longhand(name, input, inset, |inset| {
+                Declaration::Inset(Edge::Left, inset)
+            })
+        },
+    },
+    Spec {
+        name: "wrap-flow",
+        inherited: false,
+        syntax: "auto | both | start | end",
+        examples: &["end"],
+        read: |name, input| longhand(name, input, wrap_flow, Declaration::WrapFlow),
+    },
+    Spec {
         name: "margin",
         inherited: false,
         syntax: "[ <length> | <percentage> ]{1,4}",
@@ -1276,6 +1334,41 @@ fn hyphens(input: &mut Parser<'_, '_>) -> Option<Hyphens> {
     match_ignore_ascii_case! { &keyword,
         "none" | "manual" => Some(Hyphens::None),
         "auto" => Some(Hyphens::Auto),
+        _ => None,
+    }
+}
+
+/// `position: static | absolute`. An absolute box comes out of the
+/// flow and sits against the page area.
+fn positioning(input: &mut Parser<'_, '_>) -> Option<Position> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "static" => Some(Position::Static),
+        "absolute" => Some(Position::Absolute),
+        _ => None,
+    }
+}
+
+/// One inset: `auto`, or a length from the page area's edge.
+fn inset(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    length(input).map(Some)
+}
+
+/// `wrap-flow: auto | both | start | end`: which side of an exclusion
+/// prose sets on.
+fn wrap_flow(input: &mut Parser<'_, '_>) -> Option<WrapFlow> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "auto" => Some(WrapFlow::Auto),
+        "both" => Some(WrapFlow::Both),
+        "start" => Some(WrapFlow::Start),
+        "end" => Some(WrapFlow::End),
         _ => None,
     }
 }

@@ -798,6 +798,9 @@ pub enum Declaration {
     StringSet(Vec<StringSet>),
     CounterReset(Option<u32>),
     InitialLetter(u16),
+    Position(Position),
+    Inset(Edge, Option<Length>),
+    WrapFlow(WrapFlow),
     Margin(Edge, Length),
     Padding(Edge, Length),
     BorderStyle(Edge, BorderStyle),
@@ -842,6 +845,18 @@ impl LineHeight {
 /// ascent and descent from the font; this is the factor over them.
 const NORMAL_LINE_HEIGHT: f32 = 1.2;
 
+fn in_flow(position: &Position) -> bool {
+    *position == Position::Static
+}
+
+fn unplaced(inset: &Edges<Inset>) -> bool {
+    *inset == Edges::all(Inset::Auto)
+}
+
+fn wraps_nothing(wrap: &WrapFlow) -> bool {
+    *wrap == WrapFlow::Auto
+}
+
 fn no_padding(padding: &Edges) -> bool {
     *padding == Edges::all(0.0)
 }
@@ -852,6 +867,54 @@ fn no_border(border: &Edges<Border>) -> bool {
 
 fn sliced(value: &BoxDecorationBreak) -> bool {
     *value == BoxDecorationBreak::Slice
+}
+
+/// Whether an element sits in the flow or against the page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Position {
+    /// `static`: the element sits where the flow puts it.
+    Static,
+    /// `absolute`: the element comes out of the flow and sits against
+    /// the page area, at the insets it declares.
+    Absolute,
+}
+
+/// How far one edge of a positioned box sits from the page area's own,
+/// from `top`, `right`, `bottom` and `left`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Inset {
+    /// `auto`: the opposite edge places the box, and where that is
+    /// `auto` too the page area's own edge does.
+    Auto,
+    /// A length in points, negative where the box reaches into the
+    /// margin.
+    Points(f32),
+}
+
+impl Inset {
+    /// The length in points, or `None` where the inset is `auto`.
+    pub fn points(self) -> Option<f32> {
+        match self {
+            Inset::Auto => None,
+            Inset::Points(points) => Some(points),
+        }
+    }
+}
+
+/// Which side of an exclusion prose sets on, from `wrap-flow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WrapFlow {
+    /// `auto`: the box excludes nothing, and prose runs under it.
+    Auto,
+    /// `both`: prose sets on either side of it.
+    Both,
+    /// `start`: prose sets on the side the line starts at.
+    Start,
+    /// `end`: prose sets on the side the line ends at.
+    End,
 }
 
 /// One node's resolved style: what every downstream pass reads.
@@ -912,6 +975,15 @@ pub struct ComputedStyle {
     /// Lines an initial letter is sunk over, from `initial-letter`.
     /// Fewer than two is no drop cap.
     pub initial_letter: u16,
+    /// Whether the element sits in the flow or against the page.
+    #[serde(skip_serializing_if = "in_flow")]
+    pub position: Position,
+    /// What the insets say, for an element that is against the page.
+    #[serde(skip_serializing_if = "unplaced")]
+    pub inset: Edges<Inset>,
+    /// Which side of this element prose sets on, from `wrap-flow`.
+    #[serde(skip_serializing_if = "wraps_nothing")]
+    pub wrap_flow: WrapFlow,
     /// Margins in points.
     pub margin: Edges,
     /// Padding in points, between the border and the content.
@@ -961,6 +1033,9 @@ impl ComputedStyle {
             string_set: Vec::new(),
             counter_reset: None,
             initial_letter: 0,
+            position: Position::Static,
+            inset: Edges::all(Inset::Auto),
+            wrap_flow: WrapFlow::Auto,
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
@@ -985,6 +1060,9 @@ impl ComputedStyle {
             string_set: Vec::new(),
             counter_reset: None,
             initial_letter: 0,
+            position: Position::Static,
+            inset: Edges::all(Inset::Auto),
+            wrap_flow: WrapFlow::Auto,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -1026,6 +1104,14 @@ impl ComputedStyle {
             Declaration::StringSet(sets) => self.string_set = sets.clone(),
             Declaration::CounterReset(folio) => self.counter_reset = *folio,
             Declaration::InitialLetter(lines) => self.initial_letter = *lines,
+            Declaration::Position(position) => self.position = *position,
+            Declaration::Inset(edge, length) => {
+                *self.inset.edge(*edge) = match length {
+                    None => Inset::Auto,
+                    Some(length) => Inset::Points(length.to_points(self.font_size, root_size)),
+                }
+            }
+            Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
             Declaration::Margin(edge, length) => {
                 *self.margin.edge(*edge) = length.to_points(self.font_size, root_size)
             }

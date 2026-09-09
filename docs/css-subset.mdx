@@ -476,6 +476,9 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `string-set` | `string-set: chapter content()` |
 | `counter-reset` | `counter-reset: page` |
 | `initial-letter` | `initial-letter: 3` |
+| `position` | `position: absolute` |
+| `top`, `right`, `bottom`, `left` | `top: 0` |
+| `wrap-flow` | `wrap-flow: end` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -493,6 +496,12 @@ content:              none | <string>;
 string-set:           none | [ <name> [ content() | <string> ]+ ]#;
 counter-reset:        none | page <integer>?;
 initial-letter:       <integer>;
+position:             static | absolute;
+top:                  auto | <length>;
+right:                auto | <length>;
+bottom:               auto | <length>;
+left:                 auto | <length>;
+wrap-flow:            auto | both | start | end;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;

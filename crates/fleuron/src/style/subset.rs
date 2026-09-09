@@ -471,6 +471,14 @@ mod tests {
             Declaration::StringSet(_) => "string-set",
             Declaration::CounterReset(_) => "counter-reset",
             Declaration::InitialLetter(_) => "initial-letter",
+            Declaration::Position(_) => "position",
+            Declaration::Inset(edge, _) => match edge {
+                Edge::Top => "top",
+                Edge::Right => "right",
+                Edge::Bottom => "bottom",
+                Edge::Left => "left",
+            },
+            Declaration::WrapFlow(_) => "wrap-flow",
             Declaration::Margin(edge, _) => margin_of(*edge),
             Declaration::Padding(edge, _) => match edge {
                 Edge::Top => "padding-top",
