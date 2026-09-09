@@ -28,7 +28,7 @@ library, so it builds for any target Rust does.
 ## Scope
 
 fleuron handles book-shaped documents: flowing prose with headings,
-block quotes, scene breaks, drop caps, images, running heads, footnotes,
+block quotes, scene breaks, drop caps, images, running heads,
 multi-column pages, and page furniture like recto and verso, page
 counters and named pages.
 

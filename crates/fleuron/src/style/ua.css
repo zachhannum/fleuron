@@ -1,6 +1,5 @@
-/* The user-agent stylesheet: fleuron's defaults, as CSS.
-   A trade paperback — 6x9in, mirrored margins, a folio in the bottom
-   margin — because that is the book most manuscripts become. Author
+/* Fleuron's default stylesheet: a trade paperback at 6x9 inches, with
+   mirrored margins and a page number at the bottom. Any additional
    CSS cascades over every rule here. */
 
 book {
@@ -13,8 +12,8 @@ book {
   widows: 2;
 }
 
-/* A chapter opens on a right-hand page, and its pages are named so
-   that @page can tell an opening from a continuation. */
+/* A chapter opens on a right-hand page. Naming its pages lets @page
+   tell an opening page from a continuation. */
 section {
   page: chapter;
   break-before: recto;
@@ -25,26 +24,21 @@ h1, h2, h3, h4, h5, h6 {
   break-after: avoid;
 }
 
-/* Prose tells one paragraph from the next with an indent rather than
-   a blank line, so the indent belongs to a paragraph that follows
-   another one. A paragraph that opens a chapter or a quotation, or
-   picks the prose up again after a heading, a scene break or an
-   illustration, has nothing above it to be told apart from, and sets
-   flush. */
+/* An indent separates one paragraph from the next, so it belongs
+   only to a paragraph that follows another one. A paragraph after a
+   heading, a thematic break, or an image starts flush. */
 p + p {
   text-indent: 1.2em;
 }
 
-/* A quotation is set narrower than the measure and off from the
-   prose around it, and stays together across a page turn as far as
-   its own orphans and widows allow. */
+/* A quotation is narrower than the surrounding text and set off
+   from it. */
 blockquote {
   margin: 1em 2em;
 }
 
-/* A scene break is an ornament centred in the measure. It belongs
-   between paragraphs, so it never opens or closes a page: what would
-   read as a stray mark at a page turn moves with the prose. */
+/* A thematic break is a centered ornament. It belongs between
+   paragraphs, so it never opens or closes a page. */
 hr {
   content: "\2766";
   text-align: center;
@@ -53,10 +47,9 @@ hr {
   break-after: avoid;
 }
 
-/* A section's opening heading is its chapter title, and travels as a
-   named string so a running head can pick it up with
-   string(chapter). Where that shows is the author's business; that
-   there is something to show is not. */
+/* A section's opening heading is its chapter title. Storing it as a
+   named string lets a running head pick it up with
+   string(chapter). */
 section > :is(h1, h2, h3, h4, h5, h6):first-child {
   string-set: chapter content();
 }
@@ -75,8 +68,8 @@ code { font-family: monospace }
   }
 }
 
-/* Margins mirror across the spread: the wider one is always the
-   spine. */
+/* Margins mirror across the spread, so the wider one is always at
+   the spine. */
 @page :left {
   margin-left: 42pt;
   margin-right: 54pt;
@@ -87,9 +80,8 @@ code { font-family: monospace }
   margin-right: 42pt;
 }
 
-/* A chapter's opening page counts but does not show its folio. A
-   blank inserted to square the sheet counts too, and paints nothing
-   at all: that rule is the engine's, not this sheet's. */
+/* A chapter's opening page counts toward the numbering but does not
+   show its number. */
 @page chapter:first {
   @bottom-center { content: none }
 }

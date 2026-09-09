@@ -19,7 +19,7 @@ In: whatever changed. Markdown source, stylesheets, font bytes, a content tree. 
 
 Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. Transferred rather than copied.
 
-A `preview` reply need not carry the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0, and the reply's `pages` is that slice: `first` says where it begins and `bookPages` says how many pages the book has, so a reply carrying one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
+A `preview` reply need not be the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0, and the reply's `pages` is that slice: `first` says where it begins and `bookPages` says how many pages the book has, so a reply with one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
 
 ## The display structure
 
@@ -31,7 +31,7 @@ Faces include their instance. The font table records where on its file's axes ea
 
 Glyphs are tied to their text. Each text run has the string it was shaped from, and each glyph a byte range into it. Only the shaper knew the correspondence, so the display structure records it. A painter that supports selection or accessible text reads it through those ranges; a painter that only draws ignores it.
 
-Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, a folio or a running head, names no node. A node id is the engine's own name for a place in the book, and the two questions below turn it into a file and a byte of one.
+Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, a page number or a running head, names no node. A node id is the engine's own name for a place in the book, and the two questions below turn it into a file and a byte of one.
 
 ## One book, both targets
 

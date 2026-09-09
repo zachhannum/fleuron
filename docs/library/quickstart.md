@@ -11,7 +11,7 @@ lays it out, and writes the PDF. This code can also be found at
 cargo run --example quickstart -p fleuron
 ```
 
-## Sample Code
+## Sample code
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -167,8 +167,8 @@ book.assign_node_ids();
 
 ## Styling without an author sheet
 
-`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 6×9 inches, 
-EB Garamond at 11 points, prose indented, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
+`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 6x9 inches, 
+EB Garamond at 11 pt, prose indented, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
 
 ```rust
 let registry = fleuron::fonts::bundled_registry()?;
@@ -199,6 +199,6 @@ Set a new sheet and call `preview` again, and only the stages under the edit run
 
 ## When things go wrong
 
-The engine is designed to never panic, even with bad input. Unsupported CSS, an unresolvable 
+Unsupported CSS, an unresolvable 
 font and a stack that matches nothing are all warnings, and the run will still finish. 
 See [diagnostics](diagnostics.mdx) for what warns and what fails.

@@ -101,7 +101,7 @@ Within a family, slope decides before weight. A family with an italic style neve
 an italic request with the upright one, whatever weights are available. Weight then follows
 CSS: between 400 and 500 the search looks up before it looks down, and outside that range it looks away from it.
 
-Nothing is synthesised. There is no oblique-by-shearing and no bold-by-smearing. A family 
+Nothing is synthesized. There is no oblique-by-shearing and no bold-by-smearing. A family 
 with no italic cut lays out upright, and a stack that resolves nothing falls back to the 
 first registered face. Both warn, naming what was asked for, and the book lays out either way. 
 See [diagnostics](diagnostics.mdx).

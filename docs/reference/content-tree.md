@@ -91,7 +91,7 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 ## Naming a node
 
-`attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that carries neither leaves the field out.
+`attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that has neither leaves the field out.
 
 ```json
 { "attributes": { "id": "frontispiece", "classes": ["map"] } }
@@ -101,7 +101,7 @@ Specificity counts them in buckets of their own: `.map` outranks `img`, and `#fr
 
 The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 
-A text run carries the field like every other node, and a sheet reaches nothing through it.
+A text run has the field like every other node, and a sheet reaches nothing through it.
 
 ## Node identity
 
@@ -117,7 +117,7 @@ Positions are diagnostic data and never layout input, so a missing one never fai
 
 ## Where a node was read from
 
-`span` is the other half: the bytes of `source` the node was read from, markup and all. A source and the text of the nodes read from it are different bytes, because markup is not text, so the span is the node's extent rather than a letter-by-letter map. A byte of the file lands on the node written there, not on a letter of it. The node that holds another was read from a stretch that holds its own, and the innermost nodes tile the file, so one byte is one node.
+`span` is the other half: the bytes of `source` the node was read from, markup and all. A source and the text of the nodes read from it are different bytes, because markup is not text, so the span is the node's extent rather than a letter-by-letter map. A byte of the file lands on the node written there, not on a letter of it. The node that contains another was read from a stretch that contains its own, and the innermost nodes tile the file, so one byte is one node.
 
 Two questions are answered from it, and they are the two halves of a cursor's way onto a page and back:
 
@@ -128,6 +128,6 @@ Two questions are answered from it, and they are the two halves of a cursor's wa
 
 A cursor becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page it is set on. A run under the pointer goes the other way. Only the sections read from the source asked about are looked at, so one file's cursor is answered by one file's nodes.
 
-Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host that holds one across an edit asks again rather than reusing it.
+Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host that keeps one across an edit asks again rather than reusing it.
 
 A node the engine synthesized, or one from a tree built rather than parsed, was read from nothing, and both questions answer with nothing rather than guessing.

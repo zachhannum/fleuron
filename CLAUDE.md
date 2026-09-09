@@ -166,32 +166,30 @@ the lockfiles that mirror all of it.
 
 ## Documentation rules
 
-Applies to code comments and all documentation — internal (CLAUDE.md,
-docs/) and external (README).
+`STYLE.md` is the voice the docs, the README, and the npm READMEs are
+written in. Its before-and-after pairs come from edits made to
+finished pages, so they are the samples to match. Read them before
+writing prose and check a draft against them after.
 
-**DO**
+**Code comments**
 
 - Keep them short.
-- Only write documentation when the WHY is non-obvious.
+- Only write one when the WHY is non-obvious.
+- Do not restate what the code says.
+- No links (code references, PRs, issues, error URLs).
+- Do not explain why an unchosen alternative was not taken.
+- A comment published as documentation, such as the ones in
+  `crates/fleuron/src/style/ua.css`, follows STYLE.md as well.
+
+**Documentation**
+
+- Say what a page covers and what an example demonstrates. A docs
+  page is allowed to describe itself; a code comment is not.
 - Write docs as statements of how things are.
-- Run the `humanizer` skill over prose before it lands: comments,
-  doc comments, docs/, README, PR and issue bodies.
-- After the `humanizer` skill, run all prose through the style guide in STYLE.md
+- Do not document deletions or changes over time. History lives in
+  git.
 
-**DO NOT**
-
-- Document what the code or doc already says.
-- Document deletions.
-- Document changes over time — history lives in git.
-- Include links (code references, PRs, issues, error URLs).
-- Explain why a rejected or unchosen alternative wasn't taken.
-
-Run it against its own rules. Nothing in this repo is a writing
-sample to match, so nothing overrides them, the em dash rule
-included.
-
-`STYLE.md` is the voice the docs, the README and the npm READMEs are
-written in.
+Both: no em dashes.
 
 ## Conventions
 

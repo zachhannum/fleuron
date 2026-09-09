@@ -71,7 +71,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
 | `warnings` | [what the run warned about](../library/diagnostics.mdx) |
-| `svg(page?)` | the markup for a held page, painted but not mounted; empty for one that is not |
+| `svg(page?)` | the markup for a fetched page, painted but not mounted; empty for one that is not |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |
 
@@ -114,11 +114,11 @@ The effect is a debounce whose delay is the last render's duration: a long book 
 
 ## Turning pages
 
-`Preview` fetches one page at a time, not the whole book: the page on screen and the one either side of it. Assigning to `page` inside that reach paints at once, from what is already held. A page further off asks the worker and paints once the reply lands, the frame staying as it was until then. `pages` reports how many pages the book has regardless of how much of it has crossed.
+`Preview` fetches one page at a time, not the whole book: the page on screen and the one either side of it. Assigning to `page` inside that reach paints at once, from what is already fetched. A page further off asks the worker and paints once the reply lands, the frame staying as it was until then. `pages` reports how many pages the book has regardless of how much of it has crossed.
 
-An edit drops whatever pages were held, since the book they came from no longer stands, and fetches the page on screen fresh against the book the edit produced.
+An edit drops whatever pages were fetched, since the book they came from no longer stands, and fetches the page on screen fresh against the book the edit produced.
 
-`onRender` is called after every render that reaches the screen, with the reply behind the page on screen: `output.pages` holds that page alone, `output.bookPages` is the book's own length, and `output.fonts`, `output.assets` and `output.warnings` are the whole run's.
+`onRender` is called after every render that reaches the screen, with the reply behind the page on screen: `output.pages` has that page alone, `output.bookPages` is the book's own length, and `output.fonts`, `output.assets` and `output.warnings` are the whole run's.
 
 ```js
 const preview = await Preview.mount(element, {
@@ -151,7 +151,7 @@ const output = decodeDisplayList(bytes);
 element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts, zoom: 2 });
 ```
 
-`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the trim size in points with the origin at the top left, which is the display structure's own coordinate system, so nothing is rescaled on the way out.
+`paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the page size in points with the origin at the top left, which is the display structure's own coordinate system, so nothing is rescaled on the way out.
 
 The second argument is all optional:
 
@@ -160,7 +160,7 @@ The second argument is all optional:
 | `fonts` | none | The font table, `output.fonts`. Leave it out and the painter cannot name the faces, so every run falls back to a generic serif. |
 | `zoom` | `1` | Points to CSS pixels. This sets the `width` and `height` on the `<svg>` element and nothing else: the coordinates inside it do not move, so the page scales without re-laying out. |
 | `paper` | `'#ffffff'` | The fill of a rectangle painted behind the page. `null` paints none, leaving the page transparent. |
-| `ink` | `'#000000'` | The fill for a run or a rule the sheet left black. A coloured run takes its own colour instead. `ink` reaches the preview only: the export prints black wherever the sheet named no colour. |
+| `ink` | `'#000000'` | The fill for a run or a rule the sheet left black. A colored run takes its own color instead. `ink` reaches the preview only: the export prints black wherever the sheet named no color. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 

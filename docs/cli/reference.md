@@ -44,7 +44,7 @@ usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
 A lone markdown input is the whole book, so its frontmatter fills whatever `--title`, `--author` and `--meta` leave unset. Several inputs are chapters, and each file's frontmatter stays with the section it became.
 
-An unrecognised option beginning with `-` is a usage error. There is no `--` separator: every positional argument is an input, and every option takes its value next.
+An unrecognized option beginning with `-` is a usage error. There is no `--` separator: every positional argument is an input, and every option takes its value next.
 
 ## Exit codes
 

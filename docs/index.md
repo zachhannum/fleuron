@@ -5,7 +5,7 @@ slug: overview
 ---
 
 fleuron takes markdown and CSS and generates a fully typeset and publish-ready novel. It shapes the text, 
-breaks and hyphenates the lines, fragments the result into pages, and emits a formatted output struct that 
+breaks and hyphenates the lines, fragments the result into pages, and produces a display structure that 
 can be used to preview the book, and exported to PDF. The same source compiles to native and to WebAssembly.
 
 ## Getting started
@@ -24,7 +24,7 @@ to test it out.
 
 ## The pipeline
 
-```mermaid
+```text
 markdown ─► content tree ──┐
                            ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
 CSS ───────────────────────┘                                                               │
@@ -43,7 +43,7 @@ See the [content tree](reference/content-tree.md) for a reference of the AST the
 ## Scope
 
 `fleuron` handles book-shaped documents: flowing prose with headings, block quotes, scene breaks, 
-drop caps, images, running heads, footnotes, multi-column pages, and page furniture like recto and verso, page counters and named pages.
+drop caps, images, running heads, multi-column pages, and page furniture like recto and verso, page counters and named pages.
 
 While it uses CSS to describe the intended formatting, `fleuron` is not a browser engine.
 

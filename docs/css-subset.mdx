@@ -1,11 +1,11 @@
 ---
 title: CSS subset
-description: Every property, at-rule and selector the engine honours, and what it does with the rest.
+description: The CSS rules fleuron supports, what each one does, and what happens to CSS it does not support.
 ---
 
-fleuron supports the CSS a book needs and reports the rest. Everything below is honoured by the pipeline. Anything outside it becomes a warning naming the line and column it was written at, and the run continues.
+Fleuron uses CSS to describe how a book is typeset. This page describes all of the CSS rules that fleuron supports and how to use them. The engine warns about anything it does not support and continues, so one unsupported rule does not cost you the rest of the stylesheet.
 
-The stylesheet below is written in this vocabulary: mirrored margins, a folio, a running head from `string-set`, and a drop cap from `initial-letter`. Change a rule and the chapter is set again.
+The editor below is a live playground running the fleuron engine.
 
 <Playground
   demo="css-subset"
@@ -13,166 +13,32 @@ The stylesheet below is written in this vocabulary: mirrored margins, a folio, a
   caption="A chapter opening, and the stylesheet that set it."
 />
 
-## Selectors
+## The defaults
 
-{/* generated: selectors */}
+The engine includes a built-in stylesheet that defines a basic trade paperback style: a 6x9 inch page, mirrored margins, and page numbers centered at the bottom. It sets the text in the [bundled font](library/fonts.md) at 11 pt with a line height of 1.4, left-aligned and unhyphenated. It indents every paragraph after the first and centers an ornament on each thematic break.
 
-Element names are the markdown vocabulary: `book`, `section`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `p`, `blockquote`, `hr`, `img`, `code`, `em`, `strong` and `a`.
+The CSS for the built-in stylesheet is listed [at the bottom of this page](#the-built-in-stylesheet). Any additional CSS cascades over it regardless of specificity, so `p { text-indent: 0 }` overrides the built-in `p + p` rule.
 
-A compound is `<element>` (`p`), `*` (`section > *`), `.<class>` (`p.epigraph`) or `#<id>` (`#frontispiece`), with any of the pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:empty`, `:root`, `:is()`, `:where()`, `:not()` and `:has()`.
+The following example overrides the default page size, font size, text alignment, and hyphenation:
 
-Compounds join by the descendant (`section p`), child (`section > p`), next-sibling (`h1 + p`) and subsequent-sibling (`h1 ~ p`) combinators, and selectors list with `,` (`h1, h2`).
+```css
+@page {
+  size: a5;
+  margin: 16mm 14mm 18mm 16mm;
+}
 
-The pseudo-elements are `::first-letter` and `::first-line`.
+book {
+  font-size: 10pt;
+  text-align: justify;
+  hyphens: auto;
+}
+```
 
-`::first-line` takes `color`, `font-size`, `font-variant-caps`, `letter-spacing` and `text-transform`.
+## The page
 
-{/* end generated */}
+`@page` describes the page itself: its size, its margins, its columns, and the boxes in the margins that contain running heads and page numbers.
 
-There are no attributes or namespaces, and no interaction pseudo-classes, because nothing here is interactive.
-
-A class or an id names one element rather than a kind of them: this image rather than every `img`. An element takes any number of classes and at most one id. Two elements under one id both match, and the second one warns. See [the markdown mapping](reference/markdown.mdx) for where a manuscript writes them.
-
-`::first-letter` is where a drop cap comes from. It cascades over the style of the element it belongs to, so a rule that names it starts from that element's own font and size. `::first-line` cascades the same way, and takes the properties listed above and nothing else. A declaration outside that set warns naming the property and is dropped.
-
-`::first-letter` takes the initial where both fall on the same paragraph, and `::first-line` sets the rest of the line.
-
-Text runs are not elements. They take the style of the inline or block around them, and never count towards `:first-child`.
-
-## Properties
-
-{/* generated: properties */}
-
-A declaration is `<property>: <value> !important?`.
-
-Text, inherited:
-
-| property | values |
-|---|---|
-| `font-family` | `[ <family-name> \| serif \| sans-serif \| monospace ]#` |
-| `font-size` | `<length> \| <percentage>` |
-| `font-style` | `normal \| italic \| oblique` |
-| `font-weight` | `normal \| bold \| <number [1,1000]>` |
-| `color` | `<color>` |
-| `line-height` | `normal \| <number> \| <length> \| <percentage>` |
-| `letter-spacing` | `normal \| <length>` |
-| `font-variant-caps` | `normal \| small-caps` |
-| `text-transform` | `none \| uppercase \| lowercase \| capitalize` |
-| `text-align` | `left \| right \| center \| justify \| start \| end` |
-| `text-justify` | `auto \| inter-word \| inter-character \| distribute` |
-| `text-indent` | `<length> \| <percentage>` |
-| `hanging-punctuation` | `none \| [ first \|\| [ force-end \| allow-end ] \|\| last ]` |
-| `hyphens` | `none \| manual \| auto` |
-| `orphans`, `widows` | `<integer>` |
-| `page` | `auto \| <name>` |
-
-Block box, not inherited:
-
-| property | values |
-|---|---|
-| `content` | `none \| <string>` |
-| `string-set` | `none \| [ <name> [ content() \| <string> ]+ ]#` |
-| `counter-reset` | `none \| page <integer>?` |
-| `initial-letter` | `<integer>` |
-| `margin` | `[ <length> \| <percentage> ]{1,4}` |
-| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `<length> \| <percentage>` |
-| `padding` | `[ <length> \| <percentage> ]{1,4}` |
-| `padding-top`, `padding-right`, `padding-bottom`, `padding-left` | `<length> \| <percentage>` |
-| `border`, `border-top`, `border-right`, `border-bottom`, `border-left` | `[ <length> \| thin \| medium \| thick ] \|\| [ none \| solid ] \|\| <color>` |
-| `border-width` | `[ <length> \| thin \| medium \| thick ]{1,4}` |
-| `border-style` | `[ none \| solid ]{1,4}` |
-| `border-color` | `<color>{1,4}` |
-| `background-color` | `<color> \| transparent` |
-| `box-decoration-break` | `slice \| clone` |
-| `break-before`, `break-after`, `break-inside` | `auto \| avoid \| avoid-page \| avoid-column \| column \| page \| always \| left \| right \| recto \| verso` |
-
-{/* end generated */}
-
-`recto` and `verso` are the book's names for `right` and `left`. `content` on `hr` is the ornament a thematic break is set in.
-
-{/* generated: units */}
-
-Lengths are `pt`, `px`, `pc`, `in`, `cm`, `mm`, `q`, `em` and `rem`, and everything computes to points.
-
-{/* end generated */}
-
-`em` in `font-size` is a multiple of the parent's size and elsewhere of the element's own. `rem` is always a multiple of the root's.
-
-### Setting the measure
-
-Lines break by total fit over the whole paragraph: every set of breaks is costed by how far each line is from the measure, cubed, and the cheapest set wins. A word pulled up to fill one line is not taken when it leaves a hole in the next.
-
-`text-align: justify` opens the space between words to reach the measure exactly, on every line but the last. `text-justify: inter-character` lets the space between letters change as well. The default does not. Left, right and centred text break the same way and sit where the alignment puts them.
-
-`hyphens: auto` adds syllable boundaries to the breaks a line may take, each charged for the hyphen it leaves and for coming after another one. No more than two lines in a row end hyphenated.
-
-The syllables are the ones the book's language has. `extra["language"]` in the metadata names it, as a BCP 47 tag read by its primary subtag: `fr-CA` is French. A book that declares no language breaks by English. A language with no patterns leaves every word whole, and a diagnostic names the tag. The tag is the book's, so one book is set in one language.
-
-### Display typography
-
-`letter-spacing` is advance added between the glyphs of a run, and the total-fit pass measures it like any other width. Nothing is added after a line's last glyph, so a tracked title centres on its own letters rather than on the space after them.
-
-`font-variant-caps: small-caps` takes the face's `smcp` feature. A face without one draws its lowercase as capitals at four-fifths of the size, and a diagnostic names it, so an author can pick a face that has them.
-
-`text-transform` changes the characters that are shaped. What a painter reads back is the text the author wrote: the run has the source and the shaper's mapping into the transformed form, so a PDF's text extraction, a search over it and copy and paste all return the manuscript. `capitalize` raises the letter a word opens with, where a word continues through letters, digits and the apostrophe inside one.
-
-### Colour
-
-`color` is the ink a run is set in. It inherits, so a colour on `section` reaches the prose under it and a rule on `h1` beats what the heading inherited.
-
-The values are a CSS colour name, `#rgb`, `#rrggbb`, and `rgb()` over numbers or percentages. There is no alpha channel.
-
-The preview and the PDF fill from the same field on the run.
-
-### The box model
-
-A block has a margin, a border and padding around its content, and a background behind them. `margin` and `padding` take a one-to-four value shorthand and a longhand per edge. `border` takes a width, a style and a colour in any order, and `border-top`, `border-right`, `border-bottom` and `border-left` take the same three for one edge. `border-width`, `border-style` and `border-color` each set one of the three across all four edges, with the one-to-four value shorthand `margin` uses. `border-style` is `none` or `solid`.
-
-The border and the padding on the left and right narrow the measure and move the leading edge in by what they take. The ones on the top and bottom take height in the flow, and the margins on either side of them no longer collapse: a top border on a blockquote sits between the quote's own top margin and its first paragraph's, and both take space.
-
-`background-color` fills the border box, with the border over it. Neither inherits.
-
-Where two edges of different colours meet, the corner goes to the horizontal one rather than mitring, and there are no rounded corners.
-
-A page break through a block splits its box, and `box-decoration-break` settles the two edges the break made. `slice`, the initial value, draws the block as one box and cuts it, leaving both open. `clone` closes each piece on all four edges. Neither repeats the padding, which belongs to the block's own top and bottom.
-
-### Hanging punctuation
-
-`hanging-punctuation` lets a mark sit outside the measure so the edge of the text block reads straight. A full stop or a comma at the end of a line leaves a hole in the margin, and hanging it closes the hole.
-
-`first` hangs an opening quotation mark or bracket back into the margin the line starts at. `force-end` hangs a closing mark past the measure on every line; `allow-end` hangs one only where that is what makes the line fit. `last` hangs the mark a paragraph ends on.
-
-How far a mark hangs depends on the mark: most of a full stop or a comma, less of a colon, and none of a letter.
-
-### Breaking
-
-`break-inside: avoid` moves a block whole rather than split it. `orphans` and `widows` bound where a paragraph may be cut: fewer than `orphans + widows` lines and it moves whole too. Where no allowed break remains, the page ends anyway.
-
-### Running heads
-
-`string-set` is where a running head's text comes from. The element sets the named string when the flow reaches it, and a margin box reads it back with `string()`. `content()` is the element's own text, which only headings and paragraphs have any of.
-
-### Folios
-
-`counter-reset: page <integer>` is where the folio restarts. The page the element opens takes that number, and the pages after it count on from there. Blank leaves count.
-
-Recto and verso do not follow the folio. Which side of the spread a page falls on is where it sits in the sheet, not what is printed on it, so front matter restarting the body at 1 leaves the sides alone.
-
-### First lines
-
-`::first-line` reaches the paragraph's first line rather than the page's, so a paragraph broken across a page boundary is styled on its opening line and nowhere else.
-
-Which words the line holds depends on the style over it. `letter-spacing`, `font-variant-caps`, `text-transform` and `font-size` change the width of the text, and the width moves where the line breaks. The style covers the words the line comes to hold, wherever that break lands.
-
-`font-size` grows the line around the baseline the paragraph shares. `color` is paint alone, and the lines break the same with it or without it.
-
-### Drop caps
-
-An initial letter is sized from the sink rather than from `font-size`. Its cap height spans `initial-letter` lines, so its baseline lands on the last of them and its top on the first line's cap height. The lines beside it break to the measure it leaves.
-
-## `@page`
-
-{/* generated: page */}
+{/* generated: page-grammar */}
 
 ```css
 @page <name>? [ :first | :blank | :left | :right ]* {
@@ -194,37 +60,595 @@ An initial letter is sized from the sink rather than from `font-size`. Its cap h
 }
 ```
 
-`<page-size>` is `a3`, `a4`, `a5`, `b4`, `b5`, `letter`, `legal` and `ledger`, portrait unless `landscape` follows.
+{/* end generated */}
 
-`<counter-style>` is `decimal`, `lower-roman`, `upper-roman`, `lower-alpha` and `upper-alpha`.
+### Size and margins
 
-The margin boxes that paint are `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center` and `@bottom-right`. `@top-left-corner`, `@top-right-corner`, `@left-top`, `@left-middle`, `@left-bottom`, `@right-top`, `@right-middle`, `@right-bottom`, `@bottom-left-corner` and `@bottom-right-corner` parse and paint nothing.
+`size` takes a width and a height, a single length for a square page, or a named paper size.
+
+{/* generated: page-sizes */}
+
+A named page size is one of these, portrait unless `landscape` follows.
+
+```
+a3 a4 a5 b4 b5 letter legal ledger
+```
+
+{/* end generated */}
+
+`margin` takes one to four lengths, and there is a longhand for each edge. What is left inside the margins is the content box, and its width is the width that lines of text break to.
+
+The following example sets a 5.5 by 8.5 inch page, with the widest margin at the bottom and a slightly wider one on the left:
+
+```css
+@page {
+  size: 5.5in 8.5in;
+  margin: 0.7in 0.6in 0.8in 0.7in;
+}
+```
+
+### Which pages a rule selects
+
+`@page` on its own applies to every page. Adding a selector narrows it:
+
+| selector | the pages it selects |
+|---|---|
+| `:left` | left-hand pages, called versos |
+| `:right` | right-hand pages, called rectos |
+| `:first` | the opening page of a chapter |
+| `:blank` | a blank page the engine inserts, such as when a chapter has to begin on the right |
+
+A new page group starts wherever a section begins a page, so `:first` matches the opening page of each chapter rather than only the first page of the book. `break-before` accepts `recto` and `verso` as values.
+
+The following example mirrors the margins so the wider one always falls at the spine:
+
+```css
+@page :left {
+  margin-left: 0.6in;
+  margin-right: 0.7in;
+}
+
+@page :right {
+  margin-left: 0.7in;
+  margin-right: 0.6in;
+}
+```
+
+`page: <name>` on an element names the pages its content falls on, and `@page <name>` selects those pages. The built-in stylesheet names every section's pages `chapter`, which is what lets `@page chapter:first` match a chapter's opening page and nothing else.
+
+The following example numbers the front matter in lowercase roman numerals:
+
+```css
+section.front { page: front }
+
+@page front {
+  @bottom-center { content: counter(page, lower-roman) }
+}
+```
+
+Page rules cascade like any other rule: origin first, then specificity, then source order. A page name outranks `:first` and `:blank`, which outrank `:left` and `:right`.
+
+### Running heads
+
+A margin box is a rule nested inside `@page`. `content` sets what it shows, and it accepts the text properties as well.
+
+{/* generated: margin-boxes */}
+
+The engine draws these margin boxes:
+
+```
+@top-left @top-center @top-right @bottom-left @bottom-center
+@bottom-right
+```
+
+These parse but draw nothing:
+
+```
+@top-left-corner @top-right-corner @left-top @left-middle
+@left-bottom @right-top @right-middle @right-bottom
+@bottom-left-corner @bottom-right-corner
+```
+
+{/* end generated */}
+
+| `content` | shows |
+|---|---|
+| `"Pride and Prejudice"` | that string |
+| `counter(page)` | the page number |
+| `counter(page, lower-roman)` | the page number in another counter style |
+| `string(chapter)` | the current value of a named string |
+| `none` | nothing |
+
+`string-set` on an element stores a named string, updated each time the text reaches such an element. `content()` inside it means the element's own text, which only headings and paragraphs have. The built-in stylesheet already stores the `chapter` string from each section's opening heading, so a running head takes one rule.
+
+The following example puts the current chapter title at the top of every right-hand page:
+
+```css
+@page :right {
+  @top-center {
+    content: string(chapter);
+    font-size: 8pt;
+    letter-spacing: 0.06em;
+  }
+}
+```
+
+`string()` reads the value the string had when the page began, not the value an element further down the page sets, so a chapter that starts halfway down a page does not change that page's running head. A string that nothing has set yet shows nothing.
+
+A `-center` box is centered on the page rather than on the content box, so a page number stays on the page's axis even where mirrored margins push the content box off it. `-left` and `-right` align to the edges of the content box.
+
+A page with no text on it draws no margin boxes at all. `@page :blank` still sets that page's size and margins.
+
+### Page numbers
+
+`counter(page)` in a margin box shows the page number.
+
+{/* generated: counter-styles */}
+
+A counter style is one of these.
+
+```
+decimal lower-roman upper-roman lower-alpha upper-alpha
+```
 
 {/* end generated */}
 
 A number the counter style cannot express falls back to decimal.
 
-`string(<name>)` reads a running string as it stood when the page opened, not as the first element on the page set it, so a chapter opening halfway down a page does not retitle the page it opened on. A string nothing has set yet paints nothing.
+`counter-reset: page <integer>` on an element restarts the count. The page that element begins takes that number, and later pages count on from it.
 
-A page group begins wherever a section opens a page, so `:first` selects a chapter's opening page rather than only the book's. `:blank` selects a page inserted to square the sheet. `:left` and `:right` are verso and recto.
+```css
+section.body { counter-reset: page 1 }
+```
 
-Page selectors cascade like any other rule: origin first, then specificity, then source order. The name outweighs `:first` and `:blank`, which outweigh `:left` and `:right`.
-
-A `-center` box is centred on the trim rather than on the content box, because a folio belongs on the page's axis and mirrored margins put the content box off it. `-left` and `-right` align to the content box's edges.
-
-A page the flow put nothing on paints no margin boxes at all, so a page whose only content would be a running head does not get one. `@page :blank` still gives that leaf its trim and margins.
+The count includes blank pages. Restarting it does not change which side of the spread a page falls on, because that depends on where the page sits in the book rather than on the number printed on it.
 
 ### Columns
 
-`column-count` and `column-width` divide the page's content box. `column-count` alone takes that many columns. `column-width` alone takes as many columns of at least that width as fit. Declared together, the count is the ceiling on how many the width takes. `column-gap` is the gutter between them, and `normal` is one em of the book's own size.
+These properties divide the page's content box:
 
-The flow fills the first column to its foot, then the next. Only the last column running out starts a page. A paragraph breaks to the column it is set in, and orphans, widows and `break-inside: avoid` hold inside a column. `break-before: column` and `break-after: column` open the next column rather than the next page.
+| property | gives |
+|---|---|
+| `column-count` | that many columns |
+| `column-width` | as many columns of at least that width as will fit |
+| `column-gap` | the space between columns, where `normal` is one em of the book's font size |
 
-`column-rule-style: solid` paints a rule down each gutter, `column-rule-width` wide, centred in the gutter and reaching the foot of the columns it divides. The rule takes no width from the columns. A page the flow left in one column paints no rule.
+Given both a count and a width, the count is the maximum.
 
-Running heads, folios and margin boxes belong to the page rather than to a column. Dividing the content box leaves them where an undivided page puts them.
+The following example sets two columns with a thin vertical rule between them:
 
-## `@font-face`
+```css
+@page {
+  size: a4;
+  margin: 20mm;
+  column-count: 2;
+  column-gap: 18pt;
+  column-rule-width: 0.5pt;
+  column-rule-style: solid;
+}
+```
+
+Text fills the first column to the bottom, then the next, and only the last column running out starts a new page. `orphans`, `widows`, and `break-inside: avoid` apply within a column. `break-before: column` and `break-after: column` move to the next column instead of the next page.
+
+`column-rule-style: solid` draws a vertical rule in each space between columns, `column-rule-width` wide and centered in that space. The rule takes no width from the columns. A page that ends up with a single column draws no rule.
+
+Running heads and page numbers belong to the page rather than to a column, so dividing the content box leaves them where they are.
+
+## Selectors
+
+{/* generated: elements */}
+
+The element names come from markdown:
+
+```
+book section h1 h2 h3 h4 h5 h6 p blockquote hr img code em
+strong a
+```
+
+{/* end generated */}
+
+{/* generated: compounds */}
+
+A compound selector is one of these, optionally followed by any of the pseudo-classes below.
+
+| compound | example |
+|---|---|
+| `<element>` | `p` |
+| `*` | `section > *` |
+| `.<class>` | `p.epigraph` |
+| `#<id>` | `#frontispiece` |
+
+```
+:first-child :last-child :only-child :nth-child()
+:nth-last-child() :first-of-type :last-of-type :only-of-type
+:nth-of-type() :nth-last-of-type() :empty :root :is()
+:where() :not() :has()
+```
+
+{/* end generated */}
+
+{/* generated: combinators */}
+
+A combinator joins two compound selectors, and a `,` separates the selectors in a list (`h1, h2`).
+
+| combinator | example |
+|---|---|
+| descendant | `section p` |
+| child | `section > p` |
+| next-sibling | `h1 + p` |
+| subsequent-sibling | `h1 ~ p` |
+
+{/* end generated */}
+
+The following examples use the combinators and pseudo-classes to reach particular paragraphs and headings:
+
+```css
+h2 + p { text-indent: 0 }
+section > p:first-child { text-indent: 0 }
+blockquote p:not(:first-child) { text-indent: 1em }
+:is(h1, h2, h3) { break-after: avoid }
+h1, h2 { text-align: center }
+```
+
+There are no attribute or namespace selectors, and no interaction pseudo-classes such as `:hover`, because nothing here is interactive.
+
+A run of text is not an element. It takes the style of the paragraph or inline element around it, and it never counts as a child for `:first-child`.
+
+### Classes and ids
+
+A class or an id names a particular element rather than every element of a kind: one image rather than every `img`. An element can have any number of classes and at most one id. Where two elements share an id, both match and the second one warns. See [the markdown mapping](reference/markdown.mdx) for how a manuscript assigns them.
+
+```css
+p.epigraph {
+  font-style: italic;
+  text-indent: 0;
+  margin: 2em 4em;
+}
+
+#frontispiece {
+  margin: 0;
+  break-after: page;
+}
+```
+
+### Pseudo-elements
+
+{/* generated: pseudo-elements */}
+
+The pseudo-elements are `::first-letter` and `::first-line`.
+
+{/* end generated */}
+
+Both start from the style of the element they belong to, so a rule on `p::first-letter` begins with that paragraph's own font and size. `::first-letter` produces [a drop cap](#drop-caps), and `::first-line` styles [a paragraph's opening line](#first-lines). Where both apply to the same paragraph, `::first-letter` takes the initial letter and `::first-line` styles the rest of that line.
+
+## Declarations, values, and units
+
+{/* generated: declaration */}
+
+A declaration is `<property>: <value> !important?`.
+
+{/* end generated */}
+
+{/* generated: units */}
+
+A length can be written in any of these units, and the engine converts them all to points.
+
+```
+pt px pc in cm mm q em rem
+```
+
+{/* end generated */}
+
+`em` in `font-size` means a multiple of the parent's font size. Everywhere else it means a multiple of the element's own. `rem` is always a multiple of the root font size.
+
+A color can be a CSS color name, `#rgb`, `#rrggbb`, or `rgb()` with numbers or percentages. There is no alpha channel.
+
+## Text
+
+These properties inherit. A value set on `book` or `section` reaches the text below it, and a rule on `h2` overrides what the heading inherited.
+
+{/* generated: text-properties */}
+
+| property | example |
+|---|---|
+| `font-family` | `font-family: "Author Serif", serif` |
+| `font-size` | `font-size: 11pt` |
+| `font-style` | `font-style: italic` |
+| `font-weight` | `font-weight: bold` |
+| `color` | `color: darkslategray` |
+| `line-height` | `line-height: 1.4` |
+| `letter-spacing` | `letter-spacing: 0.05em` |
+| `font-variant-caps` | `font-variant-caps: small-caps` |
+| `text-transform` | `text-transform: uppercase` |
+| `text-align` | `text-align: justify` |
+| `text-justify` | `text-justify: inter-character` |
+| `text-indent` | `text-indent: 1.2em` |
+| `hanging-punctuation` | `hanging-punctuation: first` |
+| `hyphens` | `hyphens: auto` |
+| `orphans`, `widows` | `orphans: 3` |
+| `page` | `page: chapter` |
+
+```css
+font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
+font-size:           <length> | <percentage>;
+font-style:          normal | italic | oblique;
+font-weight:         normal | bold | <number [1,1000]>;
+color:               <color>;
+line-height:         normal | <number> | <length> | <percentage>;
+letter-spacing:      normal | <length>;
+font-variant-caps:   normal | small-caps;
+text-transform:      none | uppercase | lowercase | capitalize;
+text-align:          left | right | center | justify | start | end;
+text-justify:        auto | inter-word | inter-character | distribute;
+text-indent:         <length> | <percentage>;
+hanging-punctuation: none | [ first || [ force-end | allow-end ] || last ];
+hyphens:             none | manual | auto;
+orphans:             <integer>;
+widows:              <integer>;
+page:                auto | <name>;
+```
+
+{/* end generated */}
+
+### Line breaking and justification
+
+The engine breaks a paragraph as a whole rather than one line at a time. It costs every possible set of breaks by how far each line falls short of the full width, cubed, and takes the cheapest set. A word that would fill one line stays where it is if moving it leaves a bigger gap in the next.
+
+`text-align` decides where a finished line sits:
+
+| value | |
+|---|---|
+| `left`, `start` | flush left |
+| `right`, `end` | flush right |
+| `center` | centered |
+| `justify` | spaced out to fill the line exactly, on every line but the last |
+
+Lines break the same way under all four. When justifying, `text-justify: inter-character` also lets the space between letters change. The default does not.
+
+### Hyphenation
+
+`hyphens: auto` lets a line break inside a word at a syllable boundary. Each such break costs extra, and more again directly after another one, so no more than two lines in a row end in a hyphen. `none` and `manual` add no syllable breaks.
+
+The syllable patterns come from the book's language. `extra["language"]` in the [metadata](reference/markdown.mdx) names it as a BCP 47 tag, read by its primary subtag, so `fr-CA` is French. The engine hyphenates a book that declares no language as English. A language it has no patterns for leaves every word whole and warns, naming the tag. The language belongs to the book, so one book is hyphenated in one language.
+
+The following example justifies the text, hyphenates it, and hangs punctuation into the margins:
+
+```css
+book {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+  hanging-punctuation: first allow-end last;
+}
+```
+
+### Small caps, letter spacing, and case
+
+`font-variant-caps: small-caps` uses the font's `smcp` feature, which is capitals drawn at lowercase height. For a font without one, the engine draws the lowercase letters as capitals at four-fifths of the size and warns, naming the font.
+
+`letter-spacing` adds space between the glyphs of a run, and line breaking measures it like any other width. Nothing is added after the last glyph on a line, so a letter-spaced title centers on its letters rather than on the trailing space.
+
+`text-transform` changes which characters are drawn, not the text stored underneath. Extracting text from the PDF, searching it, and copying from it all return what the manuscript said. `capitalize` raises the first letter of each word, where a word runs through letters, digits, and an apostrophe inside it.
+
+The following example sets chapter headings in centered small capitals:
+
+```css
+h2 {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.08em;
+  text-align: center;
+  font-weight: normal;
+}
+```
+
+### Color
+
+`color` sets the color of the text, and it inherits.
+
+```css
+book { color: #241f1c }
+h2 { color: rgb(140, 30, 30) }
+.epigraph { color: #6b6257 }
+```
+
+### Hanging punctuation
+
+`hanging-punctuation` lets a punctuation mark sit outside the text width so the edge of the text block looks straight. A period or comma at the end of a line leaves a visible gap, and hanging it outside closes the gap.
+
+| value | hangs |
+|---|---|
+| `first` | an opening quotation mark or bracket, out into the left margin |
+| `force-end` | a closing mark past the right edge, on every line |
+| `allow-end` | a closing mark, only where doing so makes the line fit |
+| `last` | the mark a paragraph ends on |
+
+How far a mark hangs depends on the mark: nearly all of a period or comma, less of a colon, none of a letter.
+
+## Blocks
+
+These do not inherit. A block is a paragraph, a heading, a quotation, an image, or a thematic break.
+
+{/* generated: block-properties */}
+
+| property | example |
+|---|---|
+| `content` | `content: "\2766"` |
+| `string-set` | `string-set: chapter content()` |
+| `counter-reset` | `counter-reset: page` |
+| `initial-letter` | `initial-letter: 3` |
+| `margin` | `margin: 1em` |
+| `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
+| `padding` | `padding: 12pt` |
+| `padding-top`, `padding-right`, `padding-bottom`, `padding-left` | `padding-top: 6pt` |
+| `border`, `border-top`, `border-right`, `border-bottom`, `border-left` | `border: 2pt solid` |
+| `border-width` | `border-width: 2pt` |
+| `border-style` | `border-style: solid` |
+| `border-color` | `border-color: crimson` |
+| `background-color` | `background-color: #f4f1ea` |
+| `box-decoration-break` | `box-decoration-break: slice` |
+| `break-before`, `break-after`, `break-inside` | `break-before: recto` |
+
+```css
+content:              none | <string>;
+string-set:           none | [ <name> [ content() | <string> ]+ ]#;
+counter-reset:        none | page <integer>?;
+initial-letter:       <integer>;
+margin:               [ <length> | <percentage> ]{1,4};
+margin-top:           <length> | <percentage>;
+margin-right:         <length> | <percentage>;
+margin-bottom:        <length> | <percentage>;
+margin-left:          <length> | <percentage>;
+padding:              [ <length> | <percentage> ]{1,4};
+padding-top:          <length> | <percentage>;
+padding-right:        <length> | <percentage>;
+padding-bottom:       <length> | <percentage>;
+padding-left:         <length> | <percentage>;
+border:               [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-top:           [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-right:         [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-bottom:        [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-left:          [ <length> | thin | medium | thick ] || [ none | solid ] || <color>;
+border-width:         [ <length> | thin | medium | thick ]{1,4};
+border-style:         [ none | solid ]{1,4};
+border-color:         <color>{1,4};
+background-color:     <color> | transparent;
+box-decoration-break: slice | clone;
+break-before:         auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+break-after:          auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+break-inside:         auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
+```
+
+{/* end generated */}
+
+### Margins, borders, and padding
+
+A block has a margin, a border, and padding around its content, and a background behind them.
+
+The following example indents block quotes and rules them down the left edge:
+
+```css
+blockquote {
+  margin: 1em 2em;
+  padding: 0.5em 1em;
+  border-left: 2pt solid #b9b0a2;
+  background-color: #f4f1ea;
+}
+```
+
+| property | takes |
+|---|---|
+| `margin`, `padding` | one to four lengths, clockwise from the top |
+| `margin-top` and the other longhands | one length, for one edge |
+| `border` | a width, a style, and a color, in any order |
+| `border-top`, `border-right`, `border-bottom`, `border-left` | the same three, for one edge |
+| `border-width`, `border-style`, `border-color` | one of the three, in one to four values |
+
+The only border styles are `none` and `solid`.
+
+A border or padding on the left or right narrows the text and moves its left edge inward. On the top and bottom they take vertical space, and they stop the margins on either side from collapsing: a top border on a block quote sits between the quote's own top margin and its first paragraph's margin, and both take space.
+
+`background-color` fills the area inside the border, and the border draws over it.
+
+Where two edges of different colors meet, the corner takes the color of the horizontal edge rather than splitting diagonally.
+
+### Breaking across pages
+
+`break-before` and `break-after` start a new page or column before or after a block. `break-inside: avoid` keeps a block from splitting.
+
+| value | |
+|---|---|
+| `auto` | break wherever the text falls |
+| `avoid`, `avoid-page`, `avoid-column` | do not break here |
+| `page`, `always` | the next page |
+| `left`, `verso` | the next left-hand page |
+| `right`, `recto` | the next right-hand page |
+| `column` | the next column |
+
+`orphans` and `widows` limit where a paragraph can split. A paragraph with fewer than `orphans + widows` lines moves whole to the next page instead. Where no permitted break is left, the page ends anyway.
+
+The following example starts each chapter on a right-hand page, keeps a heading with the text below it, and keeps block quotes whole:
+
+```css
+section { break-before: recto }
+h2 { break-after: avoid }
+blockquote { break-inside: avoid }
+
+p {
+  orphans: 2;
+  widows: 3;
+}
+```
+
+Where a page break splits a block, `box-decoration-break` decides how the two new edges are drawn. `slice`, the default, treats the block as one box and cuts it, leaving both new edges open. `clone` closes each piece on all four sides. Neither repeats the padding, which belongs to the block's own top and bottom.
+
+### Ornaments
+
+`content` sets the text of an empty element, which in markdown means the thematic break. The built-in stylesheet uses a floral heart, and any other string replaces it.
+
+```css
+hr {
+  content: "* * *";
+  text-align: center;
+  margin: 1.5em 0;
+}
+```
+
+## Chapter openings
+
+### Drop caps
+
+A drop cap is a large first letter that sinks into the paragraph below it. Set `initial-letter` on the `::first-letter` pseudo-element to the number of lines the letter should span.
+
+The letter is sized to fit those lines rather than by `font-size`. Its top lines up with the top of the capitals on the first line, and its baseline sits on the last.
+
+The following example gives the first paragraph after a chapter heading a three-line drop cap:
+
+```css
+h2 + p {
+  text-indent: 0;
+}
+
+h2 + p::first-letter {
+  initial-letter: 3;
+  font-family: "Author Display", serif;
+}
+```
+
+### First lines
+
+{/* generated: first-line-properties */}
+
+`::first-line` accepts only these properties:
+
+```
+color font-size font-variant-caps letter-spacing
+text-transform
+```
+
+{/* end generated */}
+
+The engine warns about any other property in a `::first-line` rule and drops it.
+
+`::first-line` applies to the paragraph's first line, not to the first line on a page, so a paragraph split across a page break is styled on its opening line and nowhere else.
+
+The following example sets the opening line of a chapter in small capitals:
+
+```css
+h2 + p::first-line {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.06em;
+}
+```
+
+Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words end up on that line.
+
+`font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
+
+## Fonts
+
+`@font-face` registers a font under the family name the stylesheet gives it.
+
+The following example loads a font file and uses it for the body text:
 
 ```css
 @font-face {
@@ -233,33 +657,151 @@ Running heads, folios and margin boxes belong to the page rather than to a colum
   font-style: normal;
   font-weight: 400;
 }
+
+book {
+  font-family: "Author Serif", serif;
+}
 ```
 
 {/* generated: font-face */}
 
-| descriptor | values |
+| descriptor | example |
 |---|---|
-| `font-family` | `<family-name>` |
-| `font-style` | `normal \| italic \| oblique` |
-| `font-weight` | `normal \| bold \| <number [1,1000]>` |
-| `src` | `[ <url> format(<string>)? \| local(<string>) ]#` |
+| `font-family` | `font-family: "Author Serif"` |
+| `font-style` | `font-style: italic` |
+| `font-weight` | `font-weight: bold` |
+| `src` | `src: url(fonts/serif.otf)` |
+
+```css
+font-family: <family-name>;
+font-style:  normal | italic | oblique;
+font-weight: normal | bold | <number [1,1000]>;
+src:         [ <url> format(<string>)? | local(<string>) ]#;
+```
 
 {/* end generated */}
 
-The string in `url()` is handed to the loader unchanged, and does not have to be a real URL. A face that resolves registers under the family the sheet declared, not the one inside the file. A face that resolves nowhere warns, and text falls back to the next family in the list.
+The string in `url()` goes to the host's loader unchanged and does not have to be a real URL. A font that loads registers under the family name the stylesheet gave it, not the name inside the file. A font that fails to load warns, and the text falls back to the next family in the list.
 
-`font-family` is tried in order and the first registered family answers. Within it, slope decides before weight. No slope or weight is synthesised. See [fonts](library/fonts.md) for the full matching rules and how variable files register.
+The engine tries each family in `font-family` in order and uses the first one registered. Within a family it matches style before weight, and it synthesizes neither. See [fonts](library/fonts.md) for the full matching rules and how variable fonts register.
+
+## The built-in stylesheet
+
+The complete stylesheet that any additional CSS cascades over.
+
+{/* generated: defaults */}
+
+```css
+/* Fleuron's default stylesheet: a trade paperback at 6x9 inches, with
+   mirrored margins and a page number at the bottom. Any additional
+   CSS cascades over every rule here. */
+
+book {
+  font-family: serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  text-align: left;
+  hyphens: none;
+  orphans: 2;
+  widows: 2;
+}
+
+/* A chapter opens on a right-hand page. Naming its pages lets @page
+   tell an opening page from a continuation. */
+section {
+  page: chapter;
+  break-before: recto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-size: 18pt;
+  break-after: avoid;
+}
+
+/* An indent separates one paragraph from the next, so it belongs
+   only to a paragraph that follows another one. A paragraph after a
+   heading, a thematic break, or an image starts flush. */
+p + p {
+  text-indent: 1.2em;
+}
+
+/* A quotation is narrower than the surrounding text and set off
+   from it. */
+blockquote {
+  margin: 1em 2em;
+}
+
+/* A thematic break is a centered ornament. It belongs between
+   paragraphs, so it never opens or closes a page. */
+hr {
+  content: "\2766";
+  text-align: center;
+  margin: 1em 0;
+  break-before: avoid;
+  break-after: avoid;
+}
+
+/* A section's opening heading is its chapter title. Storing it as a
+   named string lets a running head pick it up with
+   string(chapter). */
+section > :is(h1, h2, h3, h4, h5, h6):first-child {
+  string-set: chapter content();
+}
+
+em { font-style: italic }
+strong { font-weight: bold }
+code { font-family: monospace }
+
+@page {
+  size: 432pt 648pt;
+  margin: 54pt 42pt 54pt 54pt;
+  @bottom-center {
+    content: counter(page);
+    font-size: 9pt;
+    line-height: 1.4;
+  }
+}
+
+/* Margins mirror across the spread, so the wider one is always at
+   the spine. */
+@page :left {
+  margin-left: 42pt;
+  margin-right: 54pt;
+}
+
+@page :right {
+  margin-left: 54pt;
+  margin-right: 42pt;
+}
+
+/* A chapter's opening page counts toward the numbering but does not
+   show its number. */
+@page chapter:first {
+  @bottom-center { content: none }
+}
+```
+
+{/* end generated */}
 
 ## Not in the subset
 
-Floats, tables, grid, flexbox, transforms, media queries, custom properties, counters other than `page`, `counter-increment`, `font-variant` beyond `font-variant-caps: small-caps`, and generated content beyond page margin boxes, `string-set`, and `content` on an empty element.
+| area | not supported yet |
+|---|---|
+| layout | floats, tables, grid, flexbox, transforms |
+| at-rules | media queries |
+| custom properties | the `--name` syntax and `var()` |
+| counters | any counter other than `page`, and `counter-increment` |
+| generated content | anything beyond page margin boxes, `string-set`, and `content` on an empty element |
+| fonts | `font-variant` beyond `font-variant-caps: small-caps` |
+| backgrounds | the `background` shorthand, and every background property but `background-color` |
+| borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
+| inline boxes | a border, padding, or background on an inline element, or on `@page` |
+| columns | `column-fill`, `column-rule-color`, `column-span`, the `columns` and `column-rule` shorthands, and columns on any element |
 
-The box model is missing the `background` shorthand and every background property but `background-color`, the border longhands that name both an edge and a value, such as `border-top-width`, `border-radius`, and a border, padding or background on an inline element or on `@page`.
+Three of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color. Nothing can run the full width with columns above and below it.
 
-Columns are missing `column-fill`, so the last page fills its columns in order and stops short rather than balancing them; `column-rule-color`, so a rule paints in the ink the book is set in; and `column-span`, so nothing spans the full measure with columns above and below it. The `columns` and `column-rule` shorthands are missing too, and columns on an element: `@page` is where the box divides.
-
-Each is reported per declaration, at the line and column it was written at. These are properties the engine does not support yet, not properties it rules out.
+The engine reports each unsupported declaration on its own, naming the line and column it was written at, and the rest of the stylesheet still applies. See [diagnostics](library/diagnostics.mdx) for how to read a warning. These are properties the engine does not support yet, not ones it refuses.
 
 ## The subset as data
 
-`fleuron --css-subset` writes this page's vocabulary as JSON: every selector, property, value and at-rule, with the engine version it came from. A host that embeds the engine pins the file for that version and drives its own editor from it. The same description is `fleuron::style::subset::Subset::describe()` in the library, and the tables on this page are rendered from it.
+`fleuron --css-subset` writes this page's vocabulary as JSON: every selector, property, value, and at-rule, with the engine version it came from. A host that embeds the engine can pin that file for its version and drive its own editor from it. The library exposes the same description as `fleuron::style::subset::Subset::describe()`, and the tables on this page are generated from it.

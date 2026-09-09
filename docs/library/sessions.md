@@ -31,7 +31,7 @@ let bytes = session.export()?;       // the same run, as PDF
 | a property the engine models nothing of | the display structure       | nothing                                  |
 | margin box content, page counters       | the page boxes              | the furniture                            |
 | `@page` geometry, counters, named pages | the lines                   | fragmentation, then the furniture        |
-| face, size, measure, leading            | the style tree              | line breaking, and everything under it   |
+| face, size, line width, leading         | the style tree              | line breaking, and everything under it   |
 | one file's content                      | every other section's lines | that file's sections, then fragmentation |
 | the whole book                          | nothing                     | all of it                                |
 
@@ -62,22 +62,22 @@ and nothing downstream is keyed on an id that renumbering will move.
 
 A content edit re-breaks only the sections it changed. The rest keep their lines, 
 and the whole book is fragmented from the top. Page assembly then resolves counters, recto opens, 
-running heads and blank leaves.
+running heads and blank pages.
 
 ## What is in the cache
 
 Breaks, shaped glyph runs and advance widths, and no coordinates at all. Where a line breaks 
-depends on the measure, the font and the text. Which page it lands on and at what baseline is 
+depends on the line width, the font and the text. Which page it lands on and at what baseline is 
 determined by fragmentation, and fragmentation runs every time. A chapter that an edit above it 
 pushed onto a different page paints at new coordinates with the same breaks.
 
 The session checks two preconditions to determine this.
 
-The first is a single measure. Masters with different measures make where a line breaks depend on which page it 
+The first is a single line width. Masters with different line widths make where a line breaks depend on which page it 
 lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are this 
 case, so is a named master set narrower, and so is one that divides its content box into a different number of 
 columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread and both sides 
-come to the same measure.
+come to the same line width.
 
 The second is that no prose depends on pagination. `counter(page)` and `string()` 
 are legal only inside a margin box, so nothing in the text can depend on where the text fell. 
