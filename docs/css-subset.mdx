@@ -602,6 +602,40 @@ hr {
 }
 ```
 
+## Images against the page
+
+An image can be placed against the page rather than among the paragraphs, with the text wrapping around it.
+
+`position: absolute` takes the image out of the text, and the insets say where on the page it goes. `top`, `right`, `bottom`, and `left` measure from the content box, which is what is left inside the page's margins. A negative inset reaches into the margin. An inset left at `auto` lets the opposite one place the image, and where both are `auto` the image sits at the left or top edge of the content box.
+
+The image keeps the size its own file gives it, scaled down where that is too big for the content box. Its margins are the space it keeps clear of the text.
+
+`wrap-flow` says which side of the image the text wraps on.
+
+| value | what goes beside the image |
+|---|---|
+| `auto` | nothing. The text breaks as though the image were not there. |
+| `start` | the side a line starts at |
+| `end` | the side a line ends at |
+| `both` | both sides |
+
+The following example puts an image in the top right corner of the page it lands on, and wraps the text of that page down its left:
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-left: 12pt;
+  margin-bottom: 6pt;
+  wrap-flow: start;
+}
+```
+
+Which page the image lands on comes from where it is written. An image written above a paragraph lands on the page that paragraph begins on, and takes up no room of its own. An image written within a line or two of a page break can land on the page before or after the paragraph it was written beside.
+
+The lines the image reaches are shortened to what it leaves them, and the lines under it run the full width. Where it covers the full width, the text continues below it.
+
 ## Chapter openings
 
 ### Drop caps
@@ -797,6 +831,7 @@ code { font-family: monospace }
 | area | not supported yet |
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
+| positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
