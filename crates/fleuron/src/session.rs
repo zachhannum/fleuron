@@ -446,10 +446,10 @@ impl<'a> Session<'a> {
     ///
     /// A node covers itself and everything under it, so a heading
     /// answers with the page its own text is on, and a chapter with
-    /// the first and last page of the pages it runs across. Nothing
-    /// for a node the book does not hold, and nothing for one whose
-    /// content reaches no page: a node the engine synthesized, or a
-    /// scene break, whose ornament the engine wrote itself.
+    /// the pages it runs across. Nothing for a node the book does
+    /// not hold, and nothing for one whose content reaches no page:
+    /// a node the engine synthesized, or a scene break, whose
+    /// ornament the engine wrote itself.
     ///
     /// The answer is a walk over the pages the session already
     /// holds. It runs a stage only when an edit has left one to run.
@@ -473,7 +473,7 @@ impl<'a> Session<'a> {
             };
             // A page names the sections it carries, and each run of
             // text names the node it was shaped from. Between them
-            // they name every node the page set anything from.
+            // they name every node the page took content from.
             for section in &page.sections {
                 reached(*section);
             }
