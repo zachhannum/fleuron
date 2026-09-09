@@ -65,8 +65,12 @@ fn plate() -> Block {
     }
 }
 
+/// Words short enough for the narrowest band these sheets leave. A
+/// word wider than the band it is set in overflows it rather than
+/// being dropped, which is the engine's answer to that everywhere,
+/// and it is not what these properties are about.
 fn word_strategy() -> impl Strategy<Value = String> {
-    "[a-z]{1,12}"
+    "[a-z]{1,6}"
 }
 
 fn paragraph_strategy() -> impl Strategy<Value = String> {

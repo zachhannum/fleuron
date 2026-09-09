@@ -797,6 +797,20 @@ struct Setting {
     cap: Option<Cap>,
 }
 
+impl Setting {
+    /// The same, for the line a paragraph opens on or for the line
+    /// the rest of it opens on.
+    fn opening(&self, opening: bool) -> Cow<'_, Setting> {
+        if opening {
+            return Cow::Borrowed(self);
+        }
+        Cow::Owned(Setting {
+            cap: None,
+            ..self.clone()
+        })
+    }
+}
+
 /// A paragraph the flow can set again.
 ///
 /// The lines a section is built with are broken against the measure
@@ -967,6 +981,21 @@ struct Hole {
 struct Profile {
     measure: Measure,
     gaps: Vec<f32>,
+}
+
+impl Profile {
+    /// The bands with nothing in the way: what a paragraph moved off
+    /// the page it was narrowed on is set to instead.
+    fn plain(reflow: &Reflow, opening: bool) -> Profile {
+        Profile {
+            measure: if opening {
+                reflow.base.clone()
+            } else {
+                Measure::new(Vec::new(), reflow.base.rest())
+            },
+            gaps: Vec::new(),
+        }
+    }
 }
 
 /// Builds one section's fragments: blocks in, everything the flow
@@ -1874,6 +1903,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut set: Cow<'_, [Fragment]> = Cow::Borrowed(original);
         let mut ends: Cow<'_, [usize]> = Cow::Borrowed(&reflow.ends);
         let mut at = 0;
+        // Whether what is in hand was broken beside a plate. The
+        // lines a section arrives with fit any page; lines broken
+        // against a notch fit the one they were broken on, so a page
+        // boundary under them is a break to do again.
+        let mut narrowed = false;
         while at < set.len() {
             // Where the line would sit is what the profile is read
             // against, and it is where `place` is about to put it.
@@ -1883,8 +1917,11 @@ impl<'a, 'p> Flow<'a, 'p> {
                 set[at].lead
             };
             let top = self.cursor + lead + set[at].fixed;
-            if let Some(profile) = self.profile(top, reflow) {
-                let from = if at == 0 { 0 } else { ends[at - 1] };
+            let from = if at == 0 { 0 } else { ends[at - 1] };
+            let profile = self.profile(top, reflow, from == 0);
+            if profile.is_some() || narrowed {
+                narrowed = profile.is_some();
+                let profile = profile.unwrap_or_else(|| Profile::plain(reflow, from == 0));
                 let paginator = self.paginator;
                 paginator.rebreaks.set(paginator.rebreaks.get() + 1);
                 let broken = paginator
@@ -1898,7 +1935,10 @@ impl<'a, 'p> Flow<'a, 'p> {
                     broken.lines,
                     &profile.measure,
                     &profile.gaps,
-                    &reflow.setting,
+                    // The initial letter belongs to the line the
+                    // paragraph opens on, not to the line the rest of
+                    // it opens on.
+                    &reflow.setting.opening(from == 0),
                 );
                 carry_over(&mut fresh, &set[at..]);
                 set = Cow::Owned(fresh);
@@ -1964,7 +2004,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// own leading, so a line is either set beside it or clear of it.
     /// A band it covers the whole of is a band nothing is set in, and
     /// the paragraph goes on below it.
-    fn profile(&self, top: f32, reflow: &Reflow) -> Option<Profile> {
+    fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
         let holes = self.holes();
         if holes.is_empty() {
             return None;
@@ -1980,7 +2020,14 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut narrowed = (0, 0);
         let (mut y, mut band, mut gap) = (top, 0, 0.0);
         while y < self.height {
-            let base = reflow.base.at(band);
+            // A first-line indent and a drop cap belong to the line
+            // the paragraph opens on. What is left of it opens on a
+            // band like any other.
+            let base = if opening {
+                reflow.base.at(band)
+            } else {
+                reflow.base.rest()
+            };
             let free = clear(base, &holes, y, y + leading, narrowest);
             let Some((last, rest)) = free.split_last() else {
                 // Nothing is set in a band a plate covers the whole

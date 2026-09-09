@@ -34,7 +34,7 @@ const EXPECTED_PAGES: usize = 23;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 36;
+const STYLED_PAGES: usize = 35;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
@@ -417,24 +417,29 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
     }
 }
 
-/// The sheet names one image and moves it, and the image beside
-/// it stays where the built-in sheet put it: a brace run in the
-/// manuscript, a class selector in the author's CSS, one image on
-/// the page set somewhere else.
+/// The sheet names one image and anchors it to the page, and the
+/// image beside it stays where the built-in sheet put it: a brace run
+/// in the manuscript, a class selector in the author's CSS, one image
+/// against the page with the prose of that page wrapping down its
+/// right.
 #[test]
-fn the_named_image_is_set_where_the_sheet_put_it() {
+fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
     // What `fixtures/styled.css` leaves around the text: the wider
     // margin is the spine, so which edge is which follows the side
     // the image landed on.
     const SPINE: f32 = 60.0;
     const FORE_EDGE: f32 = 40.0;
+    const FOOT: f32 = 56.0;
+    // The gutter the sheet keeps between the map and the prose.
+    const GUTTER: f32 = 14.0;
 
     let pages = styled_pages();
-    let images: Vec<(Side, f32, f32, f32)> = pages
+    let images: Vec<(usize, f32, f32, f32, f32)> = pages
         .iter()
-        .flat_map(|page| {
-            page.items.iter().filter_map(|item| match item {
-                DrawItem::Image { x, w, .. } => Some((page.side, page.width, *x, *w)),
+        .enumerate()
+        .flat_map(|(index, page)| {
+            page.items.iter().filter_map(move |item| match item {
+                DrawItem::Image { x, y, w, h, .. } => Some((index, *x, *y, *w, *h)),
                 _ => None,
             })
         })
@@ -443,19 +448,48 @@ fn the_named_image_is_set_where_the_sheet_put_it() {
         panic!("the fixture book has a map and an ornament: {images:?}");
     };
 
-    let (side, width, x, w) = *map;
-    let far = match side {
-        Side::Verso => width - SPINE,
-        Side::Recto => width - FORE_EDGE,
+    // The map sits in the bottom corner of the page area, at the
+    // insets the sheet gave it.
+    let (index, x, y, w, h) = *map;
+    let page = &pages[index];
+    let near = match page.side {
+        Side::Verso => FORE_EDGE,
+        Side::Recto => SPINE,
     };
-    assert!(w < far, "the map fills the measure: {map:?}");
     assert!(
-        (x + w - far).abs() < 0.5,
-        "the named image is not against the far edge: {map:?}",
+        (x - near).abs() < 0.5,
+        "the map is not at the near edge: {map:?}"
+    );
+    assert!(
+        (y + h - (page.height - FOOT)).abs() < 0.5,
+        "the map is not against the foot of the page area: {map:?}",
     );
 
-    let (side, _, x, _) = *ornament;
-    let near = match side {
+    // Every line the map reaches is set clear of it, and something is.
+    let mut beside = 0;
+    for item in &page.items {
+        let DrawItem::Text {
+            x: run,
+            y: baseline,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        if *baseline <= y || *baseline > y + h {
+            continue;
+        }
+        assert!(
+            *run >= x + w + GUTTER - 0.5,
+            "a line at {baseline} is set over the map: {run} against {}",
+            x + w + GUTTER,
+        );
+        beside += 1;
+    }
+    assert!(beside > 0, "no line is set beside the map");
+
+    let (index, x, ..) = *ornament;
+    let near = match pages[index].side {
         Side::Verso => FORE_EDGE,
         Side::Recto => SPINE,
     };
