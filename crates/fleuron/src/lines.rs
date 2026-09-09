@@ -252,6 +252,11 @@ impl Measure {
         }
     }
 
+    /// The band every span past the listed ones is set in.
+    pub fn rest(&self) -> Span {
+        self.rest
+    }
+
     /// The span at `index`.
     pub fn at(&self, index: usize) -> Span {
         self.leading.get(index).copied().unwrap_or(self.rest)
@@ -1078,10 +1083,10 @@ impl<'a> LineLayout<'a> {
         measure: &Measure,
         options: LineBreakOptions,
         opening: Opening,
-    ) -> (Vec<Line>, Option<Shaped>) {
-        let (lines, _, shaped) =
+    ) -> (Broken, Option<Shaped>) {
+        let (broken, _, shaped) =
             self.broken_shaped(inlines, style, styles, measure, options, opening);
-        (lines, shaped)
+        (broken, shaped)
     }
 
     /// Breaks a paragraph that was already shaped to `measure`,
@@ -1116,9 +1121,9 @@ impl<'a> LineLayout<'a> {
         options: LineBreakOptions,
         opening: Opening,
     ) -> (Vec<Line>, u8) {
-        let (lines, runs, _) =
+        let (broken, runs, _) =
             self.broken_shaped(inlines, style, styles, measure, options, opening);
-        (lines, runs)
+        (broken.lines, runs)
     }
 
     /// The same, handing back what the paragraph was shaped from.
@@ -1130,7 +1135,7 @@ impl<'a> LineLayout<'a> {
         measure: &Measure,
         options: LineBreakOptions,
         opening: Opening,
-    ) -> (Vec<Line>, u8, Option<Shaped>) {
+    ) -> (Broken, u8, Option<Shaped>) {
         let lead = Lead {
             style: opening.first_line,
             extent: None,
@@ -1146,14 +1151,14 @@ impl<'a> LineLayout<'a> {
         };
         let (broken, shaped) = once(lead);
         if lead.style.is_none() || broken.extent == 0 {
-            return (broken.lines, 1, shaped);
+            return (broken, 1, shaped);
         }
         let lead = Lead {
             extent: Some(broken.extent),
             ..lead
         };
         let (broken, shaped) = once(lead);
-        (broken.lines, 2, shaped)
+        (broken, 2, shaped)
     }
 
     /// One paragraph flattened and shaped, which is everything about
@@ -2419,7 +2424,7 @@ mod tests {
     fn a_shaped_paragraph_breaks_again_to_the_same_lines() {
         let layout = LineLayout::new(registry());
         let measure = Measure::uniform(120.0);
-        let (lines, shaped) = layout.layout_shaped(
+        let (first, shaped) = layout.layout_shaped(
             &one_run(OPENING),
             body(),
             &Inherited,
@@ -2428,6 +2433,7 @@ mod tests {
             Opening::default(),
         );
         let shaped = shaped.expect("the paragraph shaped");
+        let lines = first.lines;
         assert!(lines.len() > 3, "{} lines is too few to cut", lines.len());
 
         let again = layout.rebreak(&shaped, &measure, 0);
@@ -2444,7 +2450,7 @@ mod tests {
     #[test]
     fn a_shaped_paragraph_breaks_again_to_a_narrower_measure() {
         let layout = LineLayout::new(registry());
-        let (lines, shaped) = layout.layout_shaped(
+        let (wide, shaped) = layout.layout_shaped(
             &one_run(OPENING),
             body(),
             &Inherited,
@@ -2453,6 +2459,7 @@ mod tests {
             Opening::default(),
         );
         let shaped = shaped.expect("the paragraph shaped");
+        let lines = wide.lines;
         let narrow = Measure::uniform(100.0);
         let again = layout.rebreak(&shaped, &narrow, 0);
         assert!(again.lines.len() > lines.len());

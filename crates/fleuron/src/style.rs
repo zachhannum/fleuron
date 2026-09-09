@@ -38,8 +38,8 @@ use crate::pages::Side;
 pub use properties::{
     Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, Columns,
     ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens,
-    Length, LineHeight, MarginBox, PageGeometry, StringPiece, StringSet, TextAlign, TextJustify,
-    TextTransform,
+    Inset, Length, LineHeight, MarginBox, PageGeometry, Position, StringPiece, StringSet,
+    TextAlign, TextJustify, TextTransform, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 

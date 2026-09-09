@@ -43,7 +43,8 @@ use crate::lines::Patterns;
 use crate::pages::{DrawItem, Folios};
 use crate::pdf::{self, PdfError};
 use crate::style::{
-    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets,
+    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, Position, StyleTree,
+    Stylesheets,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -148,6 +149,9 @@ impl Cached {
             return;
         }
         for fragment in &mut self.fragments {
+            if let Piece::Anchor(node) = &mut fragment.piece {
+                *node = node.shifted(step);
+            }
             let Piece::Line { line, cap } = &mut fragment.piece else {
                 continue;
             };
@@ -731,23 +735,52 @@ fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOutput {
 /// page's own height, so a book without one never reads that height,
 /// and a page that grows taller leaves its prose broken where it
 /// was.
+///
+/// A book that anchors an image to the page carries the exclusions as
+/// well. Their geometry is the flow's to resolve, but a section whose
+/// paragraphs may have to be set again beside one keeps what it takes
+/// to set them, so a book that gains its first plate builds its
+/// sections again.
 #[derive(Debug, Clone, Copy)]
 struct Against {
     measure: f32,
     height: Option<f32>,
+    exclusions: Option<u64>,
 }
 
 impl Against {
     fn of(styles: &StyleTree, images: bool) -> Against {
         let geometry = styles.default_page().geometry;
+        let mut anchored = DefaultHasher::new();
+        let mut any = false;
+        for style in styles
+            .styles()
+            .iter()
+            .filter(|style| style.position == Position::Absolute)
+        {
+            any = true;
+            style.position.hash(&mut anchored);
+            style.wrap_flow.hash(&mut anchored);
+            for inset in [
+                style.inset.top,
+                style.inset.right,
+                style.inset.bottom,
+                style.inset.left,
+            ] {
+                inset.points().map(f32::to_bits).hash(&mut anchored);
+            }
+            hash_edges(style.margin, &mut anchored);
+        }
         Against {
             measure: geometry.measure(),
             height: images.then(|| geometry.content_size().1),
+            exclusions: any.then(|| anchored.finish()),
         }
     }
 
     fn hash_into(self, h: &mut DefaultHasher) {
         (self.measure.to_bits(), self.height.map(f32::to_bits)).hash(h);
+        self.exclusions.hash(h);
     }
 }
 
