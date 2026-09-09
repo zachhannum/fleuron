@@ -1,6 +1,6 @@
 ---
 title: Display structure
-description: Every type the engine's output holds, and what a painter does with it.
+description: Every type in the engine's output, and what a painter does with it.
 ---
 
 The display structure is what the engine produces: every glyph, rule, and image of a book, at the position layout decided for it. A painter draws from it and works nothing out for itself, so a preview and an export cannot disagree. This page describes every type in it.
@@ -37,7 +37,7 @@ pub struct Page {
 }
 ```
 
-`number` is the page number, counting from 1. `side` is `recto` or `verso`, the CSS names for a right-hand and a left-hand page. Books open on a right-hand page, so odd numbers are rectos. `width` and `height` are the page size in points, carried per page, since a book may change page size at a named page.
+`number` is the page number, counting from 1. `side` is `recto` or `verso`, the CSS names for a right-hand and a left-hand page. Books open on a right-hand page, so odd numbers are rectos. `width` and `height` are the page size in points, recorded per page, since a book may change page size at a named page.
 
 `sections` names the content-tree sections that appear on the page, in the order their content appears on it. A chapter that ends mid-page is followed on that page by the next one opening, so the page names both. A blank page names none.
 
@@ -131,9 +131,9 @@ pub struct SourceRange {
 
 `node` is a content-tree [node id](content-tree.md#node-identity). `range` indexes that node's own text as the frontend read it, before `text-transform` or a synthesized small capital changed what was shaped, so a run's `origin` and its `source` cover the same bytes.
 
-A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range hold the byte, and the glyph on it whose range does.
+A host maps a glyph back to the manuscript in two steps: the glyph's `range` through the run's `source_map`, where there is one, then that offset plus `origin.range.start`. A cursor in the manuscript goes the other way: find the run whose node and range contain the byte, and the glyph on it whose range does.
 
-A node id is the engine's own name for a place in the book. A host that handed over markdown holds a file and a byte of it instead, and [the content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor in the manuscript becomes a node, and the runs that name that node are on the page the cursor is set on. A run under the pointer goes back the other way.
+A node id is the engine's own name for a place in the book. A host that handed over markdown has a file and a byte of it instead, and [the content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor in the manuscript becomes a node, and the runs that name that node are on the page the cursor is set on. A run under the pointer goes back the other way.
 
 ## Writing a painter
 

@@ -59,9 +59,9 @@ A content edit re-breaks only the sections it changed, and the rest keep the lin
 
 ## What is in the cache
 
-The cache holds line breaks, shaped glyph runs, and advance widths. It holds no coordinates at all. Where a line breaks depends on the line width, the font and the text, and none of those depend on pagination. Which page a line lands on and at what baseline is fragmentation's answer, and fragmentation runs every time. A chapter that an edit above it pushed onto a different page is painted at new coordinates from the same breaks.
+The cache stores line breaks, shaped glyph runs, and advance widths, and no coordinates at all. Where a line breaks depends on the line width, the font and the text, and none of those depend on pagination. Which page a line lands on and at what baseline is fragmentation's answer, and fragmentation runs every time. A chapter that an edit above it pushed onto a different page is painted at new coordinates from the same breaks.
 
-Two conditions have to hold for those breaks to be reusable, and the session checks both.
+Two conditions have to be true for those breaks to be reusable, and the session checks both.
 
 The first is that the book has one line width. Page rules with different widths make where a line breaks depend on which page it lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are that case, so is a named page set narrower, and so is one that divides its content box into a different number of columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread, so both sides come to the same width.
 

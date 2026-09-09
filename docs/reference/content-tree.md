@@ -3,7 +3,7 @@ title: Content tree
 description: The engine's input contract, and the semantic document it lays out.
 ---
 
-The content tree is what the engine lays out: a semantic document rather than markup. Every stage downstream reads these types. This page describes the whole vocabulary and what each node carries.
+The content tree is what the engine lays out: a semantic document rather than markup. Every stage downstream reads these types. This page describes the whole vocabulary and the fields on each node.
 
 Most callers never build one. [Markdown](markdown.mdx) is the usual input and the frontend produces the tree from it. The types are public for a host whose source is already structured, such as a CMS or a docx converter, which builds a `Book` in Rust directly.
 
@@ -91,7 +91,7 @@ Text runs are not elements as far as CSS is concerned. They take the style of th
 
 ## Naming a node
 
-`attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that carries neither leaves the field out.
+`attributes` is what a sheet names one node by: `classes`, any number of them, and `id`, at most one. The names are as CSS spells them, without the `.` or the `#`. A node that has neither leaves the field out.
 
 ```json
 { "attributes": { "id": "frontispiece", "classes": ["map"] } }
@@ -101,7 +101,7 @@ Specificity counts them in buckets of their own: `.map` outranks `img`, and `#fr
 
 The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 
-A text run carries the field like every other node, and a sheet reaches nothing through it.
+A text run has the field like every other node, and a sheet reaches nothing through it.
 
 ## Node identity
 
@@ -117,7 +117,7 @@ Positions are diagnostic data and never layout input, so a missing one never fai
 
 ## Where a node was read from
 
-`span` is the other half: the bytes of `source` the node was read from, markup and all. A file and the text of the nodes read from it are different bytes, since markup is not text, so a span is the node's extent rather than a letter-by-letter map. One byte of the file lands on the node written there rather than on a letter of it. A node that holds another was read from a stretch of the file that holds its own, and the innermost nodes cover the file between them, so every byte belongs to exactly one node.
+`span` is the other half: the bytes of `source` the node was read from, markup and all. A file and the text of the nodes read from it are different bytes, since markup is not text, so a span is the node's extent rather than a letter-by-letter map. One byte of the file lands on the node written there rather than on a letter of it. A node that contains another was read from a stretch of the file that contains its own, and the innermost nodes cover the file between them, so every byte belongs to exactly one node.
 
 Spans answer two questions:
 
@@ -128,6 +128,6 @@ Spans answer two questions:
 
 Together they take a cursor onto a page and back. A cursor in the manuscript becomes a node, and the runs of the [display structure](display-structure.mdx) that name that node are on the page the cursor is set on. A run under the pointer becomes a place in the manuscript. Only the sections read from the source being asked about are searched, so one file's cursor is answered by one file's nodes.
 
-Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host that holds one across an edit asks again rather than reusing it.
+Both answers are about the book as it stands. Ids renumber whenever the book is set or one of its sources replaced, so a host asks again after an edit rather than reusing an id it already has.
 
 A node the engine synthesized, or one from a tree that was built rather than parsed, was read from nothing. Both questions answer with nothing rather than guessing.

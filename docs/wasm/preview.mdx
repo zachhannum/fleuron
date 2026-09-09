@@ -75,7 +75,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
 | `warnings` | [what the run warned about](../library/diagnostics.mdx) |
-| `svg(page?)` | the markup for a held page, painted but not mounted; empty for one that is not |
+| `svg(page?)` | the markup for a page already fetched, painted but not mounted; empty for one that is not |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |
 
@@ -118,11 +118,11 @@ The effect is a debounce whose delay is the last render's duration: a long book 
 
 ## Turning pages
 
-`Preview` fetches one page at a time, not the whole book: the page on screen and the one either side of it. Assigning to `page` inside that reach paints at once, from what is already held. A page further off asks the worker and paints once the reply lands, the frame staying as it was until then. `pages` reports how many pages the book has regardless of how much of it has crossed.
+`Preview` fetches one page at a time, not the whole book: the page on screen and the one either side of it. Assigning to `page` inside that reach paints at once, from what is already fetched. A page further off asks the worker and paints once the reply lands, the frame staying as it was until then. `pages` reports how many pages the book has regardless of how much of it has crossed.
 
-An edit drops whatever pages were held, since the book they came from no longer stands, and fetches the page on screen fresh against the book the edit produced.
+An edit drops whatever pages were fetched, since the book they came from no longer stands, and fetches the page on screen fresh against the book the edit produced.
 
-`onRender` is called after every render that reaches the screen, with the reply behind the page on screen. `output.pages` holds that page alone, `output.bookPages` is the book's own length, and `output.fonts`, `output.assets` and `output.warnings` are the whole run's.
+`onRender` is called after every render that reaches the screen, with the reply behind the page on screen. `output.pages` has that page alone, `output.bookPages` is the book's own length, and `output.fonts`, `output.assets` and `output.warnings` are the whole run's.
 
 ```js
 const preview = await Preview.mount(element, {
@@ -176,7 +176,7 @@ A browser handed a string and a font does its own typesetting: it chooses the gl
 
 So the painter leaves the browser nothing to work out. Each `<text>` sets an x for every one of its characters, taken from the glyph the engine placed there, and the run's axes and OpenType features are pinned so the browser reaches the glyphs the engine measured rather than the ones the characters spell.
 
-Where `text-transform` or small capitals changed the characters, the run carries both. The painter draws what was shaped, and beside it is what the author wrote, which is what selection and copy and paste return.
+Where `text-transform` or small capitals changed the characters, the run has both. The painter draws what was shaped, and beside it is what the author wrote, which is what selection and copy and paste return.
 
 The PDF writer reads the same display structure, so the two painters draw the same numbers, glyph for glyph.
 

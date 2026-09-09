@@ -17,11 +17,11 @@ A version leads the encoding, and a host reads it before anything else. The enco
 
 ## What crosses
 
-A request carries whatever changed: markdown source, stylesheets, font bytes, or a content tree. Inputs are ops on a session the module keeps, rather than a book re-sent per frame. The engine opens no files, so a face that has not crossed cannot be used.
+A request names whatever changed: markdown source, stylesheets, font bytes, or a content tree. Inputs are ops on a session the module keeps, rather than a book re-sent per frame. The engine opens no files, so a face that has not crossed cannot be used.
 
-A reply carries one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. It is transferred rather than copied.
+A reply is one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. It is transferred rather than copied.
 
-A `preview` reply need not carry the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0. The reply's `pages` is that slice, `first` says where the slice begins, and `bookPages` says how many pages the book has, so a reply carrying one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
+A `preview` reply need not be the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0. The reply's `pages` is that slice, `first` says where the slice begins, and `bookPages` says how many pages the book has, so a reply with just one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
 
 ## The display structure
 
@@ -31,7 +31,7 @@ Coordinates are in points, with the origin at the top left. Every painter, SVG, 
 
 Faces include their instance. The font table records where on its file's axes each face sits. One variable file names several styles, so a painter that does not pin the axes draws the default weight for every one of them.
 
-Glyphs are tied to their text. Each text run carries the string it was shaped from, and each glyph a byte range into it, because only the shaper knew which glyph came from which character. A painter that supports selection or accessible text reads the text through those ranges, and a painter that only draws ignores them.
+Glyphs are tied to their text. Each text run has the string it was shaped from, and each glyph a byte range into it, because only the shaper knew which glyph came from which character. A painter that supports selection or accessible text reads the text through those ranges, and a painter that only draws ignores them.
 
 Runs are tied to the manuscript. Each text run names the content node it was shaped from and the bytes of that node it stands for, so a host maps a cursor in the manuscript onto a page, and a click on a page back onto the manuscript. Text the engine wrote itself, such as a page number or a running head, names no node. A node id is the engine's own name for a place in the book, and the last two questions below turn it into a file and a byte of one.
 
@@ -51,7 +51,7 @@ A request is an edit, a render, a question, or an edit and one of those. The fol
 
 The `style` op takes the author's sheets in cascade order, each under a name. A warning names the sheet its declaration was written in, as `preset.css:12:3`, so a host that builds its styling out of layers sends the layers.
 
-Request and response are paired by `id`, and each request carries a generation the worker echoes back untouched. The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or at a new manuscript. A response whose generation is behind the current one is dropped without painting.
+Request and response are paired by `id`, and each request has a generation the worker echoes back untouched. The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or at a new manuscript. A response whose generation is behind the current one is dropped without painting.
 
 Some requests are questions rather than renders, and none of them overtakes a render or is overtaken by one.
 
@@ -69,7 +69,7 @@ That is also what keeps the session's caches sound. A superseded render is one t
 
 ### Errors and warnings
 
-A request the engine cannot apply replies with an error, and the session carries on rendering. Font bytes that are not a font, and a content tree that will not parse, are both that case.
+A request the engine cannot apply replies with an error, and the session continues rendering. Font bytes that are not a font, and a content tree that will not parse, are both that case.
 
 A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which is the whole run's, [the frontend's included](../library/diagnostics.mdx).
 

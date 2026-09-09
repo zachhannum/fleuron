@@ -3,7 +3,7 @@ title: WebAssembly quickstart
 description: Installing the package, running layout in a worker, and painting what comes back.
 ---
 
-The engine compiles to WebAssembly and ships as `fleuron`. The package holds the module, a worker, a client, a display-structure reader, and an SVG painter. This page covers the preview that assembles all of them, and how to assemble them yourself.
+The engine compiles to WebAssembly and ships as `fleuron`. The package ships the module, a worker, a client, a display-structure reader, and an SVG painter. This page covers the preview that assembles all of them, and how to assemble them yourself.
 
 ```sh
 npm install fleuron

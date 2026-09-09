@@ -7,7 +7,7 @@ Every glyph the engine draws comes from a face in a `FontRegistry`. The engine b
 
 ## The bundled registry
 
-`bundled_registry` builds a registry holding EB Garamond, upright and italic, registered as the generic `serif` and as the built-in stylesheet's default family. It is one variable font file.
+`bundled_registry` builds a registry containing EB Garamond, upright and italic, registered as the generic `serif` and as the built-in stylesheet's default family. It is one variable font file.
 
 ```rust
 let mut registry = fleuron::fonts::bundled_registry()?;
@@ -48,7 +48,7 @@ use fleuron::style::NoFonts;
 sheets.load_fonts(&mut registry, &NoFonts);
 ```
 
-Load the fonts before compiling. A computed style can only resolve to a face the registry already holds. A [session](sessions.md) borrows the registry for its whole life.
+Load the fonts before compiling. A computed style can only resolve to a face already in the registry. A [session](sessions.md) borrows the registry for its whole life.
 
 A face registers under the family the stylesheet declared rather than the name inside the file, so a stylesheet's selectors always match the name it wrote.
 
@@ -107,7 +107,7 @@ let scale = 11.0 / f32::from(metrics.units_per_em);
 let ascender = f32::from(metrics.ascender) * scale;
 ```
 
-Both answer `None` for a family the registry does not hold. `face.attributes` is what was found rather than what was asked for, so a caller can see that a family answered a request for an italic with an upright.
+Both answer `None` for a family the registry does not contain. `face.attributes` is what was found rather than what was asked for, so a caller can see that a family answered a request for an italic with an upright.
 
 Ascender, descender, and line gap come from the OS/2 typographic values where the face has them, and from hhea otherwise. Descender is negative, which is how the tables record it. Cap height is zero where the face declares none.
 

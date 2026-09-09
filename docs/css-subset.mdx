@@ -3,7 +3,7 @@ title: CSS subset
 description: The CSS rules fleuron supports, what each one does, and what happens to CSS it does not support.
 ---
 
-Fleuron uses CSS to describe how a book is typeset. This page describes all of the CSS rules that fleuron supports and how to use them. The engine warns about anything it does not support and carries on, so one unsupported rule does not cost you the rest of the stylesheet.
+Fleuron uses CSS to describe how a book is typeset. This page describes all of the CSS rules that fleuron supports and how to use them. The engine warns about anything it does not support and continues, so one unsupported rule does not cost you the rest of the stylesheet.
 
 The editor below is a live playground running the fleuron engine.
 
@@ -36,7 +36,7 @@ book {
 
 ## The page
 
-`@page` describes the page itself: its size, its margins, its columns, and the boxes in the margins that hold running heads and page numbers.
+`@page` describes the page itself: its size, its margins, its columns, and the boxes in the margins that contain running heads and page numbers.
 
 {/* generated: page-grammar */}
 
@@ -296,7 +296,7 @@ A run of text is not an element. It takes the style of the paragraph or inline e
 
 ### Classes and ids
 
-A class or an id names a particular element rather than every element of a kind: one image rather than every `img`. An element can carry any number of classes and at most one id. Where two elements share an id, both match and the second one warns. See [the markdown mapping](reference/markdown.mdx) for how a manuscript assigns them.
+A class or an id names a particular element rather than every element of a kind: one image rather than every `img`. An element can have any number of classes and at most one id. Where two elements share an id, both match and the second one warns. See [the markdown mapping](reference/markdown.mdx) for how a manuscript assigns them.
 
 ```css
 p.epigraph {
@@ -424,7 +424,7 @@ book {
 
 ### Small caps, letter spacing, and case
 
-`font-variant-caps: small-caps` uses the font's `smcp` feature, which holds capitals drawn at lowercase height. For a font without one, the engine draws the lowercase letters as capitals at four-fifths of the size and warns, naming the font.
+`font-variant-caps: small-caps` uses the font's `smcp` feature, which is capitals drawn at lowercase height. For a font without one, the engine draws the lowercase letters as capitals at four-fifths of the size and warns, naming the font.
 
 `letter-spacing` adds space between the glyphs of a run, and line breaking measures it like any other width. Nothing is added after the last glyph on a line, so a letter-spaced title centers on its letters rather than on the trailing space.
 
@@ -640,7 +640,7 @@ h2 + p::first-line {
 }
 ```
 
-Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words the line ends up holding.
+Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words end up on that line.
 
 `font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
 
