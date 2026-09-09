@@ -33,12 +33,14 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::ops::Range;
 
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
 use crate::images::{Added, Assets};
 use crate::layout::{Fragment, PageInfo, Paginator, Piece, font_table, no_assets};
 use crate::lines::Patterns;
+use crate::pages::{DrawItem, Folios};
 use crate::pdf::{self, PdfError};
 use crate::style::{
     ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets,
@@ -437,6 +439,55 @@ impl<'a> Session<'a> {
             self.assets.get(),
             &self.book.metadata,
         )
+    }
+
+    /// The folios each of these nodes' content is set on, answered
+    /// in the order they were asked about.
+    ///
+    /// A node covers itself and everything under it, so a heading
+    /// answers with the page its own text is on, and a chapter with
+    /// the first and last page of the pages it runs across. Nothing
+    /// for a node the book does not hold, and nothing for one whose
+    /// content reaches no page: a node the engine synthesized, or a
+    /// scene break, whose ornament the engine wrote itself.
+    ///
+    /// The answer is a walk over the pages the session already
+    /// holds. It runs a stage only when an edit has left one to run.
+    pub fn folios(&mut self, nodes: &[NodeId]) -> Vec<Option<Folios>> {
+        let held: Vec<Option<Range<u32>>> =
+            nodes.iter().map(|node| self.book.subtree(*node)).collect();
+        self.update();
+        let output = self.output.as_ref().expect("an update leaves an output");
+        let mut answers: Vec<Option<Folios>> = vec![None; nodes.len()];
+        for page in &output.pages {
+            let mut reached = |node: NodeId| {
+                for (answer, held) in answers.iter_mut().zip(&held) {
+                    if !held.as_ref().is_some_and(|held| held.contains(&node.get())) {
+                        continue;
+                    }
+                    *answer = Some(Folios {
+                        first: answer.map_or(page.number, |folios| folios.first),
+                        last: page.number,
+                    });
+                }
+            };
+            // A page names the sections it carries, and each run of
+            // text names the node it was shaped from. Between them
+            // they name every node the page set anything from.
+            for section in &page.sections {
+                reached(*section);
+            }
+            for item in &page.items {
+                if let DrawItem::Text {
+                    origin: Some(origin),
+                    ..
+                } = item
+                {
+                    reached(origin.node);
+                }
+            }
+        }
+        answers
     }
 
     /// The display structure by value, consuming the session.
@@ -1302,6 +1353,113 @@ mod tests {
 
     fn sheets(css: &str) -> Stylesheets {
         Stylesheets::parse(&[Source::author("test.css", css)])
+    }
+
+    /// The folios a node is named on directly, walked the way a host
+    /// would have to walk them: the pages a run of that node is set
+    /// on, and the pages that name it as a section.
+    fn named_on(output: &LayoutOutput, node: NodeId) -> Vec<u32> {
+        output
+            .pages
+            .iter()
+            .filter(|page| {
+                page.sections.contains(&node)
+                    || page.items.iter().any(|item| {
+                        matches!(item, DrawItem::Text { origin: Some(origin), .. }
+                            if origin.node == node)
+                    })
+            })
+            .map(|page| page.number)
+            .collect()
+    }
+
+    /// A chapter's content runs across pages, and the question
+    /// answers the folio it opens on and the folio it ends on.
+    #[test]
+    fn a_node_answers_the_first_and_last_folio_it_is_set_on() {
+        let mut session = three_chapters();
+        let chapters: Vec<NodeId> = session.book().sections.iter().map(|s| s.id).collect();
+        let settled = session.stages();
+        let folios = session.folios(&chapters);
+        assert_eq!(
+            session.stages(),
+            settled,
+            "answering ran a stage over pages that were already placed"
+        );
+        let output = session.preview();
+
+        for (chapter, folios) in chapters.iter().zip(&folios) {
+            let named = named_on(output, *chapter);
+            assert_eq!(
+                *folios,
+                Some(Folios {
+                    first: *named.first().expect("a chapter of prose reaches a page"),
+                    last: *named.last().expect("a chapter of prose reaches a page"),
+                }),
+                "chapter {} is set on {named:?}",
+                chapter.get()
+            );
+        }
+        assert!(
+            folios
+                .iter()
+                .any(|folios| folios.is_some_and(|folios| folios.first < folios.last)),
+            "no chapter of {} pages ran across two of them",
+            output.pages.len()
+        );
+    }
+
+    /// One call, one answer per node asked about, in the order they
+    /// were asked about.
+    #[test]
+    fn several_nodes_are_answered_in_one_call() {
+        let mut session = three_chapters();
+        let mut asked: Vec<NodeId> = session.book().sections.iter().map(|s| s.id).collect();
+        asked.reverse();
+        asked.push(NodeId::new(u32::MAX));
+
+        let together = session.folios(&asked);
+        let apart: Vec<Option<Folios>> = asked
+            .iter()
+            .map(|node| session.folios(std::slice::from_ref(node))[0])
+            .collect();
+        assert_eq!(together, apart);
+        assert_eq!(together.len(), asked.len());
+    }
+
+    /// A node the book does not hold, and the id the engine writes
+    /// its own text under, are both answered with nothing rather
+    /// than with a folio or an error.
+    #[test]
+    fn a_node_the_book_does_not_hold_answers_with_nothing() {
+        let mut session = three_chapters();
+        let past = NodeId::new(u32::MAX);
+        assert_eq!(
+            session.folios(&[past, NodeId::UNASSIGNED, past]),
+            vec![None, None, None]
+        );
+    }
+
+    /// A heading's runs are shaped from the text inside it, so no run
+    /// names the heading itself. It answers with the page that text
+    /// is on all the same.
+    #[test]
+    fn a_node_no_run_names_answers_with_the_page_its_content_is_on() {
+        let mut session = Session::new(registry());
+        session.set_content(book(vec![section(
+            "one.md",
+            [vec![heading("Chapter One")], prose("alpha", 8)].concat(),
+        )]));
+        let node = crate::content::block_id(&session.book().sections[0].blocks[0]);
+        let folios = session.folios(&[node]);
+        let output = session.preview();
+
+        assert!(
+            named_on(output, node).is_empty(),
+            "a run named the heading, so this proves nothing"
+        );
+        let first = output.pages.first().expect("the book has pages").number;
+        assert_eq!(folios, vec![Some(Folios { first, last: first })]);
     }
 
     /// A session over three chapters, one file each.

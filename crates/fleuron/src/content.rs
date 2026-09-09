@@ -575,6 +575,100 @@ impl Book {
         };
         Some((source, span))
     }
+
+    /// The ids one node and its descendants hold.
+    ///
+    /// Ids are assigned in document order, a node before its
+    /// children, so what a node covers is a run of consecutive
+    /// numbers. Asking what a node was set from is asking about
+    /// every id in this range.
+    ///
+    /// Nothing for a node the book does not hold.
+    pub fn subtree(&self, node: NodeId) -> Option<Range<u32>> {
+        if node == NodeId::UNASSIGNED {
+            return None;
+        }
+        let at = self
+            .sections
+            .partition_point(|section| section.id.get() <= node.get())
+            .checked_sub(1)?;
+        let section = &self.sections[at];
+        let first = section.id.get();
+        let count = 1 + section.blocks.iter().map(block_nodes).sum::<u32>();
+        if section.id == node {
+            return Some(first..first + count);
+        }
+        if !(first..first + count).contains(&node.get()) {
+            return None;
+        }
+        subtree_in_blocks(&section.blocks, node)
+    }
+}
+
+/// The ids one node of these blocks holds, by id. Ids are dense, so
+/// the block holding a node is the one whose own run of numbers
+/// covers it.
+fn subtree_in_blocks(blocks: &[Block], node: NodeId) -> Option<Range<u32>> {
+    for block in blocks {
+        let first = block_id(block).get();
+        let held = first..first + block_nodes(block);
+        if !held.contains(&node.get()) {
+            continue;
+        }
+        if block_id(block) == node {
+            return Some(held);
+        }
+        return match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                subtree_in_inlines(inlines, node)
+            }
+            Block::Blockquote { blocks, .. } => subtree_in_blocks(blocks, node),
+            Block::ThematicBreak { .. } | Block::Image { .. } => None,
+        };
+    }
+    None
+}
+
+/// The same, over the inlines of one block.
+fn subtree_in_inlines(inlines: &[Inline], node: NodeId) -> Option<Range<u32>> {
+    for inline in inlines {
+        let first = inline_id(inline).get();
+        let held = first..first + inline_nodes(inline);
+        if !held.contains(&node.get()) {
+            continue;
+        }
+        if inline_id(inline) == node {
+            return Some(held);
+        }
+        return match inline {
+            Inline::Text { .. } | Inline::Code { .. } => None,
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. } => subtree_in_inlines(children, node),
+        };
+    }
+    None
+}
+
+/// How many ids one block holds, itself included.
+fn block_nodes(block: &Block) -> u32 {
+    1 + match block {
+        Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+            inlines.iter().map(inline_nodes).sum()
+        }
+        Block::Blockquote { blocks, .. } => blocks.iter().map(block_nodes).sum(),
+        Block::ThematicBreak { .. } | Block::Image { .. } => 0,
+    }
+}
+
+/// The same, for one inline.
+fn inline_nodes(inline: &Inline) -> u32 {
+    1 + match inline {
+        Inline::Text { .. } | Inline::Code { .. } => 0,
+        Inline::Emphasis { children, .. }
+        | Inline::Strong { children, .. }
+        | Inline::Link { children, .. } => children.iter().map(inline_nodes).sum(),
+    }
 }
 
 /// The narrower of a node and whichever of its descendants was read
@@ -1242,6 +1336,47 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
             );
         }
         assert_eq!(book.source_of(NodeId::UNASSIGNED), None);
+    }
+
+    /// A node covers itself and everything under it, as one run of
+    /// numbers: the section covers the book, the blockquote covers
+    /// the paragraph quoted in it, and a text run covers only
+    /// itself.
+    #[test]
+    fn a_subtree_is_a_run_of_ids() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let ids = collect_ids(&book);
+        let last = ids.last().expect("the sample book has nodes").get();
+
+        let section = book.sections[0].id;
+        assert_eq!(book.subtree(section), Some(section.get()..last + 1));
+
+        let quote = book.sections[0].blocks[2].clone();
+        let Block::Blockquote { id, blocks, .. } = &quote else {
+            panic!("the third block is a blockquote");
+        };
+        let quoted = block_id(&blocks[0]);
+        assert_eq!(book.subtree(*id), Some(id.get()..quoted.get() + 2));
+
+        for id in ids {
+            let held = book.subtree(id).expect("the book holds it");
+            assert_eq!(held.start, id.get(), "a node opens its own run");
+            assert!(held.end <= last + 1, "a run stops inside the book");
+        }
+    }
+
+    /// An id the book has no node for is covered by nothing rather
+    /// than by whatever was numbered near it.
+    #[test]
+    fn an_id_the_book_does_not_hold_covers_nothing() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let past = collect_ids(&book).last().expect("nodes").get() + 1;
+
+        assert_eq!(book.subtree(NodeId::UNASSIGNED), None);
+        assert_eq!(book.subtree(NodeId::new(past)), None);
+        assert_eq!(Book::default().subtree(NodeId::new(1)), None);
     }
 
     /// The sample book's one paragraph of prose.
