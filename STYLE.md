@@ -1,20 +1,27 @@
 # Prose style
 
-The voice the docs, the README, and the package READMEs are written in.
+The voice the docs, the README, and the package READMEs are written
+in.
 
+The voice is Simplified English, in the spirit of ASD-STE100: short
+sentences, active voice, simple tenses, and one word for one meaning.
 The rules below come from edits made to finished pages. Each one is a
 real before and after, so the guide is a record of what was wanted
 rather than a theory of good writing.
 
 ## The two that outrank the rest
 
-**Clarity and correctness first.** Every other rule here loses to
-being understood, and to being right. A plain sentence that takes an
-extra clause beats a short one the reader has to decode.
+### Clarity and correctness first
 
-**Write the ordinary word.** A trade word is fine where it is the
-clearest word, and it gets a definition the first time it appears
-unless it is already common. A trade word used for flavor gets cut.
+Every other rule here loses to being understood, and to being right. A
+plain sentence that takes an extra clause beats a short one the reader
+has to decode.
+
+### Write the ordinary word
+
+A trade word is fine where it is the clearest word. It gets a
+definition of under ten words the first time it appears, unless it is
+already common. A trade word used for flavor gets cut.
 
 Before:
 
@@ -44,9 +51,10 @@ After:
 > describes all of the CSS rules that fleuron supports and how to use
 > them.
 
-### Active voice
+### Active voice, and name the actor
 
-The engine does something. Something is not done by the engine.
+The engine does something. Something is not done by the engine. Where
+a sentence has no actor, the actor is the engine, the host, or you.
 
 Before:
 
@@ -72,6 +80,61 @@ After:
 > What is left inside the margins is the content box. Its width is the
 > width that lines of text break to.
 
+### Twenty-five words, and twenty in a procedure
+
+A sentence that explains something runs to 25 words at most. A
+sentence that tells the reader what to do runs to 20, and carries one
+instruction. Count the words in the three longest sentences of a
+draft, and split what is over.
+
+Before:
+
+> An inset left at `auto` lets the opposite one place the image, and
+> where both are `auto` the image sits at the left or top edge of the
+> content box.
+
+After:
+
+> An inset of `auto` lets the opposite inset place the image. Where
+> both insets of an axis are `auto`, the image sits at the left or the
+> top edge of the content box.
+
+### Simple tenses
+
+Write the simple present, the simple past, and the simple future. No
+present perfect: "has completed" is "completed". An "-ing" verb after
+a comma is a second sentence.
+
+Before:
+
+> An image can be placed against the page rather than among the
+> paragraphs, with the text wrapping around it.
+
+After:
+
+> You can put an image against the page rather than among the
+> paragraphs. The text then wraps around it.
+
+### can, will, must
+
+These three modals carry every meaning a page here needs. A "should"
+that states a requirement is "must". A "should" that recommends is cut,
+or stated as the fact behind it. "may", "might" and "could" are "can".
+
+Before:
+
+> the stretches prose may be set in
+
+After:
+
+> the stretches the prose can be set in
+
+### Condition before command
+
+The condition comes first, and a comma divides it from the command: "If
+the build fails, read the log." A limit belongs with the step it
+limits rather than in a note after it.
+
 ### Say what an example demonstrates
 
 Every snippet gets a lead-in naming what it does. `The following
@@ -89,7 +152,7 @@ After:
 ### Break up a paragraph of code spans
 
 A run of inline code inside prose is a wall. A flat vocabulary goes in
-a block set apart from the text; a list of things with a second column
+a block set apart from the text. A list of things with a second column
 of information goes in a table.
 
 Before:
@@ -150,11 +213,18 @@ gets cut, however true it is.
 
 > A name is a promise the rest of the code has to keep.
 
+### State the fact, not its importance
+
+Cut the words that carry no fact: simply, seamlessly, robust,
+powerful, comprehensive, leverage, crucial, "in order to", and "it is
+worth noting". A page does not tell the reader that something matters.
+It says what the thing does.
+
 ### No personification
 
 A file, a tool, or a warning does not say, know, want, or announce
 anything. A host, a caller, or a reader is a party to the contract
-rather than a tool, and may still want things.
+rather than a tool, and can still want things.
 
 ## Words
 
@@ -165,12 +235,19 @@ ASCII where a reader might type it: `6x9`, not `6×9`. A space in
 
 Oxford commas.
 
-No em dashes or en dashes. A period, a comma, a colon, or parentheses
-does the job.
+No em dashes, no en dashes, and no semicolons. A period, a comma, a
+colon, or parentheses does the job.
+
+No contractions. Keep the articles, and keep "that".
 
 One name per concept, used everywhere: in prose, in code comments, in
 strings, in headings, and in filenames. A rename is finished when
-nothing in the repo still uses the old name.
+nothing in the repo still uses the old name. `make sure that` covers
+check, verify, confirm, validate, and ensure. `configuration` covers
+config, settings, and options.
+
+A noun chain runs to three words. Break a longer one with a
+preposition: "the timeout value for the connection pool".
 
 Name packages and commands the way the reader types them, in
 backticks.
@@ -200,15 +277,25 @@ heading says it is for someone building the repo is the exception.
 ## Shape of a page
 
 Headings are labels a reader scans and a search box matches, not lines
-of prose. Page titles are sentence case.
+of prose. A heading runs to two sentences at most. Page titles are
+sentence case.
+
+Bold is neither emphasis nor a lead-in. A heading does that work.
+
+A vertical list holds three or more parallel items or steps. The
+lead-in ends in a colon, each item starts uppercase, and an item
+carries one instruction. Fewer than three items is a sentence.
+
+A warning names the command or the condition first, then the risk. "Do
+not run this against production. The command deletes rows."
 
 A quickstart opens with install, then the one command that produces
 output, then what came back.
 
 A section that explains a mechanism ends in a snippet that runs it,
-with a lead-in naming what the snippet does. A snippet that is also a
-file in the repo is checked against that file by a test, so the page
-cannot drift from the code.
+with a lead-in naming what the snippet does. Where a snippet is also a
+file in the repo, a test compares the two. The page cannot drift from
+the code.
 
 A reference table links out rather than repeating a paragraph inline.
 
@@ -220,3 +307,11 @@ it.
 Docs pages link: to other pages, to source, to the projects the code
 depends on. CLAUDE.md's rule against links covers code comments and
 internal notes.
+
+## Before you publish
+
+Count the words in the three longest sentences, and split what is over
+the limit. Then read the draft for the habits this guide removes: a
+contraction, "has been", "should", "may", a semicolon, an em dash, an
+"-ing" verb after a comma, bold as emphasis, and check, verify or
+config where one word covers all three.
