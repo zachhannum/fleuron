@@ -3,9 +3,7 @@ title: Markdown mapping
 description: What each markdown construct becomes in the content tree, and which of them warn.
 ---
 
-`fleuron-markdown` reads markdown into the [content tree](content-tree.md). This page lists every construct it reads, what each one becomes, and which of them warn.
-
-Two calls do the reading. `to_sections` reads one source, and `assemble` composes sources into a book:
+The frontend reads markdown into the [content tree](content-tree.md). Every construct below either maps to a node or warns.
 
 ```rust
 let (sections, warnings) = fleuron_markdown::to_sections(&text, "chapter-01.md", &Options::default());
@@ -16,7 +14,7 @@ let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&text), sect
 
 ## Sections
 
-A section opens a new page. `Options::sections` sets where one begins.
+A section is what the fragmenter opens a page on. `Options::sections` sets where one begins.
 
 | policy | |
 |---|---|
@@ -94,7 +92,7 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `![alt](url)` | `image`, as a block |
 | `{.class #id}` on a line of its own | the classes and id of the block under it |
 
-An image is a block in the content tree and an inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
+An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
 
 The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
 
@@ -121,7 +119,7 @@ Two blocks also take the run written after them. A heading takes it at the end o
 
 Nothing else takes a trailing run. On a blockquote it stays inside the quote's last paragraph, as prose. After `---` the line is prose too, and no longer a break.
 
-An attribute line with no block under it names nothing, because the source ends under it or another attribute line follows it. It is laid out as the prose it was read as, and it warns. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the content tree has no node for.
+A line that names nothing is set as the prose it was read as, and warns: the source ends under it, or another attribute line follows it. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 
@@ -137,11 +135,11 @@ An id names one element. A book that writes one twice lays out with both matchin
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
 
-A line wrapped in the source is a space in the tree, so where the manuscript wraps has no effect on where the lines break.
+A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
 
 ## What warns
 
-The manuscript below uses every construct in the tables above, including the ones with no counterpart. Constructs the content tree has a node for are laid out as that node. The rest is laid out as prose and reported under the page.
+The manuscript below uses every construct in the tables above, the ones with no counterpart included. Constructs the content tree has a node for are laid out. The rest is laid out as prose and reported under the page.
 
 <Playground
   demo="mapping"
@@ -150,7 +148,7 @@ The manuscript below uses every construct in the tables above, including the one
   caption="One manuscript through the frontend, read as GFM so the table is a table. Take a construct out, or put another in, and the report changes with it."
 />
 
-The constructs below have no counterpart in the content tree. The frontend lays each one out as prose and reports the file, line, and column it was written at. Prose is never dropped.
+These constructs have no counterpart in the content tree. The frontend lays them out as prose and reports the file, line and column. Prose is never dropped.
 
 | construct | becomes |
 |---|---|
@@ -168,7 +166,7 @@ The constructs below have no counterpart in the content tree. The frontend lays 
 
 ## Dialects
 
-`Options::dialect` is a set of switches, so a host's departures from CommonMark are configuration rather than a fork of the parser.
+`Options::dialect` is a set of switches, so a host's departures from CommonMark are configuration.
 
 | switch | |
 |---|---|

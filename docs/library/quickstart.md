@@ -3,13 +3,15 @@ title: Library quickstart
 description: Read a manuscript, compile styling against it, lay it out, write the PDF.
 ---
 
-This page walks through a program that reads a manuscript, compiles styling against it, lays it out, and writes the PDF. It is checked in at [`crates/fleuron/examples/quickstart.rs`](https://github.com/zachhannum/fleuron/blob/main/crates/fleuron/examples/quickstart.rs), and runs from the repository:
+The sample program below does four things: reads a manuscript, compiles styling against it,
+lays it out, and writes the PDF. This code can also be found at
+[`crates/fleuron/examples/quickstart.rs`](https://github.com/zachhannum/fleuron/blob/main/crates/fleuron/examples/quickstart.rs).
 
 ```sh
 cargo run --example quickstart -p fleuron
 ```
 
-## The program
+## Sample code
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -92,15 +94,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `layout_book`        | Style tree in, `LayoutOutput` out: pages of draw items, the font and asset tables those items index, and every warning the run collected. A book with no images can pass `Assets::none()`.                                        |
 | `pdf::write`         | Paints the display structure into PDF bytes.                                                                                                                                                                                      |
 
-Parsing, font loading, and compiling are three calls rather than one because each is worth repeating on its own. A stylesheet is reparsed on an edit, a font is loaded once, and compilation runs against whichever book is current.
+Parsing, font loading and compiling are three calls rather than one because they have different lifetimes.
 
 ## Composing several files
 
-Assembly is a step of its own because ordering the sources and choosing the metadata are the caller's decisions rather than the parser's.
+Assembly is a step of its own because ordering sources and choosing metadata are the caller's 
+decisions, not the parser's.
 
-The manuscript above is a single file, so its frontmatter describes the book and goes straight to `assemble`. A host reading a chapter per file builds its own `Metadata` instead. [The markdown mapping](../reference/markdown.mdx) covers what a source's frontmatter means in each arrangement.
-
-The following program reads three chapters, each under its own name, and names the book itself:
+The manuscript above is a single file, so its frontmatter describes the book and goes straight to `assemble`. 
+A host reading a chapter per file can build its own `Metadata` instead. The [markdown mapping](../reference/markdown.mdx) 
+describes in more detail what the frontmatter represents in this context.
 
 ```rust
 use fleuron::content::Metadata;
@@ -132,9 +135,8 @@ let book = assemble(
 
 ## Using the content tree directly
 
-A host whose source is already structured, such as a CMS or a docx converter, skips the frontend and hands the engine a `Book` directly. [The content tree](../reference/content-tree.md) is that schema.
-
-The following program builds a one-paragraph book by hand:
+A host whose source is already structured, such as a CMS or a docx converter, can skip the frontend 
+and hand the engine a `Book` directly. [The content tree](../reference/content-tree.md) shows that schema.
 
 ```rust
 use fleuron::content::{Block, Book, Inline, Metadata, NodeId, Section};
@@ -165,7 +167,8 @@ book.assign_node_ids();
 
 ## Styling without an author sheet
 
-`Stylesheets::parse(&[])` compiles the built-in sheet alone: a 6x9 inch page, EB Garamond at 11 pt, prose indented, and every chapter opening on a right-hand page. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
+`Stylesheets::parse(&[])` compiles the built-in sheet alone: a trade paperback at 6x9 inches, 
+EB Garamond at 11 pt, prose indented, chapters opening recto. `fleuron::style::defaults(&book, &registry)` is the same thing in one call.
 
 ```rust
 let registry = fleuron::fonts::bundled_registry()?;
@@ -177,7 +180,10 @@ let output = fleuron::layout::layout_book(&book, &styles, &registry, &Assets::no
 
 ## Laying out again
 
-`layout_book` rebuilds every stage on every call. A program that lays the same book out over and over, such as a preview beside an editor, uses a [session](sessions.md) instead. A session keeps what each stage produced and re-runs only the stages an edit invalidates, so a change to the page margins re-fragments the lines it already broke.
+`layout_book` rebuilds every stage on every call. A program that lays the same book out over and over, 
+such as a preview beside an editor, should use a [session](sessions.md) instead. 
+A session keeps what each stage produced and re-runs only the ones an edit invalidates, 
+so changing the page margins only re-runs fragmentation instead of another pass over every line.
 
 ```rust
 use fleuron::session::Session;
@@ -193,4 +199,6 @@ Set a new sheet and call `preview` again, and only the stages under the edit run
 
 ## When things go wrong
 
-Unsupported CSS, a font that would not load, and a family stack that matched nothing are warnings rather than errors, and the book is laid out without them. See [diagnostics](diagnostics.mdx) for what warns and what fails.
+Unsupported CSS, an unresolvable 
+font and a stack that matches nothing are all warnings, and the run will still finish. 
+See [diagnostics](diagnostics.mdx) for what warns and what fails.

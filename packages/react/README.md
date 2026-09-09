@@ -13,9 +13,9 @@ import { Preview } from 'fleuron-react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render
-and the engine is handed the one input that changed. A render the
-reader has already typed past paints nothing.
+The manuscript and the stylesheet are props, so a keystroke is a
+re-render and the engine is handed the one input that changed. A
+render the reader has already typed past paints nothing.
 
 `onMount` hands back the preview itself, for the page count, the
 warnings and the PDF export.

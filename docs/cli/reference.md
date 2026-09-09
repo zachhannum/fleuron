@@ -3,8 +3,6 @@ title: CLI reference
 description: Flags, exit codes, and what lands on stderr.
 ---
 
-The `fleuron` binary reads markdown and writes a PDF. This page lists every flag, the exit codes, and what the run prints.
-
 ```text
 usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
 
@@ -58,7 +56,7 @@ An unrecognized option beginning with `-` is a usage error. There is no `--` sep
 
 Exit 2 means the command line is wrong. Exit 1 means the input is. A book that laid out with warnings exits 0, so a build that must fail on warnings checks stderr.
 
-## What lands on stderr
+## stderr
 
 The run writes everything to stderr. stdout is only what `--version`, `--help`, `--dump-tree` and `--css-subset` print.
 
@@ -76,10 +74,10 @@ fleuron: warning: chapter-03.md:88:1: family "House Sans" resolved nothing
 fleuron: 2 warnings; the PDF was written anyway
 ```
 
-An origin is either a stylesheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
+The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
 
 ## Fonts and images on the command line
 
-`@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine opens no files itself, so this resolution belongs to the binary. A library embedding fleuron supplies its own.
+`@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine opens nothing itself, so this resolution belongs to the binary. A library embedding fleuron supplies its own.
 
 An image the binary cannot open, or opens and cannot read a header from, is a warning naming the url, and the book is laid out without it.
