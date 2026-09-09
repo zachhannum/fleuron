@@ -851,7 +851,7 @@ impl Rect {
     }
 
     /// The same rectangle read from another origin.
-    fn from_origin(self, origin: (f32, f32)) -> Rect {
+    fn within(self, origin: (f32, f32)) -> Rect {
         Rect {
             x: self.x - origin.0,
             y: self.y - origin.1,
@@ -1991,7 +1991,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             .map(|at| &self.plates.all[*at])
             .filter(|plate| plate.wrap != WrapFlow::Auto)
             .map(|plate| Hole {
-                rect: plate.rect(geometry).from_origin(origin),
+                rect: plate.rect(geometry).within(origin),
                 wrap: plate.wrap,
             })
             .collect()
@@ -2011,7 +2011,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             .holes()
             .into_iter()
             .map(|hole| Hole {
-                rect: hole.rect.from_origin((reflow.setting.x, 0.0)),
+                rect: hole.rect.within((reflow.setting.x, 0.0)),
                 ..hole
             })
             .collect();
