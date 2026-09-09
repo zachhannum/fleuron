@@ -66,9 +66,16 @@ running heads and blank pages.
 
 ## Which pages a node is on
 
-`Session::folios(nodes)` answers the first and last page number each node's content is on, one answer per node, in the order asked about.
+`Session::folios(nodes)` answers where each node's content is set, one answer per node, in the order asked about.
 
 A new face repaginates the book. The chapter that opened on page 41 opens on 38, and a reader who was looking at page 41 is now looking at words that were somewhere else a moment ago. This is the question a host asks to put the reader back, to turn to a chapter, or to name the chapter on screen.
+
+An answer names four numbers, because what is printed on a page and where that page falls in the book are two different things. `counter-reset: page` restarts the count, so page 1 of a chapter can be the fortieth page of the book.
+
+| | |
+|---|---|
+| `first`, `last` | The folios the content runs between, as printed. This is what a host puts on screen. |
+| `at`, `count` | Where those pages fall in the book, counting from 0. These are the numbers a host fetches the pages by. |
 
 The following example prints the page range of every chapter of a book:
 

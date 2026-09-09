@@ -78,12 +78,24 @@ export interface NodeSource {
   end: number;
 }
 
-/** The pages one node's content is set on. */
+/**
+ * Where one node's content is set: the folios it runs between, and
+ * the pages of the book those folios are.
+ *
+ * `first` and `last` are printed on the page, and are what a host
+ * puts on screen. `at` and `count` are where those pages fall in the
+ * book, and are what a host fetches them by. A page counter that
+ * restarts makes the two differ, so both are answered.
+ */
 export interface Folios {
   /** The folio the node's content begins on. */
   first: number;
   /** The folio it ends on, the same number for a node that fits on one page. */
   last: number;
+  /** Which page of the book that first folio is, counting from 0, as `Request.first` counts. */
+  at: number;
+  /** How many pages the content runs across: `{ first: at, count }` is a range over every one. */
+  count: number;
 }
 
 /**

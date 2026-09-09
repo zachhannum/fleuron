@@ -351,19 +351,22 @@ proptest! {
         let answers = session.folios(&chapters);
         let output = session.preview();
         for (chapter, answer) in chapters.iter().zip(&answers) {
-            let named: Vec<u32> = output
+            let named: Vec<usize> = output
                 .pages
                 .iter()
-                .filter(|page| page.sections.contains(chapter))
-                .map(|page| page.number)
+                .enumerate()
+                .filter(|(_, page)| page.sections.contains(chapter))
+                .map(|(at, _)| at)
                 .collect();
             prop_assert_eq!(
                 *answer,
-                named.first().map(|first| Folios {
-                    first: *first,
-                    last: *named.last().expect("a page named it"),
+                named.first().map(|at| Folios {
+                    first: output.pages[*at].number,
+                    last: output.pages[*named.last().expect("a page named it")].number,
+                    at: *at as u32,
+                    count: (named.last().expect("a page named it") - at + 1) as u32,
                 }),
-                "chapter {} is named on {:?}",
+                "chapter {} is named on the pages {:?}",
                 chapter.get(),
                 named
             );
@@ -372,9 +375,10 @@ proptest! {
         let runs: Vec<(NodeId, u32)> = output
             .pages
             .iter()
-            .flat_map(|page| {
+            .enumerate()
+            .flat_map(|(at, page)| {
                 page.items.iter().filter_map(move |item| match item {
-                    DrawItem::Text { origin: Some(origin), .. } => Some((origin.node, page.number)),
+                    DrawItem::Text { origin: Some(origin), .. } => Some((origin.node, at as u32)),
                     _ => None,
                 })
             })
@@ -389,10 +393,10 @@ proptest! {
         let answers = session.folios(&written);
         for (node, folios) in written.iter().zip(&answers) {
             let folios = folios.expect("a node a run was shaped from reaches a page");
-            for (_, number) in runs.iter().filter(|(named, _)| named == node) {
+            for (_, at) in runs.iter().filter(|(named, _)| named == node) {
                 prop_assert!(
-                    folios.first <= *number && *number <= folios.last,
-                    "node {} is set on page {number} and answered {folios:?}",
+                    folios.at <= *at && *at < folios.at + folios.count,
+                    "node {} is set on page {at} and answered {folios:?}",
                     node.get()
                 );
             }

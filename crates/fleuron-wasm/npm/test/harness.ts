@@ -335,29 +335,34 @@ function misplacedSelection(page: Page, output: LayoutOutput): string | null {
 }
 
 /**
- * The folios a node is named on directly, walked the way a host would
- * have to walk them without a question to ask: the pages a run of
- * that node is set on, and the pages that name it as a section.
+ * Where a node is named directly, walked the way a host would have to
+ * walk it without a question to ask: the pages a run of that node is
+ * set on, and the pages that name it as a section, by their place in
+ * the book.
  */
-function foliosByWalking(pages: Page[], node: number): [number, number] | null {
-  const on = pages
-    .filter(
-      (page) =>
-        page.sections.includes(node) ||
-        page.items.some((item) => item.kind === 'text' && item.origin?.node === node),
-    )
-    .map((page) => page.number);
-  const last = on[on.length - 1];
-  return on[0] === undefined || last === undefined ? null : [on[0], last];
+function pagesByWalking(pages: Page[], node: number): number[] {
+  return pages.flatMap((page, at) =>
+    page.sections.includes(node) ||
+    page.items.some((item) => item.kind === 'text' && item.origin?.node === node)
+      ? [at]
+      : [],
+  );
 }
 
-/** Every folio one answer covers, first to last. */
-function folioSpan(folios: (Folios | null)[]): number[] | null {
-  const answer = folios[0];
-  if (answer === null || answer === undefined) {
+/** The same, as the answer the question gives for it. */
+function foliosByWalking(pages: Page[], node: number): Folios | null {
+  const on = pagesByWalking(pages, node);
+  const at = on[0];
+  const last = on[on.length - 1];
+  if (at === undefined || last === undefined) {
     return null;
   }
-  return Array.from({ length: answer.last - answer.first + 1 }, (_, at) => answer.first + at);
+  return {
+    first: pages[at]?.number ?? 0,
+    last: pages[last]?.number ?? 0,
+    at,
+    count: last - at + 1,
+  };
 }
 
 /**
@@ -457,13 +462,11 @@ worker.off('message', tapFolios);
 check('every node asked about is answered, in the order asked', folios.length === asked.length);
 check(
   'a node answers with the first and last folio its content is set on',
-  asked.every((node, at) => {
-    const walked = foliosByWalking(preview.pages, node);
-    const answer = folios[at] ?? null;
-    return walked === null
-      ? answer === null
-      : answer !== null && answer.first === walked[0] && answer.last === walked[1];
-  }),
+  asked.every(
+    (node, at) =>
+      JSON.stringify(folios[at] ?? null) ===
+      JSON.stringify(foliosByWalking(preview.pages, node)),
+  ),
   JSON.stringify(folios),
 );
 check(
@@ -488,19 +491,38 @@ check(
   `${folioBytes} bytes for ${asked.length} nodes, against ${onePage?.byteLength ?? 0} for one page`,
 );
 
+// A folio is printed on a page and a page is fetched by its place in
+// the book, and the two part company wherever the page counter
+// restarts. The answer carries both, so the range it names is the
+// range that brings back the pages it named the folios of.
+const chapter = folios[0];
+if (chapter === null || chapter === undefined) {
+  throw new Error('the fixture book opens with a chapter that reaches no page');
+}
+const turned = await client.preview([], { first: chapter.at, count: chapter.count });
+check(
+  'the range the answer names fetches the pages whose folios it named',
+  turned !== null &&
+    turned.pages.length === chapter.count &&
+    turned.pages[0]?.number === chapter.first &&
+    turned.pages[turned.pages.length - 1]?.number === chapter.last,
+  `${JSON.stringify(chapter)} fetched ${turned?.pages.length ?? 0} pages, ${turned?.pages[0]?.number ?? 0} to ${turned?.pages[turned.pages.length - 1]?.number ?? 0}`,
+);
+
 // A heading's runs are shaped from the text inside it, so no run
 // names the heading itself. The node above the run is answered from
 // what is under it.
 const above = run.node - 1;
 const held = await client.sourceOf(above);
+const [reached] = await client.foliosOf([above]);
 check(
   'a node no run names answers with the page its content is on',
   held !== null &&
     foliosByWalking(preview.pages, above) === null &&
-    (folioSpan(await client.foliosOf([above]))?.includes(
-      preview.pages[run.page]?.number ?? 0,
-    ) ??
-      false),
+    reached !== null &&
+    reached !== undefined &&
+    reached.at <= run.page &&
+    run.page < reached.at + reached.count,
 );
 
 // Two questions asked together are both answered: neither overtakes

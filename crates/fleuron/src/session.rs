@@ -441,8 +441,9 @@ impl<'a> Session<'a> {
         )
     }
 
-    /// The folios each of these nodes' content is set on, answered
-    /// in the order they were asked about.
+    /// Where each of these nodes' content is set, answered in the
+    /// order they were asked about: the folios it runs between, and
+    /// the pages of the book those folios are.
     ///
     /// A node covers itself and everything under it, so a heading
     /// answers with the page its own text is on, and a chapter with
@@ -459,15 +460,25 @@ impl<'a> Session<'a> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
         let mut answers: Vec<Option<Folios>> = vec![None; nodes.len()];
-        for page in &output.pages {
+        for (at, page) in output.pages.iter().enumerate() {
+            let at = at as u32;
             let mut reached = |node: NodeId| {
                 for (answer, held) in answers.iter_mut().zip(&held) {
                     if !held.as_ref().is_some_and(|held| held.contains(&node.get())) {
                         continue;
                     }
-                    *answer = Some(Folios {
-                        first: answer.map_or(page.number, |folios| folios.first),
-                        last: page.number,
+                    *answer = Some(match *answer {
+                        Some(folios) => Folios {
+                            last: page.number,
+                            count: at - folios.at + 1,
+                            ..folios
+                        },
+                        None => Folios {
+                            first: page.number,
+                            last: page.number,
+                            at,
+                            count: 1,
+                        },
                     });
                 }
             };
@@ -1355,21 +1366,23 @@ mod tests {
         Stylesheets::parse(&[Source::author("test.css", css)])
     }
 
-    /// The folios a node is named on directly, walked the way a host
-    /// would have to walk them: the pages a run of that node is set
-    /// on, and the pages that name it as a section.
-    fn named_on(output: &LayoutOutput, node: NodeId) -> Vec<u32> {
+    /// Where a node is named directly, walked the way a host would
+    /// have to walk it: the pages a run of that node is set on, and
+    /// the pages that name it as a section, by their place in the
+    /// book.
+    fn named_on(output: &LayoutOutput, node: NodeId) -> Vec<usize> {
         output
             .pages
             .iter()
-            .filter(|page| {
+            .enumerate()
+            .filter(|(_, page)| {
                 page.sections.contains(&node)
                     || page.items.iter().any(|item| {
                         matches!(item, DrawItem::Text { origin: Some(origin), .. }
                             if origin.node == node)
                     })
             })
-            .map(|page| page.number)
+            .map(|(at, _)| at)
             .collect()
     }
 
@@ -1390,13 +1403,17 @@ mod tests {
 
         for (chapter, folios) in chapters.iter().zip(&folios) {
             let named = named_on(output, *chapter);
+            let at = *named.first().expect("a chapter of prose reaches a page");
+            let last = *named.last().expect("a chapter of prose reaches a page");
             assert_eq!(
                 *folios,
                 Some(Folios {
-                    first: *named.first().expect("a chapter of prose reaches a page"),
-                    last: *named.last().expect("a chapter of prose reaches a page"),
+                    first: output.pages[at].number,
+                    last: output.pages[last].number,
+                    at: at as u32,
+                    count: (last - at + 1) as u32,
                 }),
-                "chapter {} is set on {named:?}",
+                "chapter {} is set on the pages {named:?}",
                 chapter.get()
             );
         }
@@ -1406,6 +1423,38 @@ mod tests {
                 .any(|folios| folios.is_some_and(|folios| folios.first < folios.last)),
             "no chapter of {} pages ran across two of them",
             output.pages.len()
+        );
+    }
+
+    /// A folio is what a page has printed on it, and a book whose
+    /// counter restarts prints a number that is not the page's place
+    /// in the book. Both are answered, so a host names one and
+    /// fetches by the other.
+    #[test]
+    fn a_restarted_counter_leaves_the_folio_and_the_page_apart() {
+        let mut session = Session::new(registry());
+        session.set_content(book(vec![
+            section("front.md", prose("alpha", 4)),
+            section("body.md", prose("beta", 8)),
+        ]));
+        session.set_style(sheets("section:last-child { counter-reset: page 1 }"));
+        let body = session.book().sections[1].id;
+        let folios = session.folios(&[body])[0].expect("the chapter reaches a page");
+        let output = session.preview();
+
+        assert_eq!(folios.first, 1, "the restarted chapter opens at folio 1");
+        assert!(
+            folios.at > 0,
+            "the restarted chapter is not the first page of the book"
+        );
+        assert_eq!(
+            output.pages[folios.at as usize].number, folios.first,
+            "`at` is not the page the folio is printed on"
+        );
+        assert_eq!(
+            output.pages[(folios.at + folios.count - 1) as usize].number,
+            folios.last,
+            "`at` and `count` do not reach the folio it ends on"
         );
     }
 
@@ -1459,7 +1508,15 @@ mod tests {
             "a run named the heading, so this proves nothing"
         );
         let first = output.pages.first().expect("the book has pages").number;
-        assert_eq!(folios, vec![Some(Folios { first, last: first })]);
+        assert_eq!(
+            folios,
+            vec![Some(Folios {
+                first,
+                last: first,
+                at: 0,
+                count: 1,
+            })]
+        );
     }
 
     /// A session over three chapters, one file each.

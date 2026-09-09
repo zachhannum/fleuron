@@ -338,15 +338,21 @@ impl Session {
         )
     }
 
-    /// The folios each of these nodes' content is set on, as JSON:
-    /// one answer per node, in the order asked about, each
-    /// `{"first": 38, "last": 52}` or `null`.
+    /// Where each of these nodes' content is set, as JSON: one
+    /// answer per node, in the order asked about, each
+    /// `{"first": 38, "last": 52, "at": 37, "count": 15}` or `null`.
     ///
     /// This is the direction a reflow invalidates. A new face
     /// repaginates the book, and a host that puts the reader back
     /// where they were, or turns to a chapter, or names the chapter
-    /// on screen, asks where a node went. No page crosses: the
-    /// answer is a folio apiece.
+    /// on screen, asks where a node went. No page crosses to answer
+    /// it.
+    ///
+    /// `first` and `last` are the folios, which is what a host puts
+    /// on screen. `at` and `count` are where those pages fall in the
+    /// book, counting from 0, which is what
+    /// [`Session::preview`]'s own `first` and `count` take. A page
+    /// counter that restarts makes the two differ.
     ///
     /// A node covers itself and everything under it, so a heading
     /// answers with the page its own text is on. `null` for a node

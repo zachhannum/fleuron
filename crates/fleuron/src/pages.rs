@@ -54,18 +54,30 @@ pub struct Page {
     pub items: Vec<DrawItem>,
 }
 
-/// The folios one node's content is set on: the page it begins on
-/// and the page it ends on.
+/// Where one node's content is set: the folios it runs between, and
+/// the pages of the book those folios are.
 ///
-/// A node whose content fits on one page answers with that page
-/// twice. The two are read in reading order rather than compared,
-/// so a book whose page counter restarts still opens at `first`.
+/// `first` and `last` are what a page has printed on it, which is
+/// what a host puts on screen. They are read in reading order rather
+/// than compared, so a book whose page counter restarts still opens
+/// at `first` and a node that fits on one page answers with the same
+/// folio twice.
+///
+/// `at` and `count` are where those pages fall in the book, counting
+/// from 0. A page counter that restarts makes them differ from the
+/// folios, so they are answered rather than left to arithmetic, and
+/// they are the numbers a host fetches the pages by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Folios {
     /// The folio the node's content begins on.
     pub first: u32,
     /// The folio it ends on.
     pub last: u32,
+    /// Which page of the book that first folio is, counting from 0.
+    pub at: u32,
+    /// How many pages the node's content runs across, so `at` and
+    /// `count` are every page it is on.
+    pub count: u32,
 }
 
 /// A single paint operation. Deliberately tiny: text, rules, images.

@@ -154,16 +154,19 @@ export class Client {
   }
 
   /**
-   * The folios each of these nodes' content is set on: one answer
-   * per node, in the order asked about. `null` for a node the book
-   * does not hold, one the engine synthesized, or one whose content
-   * reaches no page.
+   * Where each of these nodes' content is set: one answer per node,
+   * in the order asked about. `null` for a node the book does not
+   * hold, one the engine synthesized, or one whose content reaches
+   * no page.
    *
    * This is the direction a reflow invalidates. A new face
    * repaginates the book, and a host that puts the reader back where
    * they were, or turns to a chapter, or names the chapter on
    * screen, asks where a node went. No page comes back with the
    * answer.
+   *
+   * The answer names the folios to print and the pages to fetch,
+   * which a restarted page counter pulls apart: see {@link Folios}.
    *
    * A node covers itself and everything under it, so a heading
    * answers with the page its own text is on, and a chapter with the
