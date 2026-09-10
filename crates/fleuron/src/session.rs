@@ -37,7 +37,7 @@ use std::ops::Range;
 
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section};
 use crate::fonts::{FontError, FontRegistry, FontSource};
-use crate::images::{Added, Assets};
+use crate::images::{Added, Assets, Contours};
 use crate::layout::{Fragment, PageInfo, Paginator, Piece, font_table, no_assets};
 use crate::lines::Patterns;
 use crate::pages::{DrawItem, Folios};
@@ -56,6 +56,10 @@ use crate::{LayoutOutput, Warning};
 pub struct Stages {
     /// Style compilations: parse, match, cascade.
     pub style: u32,
+    /// Images decoded to trace a contour. A book whose sheet names no
+    /// contour never decodes one, and a contour already traced is not
+    /// traced again.
+    pub trace: u32,
     /// Sections broken into lines. One per section, per rebuild.
     pub lines: u32,
     /// Fragmentation and page assembly runs.
@@ -77,6 +81,9 @@ enum Stale {
     Flow,
     /// Line breaking, and everything below it.
     Break,
+    /// Tracing the contours the sheet asks for, which is above line
+    /// breaking because a contour that moved is a measure that moved.
+    Trace,
 }
 
 /// A table a session lays out against: a caller's, or one of its
@@ -186,6 +193,9 @@ impl Cached {
 pub struct Session<'a> {
     registry: Table<'a, FontRegistry>,
     assets: Table<'a, Assets>,
+    /// What the trace stage made of the assets the sheet wraps prose
+    /// around. Empty for a sheet that names no contour.
+    contours: Contours,
     book: Cow<'a, Book>,
     /// The sheets the tree was compiled from. `None` on the one-shot
     /// path, where the caller compiled the tree itself and nothing
@@ -234,6 +244,7 @@ impl<'a> Session<'a> {
         Session {
             registry,
             assets,
+            contours: Contours::none(),
             book: Cow::Owned(book),
             sheets: Some(sheets),
             prints: Prints::of(&styles, false),
@@ -246,7 +257,7 @@ impl<'a> Session<'a> {
             output: None,
             flow_warnings: Vec::new(),
             source_warnings: Vec::new(),
-            stale: Stale::Break,
+            stale: Stale::Trace,
             stages: Stages {
                 style: 1,
                 ..Stages::default()
@@ -279,6 +290,7 @@ impl<'a> Session<'a> {
         Session {
             registry: Table::Borrowed(registry),
             assets: Table::Borrowed(assets),
+            contours: Contours::none(),
             book: Cow::Borrowed(book),
             sheets: None,
             styles: Cow::Borrowed(styles),
@@ -291,7 +303,7 @@ impl<'a> Session<'a> {
             output: None,
             flow_warnings: Vec::new(),
             source_warnings: Vec::new(),
-            stale: Stale::Break,
+            stale: Stale::Trace,
             stages: Stages::default(),
         }
     }
@@ -306,7 +318,7 @@ impl<'a> Session<'a> {
         self.book = Cow::Owned(book);
         self.images = has_images(&self.book);
         self.recompile();
-        self.stale = Stale::Break;
+        self.stale = Stale::Trace;
     }
 
     /// Replaces every section that came from one source file.
@@ -337,7 +349,7 @@ impl<'a> Session<'a> {
         book.assign_node_ids();
         self.images = has_images(&self.book);
         self.recompile();
-        self.stale = Stale::Break;
+        self.stale = Stale::Trace;
     }
 
     /// Adds a frontend's complaints to the run's diagnostics.
@@ -393,6 +405,8 @@ impl<'a> Session<'a> {
     /// only if the header now reports a different size, since the
     /// PDF writer reads the asset table fresh on every export and
     /// needs no invalidation to see new pixels at an unchanged size.
+    /// An image whose contour was traced is the exception, because
+    /// the pixels are what the contour came from.
     /// Only a session that owns its asset table has one to add to;
     /// one that borrowed it says so instead.
     pub fn add_image(&mut self, url: &str, bytes: Vec<u8>) -> Result<Option<u32>, AddImageError> {
@@ -418,7 +432,9 @@ impl<'a> Session<'a> {
                     // dropped rather than trusted to notice.
                     self.output = None;
                     self.lines.clear();
-                    self.stale = Stale::Break;
+                    self.stale = Stale::Trace;
+                } else if self.contours.traces(index) {
+                    self.stale = self.stale.max(Stale::Trace);
                 }
                 Some(index)
             }
@@ -573,6 +589,9 @@ impl<'a> Session<'a> {
 
     /// Runs the stages the last change invalidated, and no others.
     fn update(&mut self) {
+        if self.stale >= Stale::Trace {
+            self.trace();
+        }
         if self.retain {
             if self.stale >= Stale::Break {
                 self.rebreak();
@@ -588,6 +607,14 @@ impl<'a> Session<'a> {
         }
         self.stale = Stale::Nothing;
         self.collect_warnings();
+    }
+
+    /// Traces the contours the cascade asks for, keeping the ones an
+    /// earlier run already traced.
+    fn trace(&mut self) {
+        self.stages.trace += self
+            .contours
+            .update(&self.book, &self.styles, self.assets.get());
     }
 
     /// Breaks the sections whose lines the cache cannot answer for,
@@ -630,10 +657,11 @@ impl<'a> Session<'a> {
                 None => {
                     // One paginator per section, so the warnings it
                     // collects are the ones this section raised.
-                    let paginator = Paginator::with_assets(
+                    let paginator = Paginator::with_contours(
                         self.registry.get(),
                         &self.styles,
                         self.assets.get(),
+                        &self.contours,
                     );
                     paginator.language(&self.book.metadata);
                     let fragments = paginator.section_fragments(section);
@@ -666,8 +694,12 @@ impl<'a> Session<'a> {
     fn reflow(&mut self) {
         let registry = self.registry.get();
         let assets = self.assets.get();
-        let paginator =
-            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
+        let paginator = Paginator::with_contours(
+            self.registry.get(),
+            &self.styles,
+            self.assets.get(),
+            &self.contours,
+        );
         let paged = paginator.fragment(
             &self.book,
             self.lines.iter().map(|cached| cached.fragments.as_slice()),
@@ -681,8 +713,12 @@ impl<'a> Session<'a> {
 
     /// Repaints the furniture over pages the flow already settled.
     fn repaint(&mut self) {
-        let paginator =
-            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
+        let paginator = Paginator::with_contours(
+            self.registry.get(),
+            &self.styles,
+            self.assets.get(),
+            &self.contours,
+        );
         if let Some(output) = &mut self.output {
             paginator.paint(&mut output.pages, &self.infos);
             self.stages.paint += 1;
@@ -693,8 +729,12 @@ impl<'a> Session<'a> {
     fn run_once(&mut self) {
         let registry = self.registry.get();
         let assets = self.assets.get();
-        let paginator =
-            Paginator::with_assets(self.registry.get(), &self.styles, self.assets.get());
+        let paginator = Paginator::with_contours(
+            self.registry.get(),
+            &self.styles,
+            self.assets.get(),
+            &self.contours,
+        );
         let pages = paginator.paginate(&self.book);
         self.stages.lines += self.book.sections.len() as u32;
         self.stages.flow += 1;
@@ -711,6 +751,7 @@ impl<'a> Session<'a> {
         let mut warnings = self.source_warnings.clone();
         warnings.extend(self.styles.warnings().iter().cloned());
         warnings.extend(self.assets.get().warnings().iter().cloned());
+        warnings.extend(self.contours.warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
         if let Some(output) = &mut self.output {
             output.warnings = warnings;
@@ -801,6 +842,8 @@ fn has_images(book: &Book) -> bool {
 /// feeds. A style edit is classified by which of these moved.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Prints {
+    /// Which nodes ask for a contour to be traced, and from what.
+    trace: u64,
     /// The measure, what every distinct style says about breaking,
     /// and which style each node resolved to.
     breaks: u64,
@@ -812,6 +855,12 @@ struct Prints {
 
 impl Prints {
     fn of(styles: &StyleTree, images: bool) -> Prints {
+        let mut trace = DefaultHasher::new();
+        for style in styles.styles() {
+            hash_shape(&style.shape_outside, &mut trace);
+        }
+        hash_nodes(styles, &mut trace);
+
         let mut breaks = DefaultHasher::new();
         Against::of(styles, images).hash_into(&mut breaks);
         for style in styles.styles() {
@@ -840,6 +889,7 @@ impl Prints {
         }
 
         Prints {
+            trace: trace.finish(),
             breaks: breaks.finish(),
             flow: flow.finish(),
             paint: paint.finish(),
@@ -848,7 +898,9 @@ impl Prints {
 
     /// The deepest stage a move from `self` to `fresh` invalidates.
     fn against(&self, fresh: &Prints) -> Stale {
-        if self.breaks != fresh.breaks {
+        if self.trace != fresh.trace {
+            Stale::Trace
+        } else if self.breaks != fresh.breaks {
             Stale::Break
         } else if self.flow != fresh.flow {
             Stale::Flow
@@ -1288,6 +1340,150 @@ mod tests {
                 DrawItem::Image { w, h, .. } => Some((*w, *h)),
                 _ => None,
             })
+    }
+
+    /// An RGBA PNG one inch square, opaque on its left half.
+    fn alpha_png(tint: u8) -> Vec<u8> {
+        let side = 96u32;
+        let mut pixels = Vec::with_capacity((side * side * 4) as usize);
+        for _ in 0..side {
+            for x in 0..side {
+                pixels.extend([tint, 0x33, 0x44, if x < side / 2 { 0xFF } else { 0 }]);
+            }
+        }
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, side, side);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("the header writes");
+        writer.write_image_data(&pixels).expect("the pixels write");
+        writer.finish().expect("the file closes");
+        bytes
+    }
+
+    /// A session over one book with one image in it, and the alpha to
+    /// trace it from.
+    fn illustrated() -> Session<'static> {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book_with_image("plate.png"));
+        session.add_image("plate.png", alpha_png(0x22)).unwrap();
+        session
+    }
+
+    /// Acceptance: a book whose sheet names no contour decodes
+    /// nothing, and neither does one that writes its contour out as a
+    /// polygon. Only `shape-outside: auto` reaches the pixels.
+    #[test]
+    fn only_a_traced_contour_decodes_an_image() {
+        let anchored = "img { position: absolute; top: 0; left: 0; wrap-flow: end";
+
+        let mut bare = illustrated();
+        bare.set_style(sheets(&format!("{anchored} }}")));
+        bare.preview();
+        assert_eq!(bare.stages().trace, 0, "a sheet with no contour decoded");
+
+        let mut written = illustrated();
+        written.set_style(sheets(&format!(
+            "{anchored}; shape-outside: polygon(0 0, 100% 0, 100% 100%) }}"
+        )));
+        written.preview();
+        assert_eq!(written.stages().trace, 0, "a polygon decoded");
+
+        let mut traced = illustrated();
+        traced.set_style(sheets(&format!("{anchored}; shape-outside: auto }}")));
+        traced.preview();
+        assert_eq!(traced.stages().trace, 1, "the contour was not traced");
+    }
+
+    /// Acceptance: editing the sheet so a plate stops wrapping
+    /// re-traces nothing. Neither does an edit that leaves the
+    /// contours where they were.
+    #[test]
+    fn a_sheet_edit_that_leaves_the_contours_re_traces_nothing() {
+        let mut session = illustrated();
+        let sheet = |rest: &str| {
+            sheets(&format!(
+                "img {{ position: absolute; top: 0; left: 0; shape-outside: auto; {rest} }}"
+            ))
+        };
+        session.set_style(sheet("wrap-flow: end"));
+        session.preview();
+        assert_eq!(session.stages().trace, 1);
+
+        // The plate stops wrapping: the contour it traced stands.
+        session.set_style(sheet("wrap-flow: auto"));
+        session.preview();
+        assert_eq!(session.stages().trace, 1, "a plate that stopped wrapping");
+
+        // So does a recolour, which reaches no stage above the paint.
+        session.set_style(sheet("wrap-flow: end; color: #333333"));
+        session.preview();
+        assert_eq!(session.stages().trace, 1, "a recolour re-traced");
+
+        // Different pixels at the same url are a different contour.
+        session.add_image("plate.png", alpha_png(0x55)).unwrap();
+        session.preview();
+        assert_eq!(session.stages().trace, 2, "new pixels were not traced");
+
+        // The same pixels again are not.
+        session.add_image("plate.png", alpha_png(0x55)).unwrap();
+        session.preview();
+        assert_eq!(session.stages().trace, 2);
+    }
+
+    /// Acceptance: two runs over a traced contour are byte-identical.
+    #[test]
+    fn two_runs_over_a_traced_contour_agree() {
+        let css = "img { position: absolute; top: 0; left: 0; wrap-flow: end; \
+                   shape-outside: auto; shape-margin: 6pt }";
+        let wire = || {
+            let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+            let mut book = book_with_image("plate.png");
+            book.sections[0]
+                .blocks
+                .extend((0..8).map(|_| Block::Paragraph {
+                    id: NodeId::UNASSIGNED,
+                    inlines: vec![Inline::Text {
+                        id: NodeId::UNASSIGNED,
+                        value: "my father had a small estate in nottinghamshire ".repeat(6),
+                        attributes: Attributes::default(),
+                        position: None,
+                        span: None,
+                    }],
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                }));
+            book.assign_node_ids();
+            session.set_content(book);
+            session.add_image("plate.png", alpha_png(0x22)).unwrap();
+            session.set_style(sheets(css));
+            crate::wire::encode(session.preview()).expect("the display structure encodes")
+        };
+        assert_eq!(wire(), wire());
+    }
+
+    /// An image asked to wrap to its own shape that carries no alpha
+    /// keeps the prose clear of its box, and the run says so once.
+    #[test]
+    fn an_image_with_no_alpha_to_trace_contributes_its_box() {
+        let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(book_with_image("pic.gif"));
+        session.add_image("pic.gif", gif(64, 32, 0)).unwrap();
+        session.set_style(sheets(
+            "img { position: absolute; top: 0; left: 0; wrap-flow: end; shape-outside: auto }",
+        ));
+        let warnings = session.preview().warnings.clone();
+        let complaints: Vec<&Warning> = warnings
+            .iter()
+            .filter(|warning| warning.message.contains("no alpha channel"))
+            .collect();
+        assert_eq!(complaints.len(), 1, "{warnings:?}");
+        assert!(complaints[0].message.contains("pic.gif"));
+
+        // Asked again, complained about once.
+        session.preview();
+        assert_eq!(session.stages().trace, 1);
     }
 
     /// Registering the same url with the same bytes again costs

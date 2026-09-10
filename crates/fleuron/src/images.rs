@@ -18,13 +18,14 @@
 //! never has to be a real URL; the host is what turns a name into
 //! bytes.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
 use crate::Warning;
 use crate::content::{Block, Book};
+use crate::style::{ShapeOutside, StyleTree};
 
 /// Resolves image urls to bytes.
 ///
@@ -241,6 +242,13 @@ impl Assets {
         self.files.get(index as usize).map(Vec::as_slice)
     }
 
+    /// What one asset's file hashes to: what tells a trace of the
+    /// bytes an index holds now from a trace of the bytes it held
+    /// before.
+    pub fn digest(&self, index: u32) -> Option<u64> {
+        self.hashes.get(index as usize).copied()
+    }
+
     /// What probing had to complain about.
     pub fn warnings(&self) -> &[Warning] {
         &self.warnings
@@ -282,6 +290,126 @@ impl Assets {
                 _ => {}
             }
         }
+    }
+}
+
+/// Every contour a book's sheet asked for, traced once and kept by
+/// asset.
+///
+/// This is the trace stage. Nothing is traced because it is an image.
+/// It is traced because a rule that matched it resolved to
+/// `shape-outside: auto`, and that is not reachable from where
+/// probing happens: probing takes a book and a loader, and neither
+/// has seen the style tree.
+///
+/// The stage sits above line breaking, because a contour that moved
+/// is a measure that moved. It keeps what an earlier run traced, so a
+/// sheet edit that leaves the contours where they were decodes
+/// nothing.
+#[derive(Debug, Default)]
+pub struct Contours {
+    traced: BTreeMap<u32, Traced>,
+    warned: BTreeSet<String>,
+    warnings: Vec<Warning>,
+}
+
+/// One asset's trace, and the bytes it was traced from.
+#[derive(Debug)]
+struct Traced {
+    digest: u64,
+    contour: Option<Contour>,
+}
+
+impl Contours {
+    /// Nothing traced: what a book whose sheet names no contour
+    /// carries.
+    pub fn none() -> Contours {
+        Contours::default()
+    }
+
+    /// Traces every asset the cascade asks for and this table does not
+    /// already answer for, and reports how many images it decoded.
+    ///
+    /// A book whose sheet names no contour decodes nothing, and so
+    /// does one whose contours are all traced already.
+    pub fn update(&mut self, book: &Book, styles: &StyleTree, assets: &Assets) -> u32 {
+        fn walk(
+            contours: &mut Contours,
+            blocks: &[Block],
+            source: Option<&str>,
+            styles: &StyleTree,
+            assets: &Assets,
+            traced: &mut u32,
+        ) {
+            for block in blocks {
+                match block {
+                    Block::Blockquote { blocks, .. } => {
+                        walk(contours, blocks, source, styles, assets, traced)
+                    }
+                    Block::Image {
+                        id, url, position, ..
+                    } if styles.style(*id).shape_outside == ShapeOutside::Auto => {
+                        let Some(((index, _), digest)) = assets
+                            .lookup(url)
+                            .and_then(|found| Some((found, assets.digest(found.0)?)))
+                        else {
+                            continue;
+                        };
+                        if contours
+                            .traced
+                            .get(&index)
+                            .is_some_and(|kept| kept.digest == digest)
+                        {
+                            continue;
+                        }
+                        let contour = assets.bytes(index).and_then(trace);
+                        *traced += 1;
+                        if contour.is_none() && contours.warned.insert(url.clone()) {
+                            let origin = crate::content::origin(source, *position);
+                            contours.warnings.push(Warning {
+                                message: format!(
+                                    "image {url}: no alpha channel to trace; the prose keeps \
+                                     clear of its box"
+                                ),
+                                origin: (!origin.is_empty()).then_some(origin),
+                            });
+                        }
+                        contours.traced.insert(index, Traced { digest, contour });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut traced = 0;
+        for section in &book.sections {
+            let source = section.source.clone();
+            walk(
+                self,
+                &section.blocks,
+                source.as_deref(),
+                styles,
+                assets,
+                &mut traced,
+            );
+        }
+        traced
+    }
+
+    /// The contour one asset traced to, and `None` where it traced to
+    /// nothing or was never asked for.
+    pub fn get(&self, asset: u32) -> Option<&Contour> {
+        self.traced.get(&asset)?.contour.as_ref()
+    }
+
+    /// Whether this table holds a trace of one asset, whatever the
+    /// trace found.
+    pub fn traces(&self, asset: u32) -> bool {
+        self.traced.contains_key(&asset)
+    }
+
+    /// What tracing had to complain about.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
     }
 }
 
