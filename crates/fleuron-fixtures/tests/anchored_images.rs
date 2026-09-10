@@ -6,43 +6,8 @@
 //! is enough.
 
 use fleuron::layout::layout_book;
-use fleuron::pages::{DrawItem, Page};
 use fleuron_fixtures::gate::{Division, Illustration};
-use fleuron_fixtures::{Corpus, anchored_images, registry, styles_on};
-
-/// One page's images and one page's text, as the boxes they cover.
-fn boxes(page: &Page) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
-    let mut images = Vec::new();
-    let mut runs = Vec::new();
-    for item in &page.items {
-        match item {
-            DrawItem::Image { x, y, w, h, .. } => images.push([*x, *y, *x + *w, *y + *h]),
-            DrawItem::Text {
-                x,
-                y,
-                font_id,
-                size,
-                glyphs,
-                ..
-            } => {
-                let Some(metrics) = registry().metrics(*font_id) else {
-                    continue;
-                };
-                let Some(last) = glyphs.last() else { continue };
-                let upem = metrics.units_per_em as f32;
-                let advance = registry().advance_width(*font_id, last.id).unwrap_or(0) as f32;
-                runs.push([
-                    *x,
-                    y - metrics.ascender as f32 / upem * size,
-                    last.x + advance / upem * size,
-                    y - metrics.descender as f32 / upem * size,
-                ]);
-            }
-            _ => {}
-        }
-    }
-    (images, runs)
-}
+use fleuron_fixtures::{Corpus, anchored_images, image_boxes, registry, run_boxes, styles_on};
 
 /// The gate novel with an image a chapter: every chapter's image is
 /// painted, and no line of prose is set where one stands.
@@ -55,7 +20,7 @@ fn a_novel_of_images_sets_every_page_clear_of_them() {
 
     let mut painted = 0;
     for (index, page) in output.pages.iter().enumerate() {
-        let (images, runs) = boxes(page);
+        let (images, runs) = (image_boxes(page), run_boxes(page));
         painted += images.len();
         for image in &images {
             for run in &runs {
