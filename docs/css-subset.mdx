@@ -612,7 +612,7 @@ You can put an image against the page rather than among the paragraphs. The text
 
 `position: absolute` takes the image out of the text. The insets say where on the page it goes. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
 
-The image keeps the size its own file gives it. The engine scales it down where that size does not fit the content box. The margins of the image are the space it keeps clear of the text.
+The image keeps the size its own file gives it. The engine makes it smaller where that size does not fit the content box. The margins of the image hold the text away from it.
 
 `wrap-flow` says which side of the image the text wraps on.
 
@@ -642,15 +642,19 @@ The engine shortens every line the image reaches to the space the image leaves. 
 
 ### Wrapping to the shape of an image
 
-`shape-outside` sets the text around the shape of an image rather than around its box. A contour is the outline the text keeps clear of. It applies to an image the sheet has put against the page and given a `wrap-flow` other than `auto`, because that is the only place text sets beside an image.
+`shape-outside` wraps the text around the shape of an image instead of around its box. That shape is a contour: the outline the text goes around.
 
-| value | the outline the text keeps clear of |
+A contour works only on an image you put against the page and give a `wrap-flow` other than `auto`. Text goes beside an image only there.
+
+| value | the shape the text goes around |
 |---|---|
 | `none` | the box, which is the default |
 | `auto` | the shape the image's own alpha channel covers |
 | `polygon(…)` | the points you write |
 
-`polygon()` takes pairs of coordinates, one pair to a point, separated by commas. Each pair is across the box and then down it. A percentage measures against the box, and the polygon closes itself. Three points are the fewest that enclose anything.
+`polygon()` takes pairs of lengths, one pair to a point, separated by commas. The first of a pair measures across the box, and the second measures down it. A percentage measures against the box. The polygon closes itself, so you write at least three points.
+
+The following example wraps the text down a diagonal, from the top left corner of the image to its bottom right:
 
 ```css
 img {
@@ -662,9 +666,15 @@ img {
 }
 ```
 
-`auto` reads the shape from the file. The engine decodes the image to do it, and it decodes no image that no rule asks it to. An image the sheet leaves among the paragraphs is never decoded, whatever `shape-outside` says about it. PNG, GIF and WebP carry an alpha channel. JPEG does not, and an image the engine finds no alpha in keeps the text clear of its box.
+`auto` reads the shape from the file. The engine decodes the image to do it. It decodes no image that no rule asks it to, and it never decodes an image you leave among the paragraphs.
 
-`shape-margin` holds the text off the contour by a distance. The engine reads the contour over the band the margin grows, so a sloping edge holds the text off by at least the distance you ask for.
+PNG, GIF and WebP carry an alpha channel. JPEG does not. Where the engine finds no alpha channel, the text goes around the box and the engine warns you.
+
+`shape-margin` holds the text away from the contour. The margins of the image do not. A contour replaces the box those margins surround, so use `shape-margin` where you want a gap between the image and the text.
+
+The engine reads the contour over a band that `shape-margin` makes taller. A sloping edge therefore holds the text away by at least the distance you ask for.
+
+The following example wraps the text around the shape the image's own alpha channel covers, and keeps 9pt between the two:
 
 ```css
 img {
@@ -677,7 +687,7 @@ img {
 }
 ```
 
-The engine reads a contour one line-height at a time. A line is either set beside the image or clear of it. Where the contour leaves a band clear across the whole image, the text of that band runs the full width.
+The engine reads a contour one line-height at a time. A line goes either beside the image or below it. Where the contour leaves a band empty across the whole image, the text of that band runs the full width.
 
 ## Chapter openings
 
@@ -875,7 +885,7 @@ code { font-family: monospace }
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
 | positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
-| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an element the sheet has not taken out of the flow |
+| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
