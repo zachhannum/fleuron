@@ -1134,6 +1134,40 @@ fn a_multi_file_book_is_named_on_the_command_line() {
     assert!(info.contains("E. Marsh"), "no author:\n{info}");
 }
 
+/// Acceptance: the sample in `docs/cli/reference.md` is what the CLI
+/// prints, message for message.
+#[test]
+fn the_cli_reference_shows_warnings_the_run_prints() {
+    let reference = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/cli/reference.md")
+        .canonicalize()
+        .expect("the reference page is in the repository");
+    let page = std::fs::read_to_string(&reference).expect("the reference page is readable");
+    let samples: Vec<&str> = page
+        .lines()
+        .filter_map(|line| line.strip_prefix("fleuron: warning: "))
+        .filter_map(|line| line.split_once(": ").map(|(_, message)| message))
+        .collect();
+    assert_eq!(samples.len(), 2, "the page stopped showing two warnings");
+
+    let source = write_source("reference-sample", "# Chapter\n\n- one\n- two\n");
+    let sheet = write_sheet(
+        "reference-sample",
+        "p {\n  text-shadow: 0 0 2px black;\n}\n",
+    );
+    let (_, stderr) = run("reference-sample", &[source.as_path()], &[sheet.as_path()]);
+    for sample in samples {
+        assert!(
+            stderr.contains(sample),
+            "the page shows `{sample}`:\n{stderr}"
+        );
+    }
+    assert!(
+        stderr.contains("2 warnings. The PDF was written anyway."),
+        "the page shows the summary line:\n{stderr}",
+    );
+}
+
 /// A source for the CLI to read, beside the PDFs.
 fn write_source(name: &str, markdown: &str) -> PathBuf {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.md"));

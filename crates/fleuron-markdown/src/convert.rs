@@ -1178,6 +1178,37 @@ Ordinary prose.
         assert_eq!(at, ["test.md:3:1", "test.md:9:1"], "{warnings:?}");
     }
 
+    /// One manuscript with every construct the vocabulary has no room
+    /// for. Each warning is a sentence, and names the construct and
+    /// what it falls back to.
+    #[test]
+    fn every_frontend_warning_reads_as_a_sentence() {
+        let markdown = "# C\n\n\
+             - one\n- two\n\n\
+             ```\ncode\n```\n\n\
+             | a | b |\n|---|---|\n| c | d |\n\n\
+             ~~struck~~ and $x$ and <b>bold</b>\n\n\
+             <div>block</div>\n\n\
+             A note[^1] and a run ![a map](p.jpg) among prose.\n\n\
+             [^1]: The note.\n\n\
+             {key=value}\n";
+        let (_, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.len() >= 8, "{warnings:?}");
+        for warning in &warnings {
+            let message = &warning.message;
+            assert!(
+                message.starts_with(|opens: char| opens.is_uppercase()),
+                "{message}",
+            );
+            assert!(message.ends_with('.'), "{message}");
+            assert!(!message.contains(';'), "{message}");
+            assert!(
+                message.to_lowercase().contains("supported") || message.contains("become"),
+                "{message}",
+            );
+        }
+    }
+
     /// A brace run the vocabulary has no room for is prose, the same
     /// as every other construct it has no room for.
     #[test]

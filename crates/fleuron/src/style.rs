@@ -31,7 +31,7 @@ use crate::content::{
     Attributes, Block, Book, Inline, NodeId, block_attributes, block_position, inline_attributes,
     inline_position, origin,
 };
-use crate::fonts::{FaceAttributes, FontRegistry, FontSource};
+use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
@@ -515,10 +515,7 @@ fn register_face(
                     Ok(_) => warnings,
                     Err(error) => {
                         warnings.push(Warning {
-                            message: format!(
-                                "{} was not registered: {error}. {FALLBACK}",
-                                face.family
-                            ),
+                            message: face_failure(&face.family, &error),
                             origin: Some(url.clone()),
                         });
                         warnings
@@ -526,7 +523,7 @@ fn register_face(
                 };
             }
             Err(error) => warnings.push(Warning {
-                message: format!("{} was not registered: {error}. {FALLBACK}", face.family),
+                message: face_failure(&face.family, &error),
                 origin: Some(url.clone()),
             }),
         }
@@ -541,6 +538,17 @@ fn register_face(
 /// What happens to text that asked for a face the registry has not
 /// got.
 const FALLBACK: &str = "Falling back to another registered font.";
+
+/// Why one `@font-face` file did not register. The two causes read
+/// apart, because the fix for each one is different.
+fn face_failure(family: &str, error: &FontError) -> String {
+    match error {
+        FontError::MissingName => {
+            format!("{family} has no family name and was not registered. {FALLBACK}")
+        }
+        FontError::Parse => format!("{family} could not be read as a font. {FALLBACK}"),
+    }
+}
 
 /// What a `@font-face` declared its source to be. A sheet that
 /// declares neither slope nor weight is naming a family, not a cut,
@@ -1313,6 +1321,51 @@ mod tests {
         );
     }
 
+    /// A sheet that breaks the subset every way it can. Each warning
+    /// is a sentence, and says what happened to the declaration or to
+    /// the rule.
+    #[test]
+    fn every_css_warning_names_what_was_ignored() {
+        let css = "p { text-shadow: 0 0 2px black }\n\
+                   p { text-align: bananas }\n\
+                   p::first-line { font-family: serif }\n\
+                   @media print { p { color: red } }\n\
+                   @page :nth(2) { size: a4 }\n\
+                   p:hover { color: red }\n\
+                   p { color: }\n";
+        let sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
+        let warnings = sheets.warnings();
+        assert!(warnings.len() >= 6, "{warnings:?}");
+        for warning in warnings {
+            let message = &warning.message;
+            assert!(
+                message.starts_with(|opens: char| opens.is_uppercase()),
+                "{message}",
+            );
+            assert!(!message.contains(';'), "{message}");
+            assert!(
+                message.ends_with("The declaration is ignored.")
+                    || message.ends_with("The rule is ignored."),
+                "{message}",
+            );
+        }
+    }
+
+    /// A font file that will not parse and a font with no family name
+    /// are different mistakes, so they read apart.
+    #[test]
+    fn the_two_font_face_failures_read_apart() {
+        assert_eq!(
+            face_failure("Sabon", &FontError::Parse),
+            "Sabon could not be read as a font. Falling back to another registered font.",
+        );
+        assert_eq!(
+            face_failure("Sabon", &FontError::MissingName),
+            "Sabon has no family name and was not registered. \
+             Falling back to another registered font.",
+        );
+    }
+
     /// The rest of the subset's edges: an at-rule, a selector and a
     /// value the engine does not know each warn where they were
     /// written, and the sheet keeps parsing.
@@ -1923,7 +1976,8 @@ mod tests {
         assert!(
             tree.warnings().iter().any(|warning| {
                 warning.message
-                    == "`font-family` is not supported on `::first-line`. The declaration is ignored."
+                    == "Unsupported property `font-family` on `::first-line`. \
+                        The declaration is ignored."
             }),
             "{:?}",
             tree.warnings(),

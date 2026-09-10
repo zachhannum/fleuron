@@ -1083,6 +1083,39 @@ mod tests {
         );
     }
 
+    /// Acceptance: an image warning names its url once, so the reader
+    /// does not read the same name twice on one line.
+    #[test]
+    fn an_image_warning_names_its_url_once() {
+        struct Tall;
+        impl crate::images::ImageLoader for Tall {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "tall.png").then(|| png(768, 1536))
+            }
+        }
+
+        let book = book_of(vec![section(vec![Block::Image {
+            id: NodeId::UNASSIGNED,
+            url: "tall.png".into(),
+            alt: "a drawer of knives".into(),
+            attributes: Attributes::default(),
+            position: Some(SourcePos { line: 9, column: 1 }),
+            span: None,
+        }])]);
+        let styles = crate::style::defaults(&book, registry());
+        let assets = crate::images::Assets::probe(&book, &Tall);
+        let output = layout_book(&book, &styles, registry(), &assets);
+
+        let warning = output
+            .warnings
+            .iter()
+            .find(|warning| warning.message.contains("tall.png"))
+            .expect("scaling an image to fit is worth saying");
+        assert_eq!(warning.message.matches("tall.png").count(), 1);
+        assert!(warning.message.ends_with('.'), "{}", warning.message);
+        assert!(!warning.message.contains(';'), "{}", warning.message);
+    }
+
     /// Acceptance: an image taller than the content box is scaled to
     /// fit it, keeping its ratio, and the run says so.
     #[test]

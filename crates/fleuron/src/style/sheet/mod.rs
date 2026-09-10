@@ -252,7 +252,7 @@ pub fn warning(sheet: &str, error: &ParseError<'_, StyleError<'_>>) -> Warning {
             format!("Unsupported property `{name}`. {IGNORED_DECLARATION}")
         }
         ParseErrorKind::Custom(StyleError::NotOnFirstLine(name)) => {
-            format!("`{name}` is not supported on `::first-line`. {IGNORED_DECLARATION}")
+            format!("Unsupported property `{name}` on `::first-line`. {IGNORED_DECLARATION}")
         }
         ParseErrorKind::Custom(StyleError::UnsupportedValue(name)) => {
             format!("Unsupported value for `{name}`. {IGNORED_DECLARATION}")
