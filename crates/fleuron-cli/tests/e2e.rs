@@ -12,7 +12,9 @@
 //! The book has a map and an ornament in it, so the same run covers
 //! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
 //! transparency kept as a soft mask, and `qpdf --check` clean over
-//! both.
+//! both. The ornament's transparency does a second job. The sheet
+//! wraps the prose to the shape it traces, so the trace stage runs
+//! on the way to the PDF as well.
 //!
 //! Structure and text need `qpdf` and `pdftotext`. Where a tool is
 //! missing its check is skipped; setting `FLEURON_E2E_REQUIRE_TOOLS`
@@ -496,8 +498,66 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
     };
     assert!(
         (x - near).abs() < 0.5,
-        "the image the sheet did not name moved: {ornament:?}",
+        "the ornament is not at the near edge: {ornament:?}",
     );
+}
+
+/// The prose beside the ornament wraps to the shape the ornament's
+/// own alpha channel traces, rather than to its box.
+///
+/// The ornament is a floral heart on a clear ground, so its contour
+/// leaves the sides of its box empty and the prose sets into them.
+/// The same sheet with the contour turned off holds the prose off the
+/// whole box, and that is the difference this measures.
+#[test]
+fn the_prose_wraps_to_the_shape_the_ornament_traces() {
+    let traced = beside_the_ornament(&styled_pages());
+    let boxed = beside_the_ornament(&styled_pages_with(
+        "img:not(.map) { shape-outside: none; shape-margin: 0 }",
+    ));
+    assert!(!traced.is_empty(), "no line is set beside the ornament");
+    assert_eq!(
+        traced.len(),
+        boxed.len(),
+        "the two runs set different lines"
+    );
+    for ((start, box_right), (off, _)) in traced.iter().zip(&boxed) {
+        assert!(
+            start < &(box_right - 1.0),
+            "a line starts at {start}, off the ornament's whole box",
+        );
+        assert!(
+            off - start > 1.0,
+            "the contour did not move the line: {start} against {off}",
+        );
+    }
+}
+
+/// Every line set beside the ornament: where it starts, and where the
+/// ornament's own box ends.
+fn beside_the_ornament(pages: &[Page]) -> Vec<(f32, f32)> {
+    let (page, x, y, w, h) = pages
+        .iter()
+        .find_map(|page| {
+            page.items.iter().find_map(|item| match item {
+                // The map is the wider of the two images; the
+                // ornament is the one a line's height covers.
+                DrawItem::Image { x, y, w, h, .. } if *w < 60.0 => Some((page, *x, *y, *w, *h)),
+                _ => None,
+            })
+        })
+        .expect("the ornament is placed");
+    page.items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Text {
+                x: run,
+                y: baseline,
+                ..
+            } if *baseline > y && *baseline <= y + h => Some((*run, x + w)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// One channel as a PDF writes it: krilla's own rounding of a byte
@@ -535,11 +595,19 @@ fn fills(page: &Page, wanted: Color) -> impl Iterator<Item = (f32, f32, f32, f32
 /// The fixture book laid out under `fixtures/styled.css`, the way the
 /// CLI lays it out.
 fn styled_pages() -> Vec<Page> {
+    styled_pages_with("")
+}
+
+/// The same with one more sheet over it, for a test that measures
+/// what a rule of the checked-in sheet is doing.
+fn styled_pages_with(extra: &str) -> Vec<Page> {
     let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
     let book = fixture_book();
     let css = std::fs::read_to_string(styled_sheet()).expect("the sheet is checked in");
-    let sheets =
-        fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("styled.css", &css)]);
+    let sheets = fleuron::style::Stylesheets::parse(&[
+        fleuron::style::Source::author("styled.css", &css),
+        fleuron::style::Source::author("over.css", extra),
+    ]);
     let styles = sheets.compile(&book, &registry);
     assert!(
         styles.warnings().is_empty(),

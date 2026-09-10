@@ -16,3 +16,9 @@ formats the PDF writer decodes.
 Between them they cover what the writer does with an image: a JPEG
 embedded as it arrived, and a raster format whose alpha channel
 becomes a soft mask.
+
+The ornament's alpha channel does a second job. `fixtures/styled.css`
+sets the prose around the shape it traces, so the ornament is also
+what drives `shape-outside: auto` through the fixture run. The map
+has no alpha channel, which is the other half of that: an image the
+tracer finds nothing in keeps the prose clear of its box.

@@ -640,6 +640,45 @@ The place where you write an image decides which page it lands on. An image writ
 
 The engine shortens every line the image reaches to the space the image leaves. The lines under the image run the full width. Where the image covers the full width, the text continues below it.
 
+### Wrapping to the shape of an image
+
+`shape-outside` sets the text around the shape of an image rather than around its box. A contour is the outline the text keeps clear of.
+
+| value | the outline the text keeps clear of |
+|---|---|
+| `none` | the box, which is the default |
+| `auto` | the shape the image's own alpha channel covers |
+| `polygon(…)` | the points you write |
+
+`polygon()` takes pairs of coordinates, one pair to a point, separated by commas. Each pair is across the box and then down it. A percentage measures against the box, and the polygon closes itself. Three points are the fewest that enclose anything.
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  wrap-flow: end;
+  shape-outside: polygon(0 0, 100% 100%, 0 100%);
+}
+```
+
+`auto` reads the shape from the file. The engine decodes the image to do it, and it decodes no image that no rule asks it to. PNG, GIF and WebP carry an alpha channel. JPEG does not, and an image the engine finds no alpha in keeps the text clear of its box.
+
+`shape-margin` holds the text off the contour by a distance. The engine reads the contour over the band the margin grows, so a sloping edge holds the text off by at least the distance you ask for.
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  wrap-flow: end;
+  shape-outside: auto;
+  shape-margin: 9pt;
+}
+```
+
+The engine reads a contour one line-height at a time. A line is either set beside the image or clear of it. Where the contour leaves a band clear across the whole image, the text of that band runs the full width.
+
 ## Chapter openings
 
 ### Drop caps
@@ -836,7 +875,7 @@ code { font-family: monospace }
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
 | positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
-| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on anything but an image |
+| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an element the sheet has not taken out of the flow |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |

@@ -69,9 +69,7 @@ h3 {
 
 /* The map is one image rather than every image. The class the
    manuscript wrote on it takes this one out of the text and against
-   the page, and the prose of that page wraps down its right. The
-   ornament that closes the chapter stays where the built-in sheet
-   put it. */
+   the page, and the prose of that page wraps down its right. */
 .map {
   position: absolute;
   bottom: 0;
@@ -79,4 +77,17 @@ h3 {
   margin-right: 14pt;
   margin-top: 8pt;
   wrap-flow: end;
+}
+
+/* The ornament that closes the chapter, which is every image the
+   sheet has not named the map. It goes into the head of the page it
+   lands on, and the prose wraps to the shape its alpha channel
+   traces rather than to its box. */
+img:not(.map) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  wrap-flow: end;
+  shape-outside: auto;
+  shape-margin: 3pt;
 }
