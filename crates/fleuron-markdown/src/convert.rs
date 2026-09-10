@@ -17,6 +17,12 @@ use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
 use crate::{Options, Sections};
 
+/// Both attribute diagnostics name the same two forms, so they are
+/// written once.
+const UNSUPPORTED_ATTRIBUTE: &str = "Unsupported attribute. Only `.class` or `#id` are valid.";
+const UNSUPPORTED_HEADING_ATTRIBUTE: &str =
+    "Unsupported heading attribute. Only `.class` or `#id` are valid.";
+
 /// Reads one source into sections and diagnostics.
 pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Warning>) {
     let mut converter = Converter::new(text, source, options);
@@ -189,7 +195,7 @@ impl<'a> Converter<'a> {
                 attrs,
             }) => {
                 if !attrs.is_empty() {
-                    self.drops("an attribute that is not a class or an id", at);
+                    self.warn(UNSUPPORTED_HEADING_ATTRIBUTE, at);
                 }
                 let named = Attributes {
                     id: id.map(|id| id.into_string()),
@@ -212,15 +218,24 @@ impl<'a> Converter<'a> {
                 read,
             ),
             Event::Start(Tag::Strikethrough) => {
-                self.degrades("strikethrough", "plain text", at);
+                self.warn(
+                    "Strikethrough is not supported. Falling back to plain text.",
+                    at,
+                );
                 self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::Superscript) => {
-                self.degrades("a superscript", "plain text", at);
+                self.warn(
+                    "Superscript is not supported. Falling back to plain text.",
+                    at,
+                );
                 self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::Subscript) => {
-                self.degrades("a subscript", "plain text", at);
+                self.warn(
+                    "Subscript is not supported. Falling back to plain text.",
+                    at,
+                );
                 self.push_inlines(InlineFor::Plain, read)
             }
             Event::Start(Tag::BlockQuote(_)) => {
@@ -228,19 +243,32 @@ impl<'a> Converter<'a> {
                 self.blocks.push(Vec::new());
             }
 
-            Event::Start(Tag::List(_)) => self.degrades("a list", "one paragraph per item", at),
-            Event::Start(Tag::Table(_)) => self.degrades("a table", "one paragraph per cell", at),
+            Event::Start(Tag::List(_)) => self.warn(
+                "Lists are not supported. Falling back to one paragraph per item.",
+                at,
+            ),
+            Event::Start(Tag::Table(_)) => self.warn(
+                "Tables are not supported. Falling back to one paragraph per cell.",
+                at,
+            ),
             Event::Start(Tag::CodeBlock(_)) => {
-                self.degrades("a code block", "a paragraph", at);
+                self.warn(
+                    "Code blocks are not supported. Falling back to a plain paragraph.",
+                    at,
+                );
                 self.push_inlines(InlineFor::Paragraph, read)
             }
-            Event::Start(Tag::FootnoteDefinition(_)) => {
-                self.degrades("a footnote", "prose where it was written", at)
+            Event::Start(Tag::FootnoteDefinition(_)) => self.warn(
+                "Footnotes are not supported. The note is kept where it was written.",
+                at,
+            ),
+            Event::Start(Tag::DefinitionList) => self.warn(
+                "Definition lists are not supported. Falling back to one paragraph per entry.",
+                at,
+            ),
+            Event::Start(Tag::HtmlBlock) => {
+                self.warn("HTML blocks are not supported and will be ignored.", at)
             }
-            Event::Start(Tag::DefinitionList) => {
-                self.degrades("a definition list", "one paragraph per entry", at)
-            }
-            Event::Start(Tag::HtmlBlock) => self.drops("an html block", at),
             // A tight list item has its text directly inside it, with
             // no paragraph around it. The frame catches that text; a
             // loose item's own paragraph closes first and leaves this
@@ -279,12 +307,20 @@ impl<'a> Converter<'a> {
                 span: Some(read.span),
             }),
             Event::InlineMath(math) | Event::DisplayMath(math) => {
-                self.degrades("math", "plain text", at);
+                self.warn("Math is not supported. Falling back to plain text.", at);
                 self.text(&math, read)
             }
-            Event::Html(_) | Event::InlineHtml(_) => self.drops("html", at),
-            Event::FootnoteReference(_) => self.drops("a footnote reference", at),
-            Event::TaskListMarker(_) => self.drops("a task list marker", at),
+            Event::Html(_) | Event::InlineHtml(_) => {
+                self.warn("Inline HTML is not supported and will be ignored.", at)
+            }
+            Event::FootnoteReference(_) => self.warn(
+                "Footnote references are not supported and will be ignored.",
+                at,
+            ),
+            Event::TaskListMarker(_) => self.warn(
+                "Task list markers are not supported and will be ignored.",
+                at,
+            ),
             // A wrapped line is a space; the shaper never sees the
             // markdown's ragged column.
             Event::SoftBreak | Event::HardBreak => self.text(" ", read),
@@ -303,21 +339,9 @@ impl<'a> Converter<'a> {
         }
     }
 
-    /// Reports a construct the vocabulary has no room for, naming
-    /// what it becomes instead.
-    fn degrades(&mut self, what: &str, becomes: &str, at: SourcePos) {
-        self.warn(format!("{what} is set as {becomes}"), at);
-    }
-
-    /// Reports a construct with no prose in it, and so nothing left
-    /// behind.
-    fn drops(&mut self, what: &str, at: SourcePos) {
-        self.warn(format!("{what} has no counterpart and is dropped"), at);
-    }
-
-    fn warn(&mut self, message: String, at: SourcePos) {
+    fn warn(&mut self, message: impl Into<String>, at: SourcePos) {
         self.warnings.push(Warning {
-            message,
+            message: message.into(),
             origin: Some(origin(Some(self.source), Some(at))),
         });
     }
@@ -486,11 +510,7 @@ impl<'a> Converter<'a> {
             Some(inside) => named(inside),
         };
         let Some(attributes) = read_as else {
-            self.degrades(
-                "an attribute the syntax cannot hold",
-                "plain text",
-                read.position,
-            );
+            self.warn(UNSUPPORTED_ATTRIBUTE, read.position);
             return Some(children);
         };
         // An image is a block written inline, so a run after one
@@ -522,9 +542,8 @@ impl<'a> Converter<'a> {
         let Some(line) = self.pending.take() else {
             return;
         };
-        self.degrades(
-            "an attribute line with no block under it",
-            "plain text",
+        self.warn(
+            "Attribute line with no block under it. Falling back to plain text.",
             line.read.position,
         );
         self.push_block(Block::Paragraph {
@@ -556,7 +575,11 @@ impl<'a> Converter<'a> {
             })
             .collect();
         for at in moved {
-            self.degrades("an inline image", "a block of its own", at);
+            self.warn(
+                "Inline images become blocks. The image is placed after the paragraph it was \
+                 written in.",
+                at,
+            );
         }
     }
 
@@ -782,7 +805,7 @@ mod tests {
             &Options::default(),
         );
         assert_eq!(loud.len(), 1, "{loud:?}");
-        assert!(loud[0].message.contains("an inline image"));
+        assert!(loud[0].message.contains("Inline images become blocks"));
         assert!(matches!(
             among[0].blocks.as_slice(),
             [Block::Paragraph { .. }, Block::Image { .. }],
@@ -927,9 +950,18 @@ code line
         assert_eq!(
             reported,
             [
-                ("a list is set as one paragraph per item", "test.md:3:1"),
-                ("a code block is set as a paragraph", "test.md:6:1"),
-                ("a table is set as one paragraph per cell", "test.md:10:1"),
+                (
+                    "Lists are not supported. Falling back to one paragraph per item.",
+                    "test.md:3:1",
+                ),
+                (
+                    "Code blocks are not supported. Falling back to a plain paragraph.",
+                    "test.md:6:1",
+                ),
+                (
+                    "Tables are not supported. Falling back to one paragraph per cell.",
+                    "test.md:10:1",
+                ),
             ],
         );
         let prose: Vec<String> = sections[0].blocks[1..].iter().map(text_of).collect();
@@ -1159,7 +1191,10 @@ Ordinary prose.
             assert_eq!(text_of(&sections[0].blocks[1]), run);
             assert!(block_attributes(&sections[0].blocks[2]).is_empty());
             assert_eq!(warnings.len(), 1, "{run}: {warnings:?}");
-            assert!(warnings[0].message.contains("attribute"), "{warnings:?}");
+            assert!(
+                warnings[0].message.contains("Unsupported attribute"),
+                "{warnings:?}"
+            );
         }
     }
 
@@ -1187,7 +1222,7 @@ Ordinary prose.
         // image is broken out of.
         assert_eq!(text_of(&sections[0].blocks[3]), "{.map}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
-        assert!(warnings[0].message.contains("an inline image"));
+        assert!(warnings[0].message.contains("Inline images become blocks"));
     }
 
     #[test]
