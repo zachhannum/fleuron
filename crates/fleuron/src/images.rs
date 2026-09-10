@@ -1,24 +1,31 @@
-//! Image sizing: what a header says, and nothing more.
+//! Image sizing, and the contour a sheet asks to be traced.
 //!
 //! Layout needs one thing from an image — how big it is — and getting
 //! it by decoding would put a pixel buffer in the layout pass. So the
 //! engine reads the header: PNG's `IHDR` and `pHYs`, JPEG's `SOFn` and
 //! JFIF density, GIF's screen descriptor, WebP's chunk headers. The
-//! file is kept as it arrived and decoded by nothing until a painter
-//! needs the pixels.
+//! file is kept as it arrived, and a painter is what decodes it.
+//!
+//! One thing else decodes it: `shape-outside: auto`, which sets prose
+//! around the shape of an image rather than around its box. That is
+//! not reachable from where probing happens, because probing has not
+//! seen the style tree, so it is a stage of its own. [`Contours`] is
+//! what that stage keeps: it walks the cascade for the nodes that ask
+//! for a traced contour, and traces each asset once.
 //!
 //! The engine opens nothing itself, the same as with fonts. Whatever string
 //! the content tree writes is the name an image is matched under. It
 //! never has to be a real URL; the host is what turns a name into
 //! bytes.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
 use crate::Warning;
 use crate::content::{Block, Book};
+use crate::style::{ComputedStyle, ShapeOutside, StyleTree};
 
 /// Resolves image urls to bytes.
 ///
@@ -235,6 +242,13 @@ impl Assets {
         self.files.get(index as usize).map(Vec::as_slice)
     }
 
+    /// What one asset's file hashes to: what tells a trace of the
+    /// bytes an index holds now from a trace of the bytes it held
+    /// before.
+    pub fn digest(&self, index: u32) -> Option<u64> {
+        self.hashes.get(index as usize).copied()
+    }
+
     /// What probing had to complain about.
     pub fn warnings(&self) -> &[Warning] {
         &self.warnings
@@ -277,6 +291,333 @@ impl Assets {
             }
         }
     }
+}
+
+/// Every contour a book's sheet asked for, traced once and kept by
+/// asset.
+///
+/// This is the trace stage. Nothing is traced because it is an image.
+/// It is traced because a rule that matched it resolved to
+/// `shape-outside: auto`, and that is not reachable from where
+/// probing happens: probing takes a book and a loader, and neither
+/// has seen the style tree.
+///
+/// The stage sits above line breaking, because a contour that moved
+/// is a measure that moved. It keeps what an earlier run traced, so a
+/// sheet edit that leaves the contours where they were decodes
+/// nothing.
+#[derive(Debug, Default)]
+pub struct Contours {
+    traced: BTreeMap<u32, Traced>,
+    warned: BTreeSet<String>,
+    warnings: Vec<Warning>,
+}
+
+/// Whether one node's styling asks for a contour the flow can read.
+///
+/// Both halves matter. A sheet that names `auto` on an element it
+/// leaves in the flow asks for a contour nothing sets beside, and an
+/// image is not decoded to answer that.
+fn traceable(style: &ComputedStyle) -> bool {
+    style.shape_outside == ShapeOutside::Auto && style.excludes()
+}
+
+/// One asset's trace, and the bytes it was traced from.
+#[derive(Debug)]
+struct Traced {
+    digest: u64,
+    contour: Option<Contour>,
+}
+
+impl Contours {
+    /// Nothing traced: what a book whose sheet names no contour
+    /// carries.
+    pub fn none() -> Contours {
+        Contours::default()
+    }
+
+    /// Traces every asset the cascade asks for and this table does not
+    /// already answer for, and reports how many images it decoded.
+    ///
+    /// A book whose sheet names no contour decodes nothing, and so
+    /// does one whose contours are all traced already.
+    pub fn update(&mut self, book: &Book, styles: &StyleTree, assets: &Assets) -> u32 {
+        fn walk(
+            contours: &mut Contours,
+            blocks: &[Block],
+            source: Option<&str>,
+            styles: &StyleTree,
+            assets: &Assets,
+            traced: &mut u32,
+        ) {
+            for block in blocks {
+                match block {
+                    Block::Blockquote { blocks, .. } => {
+                        walk(contours, blocks, source, styles, assets, traced)
+                    }
+                    Block::Image {
+                        id, url, position, ..
+                    } if traceable(styles.style(*id)) => {
+                        let Some(((index, _), digest)) = assets
+                            .lookup(url)
+                            .and_then(|found| Some((found, assets.digest(found.0)?)))
+                        else {
+                            continue;
+                        };
+                        if contours
+                            .traced
+                            .get(&index)
+                            .is_some_and(|kept| kept.digest == digest)
+                        {
+                            continue;
+                        }
+                        let contour = assets.bytes(index).and_then(trace);
+                        *traced += 1;
+                        if contour.is_none() && contours.warned.insert(url.clone()) {
+                            let origin = crate::content::origin(source, *position);
+                            contours.warnings.push(Warning {
+                                message: format!(
+                                    "image {url}: no alpha channel to trace; the prose keeps \
+                                     clear of its box"
+                                ),
+                                origin: (!origin.is_empty()).then_some(origin),
+                            });
+                        }
+                        contours.traced.insert(index, Traced { digest, contour });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut traced = 0;
+        for section in &book.sections {
+            walk(
+                self,
+                &section.blocks,
+                section.source.as_deref(),
+                styles,
+                assets,
+                &mut traced,
+            );
+        }
+        traced
+    }
+
+    /// The contour one asset traced to, and `None` where it traced to
+    /// nothing or was never asked for.
+    pub fn get(&self, asset: u32) -> Option<&Contour> {
+        self.traced.get(&asset)?.contour.as_ref()
+    }
+
+    /// Whether this table holds a trace of one asset, whatever the
+    /// trace found.
+    pub fn traces(&self, asset: u32) -> bool {
+        self.traced.contains_key(&asset)
+    }
+
+    /// What tracing had to complain about.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+}
+
+/// The outline prose sets around, in the image's own box.
+///
+/// A ring is a closed loop of points, `(0, 0)` at the top left of the
+/// image and `(1, 1)` at its bottom right. An image whose alpha
+/// leaves two shapes with clear space between them traces to two
+/// rings, and the prose sets through the space.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Contour {
+    /// The rings, each closed by its own first point.
+    pub rings: Vec<Vec<[f32; 2]>>,
+}
+
+/// How many rows a trace reports, so that the outline one image
+/// traces to is the same size whatever the image's pixel count is.
+const ROWS: u32 = 128;
+
+/// The largest image the tracer decodes. A file above this contributes
+/// its box, because the buffer a decode wants is the picture again in
+/// memory and a contour is not worth that.
+const CEILING: u64 = 32 * 1024 * 1024;
+
+/// The alpha channel of one image, one byte to a pixel.
+struct Mask {
+    width: u32,
+    height: u32,
+    alpha: Vec<u8>,
+}
+
+impl Mask {
+    /// The first and last covered pixel of every row, `None` for a
+    /// row nothing covers.
+    fn rows(&self) -> Vec<Option<(u32, u32)>> {
+        (0..self.height)
+            .map(|y| {
+                let row = &self.alpha[(y * self.width) as usize..][..self.width as usize];
+                let first = row.iter().position(|alpha| *alpha > 0)? as u32;
+                let last = row.iter().rposition(|alpha| *alpha > 0)? as u32;
+                Some((first, last + 1))
+            })
+            .collect()
+    }
+}
+
+/// Traces one image's alpha channel. `None` where the format carries
+/// no alpha, where the file does not decode, or where it is larger
+/// than the tracer decodes.
+///
+/// The outline is reported over a fixed number of bands rather than
+/// over the image's own rows, so two images of the same shape and
+/// different resolutions trace to the same size of outline.
+pub fn trace(bytes: &[u8]) -> Option<Contour> {
+    let mask = mask(bytes)?;
+    let rows = mask.rows();
+    let bands: Vec<Option<(f32, f32)>> = (0..ROWS)
+        .map(|band| {
+            let from = (band as u64 * mask.height as u64 / ROWS as u64) as usize;
+            let to = ((band as u64 + 1) * mask.height as u64 / ROWS as u64).max(from as u64 + 1);
+            rows.get(from..(to as usize).min(rows.len()))?
+                .iter()
+                .flatten()
+                .copied()
+                .reduce(|(left, right), (start, end)| (left.min(start), right.max(end)))
+                .map(|(left, right)| {
+                    (
+                        left as f32 / mask.width as f32,
+                        right as f32 / mask.width as f32,
+                    )
+                })
+        })
+        .collect();
+    Some(Contour {
+        rings: rings(&bands),
+    })
+}
+
+/// One ring for every run of bands the alpha covers, in reading
+/// order. A band nothing covers ends the ring above it, which is what
+/// lets prose set through a gap in the image.
+fn rings(bands: &[Option<(f32, f32)>]) -> Vec<Vec<[f32; 2]>> {
+    let mut rings = Vec::new();
+    let mut run: Vec<(usize, (f32, f32))> = Vec::new();
+    let height = bands.len() as f32;
+    let close = |run: &mut Vec<(usize, (f32, f32))>, rings: &mut Vec<Vec<[f32; 2]>>| {
+        if run.is_empty() {
+            return;
+        }
+        let edge = |side: fn(&(f32, f32)) -> f32, run: &[(usize, (f32, f32))]| {
+            let mut points: Vec<[f32; 2]> = Vec::new();
+            for (band, span) in run {
+                let (top, bottom) = (*band as f32 / height, (*band + 1) as f32 / height);
+                let x = side(span);
+                // A band no wider than the one above it needs no
+                // corner of its own.
+                match points.last_mut() {
+                    Some(last) if last[0] == x => last[1] = bottom,
+                    _ => {
+                        points.push([x, top]);
+                        points.push([x, bottom]);
+                    }
+                }
+            }
+            points
+        };
+        let mut ring = edge(|span| span.0, run);
+        let mut right = edge(|span| span.1, run);
+        right.reverse();
+        ring.append(&mut right);
+        rings.push(ring);
+        run.clear();
+    };
+    for (band, span) in bands.iter().enumerate() {
+        match span {
+            Some(span) => run.push((band, *span)),
+            None => close(&mut run, &mut rings),
+        }
+    }
+    close(&mut run, &mut rings);
+    rings
+}
+
+/// The alpha channel of one file, for the formats that carry one.
+fn mask(bytes: &[u8]) -> Option<Mask> {
+    let intrinsic = probe(bytes)?;
+    if intrinsic.width as u64 * intrinsic.height as u64 > CEILING {
+        return None;
+    }
+    png_mask(bytes)
+        .or_else(|| webp_mask(bytes))
+        .or_else(|| gif_mask(bytes))
+}
+
+/// PNG. `normalize_to_color8` expands a palette and a `tRNS` chunk,
+/// so an alpha channel arrives however the file wrote it.
+fn png_mask(bytes: &[u8]) -> Option<Mask> {
+    let mut decoder = png::Decoder::new(bytes);
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().ok()?;
+    let (channels, offset) = match reader.output_color_type() {
+        (png::ColorType::Rgba, _) => (4, 3),
+        (png::ColorType::GrayscaleAlpha, _) => (2, 1),
+        _ => return None,
+    };
+    let mut buffer = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buffer).ok()?;
+    Some(Mask {
+        width: info.width,
+        height: info.height,
+        alpha: buffer[..(info.width * info.height * channels) as usize]
+            .iter()
+            .skip(offset)
+            .step_by(channels as usize)
+            .copied()
+            .collect(),
+    })
+}
+
+/// WebP, when the file declares an alpha channel.
+fn webp_mask(bytes: &[u8]) -> Option<Mask> {
+    let mut decoder = image_webp::WebPDecoder::new(std::io::Cursor::new(bytes)).ok()?;
+    if !decoder.has_alpha() {
+        return None;
+    }
+    let (width, height) = decoder.dimensions();
+    let mut buffer = vec![0u8; decoder.output_buffer_size()?];
+    decoder.read_image(&mut buffer).ok()?;
+    Some(Mask {
+        width,
+        height,
+        alpha: buffer.iter().skip(3).step_by(4).copied().collect(),
+    })
+}
+
+/// GIF, whose transparency is one palette entry. The first frame is
+/// the image, and a frame smaller than the screen leaves the rest of
+/// it clear.
+fn gif_mask(bytes: &[u8]) -> Option<Mask> {
+    let mut options = gif::DecodeOptions::new();
+    options.set_color_output(gif::ColorOutput::RGBA);
+    let mut decoder = options.read_info(bytes).ok()?;
+    let (width, height) = (decoder.width() as u32, decoder.height() as u32);
+    let frame = decoder.read_next_frame().ok()??;
+    let mut alpha = vec![0u8; (width * height) as usize];
+    for y in 0..frame.height as u32 {
+        for x in 0..frame.width as u32 {
+            let (at_x, at_y) = (x + frame.left as u32, y + frame.top as u32);
+            if at_x >= width || at_y >= height {
+                continue;
+            }
+            alpha[(at_y * width + at_x) as usize] =
+                frame.buffer[((y * frame.width as u32 + x) * 4 + 3) as usize];
+        }
+    }
+    Some(Mask {
+        width,
+        height,
+        alpha,
+    })
 }
 
 /// Reads an image's size from its header. `None` for a format no
@@ -496,6 +837,153 @@ mod tests {
         bytes.extend(height.to_be_bytes());
         bytes.extend(width.to_be_bytes());
         bytes
+    }
+
+    /// An RGBA PNG whose alpha `covered` decides, pixel by pixel.
+    fn rgba_png(width: u32, height: u32, covered: impl Fn(u32, u32) -> bool) -> Vec<u8> {
+        let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+        for y in 0..height {
+            for x in 0..width {
+                pixels.extend([0x33, 0x44, 0x55, if covered(x, y) { 0xFF } else { 0 }]);
+            }
+        }
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("the header writes");
+        writer.write_image_data(&pixels).expect("the pixels write");
+        writer.finish().expect("the file closes");
+        bytes
+    }
+
+    /// The leftmost and rightmost point a contour reaches between two
+    /// heights, as a fraction of the image's width.
+    fn span(contour: &Contour, top: f32, bottom: f32) -> Option<(f32, f32)> {
+        let mut reach: Option<(f32, f32)> = None;
+        for ring in &contour.rings {
+            for point in ring {
+                if point[1] < top || point[1] > bottom {
+                    continue;
+                }
+                reach = Some(match reach {
+                    None => (point[0], point[0]),
+                    Some((left, right)) => (left.min(point[0]), right.max(point[0])),
+                });
+            }
+        }
+        reach
+    }
+
+    /// The alpha channel decides the contour: a shape that covers half
+    /// of every row traces to a contour half the width of the image,
+    /// and one that widens down the image traces to a contour that
+    /// widens with it.
+    #[test]
+    fn an_alpha_channel_traces_to_the_shape_it_covers() {
+        let half = trace(&rgba_png(64, 64, |x, _| x < 32)).expect("a PNG with alpha traces");
+        assert_eq!(half.rings.len(), 1);
+        assert_eq!(span(&half, 0.0, 1.0), Some((0.0, 0.5)));
+
+        // A wedge: one pixel wide at the top, the whole width at the
+        // bottom.
+        let wedge = trace(&rgba_png(64, 64, |x, y| x <= y)).expect("a PNG with alpha traces");
+        let (_, top) = span(&wedge, 0.0, 0.1).expect("the top of the wedge");
+        let (_, bottom) = span(&wedge, 0.9, 1.0).expect("the foot of the wedge");
+        assert!(top < 0.2, "the wedge opens narrow: {top}");
+        assert!(bottom > 0.9, "and closes wide: {bottom}");
+    }
+
+    /// Clear space across the image ends one ring and opens another,
+    /// so the prose can set through the gap.
+    #[test]
+    fn clear_space_across_an_image_splits_the_contour() {
+        let split = trace(&rgba_png(64, 64, |_, y| !(24..40).contains(&y)))
+            .expect("a PNG with alpha traces");
+        assert_eq!(split.rings.len(), 2, "{:?}", split.rings.len());
+        assert_eq!(span(&split, 0.4, 0.6), None, "nothing covers the gap");
+    }
+
+    /// An image with nothing in it traces to no rings at all, which is
+    /// a contour the prose sets straight through.
+    #[test]
+    fn an_empty_alpha_channel_traces_to_nothing() {
+        let empty = trace(&rgba_png(16, 16, |_, _| false)).expect("a PNG with alpha traces");
+        assert!(empty.rings.is_empty());
+    }
+
+    /// A format that carries no alpha traces to nothing, and its box
+    /// is what the prose keeps clear of. So do bytes that do not
+    /// decode.
+    #[test]
+    fn a_format_without_alpha_traces_to_nothing() {
+        assert!(trace(&jpeg_bytes(64, 64, None)).is_none());
+        assert!(trace(&png_bytes(64, 64, None)).is_none(), "a bare header");
+        assert!(trace(b"not an image").is_none());
+        assert!(trace(b"").is_none());
+    }
+
+    /// The same picture in two formats traces to the same contour:
+    /// the outline is the image's shape, not the file's.
+    #[test]
+    fn one_shape_in_two_formats_traces_the_same() {
+        let png = trace(include_bytes!("../../../fixtures/images/fleuron.png"))
+            .expect("the ornament traces");
+        let webp = trace(include_bytes!("../../../fixtures/images/fleuron.webp"))
+            .expect("the ornament traces");
+        assert_eq!(png.rings.len(), 1, "the ornament is one shape");
+        for (top, bottom) in [(0.0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)] {
+            let (one, two) = (span(&png, top, bottom), span(&webp, top, bottom));
+            let (one, two) = (one.expect("the PNG covers it"), two.expect("the WebP does"));
+            assert!(
+                (one.0 - two.0).abs() < 0.02 && (one.1 - two.1).abs() < 0.02,
+                "between {top} and {bottom}: {one:?} against {two:?}",
+            );
+        }
+        // The ornament is set on a clear ground, so its contour is
+        // narrower than its box.
+        let widest = (0..8)
+            .filter_map(|band| span(&png, band as f32 / 8.0, (band as f32 + 1.0) / 8.0))
+            .fold(0.0f32, |widest, (left, right)| widest.max(right - left));
+        assert!(widest < 0.95, "the contour is the box: {widest}");
+    }
+
+    /// A GIF's transparent palette entry is an alpha channel like any
+    /// other.
+    #[test]
+    fn a_transparent_palette_entry_traces_like_an_alpha_channel() {
+        let (width, height) = (32u16, 32u16);
+        let indices: Vec<u8> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| u8::from(x >= y)))
+            .collect();
+        let mut bytes = Vec::new();
+        {
+            let mut encoder =
+                gif::Encoder::new(&mut bytes, width, height, &[0, 0, 0, 0x33, 0x44, 0x55])
+                    .expect("the header writes");
+            let frame = gif::Frame {
+                width,
+                height,
+                buffer: std::borrow::Cow::Borrowed(&indices),
+                transparent: Some(0),
+                ..gif::Frame::default()
+            };
+            encoder.write_frame(&frame).expect("the frame writes");
+        }
+        let traced = trace(&bytes).expect("a GIF with a transparent entry traces");
+        assert_eq!(traced.rings.len(), 1);
+        let (left, _) = span(&traced, 0.0, 0.1).expect("the top of the wedge");
+        let (foot, _) = span(&traced, 0.9, 1.0).expect("the foot of it");
+        assert!(left < 0.1, "the wedge opens at the left edge: {left}");
+        assert!(foot > 0.8, "and closes at the right: {foot}");
+    }
+
+    /// Two runs over one image trace the same bytes to the same
+    /// contour.
+    #[test]
+    fn tracing_is_deterministic() {
+        let bytes = rgba_png(48, 32, |x, y| (x + y) % 17 < 9);
+        assert_eq!(trace(&bytes), trace(&bytes));
     }
 
     /// Every format the probe recognises, read back at its declared size.

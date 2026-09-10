@@ -859,6 +859,60 @@ check(
   `${clear.length} lines painted beside the image, ${beside.length} on the page`,
 );
 
+// A contour. The same sheet wraps the prose to the shape the
+// ornament's own alpha channel traces rather than to its box. The
+// lines beside it start inside the box, which nothing but a traced
+// contour allows, and the painter starts them where the display
+// structure did. The PDF the same run exports is the CLI's byte for
+// byte, so the preview and the export agree about this page as they
+// agree about every other.
+const contoured = await client.preview([
+  styleOp(
+    'img:not(.map) { position: absolute; top: 0; left: 0; wrap-flow: end; ' +
+      'shape-outside: auto; shape-margin: 3pt }',
+  ),
+]);
+// The ornament is the narrow image; the map is the wide one.
+const ornamented =
+  contoured?.pages.find((page) =>
+    page.items.some((item) => item.kind === 'image' && item.w < 60),
+  ) ?? null;
+const ornament =
+  ornamented?.items.find((item): item is ImageItem => item.kind === 'image' && item.w < 60) ?? null;
+const contourLines = (ornamented?.items ?? []).filter(
+  (item): item is TextItem =>
+    item.kind === 'text' &&
+    ornament !== null &&
+    item.y > ornament.y &&
+    item.y <= ornament.y + ornament.h,
+);
+check(
+  'a page wrapped to a traced contour sets its prose inside the image box',
+  ornament !== null &&
+    contourLines.length > 0 &&
+    contourLines.every((run) => run.x > ornament.x && run.x < ornament.x + ornament.w),
+  ornament === null
+    ? 'no ornament on any page'
+    : `${contourLines.map((run) => run.x).join(', ')} inside ${ornament.x}..${
+        ornament.x + ornament.w
+      }`,
+);
+const contouredSvg =
+  ornamented === null
+    ? ''
+    : paintPage(ornamented, {
+        fonts: contoured?.fonts ?? [],
+        assets: contoured?.assets ?? [],
+        asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      });
+const contourStarts = texts(contouredSvg).map((run) => Number(run.x[0]));
+check(
+  'and the painter starts them where the display structure did',
+  contourLines.length > 0 &&
+    contourLines.every((item) => contourStarts.some((x) => near(x, item.x))),
+  `${contourStarts.length} lines painted, ${contourLines.length} beside the ornament`,
+);
+
 // Named sheets. A host that builds its styling out of layers sends
 // the layers, and a warning names the layer it was written in.
 const layers = [

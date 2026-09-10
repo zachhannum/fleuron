@@ -178,7 +178,7 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("font", "italic 11pt serif"),
         ("width", "10em"),
         ("inset", "0"),
-        ("shape-outside", "circle()"),
+        ("clip-path", "circle()"),
     ];
     for (name, value) in outside {
         assert!(!described.contains(name), "{name} is in the description");
@@ -209,6 +209,11 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
     warns_at_line_two(&rule("p", "font-size: bigger"), "font-size");
     warns_at_line_two(&rule("p", "margin-top: 1vw"), "margin-top");
     warns_at_line_two(&rule("p", "color: transparent"), "color");
+    warns_at_line_two(&rule("p", "shape-outside: circle(4em)"), "shape-outside");
+    warns_at_line_two(
+        &rule("p", "shape-outside: polygon(0 0, 100% 0)"),
+        "shape-outside",
+    );
     warns_at_line_two(&rule("@page", "size: tabloid"), "size");
     warns_at_line_two(
         &rule("@page { @top-center", "content: counter(page, hebrew)"),
@@ -676,7 +681,7 @@ const CSS_PROPERTIES: &[&str] = &[
     "padding-left", "padding-right", "padding-top", "page", "page-break-after",
     "page-break-before", "page-break-inside", "perspective", "place-content", "place-items",
     "place-self", "pointer-events", "position", "quotes", "resize", "right", "rotate",
-    "row-gap", "scale", "shape-outside", "size", "src", "string-set", "tab-size", "table-layout",
+    "row-gap", "scale", "shape-margin", "shape-outside", "size", "src", "string-set", "tab-size", "table-layout",
     "text-align", "text-align-last", "text-combine-upright", "text-decoration",
     "text-decoration-color", "text-decoration-line", "text-decoration-style",
     "text-decoration-thickness", "text-emphasis", "text-indent", "text-justify",

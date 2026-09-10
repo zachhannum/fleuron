@@ -5,6 +5,9 @@
 //! places it, and breaks the paragraphs beside it again. The gate
 //! measures the same book both ways, so the cost of that path is a
 //! number rather than a guess.
+//!
+//! [`ORNAMENT`] is the second image here, and it is the one the trace
+//! bench reads: it carries an alpha channel, which the map does not.
 
 use fleuron::content::{Attributes, Block, Book, NodeId};
 use fleuron::images::{Assets, ImageLoader};
@@ -21,9 +24,30 @@ pub const URL: &str = "plate.jpg";
 pub const CSS: &str = "img { position: absolute; top: 0; right: 0; \
                        margin-left: 12pt; margin-bottom: 6pt; wrap-flow: start }";
 
+/// The ornament the fixture book closes a chapter with, which is the
+/// image in this repository that carries an alpha channel.
+pub const ORNAMENT: &[u8] = include_bytes!("../../../fixtures/images/fleuron.png");
+
+/// The same ornament as WebP: the same pixels in the other format
+/// that carries alpha.
+pub const ORNAMENT_WEBP: &[u8] = include_bytes!("../../../fixtures/images/fleuron.webp");
+
+/// What a book that wraps prose to a traced contour names it.
+pub const ORNAMENT_URL: &str = "fleuron.png";
+
+/// The sheet that wraps prose to the ornament's own shape.
+pub const CONTOUR_CSS: &str = "img { position: absolute; top: 0; right: 0; \
+                               margin-left: 12pt; wrap-flow: start; \
+                               shape-outside: auto; shape-margin: 6pt }";
+
 /// The same book with an image at the head of every chapter, anchored
 /// above the prose the chapter opens with.
 pub fn illustrated(book: &Book) -> Book {
+    illustrated_with(book, URL)
+}
+
+/// The same, over an image the caller names.
+pub fn illustrated_with(book: &Book, url: &str) -> Book {
     let mut illustrated = book.clone();
     for section in &mut illustrated.sections {
         let at = section
@@ -35,8 +59,8 @@ pub fn illustrated(book: &Book) -> Book {
             at,
             Block::Image {
                 id: NodeId::UNASSIGNED,
-                url: URL.into(),
-                alt: "a map of Lilliput".into(),
+                url: url.into(),
+                alt: "the plate the chapter opens with".into(),
                 attributes: Attributes::default(),
                 position: None,
                 span: None,
@@ -47,15 +71,20 @@ pub fn illustrated(book: &Book) -> Book {
     illustrated
 }
 
-/// The image itself, in an asset table that layout can size from.
+/// The images themselves, in an asset table that layout can size
+/// from.
 pub fn assets(book: &Book) -> Assets {
-    struct Image;
-    impl ImageLoader for Image {
+    struct Images;
+    impl ImageLoader for Images {
         fn load(&self, url: &str) -> Option<Vec<u8>> {
-            (url == URL).then(|| IMAGE.to_vec())
+            match url {
+                URL => Some(IMAGE.to_vec()),
+                ORNAMENT_URL => Some(ORNAMENT.to_vec()),
+                _ => None,
+            }
         }
     }
-    Assets::probe(book, &Image)
+    Assets::probe(book, &Images)
 }
 
 #[cfg(test)]

@@ -21,7 +21,8 @@ use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     BorderStyle, BoxDecorationBreak, Break, Color, Content, CounterStyle, Declaration, Edge,
     Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, MEDIUM,
-    MarginBox, Position, StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
+    MarginBox, Position, ShapeSource, StringPiece, StringSet, TextAlign, TextJustify,
+    TextTransform, WrapFlow,
 };
 
 /// Where a stylesheet came from. The cascade sorts by this before it
@@ -862,6 +863,20 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         read: |name, input| longhand(name, input, wrap_flow, Declaration::WrapFlow),
     },
     Spec {
+        name: "shape-outside",
+        inherited: false,
+        syntax: "none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* )",
+        examples: &["auto", "polygon(0 0, 100% 0, 100% 100%)"],
+        read: |name, input| longhand(name, input, shape_outside, Declaration::ShapeOutside),
+    },
+    Spec {
+        name: "shape-margin",
+        inherited: false,
+        syntax: "<length> | <percentage>",
+        examples: &["6pt"],
+        read: |name, input| longhand(name, input, length, Declaration::ShapeMargin),
+    },
+    Spec {
         name: "margin",
         inherited: false,
         syntax: "[ <length> | <percentage> ]{1,4}",
@@ -1371,6 +1386,41 @@ fn wrap_flow(input: &mut Parser<'_, '_>) -> Option<WrapFlow> {
         "end" => Some(WrapFlow::End),
         _ => None,
     }
+}
+
+/// `shape-outside: none | auto | polygon(…)`: the contour the prose
+/// sets around, in place of the box.
+///
+/// The points are read from the top left of the margin box, and the
+/// polygon closes itself. Three of them are the fewest that enclose
+/// anything.
+fn shape_outside(input: &mut Parser<'_, '_>) -> Option<ShapeSource> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return match_ignore_ascii_case! { &keyword,
+            "none" => Some(ShapeSource::None),
+            "auto" => Some(ShapeSource::Auto),
+            _ => None,
+        };
+    }
+    input
+        .try_parse(|input| input.expect_function_matching("polygon"))
+        .ok()?;
+    let points = input
+        .parse_nested_block(|input| {
+            let mut points = Vec::new();
+            loop {
+                let x = length(input).ok_or_else(|| input.new_error_for_next_token::<()>())?;
+                let y = length(input).ok_or_else(|| input.new_error_for_next_token::<()>())?;
+                points.push((x, y));
+                if input.try_parse(|input| input.expect_comma()).is_err() {
+                    break;
+                }
+            }
+            input.expect_exhausted()?;
+            Ok(points)
+        })
+        .ok()?;
+    (points.len() >= 3).then_some(ShapeSource::Polygon(points))
 }
 
 fn page_name(input: &mut Parser<'_, '_>) -> Option<Option<String>> {
@@ -2343,5 +2393,43 @@ mod tests {
         }
         assert_eq!(named("REBECCAPURPLE"), Some(Color::rgb(102, 51, 153)));
         assert_eq!(named("octarine"), None);
+    }
+
+    /// One value through the `shape-outside` parser.
+    fn shape(css: &str) -> Option<ShapeSource> {
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        let value = shape_outside(&mut parser);
+        value.filter(|_| parser.is_exhausted())
+    }
+
+    /// `shape-outside` reads its two keywords and a polygon of
+    /// lengths and percentages. A polygon that encloses nothing, or
+    /// that leaves a point half written, is no shape.
+    #[test]
+    fn shape_outside_reads_its_keywords_and_a_polygon() {
+        assert_eq!(shape("none"), Some(ShapeSource::None));
+        assert_eq!(shape("AUTO"), Some(ShapeSource::Auto));
+        assert_eq!(
+            shape("polygon(0 0, 100% 0, 1em 2em)"),
+            Some(ShapeSource::Polygon(vec![
+                (Length::Points(0.0), Length::Points(0.0)),
+                (Length::Percent(100.0), Length::Points(0.0)),
+                (Length::Em(1.0), Length::Em(2.0)),
+            ])),
+        );
+        assert_eq!(
+            shape("polygon(0 0, 100% 0)"),
+            None,
+            "two points enclose nothing"
+        );
+        assert_eq!(
+            shape("polygon(0 0, 100% 0, 50%)"),
+            None,
+            "a point is a pair"
+        );
+        assert_eq!(shape("polygon()"), None);
+        assert_eq!(shape("circle(4em)"), None);
+        assert_eq!(shape("border-box"), None);
     }
 }

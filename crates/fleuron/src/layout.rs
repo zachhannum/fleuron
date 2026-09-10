@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, SourceRange, origin, text};
 use crate::fonts::FontRegistry;
-use crate::images::Assets;
+use crate::images::{Assets, Contours};
 use crate::lines::{
     Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns, Shaped, Span,
 };
@@ -32,8 +32,8 @@ use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
     Align, Band, BoxDecorationBreak, Break, Color, ComputedStyle, Content, Edges, Hyphens, Inset,
-    MarginBox, MarginBoxStyle, PageGeometry, PageQuery, PageStyle, Position, Situation,
-    StringPiece, StyleTree, TextAlign, TextJustify, WrapFlow,
+    MarginBox, MarginBoxStyle, PageGeometry, PageQuery, PageStyle, Position, ShapeOutside,
+    Situation, StringPiece, StyleTree, TextAlign, TextJustify, WrapFlow,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -59,6 +59,12 @@ pub fn layout_book(
 pub(crate) fn no_assets() -> &'static Assets {
     static EMPTY: std::sync::OnceLock<Assets> = std::sync::OnceLock::new();
     EMPTY.get_or_init(Assets::none)
+}
+
+/// The contours of a book whose sheet asked for none.
+pub(crate) fn no_contours() -> &'static Contours {
+    static EMPTY: std::sync::OnceLock<Contours> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(Contours::none)
 }
 
 /// The fonts a run used, in the order the output indexes them.
@@ -278,6 +284,9 @@ pub struct Paginator<'a> {
     registry: &'a FontRegistry,
     styles: &'a StyleTree,
     assets: &'a Assets,
+    /// What the trace stage made of the assets the sheet asked to
+    /// wrap around.
+    contours: &'a Contours,
     lines: LineLayout<'a>,
     /// The syllable patterns `hyphens: auto` breaks by.
     patterns: Cell<Patterns>,
@@ -301,16 +310,30 @@ impl<'a> Paginator<'a> {
         Paginator::with_assets(registry, styles, no_assets())
     }
 
-    /// The same, over images the host has already probed.
+    /// The same, over images the host has already probed. A book
+    /// whose sheet names a traced contour also passes what the trace
+    /// stage made of it, through
+    /// [`with_contours`](Paginator::with_contours).
     pub fn with_assets(
         registry: &'a FontRegistry,
         styles: &'a StyleTree,
         assets: &'a Assets,
     ) -> Self {
+        Paginator::with_contours(registry, styles, assets, no_contours())
+    }
+
+    /// The same, over the contours the trace stage left.
+    pub fn with_contours(
+        registry: &'a FontRegistry,
+        styles: &'a StyleTree,
+        assets: &'a Assets,
+        contours: &'a Contours,
+    ) -> Self {
         Paginator {
             registry,
             styles,
             assets,
+            contours,
             lines: LineLayout::new(registry),
             patterns: Cell::new(Patterns::default()),
             unknown: RefCell::new(None),
@@ -418,6 +441,7 @@ impl<'a> Paginator<'a> {
                             inset: style.inset,
                             margin,
                             wrap: style.wrap_flow,
+                            shape: paginator.shape(style, asset, (width, height)),
                         });
                     }
                     _ => {}
@@ -434,6 +458,50 @@ impl<'a> Paginator<'a> {
             );
         }
         anchored
+    }
+
+    /// The contour one anchored image's prose keeps clear of, in the
+    /// coordinates of the box its insets place.
+    ///
+    /// `auto` is what the trace stage left, laid over the image
+    /// inside its margins. An image the tracer had no alpha for
+    /// contributes its box. A polygon is read against the whole box,
+    /// margins and all, which is what a percentage in it measures.
+    fn shape(&self, style: &ComputedStyle, asset: u32, size: (f32, f32)) -> Option<Shape> {
+        // The one predicate the trace stage keys on as well, so that
+        // what is traced and what is read cannot drift apart.
+        if !style.excludes() {
+            return None;
+        }
+        let margin = style.margin;
+        let (width, height) = size;
+        let rings = match &style.shape_outside {
+            ShapeOutside::None => return None,
+            ShapeOutside::Auto => self
+                .contours
+                .get(asset)?
+                .rings
+                .iter()
+                .map(|ring| {
+                    ring.iter()
+                        .map(|[x, y]| [margin.left + x * width, margin.top + y * height])
+                        .collect()
+                })
+                .collect(),
+            ShapeOutside::Polygon(points) => {
+                let box_ = (width + margin.inline(), height + margin.top + margin.bottom);
+                vec![
+                    points
+                        .iter()
+                        .map(|point| [point.x.to_points(box_.0), point.y.to_points(box_.1)])
+                        .collect(),
+                ]
+            }
+        };
+        Some(Shape {
+            rings,
+            margin: style.shape_margin,
+        })
     }
 
     /// Says so where the host supplied no image for a url. The table
@@ -883,6 +951,19 @@ struct AnchoredImage {
     margin: Edges,
     /// Which side of it the prose sets on.
     wrap: WrapFlow,
+    /// The contour the prose keeps clear of in place of the box,
+    /// from `shape-outside`.
+    shape: Option<Shape>,
+}
+
+/// A contour in the coordinates of the box the insets place: `(0, 0)`
+/// its top left corner, points down and across from there.
+#[derive(Debug, Clone)]
+struct Shape {
+    /// The rings, each closed by its own first point.
+    rings: Vec<Vec<[f32; 2]>>,
+    /// How far the prose keeps off them, from `shape-margin`.
+    margin: f32,
 }
 
 impl AnchoredImage {
@@ -973,11 +1054,37 @@ impl AnchoredImages {
 }
 
 /// One image as the column being filled sees it: the rectangle it
-/// covers, and which side of it the prose sets on.
+/// covers, the contour inside that rectangle where it has one, and
+/// which side of it the prose sets on.
 #[derive(Debug, Clone, Copy)]
-struct Hole {
+struct Hole<'a> {
     rect: Rect,
     wrap: WrapFlow,
+    shape: Option<&'a Shape>,
+}
+
+impl Hole<'_> {
+    /// What the hole covers of the band between `top` and `bottom`,
+    /// and `None` where it reaches none of it.
+    ///
+    /// A box covers the same stretch at every height. A contour is
+    /// read band by band, over the band grown by the shape margin,
+    /// and what it gives back is grown by it too.
+    fn covering(&self, top: f32, bottom: f32) -> Option<(f32, f32)> {
+        let Some(shape) = self.shape else {
+            return (self.rect.bottom() > top && self.rect.y < bottom)
+                .then(|| (self.rect.x, self.rect.right()));
+        };
+        let (from, to) = (
+            top - self.rect.y - shape.margin,
+            bottom - self.rect.y + shape.margin,
+        );
+        let (left, right) = scanline(&shape.rings, from, to)?;
+        Some((
+            self.rect.x + left - shape.margin,
+            self.rect.x + right + shape.margin,
+        ))
+    }
 }
 
 /// The bands a paragraph is set in beside an image: what each of them
@@ -1990,7 +2097,7 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     /// The images on the page being built, in the coordinates of the
     /// column being filled.
-    fn holes(&self) -> Vec<Hole> {
+    fn holes(&self) -> Vec<Hole<'_>> {
         let index = self.pages.len();
         let Some(anchored) = self.anchored.by_page.get(&index) else {
             return Vec::new();
@@ -2004,6 +2111,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             .map(|image| Hole {
                 rect: image.rect(geometry).within(origin),
                 wrap: image.wrap,
+                shape: image.shape.as_ref(),
             })
             .collect()
     }
@@ -2083,11 +2191,19 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             let Some((last, rest)) = free.split_last() else {
                 // Nothing is set in a band an image covers the whole
-                // of, so the next band is the first one under it.
+                // of, so the next band is the first one under it. A
+                // box covers every band down to its foot; a contour
+                // may narrow at any of them, so it is asked again one
+                // band down.
                 let below = holes
                     .iter()
-                    .filter(|hole| hole.rect.y < y + leading && hole.rect.bottom() > y)
-                    .fold(y, |below: f32, hole| below.max(hole.rect.bottom()));
+                    .filter(|hole| hole.covering(y, y + leading).is_some())
+                    .fold(y, |below: f32, hole| {
+                        below.max(match hole.shape {
+                            None => hole.rect.bottom(),
+                            Some(_) => y + leading,
+                        })
+                    });
                 if below <= y {
                     break;
                 }
@@ -2547,10 +2663,9 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
 fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> Vec<(f32, f32)> {
     let mut free = vec![(base.origin, base.origin + base.width)];
     for hole in holes {
-        if hole.rect.bottom() <= top || hole.rect.y >= bottom {
+        let Some((left, right)) = hole.covering(top, bottom) else {
             continue;
-        }
-        let (left, right) = (hole.rect.x, hole.rect.right());
+        };
         free = free
             .iter()
             .flat_map(|(start, end)| {
@@ -2570,6 +2685,44 @@ fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> V
     free.into_iter()
         .map(|(start, end)| (start, end - start))
         .collect()
+}
+
+/// The leftmost and rightmost point a contour reaches between two
+/// heights, and `None` where it reaches neither.
+///
+/// This is what turns a polygon into per-band spans. A ring is closed
+/// by its own first point. An edge inside the band contributes its
+/// ends, and one that crosses the band's edge contributes where it
+/// crosses.
+fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option<(f32, f32)> {
+    let mut reach: Option<(f32, f32)> = None;
+    let mut widen = |x: f32| {
+        reach = Some(match reach {
+            None => (x, x),
+            Some((left, right)) => (left.min(x), right.max(x)),
+        });
+    };
+    for ring in rings {
+        for (at, from) in ring.iter().enumerate() {
+            let to = ring[(at + 1) % ring.len()];
+            let (above, below) = (from[1].min(to[1]), from[1].max(to[1]));
+            if below < top || above > bottom {
+                continue;
+            }
+            for point in [*from, to] {
+                if point[1] >= top && point[1] <= bottom {
+                    widen(point[0]);
+                }
+            }
+            for cut in [top, bottom] {
+                if cut > above && cut < below {
+                    let along = (cut - from[1]) / (to[1] - from[1]);
+                    widen(from[0] + along * (to[0] - from[0]));
+                }
+            }
+        }
+    }
+    reach
 }
 
 /// What one band has left of it once the initial letter beside it
@@ -4747,6 +4900,210 @@ mod tests {
                 "the line at {baseline} reaches {edge}, into the image",
             );
         }
+    }
+
+    /// An RGBA PNG two inches square at 96dpi, opaque where
+    /// `covered` says so.
+    fn alpha_png(covered: impl Fn(u32, u32) -> bool) -> Vec<u8> {
+        let side = 192u32;
+        let mut pixels = Vec::with_capacity((side * side * 4) as usize);
+        for y in 0..side {
+            for x in 0..side {
+                pixels.extend([0x22, 0x33, 0x44, if covered(x, y) { 0xFF } else { 0 }]);
+            }
+        }
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, side, side);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("the header writes");
+        writer.write_image_data(&pixels).expect("the pixels write");
+        writer.finish().expect("the file closes");
+        bytes
+    }
+
+    /// The book the anchoring tests lay out, over an image whose
+    /// alpha `covered` decides, with the contour traced first.
+    fn traced(css: &str, covered: impl Fn(u32, u32) -> bool + Sync + 'static) -> Vec<Page> {
+        struct Alpha(Vec<u8>);
+        impl crate::images::ImageLoader for Alpha {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "image.png").then(|| self.0.clone())
+            }
+        }
+        let book = book_of(vec![section(
+            std::iter::once(image()).chain(long_prose(6)).collect(),
+        )]);
+        let styles = styled(css, &book);
+        let assets = crate::images::Assets::probe(&book, &Alpha(alpha_png(covered)));
+        let mut contours = crate::images::Contours::none();
+        contours.update(&book, &styles, &assets);
+        Paginator::with_contours(registry(), &styles, &assets, &contours).paginate(&book)
+    }
+
+    /// Where every line of a page starts, in baseline order, for the
+    /// lines beside an image at the head of the page.
+    fn starts_beside(page: &Page, foot: f32) -> Vec<f32> {
+        content_lines(page)
+            .iter()
+            .filter(|(baseline, _)| *baseline < foot)
+            .map(|(_, runs)| runs[0].0)
+            .collect()
+    }
+
+    /// Acceptance: prose sets to a polygon written in the sheet, and
+    /// nothing is decoded to do it. A polygon reaches layout from the
+    /// cascade, so this run has no traced contour at all.
+    #[test]
+    fn prose_sets_to_a_polygon_written_in_the_sheet() {
+        // A right triangle down the leading edge: nothing at the top,
+        // the whole box at the foot.
+        let wedge = with_image(
+            "img { position: absolute; top: 0; left: 0; wrap-flow: end; \
+             shape-outside: polygon(0 0, 100% 100%, 0 100%) }",
+            vec![section(
+                std::iter::once(image()).chain(long_prose(6)).collect(),
+            )],
+        );
+        let page = &wedge.pages[0];
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let starts = starts_beside(page, 54.0 + IMAGE);
+        assert!(starts.len() > 3, "not enough lines beside the image");
+        assert!(
+            starts[0] < left + IMAGE / 4.0,
+            "the first line did not reach into the corner the polygon leaves: {}",
+            starts[0] - left,
+        );
+        for pair in starts.windows(2) {
+            assert!(
+                pair[1] >= pair[0] - 1e-3,
+                "the prose did not follow the polygon down: {pair:?}",
+            );
+        }
+        assert!(
+            starts.last().expect("a last line") > &(left + IMAGE / 2.0),
+            "the polygon never pushed the prose past its middle",
+        );
+
+        // The same image with no contour holds every line off its
+        // whole width.
+        let box_ = with_image(
+            "img { position: absolute; top: 0; left: 0; wrap-flow: end }",
+            vec![section(
+                std::iter::once(image()).chain(long_prose(6)).collect(),
+            )],
+        );
+        for start in starts_beside(&box_.pages[0], 54.0 + IMAGE) {
+            assert!(
+                start >= left + IMAGE - 1e-3,
+                "a line set over the box: {start}",
+            );
+        }
+    }
+
+    /// Acceptance: prose sets to a contour traced from the image's own
+    /// alpha under `shape-outside: auto`.
+    #[test]
+    fn prose_sets_to_a_traced_contour() {
+        let pages = traced(
+            "img { position: absolute; top: 0; left: 0; wrap-flow: end; \
+             shape-outside: auto }",
+            |x, y| x <= y,
+        );
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let starts = starts_beside(&pages[0], 54.0 + IMAGE);
+        assert!(starts.len() > 3, "not enough lines beside the image");
+        assert!(
+            starts[0] < left + IMAGE / 4.0,
+            "the first line did not reach into the clear corner: {}",
+            starts[0] - left,
+        );
+        for pair in starts.windows(2) {
+            assert!(
+                pair[1] >= pair[0] - 1e-3,
+                "the prose did not follow the contour down: {pair:?}",
+            );
+        }
+        assert!(
+            starts.last().expect("a last line") > &(left + IMAGE / 2.0),
+            "the contour never pushed the prose past the image's middle",
+        );
+    }
+
+    /// Acceptance: `shape-margin` holds the prose off the contour by
+    /// the distance it asks for.
+    ///
+    /// The contour is the left half of the box, so its edge is
+    /// upright and the distance the prose moves is the margin itself.
+    /// A sloping edge is held off by at least the margin, because the
+    /// contour is read over the band grown by it.
+    #[test]
+    fn shape_margin_holds_prose_off_the_contour() {
+        let sheet = |margin: &str| {
+            format!(
+                "img {{ position: absolute; top: 0; left: 0; wrap-flow: end; \
+                 shape-outside: polygon(0 0, 50% 0, 50% 100%, 0 100%); \
+                 shape-margin: {margin} }}"
+            )
+        };
+        let blocks = || {
+            vec![section(
+                std::iter::once(image()).chain(long_prose(6)).collect(),
+            )]
+        };
+        let close = with_image(&sheet("0"), blocks());
+        let off = with_image(&sheet("18pt"), blocks());
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let (close, off) = (
+            starts_beside(&close.pages[0], 54.0 + IMAGE),
+            starts_beside(&off.pages[0], 54.0 + IMAGE),
+        );
+        assert!(!close.is_empty() && close.len() == off.len());
+        for (near, far) in close.iter().zip(&off) {
+            assert!(
+                (far - near - 18.0).abs() < 1e-3,
+                "the shape margin held the prose off by {}, not 18pt",
+                far - near,
+            );
+            assert!(
+                (near - IMAGE / 2.0 - left).abs() < 1e-3,
+                "the prose without a margin did not sit on the contour: {near}",
+            );
+        }
+    }
+
+    /// A contour is read band by band, so an image whose alpha leaves
+    /// clear space across the middle of it lets the prose set the
+    /// full measure there.
+    #[test]
+    fn prose_sets_through_a_gap_in_a_contour() {
+        let pages = traced(
+            "img { position: absolute; top: 0; left: 0; wrap-flow: end; \
+             shape-outside: auto }",
+            // Two bars, with a third of the image clear between them.
+            |_, y| !(64..128).contains(&y),
+        );
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let through: Vec<f32> = starts_beside(&pages[0], 54.0 + IMAGE)
+            .into_iter()
+            .filter(|start| (start - left).abs() < 1e-3)
+            .collect();
+        assert!(
+            !through.is_empty(),
+            "no line set through the clear space across the image",
+        );
     }
 
     /// Acceptance: an image anchored above a paragraph lands on the

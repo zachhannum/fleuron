@@ -479,6 +479,8 @@ mod tests {
                 Edge::Left => "left",
             },
             Declaration::WrapFlow(_) => "wrap-flow",
+            Declaration::ShapeOutside(_) => "shape-outside",
+            Declaration::ShapeMargin(_) => "shape-margin",
             Declaration::Margin(edge, _) => margin_of(*edge),
             Declaration::Padding(edge, _) => match edge {
                 Edge::Top => "padding-top",

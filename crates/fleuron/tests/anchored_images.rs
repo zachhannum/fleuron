@@ -1,10 +1,16 @@
 //! Property tests for anchored images: the prose keeps clear of the
 //! image, the flow terminates, and a paragraph is broken again a
 //! bounded number of times.
+//!
+//! The same properties hold where the prose keeps clear of a traced
+//! contour rather than of a box. The image those are checked over
+//! covers the leading half of every one of its rows, so its contour
+//! is exactly half its box and what the prose may reach is a
+//! rectangle rather than an arithmetic exercise.
 
 use fleuron::content::{Attributes, Block, Book, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::images::{Assets, ImageLoader};
+use fleuron::images::{Assets, Contours, ImageLoader};
 use fleuron::layout::Paginator;
 use fleuron::pages::{DrawItem, Page, Side};
 use fleuron::style::{PageQuery, Situation, StyleTree, Stylesheets};
@@ -30,6 +36,32 @@ impl ImageLoader for Png {
         bytes.extend(self.0.to_be_bytes());
         bytes.extend(self.1.to_be_bytes());
         bytes.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        Some(bytes)
+    }
+}
+
+/// An RGBA PNG whose alpha covers the leading half of every row.
+struct HalfAlpha(u32);
+
+impl ImageLoader for HalfAlpha {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        if url != "image.png" {
+            return None;
+        }
+        let side = self.0;
+        let mut pixels = Vec::with_capacity((side * side * 4) as usize);
+        for _ in 0..side {
+            for x in 0..side {
+                pixels.extend([0x22, 0x33, 0x44, if x < side / 2 { 0xFF } else { 0 }]);
+            }
+        }
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, side, side);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("the header writes");
+        writer.write_image_data(&pixels).expect("the pixels write");
+        writer.finish().expect("the file closes");
         Some(bytes)
     }
 }
@@ -133,6 +165,36 @@ fn paginate(book: &Book, css: &str, size: (u32, u32)) -> (Vec<Page>, u32) {
     let paginator = Paginator::with_assets(registry(), &styles, &assets);
     let pages = paginator.paginate(book);
     (pages, paginator.rebreaks())
+}
+
+/// The same over an image whose contour is traced from its alpha.
+fn paginate_traced(book: &Book, css: &str, side: u32) -> (Vec<Page>, u32) {
+    let styles = styles(book, css);
+    let assets = Assets::probe(book, &HalfAlpha(side));
+    let mut contours = Contours::none();
+    contours.update(book, &styles, &assets);
+    let paginator = Paginator::with_contours(registry(), &styles, &assets, &contours);
+    let pages = paginator.paginate(book);
+    (pages, paginator.rebreaks())
+}
+
+/// The leading half of every image on a page, which is what the
+/// traced contour covers.
+fn contoured(page: &Page) -> Vec<Rect> {
+    painted(page)
+        .into_iter()
+        .map(|(left, top, right, bottom)| (left, top, (left + right) / 2.0, bottom))
+        .collect()
+}
+
+/// The sheets the contour properties are checked over, which are the
+/// exclusion sheets with the contour turned on.
+fn traced_sheets() -> Vec<String> {
+    sheets()
+        .iter()
+        .take(4)
+        .map(|css| format!("{css} img {{ shape-outside: auto }}"))
+        .collect()
 }
 
 /// A rectangle: `(left, top, right, bottom)`.
@@ -280,6 +342,77 @@ proptest! {
         let (once, _) = paginate(&book, &css, (192, 192));
         let (twice, _) = paginate(&book, &css, (192, 192));
         prop_assert_eq!(once.len(), twice.len());
+        prop_assert_eq!(
+            serde_json::to_string(&once).unwrap(),
+            serde_json::to_string(&twice).unwrap(),
+        );
+    }
+
+    /// No line is set where a traced contour stands. The image's
+    /// alpha covers the leading half of it, so the prose may reach
+    /// the other half and none of this one.
+    #[test]
+    fn no_line_is_set_where_a_traced_contour_stands(book in illustrated_strategy()) {
+        for css in traced_sheets() {
+            let (pages, _) = paginate_traced(&book, &css, 192);
+            for page in &pages {
+                let contours = contoured(page);
+                for run in inked(page) {
+                    for contour in &contours {
+                        prop_assert!(
+                            !overlaps(run, *contour),
+                            "{css}\na run at {run:?} is set over the contour at {contour:?}",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every line stays inside the measure beside a contour too, and
+    /// the flow terminates.
+    #[test]
+    fn no_line_runs_past_the_measure_beside_a_contour(book in illustrated_strategy()) {
+        for css in traced_sheets() {
+            let (pages, rebreaks) = paginate_traced(&book, &css, 192);
+            let paragraphs = book.sections[0]
+                .blocks
+                .iter()
+                .filter(|block| matches!(block, Block::Paragraph { .. }))
+                .count();
+            prop_assert!(
+                rebreaks as usize <= paragraphs + pages.len(),
+                "{css}: {rebreaks} breaks over {paragraphs} paragraphs",
+            );
+            let geometry = styles(&book, &css)
+                .page(PageQuery {
+                    name: None,
+                    situation: Situation::Body(Side::Recto),
+                })
+                .geometry;
+            let left = geometry.content_origin().0;
+            let width = geometry.content_size().0;
+            for page in &pages {
+                for run in inked(page) {
+                    prop_assert!(run.0 >= left - 1.0, "{css}: a run starts at {}", run.0);
+                    prop_assert!(
+                        run.2 <= left + width + 1.0,
+                        "{css}: a run reaches {} past the measure",
+                        run.2,
+                    );
+                }
+            }
+        }
+    }
+
+    /// A book set around a traced contour lays out the same way
+    /// twice, page for page and item for item.
+    #[test]
+    fn a_contoured_book_lays_out_the_same_way_twice(book in illustrated_strategy()) {
+        let css = format!("{} img {{ shape-outside: auto; shape-margin: 4pt }}",
+            sheet("top: 0; left: 0", "end", 6.0));
+        let (once, _) = paginate_traced(&book, &css, 192);
+        let (twice, _) = paginate_traced(&book, &css, 192);
         prop_assert_eq!(
             serde_json::to_string(&once).unwrap(),
             serde_json::to_string(&twice).unwrap(),

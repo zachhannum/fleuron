@@ -801,6 +801,8 @@ pub enum Declaration {
     Position(Position),
     Inset(Edge, Option<Length>),
     WrapFlow(WrapFlow),
+    ShapeOutside(ShapeSource),
+    ShapeMargin(Length),
     Margin(Edge, Length),
     Padding(Edge, Length),
     BorderStyle(Edge, BorderStyle),
@@ -918,6 +920,86 @@ pub enum WrapFlow {
     End,
 }
 
+fn no_shape_margin(margin: &f32) -> bool {
+    *margin == 0.0
+}
+
+fn wraps_its_box(shape: &ShapeOutside) -> bool {
+    *shape == ShapeOutside::None
+}
+
+/// `shape-outside` as the sheet wrote it, before the cascade knows
+/// the font size its lengths are relative to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ShapeSource {
+    /// `none`.
+    None,
+    /// `auto`.
+    Auto,
+    /// `polygon(…)`, as pairs of written lengths.
+    Polygon(Vec<(Length, Length)>),
+}
+
+/// The contour prose sets around, from `shape-outside`.
+///
+/// A contour is the outline the text keeps clear of, in place of the
+/// box.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShapeOutside {
+    /// `none`: the prose keeps clear of the box itself.
+    None,
+    /// `auto`: the contour comes from the image's own alpha channel.
+    /// A format that carries no alpha contributes its box.
+    Auto,
+    /// `polygon(…)`: the points the sheet wrote, read against the
+    /// margin box.
+    Polygon(Vec<ShapePoint>),
+}
+
+/// One point of a `polygon()`, from the top left of the margin box.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct ShapePoint {
+    /// Across the box.
+    pub x: Coord,
+    /// Down the box.
+    pub y: Coord,
+}
+
+/// One coordinate of a shape: a length, or a fraction of the box the
+/// shape is read against.
+///
+/// `em` and `rem` are points by the time the cascade is done. A
+/// percentage is not, because the box it measures against is the
+/// image's, and the image is sized in the layout pass.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Coord {
+    /// An absolute length in points.
+    Points(f32),
+    /// A percentage of the box's own width or height.
+    Percent(f32),
+}
+
+impl Coord {
+    /// What the cascade makes of one written length: `em` and `rem`
+    /// against the font size in force, a percentage kept as one.
+    pub fn of(length: Length, size: f32, root: f32) -> Coord {
+        match length {
+            Length::Percent(percent) => Coord::Percent(percent),
+            other => Coord::Points(other.to_points(size, root)),
+        }
+    }
+
+    /// The coordinate in points, across a box `extent` wide or tall.
+    pub fn to_points(self, extent: f32) -> f32 {
+        match self {
+            Coord::Points(points) => points,
+            Coord::Percent(percent) => percent / 100.0 * extent,
+        }
+    }
+}
+
 /// One node's resolved style: what every downstream pass reads.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ComputedStyle {
@@ -985,6 +1067,13 @@ pub struct ComputedStyle {
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
+    /// The contour the prose sets around, from `shape-outside`.
+    #[serde(skip_serializing_if = "wraps_its_box")]
+    pub shape_outside: ShapeOutside,
+    /// How far the prose keeps off that contour, in points, from
+    /// `shape-margin`.
+    #[serde(skip_serializing_if = "no_shape_margin")]
+    pub shape_margin: f32,
     /// Margins in points.
     pub margin: Edges,
     /// Padding in points, between the border and the content.
@@ -1037,6 +1126,8 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             wrap_flow: WrapFlow::Auto,
+            shape_outside: ShapeOutside::None,
+            shape_margin: 0.0,
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
@@ -1064,6 +1155,8 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             wrap_flow: WrapFlow::Auto,
+            shape_outside: ShapeOutside::None,
+            shape_margin: 0.0,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -1113,6 +1206,24 @@ impl ComputedStyle {
                 }
             }
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
+            Declaration::ShapeOutside(shape) => {
+                self.shape_outside = match shape {
+                    ShapeSource::None => ShapeOutside::None,
+                    ShapeSource::Auto => ShapeOutside::Auto,
+                    ShapeSource::Polygon(points) => ShapeOutside::Polygon(
+                        points
+                            .iter()
+                            .map(|(x, y)| ShapePoint {
+                                x: Coord::of(*x, self.font_size, root_size),
+                                y: Coord::of(*y, self.font_size, root_size),
+                            })
+                            .collect(),
+                    ),
+                }
+            }
+            Declaration::ShapeMargin(length) => {
+                self.shape_margin = length.to_points(self.font_size, root_size).max(0.0)
+            }
             Declaration::Margin(edge, length) => {
                 *self.margin.edge(*edge) = length.to_points(self.font_size, root_size)
             }
@@ -1166,6 +1277,17 @@ impl ComputedStyle {
         )
     }
 
+    /// Whether prose is set around this element rather than over it:
+    /// the sheet has taken it out of the flow, and it excludes a side.
+    ///
+    /// This is the one place a contour is read, so it is also what
+    /// decides whether one is traced. An element still in the flow
+    /// takes a band of its own and nothing sets beside it, so a
+    /// contour on it would answer a question nobody asks.
+    pub fn excludes(&self) -> bool {
+        self.position == Position::Absolute && self.wrap_flow != WrapFlow::Auto
+    }
+
     /// This block's content box inside `measure`: `(leading edge, the
     /// measure its lines break to)`. Margin, border and padding come
     /// off both edges, and the leading edge moves in by what they
@@ -1210,5 +1332,39 @@ mod tests {
         assert_eq!(CounterStyle::LowerRoman.format(0), "0");
         assert_eq!(CounterStyle::LowerRoman.format(4000), "4000");
         assert_eq!(CounterStyle::LowerAlpha.format(0), "0");
+    }
+
+    /// A polygon point written as a length computes to points against
+    /// the font size in force. One written as a percentage stays a
+    /// percentage, because the box it measures against is the image's
+    /// and the image is sized in the layout pass.
+    #[test]
+    fn a_polygon_keeps_its_percentages_and_computes_its_lengths() {
+        let mut style = ComputedStyle::initial();
+        style.font_size = 10.0;
+        style.apply(
+            &Declaration::ShapeOutside(ShapeSource::Polygon(vec![
+                (Length::Em(2.0), Length::Percent(50.0)),
+                (Length::Points(3.0), Length::Rem(1.0)),
+                (Length::Percent(100.0), Length::Percent(100.0)),
+            ])),
+            10.0,
+            16.0,
+        );
+        let ShapeOutside::Polygon(points) = &style.shape_outside else {
+            panic!(
+                "the polygon did not reach the style: {:?}",
+                style.shape_outside
+            );
+        };
+        assert_eq!(points[0].x, Coord::Points(20.0));
+        assert_eq!(points[0].y, Coord::Percent(50.0));
+        assert_eq!(points[1].x, Coord::Points(3.0));
+        assert_eq!(points[1].y, Coord::Points(16.0));
+        assert_eq!(points[2].x.to_points(80.0), 80.0);
+        assert_eq!(points[2].y.to_points(40.0), 40.0);
+
+        style.apply(&Declaration::ShapeMargin(Length::Em(1.5)), 10.0, 16.0);
+        assert_eq!(style.shape_margin, 15.0);
     }
 }

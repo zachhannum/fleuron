@@ -479,6 +479,8 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `position` | `position: absolute` |
 | `top`, `right`, `bottom`, `left` | `top: 0` |
 | `wrap-flow` | `wrap-flow: end` |
+| `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
+| `shape-margin` | `shape-margin: 6pt` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -502,6 +504,8 @@ right:                auto | <length>;
 bottom:               auto | <length>;
 left:                 auto | <length>;
 wrap-flow:            auto | both | start | end;
+shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
+shape-margin:         <length> | <percentage>;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -606,11 +610,11 @@ hr {
 
 You can put an image against the page rather than among the paragraphs. The text then wraps around it.
 
-`position: absolute` takes the image out of the text. The insets say where on the page it goes. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
+`position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
 
-The image keeps the size its own file gives it. The engine scales it down where that size does not fit the content box. The margins of the image are the space it keeps clear of the text.
+The image keeps the size its own file gives it. If that size does not fit the content box, the engine makes the image smaller. Margins on the image add space between it and the text.
 
-`wrap-flow` says which side of the image the text wraps on.
+Use `wrap-flow` to choose the side of the image the text wraps on.
 
 | value | what goes beside the image |
 |---|---|
@@ -619,7 +623,7 @@ The image keeps the size its own file gives it. The engine scales it down where 
 | `end` | the side a line ends at |
 | `both` | both sides |
 
-This example puts an image in the top right corner of the page it lands on. The text of that page wraps down the left side of the image.
+The following example puts an image in the top right corner of the page it lands on. The text of that page wraps down the left side of the image.
 
 ```css
 img {
@@ -635,6 +639,51 @@ img {
 The place where you write an image decides which page it lands on. An image written above a paragraph lands on the page that the paragraph starts on, and it takes up no room of its own. An image written a line or two from a page break is different. It can land on the page before or after the paragraph you wrote it beside.
 
 The engine shortens every line the image reaches to the space the image leaves. The lines under the image run the full width. Where the image covers the full width, the text continues below it.
+
+### Wrapping to the shape of an image
+
+`shape-outside` wraps the text around the shape of an image instead of around its box. That outline is called a contour.
+
+A contour works only on an image you put against the page with a `wrap-flow` other than `auto`. Those are the only images that text goes beside.
+
+| value | the shape the text goes around |
+|---|---|
+| `none` | the box, which is the default |
+| `auto` | the shape the image's own alpha channel covers |
+| `polygon(…)` | the points you write |
+
+`polygon()` takes pairs of lengths, one pair to a point, separated by commas. The first of a pair measures across the box, and the second measures down it. A percentage measures against the box. The polygon closes itself, so you write at least three points.
+
+The following example wraps the text down a diagonal, from the top left corner of the image to its bottom right:
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  wrap-flow: end;
+  shape-outside: polygon(0 0, 100% 100%, 0 100%);
+}
+```
+
+`auto` takes the shape from the image's own alpha channel. PNG, GIF and WebP carry one. JPEG does not, and neither does a PNG saved without transparency. Where there is no alpha channel, the text goes around the box instead, and the engine warns you.
+
+`shape-margin` adds space between the contour and the text. Margins on the image do not, because a contour replaces the box they surround. Use `shape-margin` instead. An upright edge gets exactly the space you ask for, and a sloping edge gets at least that much.
+
+The following example wraps the text around the shape the image's own alpha channel covers, with 9pt of space between them:
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  wrap-flow: end;
+  shape-outside: auto;
+  shape-margin: 9pt;
+}
+```
+
+The text wraps to the contour one line at a time. A line goes either beside the image or below it. Where the contour leaves a whole line's height empty across the image, that line runs the full width.
 
 ## Chapter openings
 
@@ -832,6 +881,7 @@ code { font-family: monospace }
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
 | positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
+| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
