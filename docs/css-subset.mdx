@@ -479,6 +479,8 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `position` | `position: absolute` |
 | `top`, `right`, `bottom`, `left` | `top: 0` |
 | `wrap-flow` | `wrap-flow: end` |
+| `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
+| `shape-margin` | `shape-margin: 6pt` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -502,6 +504,8 @@ right:                auto | <length>;
 bottom:               auto | <length>;
 left:                 auto | <length>;
 wrap-flow:            auto | both | start | end;
+shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
+shape-margin:         <length> | <percentage>;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -832,6 +836,7 @@ code { font-family: monospace }
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
 | positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
+| contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on anything but an image |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |

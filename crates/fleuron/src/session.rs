@@ -43,8 +43,8 @@ use crate::lines::Patterns;
 use crate::pages::{DrawItem, Folios};
 use crate::pdf::{self, PdfError};
 use crate::style::{
-    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, Position, StyleTree,
-    Stylesheets,
+    ColumnRule, Columns, ComputedStyle, Content, Coord, Edges, PageGeometry, Position,
+    ShapeOutside, StyleTree, Stylesheets,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -760,6 +760,8 @@ impl Against {
             any = true;
             style.position.hash(&mut anchored);
             style.wrap_flow.hash(&mut anchored);
+            hash_shape(&style.shape_outside, &mut anchored);
+            style.shape_margin.to_bits().hash(&mut anchored);
             for inset in [
                 style.inset.top,
                 style.inset.right,
@@ -1095,6 +1097,8 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         position,
         inset: _,
         wrap_flow: _,
+        shape_outside: _,
+        shape_margin: _,
         margin,
         padding,
         border,
@@ -1138,6 +1142,26 @@ fn hash_geometry(geometry: PageGeometry, h: &mut DefaultHasher) {
     (count, width.map(f32::to_bits), gap.to_bits()).hash(h);
     let ColumnRule { style, width } = rule;
     (style, width.to_bits()).hash(h);
+}
+
+/// What one contour is: which of the three `shape-outside` says, and
+/// the points where it says a polygon.
+fn hash_shape(shape: &ShapeOutside, h: &mut DefaultHasher) {
+    match shape {
+        ShapeOutside::None => 0u8.hash(h),
+        ShapeOutside::Auto => 1u8.hash(h),
+        ShapeOutside::Polygon(points) => {
+            2u8.hash(h);
+            for point in points {
+                for coord in [point.x, point.y] {
+                    match coord {
+                        Coord::Points(points) => (0u8, points.to_bits()).hash(h),
+                        Coord::Percent(percent) => (1u8, percent.to_bits()).hash(h),
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn hash_edges(edges: Edges, h: &mut DefaultHasher) {

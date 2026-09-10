@@ -37,9 +37,10 @@ use crate::pages::Side;
 
 pub use properties::{
     Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, Columns,
-    ComputedStyle, Content, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens,
-    Inset, Length, LineHeight, MarginBox, PageGeometry, Position, StringPiece, StringSet,
-    TextAlign, TextJustify, TextTransform, WrapFlow,
+    ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps,
+    Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position, ShapeOutside,
+    ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
+    WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
