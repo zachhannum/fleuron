@@ -346,7 +346,7 @@ mod tests {
         let warnings = session.preview().warnings.clone();
         let complaints: Vec<&Warning> = warnings
             .iter()
-            .filter(|warning| warning.message.contains("no alpha channel"))
+            .filter(|warning| warning.message.contains("Missing alpha channel"))
             .collect();
         assert_eq!(complaints.len(), 1, "{warnings:?}");
         assert!(complaints[0].message.contains("pic.gif"));

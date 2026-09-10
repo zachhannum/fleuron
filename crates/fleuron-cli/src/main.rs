@@ -250,7 +250,7 @@ impl Summary {
         report_warnings(&self.warnings);
         if !self.warnings.is_empty() {
             eprintln!(
-                "fleuron: {} warning{}; the PDF was written anyway",
+                "fleuron: {} warning{}. The PDF was written anyway.",
                 self.warnings.len(),
                 if self.warnings.len() == 1 { "" } else { "s" },
             );

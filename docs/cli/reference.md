@@ -69,9 +69,9 @@ fleuron: manuscript.md → book.pdf: 333 pages
 Then each warning, prefixed with its origin when it has one:
 
 ```text
-fleuron: warning: house.css:14:3: unsupported property: color
-fleuron: warning: chapter-03.md:88:1: family "House Sans" resolved nothing
-fleuron: 2 warnings; the PDF was written anyway
+fleuron: warning: house.css:14:3: Unsupported property `color`. The declaration is ignored.
+fleuron: warning: chapter-03.md:88:1: Tables are not supported. Falling back to one paragraph per cell.
+fleuron: 2 warnings. The PDF was written anyway.
 ```
 
 The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.

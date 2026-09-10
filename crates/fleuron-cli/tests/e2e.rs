@@ -128,7 +128,7 @@ fn unsupported_css_is_reported_and_the_run_continues() {
     let sheet = write_sheet("unsupported", "p {\n  text-shadow: 0 0 2px black;\n}\n");
     let (pdf, stderr) = render("warned", &[sheet.as_path()]);
     assert!(
-        stderr.contains("unsupported property `text-shadow`"),
+        stderr.contains("Unsupported property `text-shadow`. The declaration is ignored."),
         "no diagnostic for text-shadow: {stderr}",
     );
     assert!(stderr.contains(":2:3"), "no source position: {stderr}");
@@ -718,7 +718,7 @@ fn font_faces_resolve_through_the_host_and_say_when_they_cannot() {
     );
     let (pdf, stderr) = render("face-missing", &[missing.as_path()]);
     assert!(
-        stderr.contains("no source resolved"),
+        stderr.contains("No src url loaded for Nowhere."),
         "an unresolved face should say so: {stderr}",
     );
     assert_eq!(
@@ -1064,7 +1064,8 @@ fn several_markdown_files_compose_in_argument_order() {
         .collect();
     assert_eq!(warnings.len(), 1, "{stderr}");
     assert!(
-        warnings[0].contains("compose-two.md:5:1") && warnings[0].contains("a list"),
+        warnings[0].contains("compose-two.md:5:1")
+            && warnings[0].contains("Lists are not supported"),
         "the diagnostic names the wrong source: {}",
         warnings[0],
     );

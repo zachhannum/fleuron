@@ -515,7 +515,10 @@ fn register_face(
                     Ok(_) => warnings,
                     Err(error) => {
                         warnings.push(Warning {
-                            message: format!("@font-face {}: {error}", face.family),
+                            message: format!(
+                                "{} was not registered: {error}. {FALLBACK}",
+                                face.family
+                            ),
                             origin: Some(url.clone()),
                         });
                         warnings
@@ -523,20 +526,21 @@ fn register_face(
                 };
             }
             Err(error) => warnings.push(Warning {
-                message: format!("@font-face {}: {error}", face.family),
+                message: format!("{} was not registered: {error}. {FALLBACK}", face.family),
                 origin: Some(url.clone()),
             }),
         }
     }
     warnings.push(Warning {
-        message: format!(
-            "@font-face {}: no source resolved; text falls back to a registered face",
-            face.family
-        ),
+        message: format!("No src url loaded for {}. {FALLBACK}", face.family),
         origin: None,
     });
     warnings
 }
+
+/// What happens to text that asked for a face the registry has not
+/// got.
+const FALLBACK: &str = "Falling back to another registered font.";
 
 /// What a `@font-face` declared its source to be. A sheet that
 /// declares neither slope nor weight is naming a family, not a cut,
@@ -737,7 +741,7 @@ fn claim<'a>(
     };
     match first.get(id) {
         Some(taken) => warnings.push(Warning {
-            message: format!("id `{id}` is written twice, at {taken} and {at}"),
+            message: format!("Id `{id}` is duplicated. Applied at {taken}."),
             origin: Some(at),
         }),
         None => {
@@ -877,9 +881,10 @@ fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> (u16, Option<
         };
         let warning = (found.attributes.italic != want.italic).then(|| Warning {
             message: format!(
-                "{} has no {} face; {} used instead",
+                "{} has no {} face. {} text falls back to {}.",
                 name.unwrap_or_default(),
                 slope(want.italic),
+                sentence(slope(want.italic)),
                 slope(found.attributes.italic),
             ),
             origin: None,
@@ -890,7 +895,7 @@ fn resolve_face(style: &ComputedStyle, registry: &FontRegistry) -> (u16, Option<
         0,
         Some(Warning {
             message: format!(
-                "no registered family matches {}; the first registered face used instead",
+                "No registered font matches {}. The first registered font is used instead.",
                 stack(&style.font_family),
             ),
             origin: None,
@@ -905,7 +910,7 @@ fn synthesized_small_caps(style: &ComputedStyle, registry: &FontRegistry) -> Opt
     let asked = style.font_variant_caps == FontVariantCaps::SmallCaps;
     (asked && !registry.has_small_caps(style.font_id)).then(|| Warning {
         message: format!(
-            "{} has no small capitals; reduced capitals used instead",
+            "{} has no small capitals. Falling back to reduced capitals.",
             registry
                 .font_ref(style.font_id)
                 .map(|entry| entry.family.clone())
@@ -916,6 +921,15 @@ fn synthesized_small_caps(style: &ComputedStyle, registry: &FontRegistry) -> Opt
 }
 
 /// A slope as a stylesheet names it.
+/// A slope at the head of a sentence.
+fn sentence(slope: &str) -> String {
+    let mut opens = slope.chars();
+    match opens.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + opens.as_str(),
+        None => String::new(),
+    }
+}
+
 fn slope(italic: bool) -> &'static str {
     if italic { "italic" } else { "upright" }
 }
@@ -1092,8 +1106,8 @@ mod tests {
     }
 
     /// An id names one element, so a second element under it is a
-    /// mistake. Both still match: the sheet reaches two, and the
-    /// warning names both places.
+    /// mistake. Both still match: the sheet reaches two, the origin
+    /// is the second, and the message names the first.
     #[test]
     fn an_id_written_twice_warns_naming_both_places() {
         let mut book = images();
@@ -1124,12 +1138,11 @@ mod tests {
             .filter(|warning| warning.message.contains("frontispiece"))
             .collect();
         assert_eq!(repeated.len(), 1, "{:?}", tree.warnings());
-        assert!(
-            repeated[0].message.contains("chapter-01.md:3:1")
-                && repeated[0].message.contains("chapter-01.md:12:1"),
-            "{:?}",
-            repeated[0],
+        assert_eq!(
+            repeated[0].message,
+            "Id `frontispiece` is duplicated. Applied at chapter-01.md:3:1.",
         );
+        assert_eq!(repeated[0].origin.as_deref(), Some("chapter-01.md:12:1"));
     }
 
     /// The built-in sheet sets the body, chapter and folio styles, and
@@ -1288,7 +1301,10 @@ mod tests {
             .iter()
             .find(|warning| warning.message.contains("text-shadow"))
             .expect("text-shadow is outside the subset");
-        assert_eq!(warning.message, "unsupported property `text-shadow`");
+        assert_eq!(
+            warning.message,
+            "Unsupported property `text-shadow`. The declaration is ignored."
+        );
         assert_eq!(warning.origin.as_deref(), Some("author.css:2:3"));
         assert_eq!(
             first(&tree, "p").font_size,
@@ -1317,19 +1333,21 @@ mod tests {
             .map(|warning| warning.message.as_str())
             .collect();
         assert!(
-            messages.contains(&"unsupported at-rule `@media`"),
+            messages.contains(&"Unsupported at-rule `@media`. The rule is ignored."),
             "{messages:?}"
         );
         assert!(
-            messages.contains(&"unsupported selector `:hover`"),
+            messages.contains(&"Unsupported selector `:hover`. The rule is ignored."),
             "{messages:?}"
         );
         assert!(
-            messages.contains(&"unsupported value for `text-align`"),
+            messages.contains(&"Unsupported value for `text-align`. The declaration is ignored."),
             "{messages:?}"
         );
         assert!(
-            messages.contains(&"unsupported value for `hanging-punctuation`"),
+            messages.contains(
+                &"Unsupported value for `hanging-punctuation`. The declaration is ignored."
+            ),
             "{messages:?}"
         );
         assert!(
@@ -1432,9 +1450,8 @@ mod tests {
             "@page { @bottom-center { content: counter(page, georgian) } }",
         );
         assert!(
-            tree.warnings()
-                .iter()
-                .any(|warning| warning.message == "unsupported value for `content`"),
+            tree.warnings().iter().any(|warning| warning.message
+                == "Unsupported value for `content`. The declaration is ignored."),
             "{:?}",
             tree.warnings(),
         );
@@ -1536,7 +1553,7 @@ mod tests {
         assert!(
             tree.warnings()
                 .iter()
-                .any(|w| w.message.contains("no source resolved"))
+                .any(|w| w.message.contains("No src url loaded"))
         );
     }
 
@@ -1847,7 +1864,8 @@ mod tests {
         assert!(
             tree.warnings()
                 .iter()
-                .any(|warning| warning.message == "unsupported selector `:before`"),
+                .any(|warning| warning.message
+                    == "Unsupported selector `:before`. The rule is ignored."),
             "{:?}",
             tree.warnings(),
         );
@@ -1904,7 +1922,8 @@ mod tests {
         );
         assert!(
             tree.warnings().iter().any(|warning| {
-                warning.message == "unsupported property `font-family` on `::first-line`"
+                warning.message
+                    == "`font-family` is not supported on `::first-line`. The declaration is ignored."
             }),
             "{:?}",
             tree.warnings(),
@@ -2008,7 +2027,7 @@ mod tests {
             .collect();
         assert_eq!(
             complaints,
-            vec!["eb garamond has no italic face; upright used instead"],
+            vec!["eb garamond has no italic face. Italic text falls back to upright."],
         );
 
         // A stack that resolves nothing at all says so, and the book
@@ -2018,8 +2037,8 @@ mod tests {
         assert!(
             tree.warnings().iter().any(|warning| {
                 warning.message
-                    == "no registered family matches Nowhere, Nor here; \
-                                    the first registered face used instead"
+                    == "No registered font matches Nowhere, Nor here. \
+                        The first registered font is used instead."
             }),
             "{:?}",
             tree.warnings(),
@@ -2075,9 +2094,10 @@ mod tests {
         // A value none of the three has is a diagnostic, not a rule.
         let tree = compile(&book, "p { text-transform: full-width }");
         assert!(
-            tree.warnings()
-                .iter()
-                .any(|warning| { warning.message == "unsupported value for `text-transform`" }),
+            tree.warnings().iter().any(|warning| {
+                warning.message
+                    == "Unsupported value for `text-transform`. The declaration is ignored."
+            }),
             "{:?}",
             tree.warnings(),
         );
@@ -2111,9 +2131,8 @@ mod tests {
         for css in ["p { color: octarine }", "p { color: rgb(10, 20%, 30) }"] {
             let tree = compile(&book, css);
             assert!(
-                tree.warnings()
-                    .iter()
-                    .any(|warning| warning.message == "unsupported value for `color`"),
+                tree.warnings().iter().any(|warning| warning.message
+                    == "Unsupported value for `color`. The declaration is ignored."),
                 "{css}: {:?}",
                 tree.warnings(),
             );
@@ -2173,7 +2192,7 @@ mod tests {
             .collect();
         assert_eq!(
             complaints,
-            vec!["eb garamond has no small capitals; reduced capitals used instead"],
+            vec!["eb garamond has no small capitals. Falling back to reduced capitals."],
         );
 
         let tree = compile(&book, css);

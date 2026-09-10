@@ -440,7 +440,7 @@ impl Builder<'_, '_> {
         }
         if height > available {
             self.paginator.warn(
-                format!("image {url} is taller than the content box; scaled to fit"),
+                format!("Image {url} is taller than the page. It is scaled to fit."),
                 (!origin.is_empty()).then_some(origin),
             );
             width = scale(width, height, available);
@@ -1147,7 +1147,7 @@ mod tests {
             .iter()
             .find(|warning| warning.message.contains("tall.png"))
             .expect("scaling an image to fit is worth saying");
-        assert!(warning.message.contains("taller than the content box"));
+        assert!(warning.message.contains("is taller than the page"));
         assert_eq!(warning.origin.as_deref(), Some("9:1"));
         assert!(
             !output

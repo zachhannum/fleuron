@@ -238,33 +238,41 @@ impl TopLevel {
     }
 }
 
+/// What happens to a declaration the parser refuses.
+const IGNORED_DECLARATION: &str = "The declaration is ignored.";
+
+/// What happens to a rule the parser refuses.
+const IGNORED_RULE: &str = "The rule is ignored.";
+
 /// One parse error as the diagnostic a reader can act on: what the
 /// engine did not understand, and where it was written.
 pub fn warning(sheet: &str, error: &ParseError<'_, StyleError<'_>>) -> Warning {
     let message = match &error.kind {
         ParseErrorKind::Custom(StyleError::UnsupportedProperty(name)) => {
-            format!("unsupported property `{name}`")
+            format!("Unsupported property `{name}`. {IGNORED_DECLARATION}")
         }
         ParseErrorKind::Custom(StyleError::NotOnFirstLine(name)) => {
-            format!("unsupported property `{name}` on `::first-line`")
+            format!("`{name}` is not supported on `::first-line`. {IGNORED_DECLARATION}")
         }
         ParseErrorKind::Custom(StyleError::UnsupportedValue(name)) => {
-            format!("unsupported value for `{name}`")
+            format!("Unsupported value for `{name}`. {IGNORED_DECLARATION}")
         }
         ParseErrorKind::Custom(StyleError::UnsupportedAtRule(name)) => {
-            format!("unsupported at-rule `@{name}`")
+            format!("Unsupported at-rule `@{name}`. {IGNORED_RULE}")
         }
         ParseErrorKind::Custom(StyleError::UnsupportedPageSelector) => {
-            "unsupported `@page` selector".to_string()
+            format!("Unsupported `@page` selector. {IGNORED_RULE}")
         }
         ParseErrorKind::Custom(StyleError::Selector(
             SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
-        )) => format!("unsupported selector `:{name}`"),
-        ParseErrorKind::Custom(StyleError::Selector(_)) => "unsupported selector".to_string(),
-        ParseErrorKind::Basic(BasicParseErrorKind::AtRuleInvalid(name)) => {
-            format!("unsupported at-rule `@{name}`")
+        )) => format!("Unsupported selector `:{name}`. {IGNORED_RULE}"),
+        ParseErrorKind::Custom(StyleError::Selector(_)) => {
+            format!("Unsupported selector. {IGNORED_RULE}")
         }
-        ParseErrorKind::Basic(_) => "malformed CSS, skipped".to_string(),
+        ParseErrorKind::Basic(BasicParseErrorKind::AtRuleInvalid(name)) => {
+            format!("Unsupported at-rule `@{name}`. {IGNORED_RULE}")
+        }
+        ParseErrorKind::Basic(_) => format!("Malformed CSS. {IGNORED_DECLARATION}"),
     };
     Warning {
         message,
