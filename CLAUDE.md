@@ -166,12 +166,31 @@ the lockfiles that mirror all of it.
 
 ## Documentation rules
 
-`STYLE.md` is the voice the docs, the README, and the npm READMEs are
-written in: Simplified English, in the spirit of ASD-STE100. Short
-sentences, active voice, simple tenses, and one word for one meaning.
-Its before-and-after pairs come from edits made to finished pages, so
-they are the samples to match. Read them before writing prose, and
-read a draft against them after.
+Editing `docs/`, `README.md`, `crates/fleuron-wasm/npm/README.md` or
+`packages/react/README.md` means reading `STYLE.md` first, whole, in
+the same turn as the edit. Matching the prose already on the page is
+not a substitute: a page can be wrong, and the guide carries rules no
+paragraph on the page happens to exercise. Read the draft against it
+again before committing.
+
+`STYLE.md` is the voice those pages are written in: Simplified
+English, in the spirit of ASD-STE100. Short sentences, active voice,
+simple tenses, and one word for one meaning. Its before-and-after
+pairs come from edits made to finished pages, so they are the samples
+to match.
+
+Four to carry into a draft, which do not replace reading the file:
+
+- No personification. A property, a file or a warning does not say,
+  know, want or announce anything. `wrap-flow` does not say which
+  side of the image the text wraps on.
+- No implementation detail. What a thing does belongs to the reader.
+  How the engine does it does not. When a decode happens, what a
+  stage caches, and what a band is are all off the page.
+- `ink`, `paints`, `sets`, `the flow`, `trim`, `leaf`, `measure` and
+  `sink` are flowery, not technical.
+- No em dashes, no semicolons, no contractions, and no `should`,
+  `may`, `might` or `could`.
 
 **Code comments**
 
