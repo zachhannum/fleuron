@@ -401,7 +401,7 @@ fn the_styled_book_paints_a_box_around_its_quotation() {
     // And the same ink reaches the PDF: the tint behind the quotation
     // and the rule around it are both filled there.
     let (pdf, _) = render("box", &[&styled_sheet()]);
-    let Some(filled) = fill_colours(&pdf) else {
+    let Some(filled) = content_streams(&pdf) else {
         return;
     };
     for color in [TINT, INK] {
@@ -568,7 +568,7 @@ fn channel(value: u8) -> String {
 
 /// A PDF's content streams, uncompressed, or `None` when `qpdf` is
 /// not installed.
-fn fill_colours(pdf: &Path) -> Option<String> {
+fn content_streams(pdf: &Path) -> Option<String> {
     let expanded = pdf.with_extension("qdf.pdf");
     let run = tool(
         "qpdf",
@@ -899,7 +899,7 @@ fn the_column_rule_reaches_the_display_structure_and_the_pdf() {
     // starts at the corner the display structure put the rule at.
     let sheet = write_sheet("columns-rule", COLUMNS_CSS);
     let (pdf, _) = render("columns-rule", &[&sheet]);
-    let Some(written) = fill_colours(&pdf) else {
+    let Some(written) = content_streams(&pdf) else {
         return;
     };
     let (x, y, ..) = pages
@@ -911,6 +911,201 @@ fn the_column_rule_reaches_the_display_structure_and_the_pdf() {
         written.contains(&corner),
         "the PDF paints no rule at {corner}",
     );
+}
+
+/// The same page box with the map set against its leading edge: one
+/// rectangle over the whole of the first column and the head of the
+/// second, with the prose of each column set around its own side of
+/// it.
+const COLUMNS_WRAPPED_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n}\n\n.map {\n  position: absolute;\n  top: 0;\n  left: 0;\n  margin: 6pt;\n  wrap-flow: both;\n}\n";
+
+/// Acceptance: the preview and the export agree over a two-column
+/// page with the prose wrapped around an image.
+///
+/// The preview paints from the display structure, so what the two
+/// have to agree about is where every run and every image goes. The
+/// PDF names each of them once: a text matrix before a run, and an
+/// image matrix before an image, both read back in the display
+/// structure's own coordinates.
+#[test]
+fn a_two_column_wrapped_page_paints_the_same_in_the_preview_and_the_pdf() {
+    let (pages, styles) = wrapped_column_pages();
+    let (index, image) = pages
+        .iter()
+        .enumerate()
+        .find_map(|(index, page)| {
+            page.items.iter().find_map(|item| match item {
+                DrawItem::Image { x, y, w, h, .. } => Some((index, (*x, *y, *w, *h))),
+                _ => None,
+            })
+        })
+        .expect("the map is placed");
+    let page = &pages[index];
+    let geometry = wrapped_geometry(&styles, page);
+    assert_eq!(geometry.column_count(), 2);
+    let (x, y, w, h) = image;
+    let measure = geometry.measure();
+    let second = geometry.column_origin(1).0;
+
+    // The rectangle covers the first column and the head of the
+    // second, so the first column is set under it and the second
+    // beside it.
+    assert!(x + w > second, "the map reaches no second column");
+    assert!(x + w < second + measure, "the map covers both columns");
+    let mut under = 0;
+    let mut beside = 0;
+    for item in &page.items {
+        let DrawItem::Text {
+            x: at, y: baseline, ..
+        } = item
+        else {
+            continue;
+        };
+        if *baseline > y && *baseline <= y + h {
+            assert!(
+                *at >= x + w - 1e-3,
+                "a line at {baseline} starts at {at}, over the map",
+            );
+            beside += 1;
+        }
+        if *baseline > y + h && *at < second {
+            under += 1;
+        }
+    }
+    assert!(beside > 0, "no line is set beside the map");
+    assert!(under > 0, "the first column set nothing under the map");
+
+    // The export puts the same runs and the same images at the same
+    // points as the display structure the preview paints from.
+    let sheet = write_sheet("columns-wrapped", COLUMNS_WRAPPED_CSS);
+    let (pdf, _) = render("columns-wrapped", &[&sheet]);
+    let Some(streams) = content_streams(&pdf) else {
+        return;
+    };
+    let height = page.height;
+    assert!(
+        pages.iter().all(|page| page.height == height),
+        "the pages are not one size, so one flip does not undo them all",
+    );
+    let painted: Vec<(f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+    let written = placed_runs(&streams);
+    assert!(written.len() > 100, "the PDF writes {} runs", written.len());
+    assert_eq!(
+        painted.len(),
+        written.len(),
+        "the preview paints {} runs and the PDF writes {}",
+        painted.len(),
+        written.len(),
+    );
+    for (index, (paints, writes)) in painted.iter().zip(&written).enumerate() {
+        assert!(
+            (paints.0 - writes.0).abs() < 1e-3 && (paints.1 - writes.1).abs() < 1e-3,
+            "run {index}: the preview paints it at {paints:?} and the PDF at {writes:?}",
+        );
+    }
+    let boxes: Vec<(f32, f32, f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+            _ => None,
+        })
+        .collect();
+    let placed = placed_images(&streams, height);
+    assert_eq!(boxes.len(), 2, "the fixture book has a map and an ornament");
+    assert_eq!(boxes.len(), placed.len(), "the two disagree about how many");
+    for (index, (paints, writes)) in boxes.iter().zip(&placed).enumerate() {
+        for (paints, writes) in [
+            (paints.0, writes.0),
+            (paints.1, writes.1),
+            (paints.2, writes.2),
+            (paints.3, writes.3),
+        ] {
+            assert!(
+                (paints - writes).abs() < 1e-3,
+                "image {index}: the preview paints {paints:?} and the PDF writes {writes:?}",
+            );
+        }
+    }
+}
+
+/// Every text run a PDF places, as `(x, baseline)` in the display
+/// structure's own coordinates, in the order the writer wrote them.
+///
+/// The writer flips the page once and then sets one text matrix
+/// before each run, so the matrix names the point the display
+/// structure named.
+fn placed_runs(streams: &str) -> Vec<(f32, f32)> {
+    streams
+        .lines()
+        .filter_map(|line| line.trim().strip_suffix(" Tm")?.strip_prefix("1 0 0 -1 "))
+        .filter_map(|matrix| {
+            let (x, y) = matrix.split_once(' ')?;
+            Some((x.parse().ok()?, y.parse().ok()?))
+        })
+        .collect()
+}
+
+/// Every image a PDF places, as `(x, y, width, height)` in the same
+/// coordinates, in the same order.
+///
+/// An image matrix scales as well as it translates, which is what
+/// tells one from the flip the page opens with.
+fn placed_images(streams: &str, height: f32) -> Vec<(f32, f32, f32, f32)> {
+    streams
+        .lines()
+        .filter_map(|line| line.trim().strip_suffix(" cm"))
+        .filter_map(|matrix| {
+            let values: Vec<f32> = matrix
+                .split(' ')
+                .map(|value| value.parse().ok())
+                .collect::<Option<_>>()?;
+            let [a, b, c, d, x, up] = values[..] else {
+                return None;
+            };
+            (b == 0.0 && c == 0.0 && a > 0.0 && d > 0.0).then_some((x, height - up - d, a, d))
+        })
+        .collect()
+}
+
+/// The fixture book on a divided page box with the map against it,
+/// the way the CLI lays it out under the same sheet.
+fn wrapped_column_pages() -> (Vec<Page>, fleuron::style::StyleTree) {
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let book = fixture_book();
+    let sheets = fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
+        "columns-wrapped.css",
+        COLUMNS_WRAPPED_CSS,
+    )]);
+    let styles = sheets.compile(&book, &registry);
+    assert!(
+        styles.warnings().is_empty(),
+        "the sheet is in the subset: {:?}",
+        styles.warnings(),
+    );
+    let assets = Assets::probe(&book, &Beside);
+    let pages = fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages;
+    (pages, styles)
+}
+
+/// The page box one page of that run resolves to.
+fn wrapped_geometry(
+    styles: &fleuron::style::StyleTree,
+    page: &Page,
+) -> fleuron::style::PageGeometry {
+    styles
+        .page(fleuron::style::PageQuery {
+            name: Some("chapter"),
+            situation: fleuron::style::Situation::Body(page.side),
+        })
+        .geometry
 }
 
 /// The fixture book laid out in two columns, the way the CLI lays it
