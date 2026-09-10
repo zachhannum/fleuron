@@ -642,7 +642,7 @@ The engine shortens every line the image reaches to the space the image leaves. 
 
 ### Wrapping to the shape of an image
 
-`shape-outside` sets the text around the shape of an image rather than around its box. A contour is the outline the text keeps clear of.
+`shape-outside` sets the text around the shape of an image rather than around its box. A contour is the outline the text keeps clear of. It applies to an image the sheet has put against the page and given a `wrap-flow` other than `auto`, because that is the only place text sets beside an image.
 
 | value | the outline the text keeps clear of |
 |---|---|
@@ -662,7 +662,7 @@ img {
 }
 ```
 
-`auto` reads the shape from the file. The engine decodes the image to do it, and it decodes no image that no rule asks it to. PNG, GIF and WebP carry an alpha channel. JPEG does not, and an image the engine finds no alpha in keeps the text clear of its box.
+`auto` reads the shape from the file. The engine decodes the image to do it, and it decodes no image that no rule asks it to. An image the sheet leaves among the paragraphs is never decoded, whatever `shape-outside` says about it. PNG, GIF and WebP carry an alpha channel. JPEG does not, and an image the engine finds no alpha in keeps the text clear of its box.
 
 `shape-margin` holds the text off the contour by a distance. The engine reads the contour over the band the margin grows, so a sloping edge holds the text off by at least the distance you ask for.
 

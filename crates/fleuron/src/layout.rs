@@ -468,6 +468,11 @@ impl<'a> Paginator<'a> {
     /// contributes its box. A polygon is read against the whole box,
     /// margins and all, which is what a percentage in it measures.
     fn shape(&self, style: &ComputedStyle, asset: u32, size: (f32, f32)) -> Option<Shape> {
+        // The one predicate the trace stage keys on as well, so that
+        // what is traced and what is read cannot drift apart.
+        if !style.excludes() {
+            return None;
+        }
         let margin = style.margin;
         let (width, height) = size;
         let rings = match &style.shape_outside {

@@ -855,9 +855,14 @@ struct Prints {
 
 impl Prints {
     fn of(styles: &StyleTree, images: bool) -> Prints {
+        // Both halves of what the stage keys on: which nodes name a
+        // contour, and which of them the flow reads one for. A sheet
+        // that anchors an image already asking for `auto` reaches the
+        // stage through the second.
         let mut trace = DefaultHasher::new();
         for style in styles.styles() {
             hash_shape(&style.shape_outside, &mut trace);
+            style.excludes().hash(&mut trace);
         }
         hash_nodes(styles, &mut trace);
 
@@ -1368,6 +1373,37 @@ mod tests {
         session.set_content(book_with_image("plate.png"));
         session.add_image("plate.png", alpha_png(0x22)).unwrap();
         session
+    }
+
+    /// An image the sheet leaves in the flow is not decoded, however
+    /// the sheet names its contour. Nothing sets beside such an
+    /// image, so a contour on it would answer a question nobody
+    /// asks, and the run says nothing about it either.
+    #[test]
+    fn an_image_left_in_the_flow_is_not_traced() {
+        for css in [
+            "img { shape-outside: auto }",
+            "img { shape-outside: auto; wrap-flow: end }",
+            "img { shape-outside: auto; position: absolute; wrap-flow: auto }",
+        ] {
+            let mut session = illustrated();
+            session.set_style(sheets(css));
+            let warnings = session.preview().warnings.clone();
+            assert_eq!(session.stages().trace, 0, "{css} decoded an image");
+            assert!(
+                !warnings.iter().any(|w| w.message.contains("alpha")),
+                "{css} complained: {warnings:?}",
+            );
+        }
+
+        // Anchored, and setting prose on one side of it, the same
+        // image is traced once.
+        let mut session = illustrated();
+        session.set_style(sheets(
+            "img { shape-outside: auto; position: absolute; wrap-flow: end }",
+        ));
+        session.preview();
+        assert_eq!(session.stages().trace, 1);
     }
 
     /// Acceptance: a book whose sheet names no contour decodes

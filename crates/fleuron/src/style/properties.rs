@@ -1277,6 +1277,17 @@ impl ComputedStyle {
         )
     }
 
+    /// Whether prose is set around this element rather than over it:
+    /// the sheet has taken it out of the flow, and it excludes a side.
+    ///
+    /// This is the one place a contour is read, so it is also what
+    /// decides whether one is traced. An element still in the flow
+    /// takes a band of its own and nothing sets beside it, so a
+    /// contour on it would answer a question nobody asks.
+    pub fn excludes(&self) -> bool {
+        self.position == Position::Absolute && self.wrap_flow != WrapFlow::Auto
+    }
+
     /// This block's content box inside `measure`: `(leading edge, the
     /// measure its lines break to)`. Margin, border and padding come
     /// off both edges, and the leading edge moves in by what they

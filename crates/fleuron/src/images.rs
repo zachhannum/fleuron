@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Warning;
 use crate::content::{Block, Book};
-use crate::style::{ShapeOutside, StyleTree};
+use crate::style::{ComputedStyle, ShapeOutside, StyleTree};
 
 /// Resolves image urls to bytes.
 ///
@@ -313,6 +313,15 @@ pub struct Contours {
     warnings: Vec<Warning>,
 }
 
+/// Whether one node's styling asks for a contour the flow can read.
+///
+/// Both halves matter. A sheet that names `auto` on an element it
+/// leaves in the flow asks for a contour nothing sets beside, and an
+/// image is not decoded to answer that.
+fn traceable(style: &ComputedStyle) -> bool {
+    style.shape_outside == ShapeOutside::Auto && style.excludes()
+}
+
 /// One asset's trace, and the bytes it was traced from.
 #[derive(Debug)]
 struct Traced {
@@ -348,7 +357,7 @@ impl Contours {
                     }
                     Block::Image {
                         id, url, position, ..
-                    } if styles.style(*id).shape_outside == ShapeOutside::Auto => {
+                    } if traceable(styles.style(*id)) => {
                         let Some(((index, _), digest)) = assets
                             .lookup(url)
                             .and_then(|found| Some((found, assets.digest(found.0)?)))
