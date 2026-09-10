@@ -11,12 +11,12 @@ use super::paragraph::{HangingPunctuation, LineBreakOptions, Patterns, hang_end,
 /// A candidate line end: the exclusive byte offset where a line may
 /// end, plus whether the break falls inside a word.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Opportunity {
+struct Opportunity {
     /// Exclusive end of the line's text.
-    pub(super) end: usize,
+    end: usize,
     /// True when this break sits inside a word and the line must be
     /// charged for a hyphen glyph.
-    pub(super) hyphen: bool,
+    hyphen: bool,
 }
 
 /// One place a line may end, with everything the breaker measures it
@@ -43,7 +43,7 @@ impl LineLayout<'_> {
     /// Break opportunities for the paragraph: UAX #14 always, UAX #29
     /// word boundaries to bound hyphenation, `hypher` for syllables
     /// when enabled.
-    pub(super) fn opportunities(
+    fn opportunities(
         &self,
         text: &str,
         widths: &Widths,
@@ -71,7 +71,7 @@ impl LineLayout<'_> {
         opportunities
     }
 
-    pub(super) fn add_hyphenation(
+    fn add_hyphenation(
         &self,
         text: &str,
         widths: &Widths,

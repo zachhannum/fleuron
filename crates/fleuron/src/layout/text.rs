@@ -16,7 +16,7 @@ impl Paginator<'_> {
 
     /// Design units per em of a face, for the one conversion that
     /// takes shaped advances into points.
-    pub(super) fn upem(&self, font_id: u16) -> f32 {
+    fn upem(&self, font_id: u16) -> f32 {
         self.registry
             .metrics(font_id)
             .map(|m| m.units_per_em as f32)

@@ -163,7 +163,7 @@ pub(crate) const MARGIN_BOX_PROPERTIES: &[Spec<MarginDeclaration>] = &[Spec {
 }];
 
 /// What one page selector narrows a rule to.
-pub(super) type Narrow = fn(&mut PageRule);
+type Narrow = fn(&mut PageRule);
 
 /// The `@page` selectors, and what each one narrows the rule to.
 pub(crate) const PAGE_SELECTORS: &[(&str, Narrow)] = &[
@@ -259,7 +259,7 @@ impl<'i> RuleBodyItemParser<'i, Vec<PageItem>, StyleError<'i>> for PageBody {
 
 /// The body of one page margin box: what it paints, and the style it
 /// paints with.
-pub(super) struct MarginBoxBody;
+struct MarginBoxBody;
 
 impl<'i> DeclarationParser<'i> for MarginBoxBody {
     type Declaration = Vec<MarginDeclaration>;
@@ -309,7 +309,7 @@ impl<'i> RuleBodyItemParser<'i, Vec<MarginDeclaration>, StyleError<'i>> for Marg
 
 /// What a margin box paints: nothing, the folio, a running string, or
 /// a literal.
-pub(super) fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
+fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
     if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
         return Some(Content::Text(text.as_ref().to_string()));
     }
@@ -353,7 +353,7 @@ pub(super) fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
 }
 
 /// `size`: one or two lengths, or a named sheet with an orientation.
-pub(super) fn size(input: &mut Parser<'_, '_>) -> Option<(f32, f32)> {
+fn size(input: &mut Parser<'_, '_>) -> Option<(f32, f32)> {
     if let Ok(Length::Points(width)) = input.try_parse(|input| length(input).ok_or(())) {
         let height = match input.try_parse(|input| length(input).ok_or(())) {
             Ok(Length::Points(height)) => height,
@@ -373,18 +373,18 @@ pub(super) fn size(input: &mut Parser<'_, '_>) -> Option<(f32, f32)> {
 }
 
 /// The sheet sizes CSS names, portrait, in points.
-pub(super) fn named_size(keyword: &str) -> Option<(f32, f32)> {
+fn named_size(keyword: &str) -> Option<(f32, f32)> {
     PAGE_SIZES
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(keyword))
         .map(|(_, size)| *size)
 }
 
-pub(super) const fn mm(value: f32) -> f32 {
+const fn mm(value: f32) -> f32 {
     value * 72.0 / 25.4
 }
 
-pub(super) const fn inch(value: f32) -> f32 {
+const fn inch(value: f32) -> f32 {
     value * 72.0
 }
 

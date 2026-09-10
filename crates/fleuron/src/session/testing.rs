@@ -91,7 +91,7 @@ pub(super) fn illustrated() -> Session<'static> {
     session
 }
 
-pub(super) fn text(value: &str) -> Inline {
+fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),

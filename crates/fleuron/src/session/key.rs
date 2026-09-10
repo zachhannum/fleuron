@@ -35,7 +35,7 @@ pub(super) fn section_key(
     hasher.finish()
 }
 
-pub(super) fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
+fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
     for block in blocks {
         match block {
             Block::Heading {
@@ -96,7 +96,7 @@ pub(super) fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultH
     }
 }
 
-pub(super) fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
+fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
     for inline in inlines {
         match inline {
             Inline::Text {
@@ -159,7 +159,7 @@ pub(super) fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut Defau
 
 /// One node's resolved styling, the initial letter and the opening
 /// line beside it.
-pub(super) fn hash_node(id: NodeId, styles: &StyleTree, h: &mut DefaultHasher) {
+fn hash_node(id: NodeId, styles: &StyleTree, h: &mut DefaultHasher) {
     hash_layout(styles.style(id), h);
     for pseudo in [styles.first_letter(id), styles.first_line(id)] {
         match pseudo {

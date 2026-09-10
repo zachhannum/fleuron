@@ -21,38 +21,38 @@ pub(super) struct FlatParagraph {
     pub(super) text: String,
     /// What the author wrote. Kept only from the point something
     /// first transforms; until then `text` is the source.
-    pub(super) source: String,
+    source: String,
     /// How much of `source` the shaped text up to each of its bytes
     /// accounts for. Kept alongside `source`, and rising with it, so
     /// the stretch between two boundaries is the source that the
     /// text between them was made from.
-    pub(super) map: Vec<u32>,
+    map: Vec<u32>,
     /// Whether anything has been written that differs from its
     /// source.
-    pub(super) transformed: bool,
+    transformed: bool,
     /// Whether the next character opens a word: what `capitalize`
     /// reads.
-    pub(super) word_start: bool,
+    word_start: bool,
     /// The style spans, in document order.
     pub(super) spans: Vec<StyleSpan>,
     /// Which node each stretch of the source was written in, in
     /// document order.
-    pub(super) origins: Vec<Origin>,
+    origins: Vec<Origin>,
     /// Bytes of the source still to be passed over before anything
     /// is written: what a drop cap took out of the paragraph.
-    pub(super) skip: usize,
+    skip: usize,
 }
 
 /// One stretch of the paragraph's source, and the node it was
 /// written in. Stretches are contiguous, so one origin runs to where
 /// the next begins.
-pub(super) struct Origin {
-    pub(super) node: NodeId,
+struct Origin {
+    node: NodeId,
     /// Where the stretch starts in the paragraph's source.
-    pub(super) start: u32,
+    start: u32,
     /// Where it starts in the node's own text, which is past the
     /// letter wherever a drop cap took one.
-    pub(super) node_start: u32,
+    node_start: u32,
 }
 
 /// One span of uniform shaping: a face, a size, the tracking after
@@ -71,7 +71,7 @@ pub(super) struct StyleSpan {
 impl StyleSpan {
     /// Whether two spans are set the same way, the text they cover
     /// aside.
-    pub(super) fn same_style(&self, other: &StyleSpan) -> bool {
+    fn same_style(&self, other: &StyleSpan) -> bool {
         self.font_id == other.font_id
             && self.size == other.size
             && self.tracking == other.tracking
@@ -127,7 +127,7 @@ impl FlatParagraph {
     /// Where one byte of the shaped text falls in the source it was
     /// made from. The two run together until something transforms,
     /// and the map holds them together after that.
-    pub(super) fn source_at(&self, byte: usize) -> usize {
+    fn source_at(&self, byte: usize) -> usize {
         if !self.transformed {
             return byte.min(self.text.len());
         }
@@ -138,7 +138,7 @@ impl FlatParagraph {
     }
 
     /// How much source the paragraph has been written from so far.
-    pub(super) fn source_len(&self) -> usize {
+    fn source_len(&self) -> usize {
         if self.transformed {
             self.source.len()
         } else {
@@ -148,7 +148,7 @@ impl FlatParagraph {
 
     /// Opens a stretch of the source written in `node`, starting
     /// `node_start` bytes into that node's own text.
-    pub(super) fn open(&mut self, node: NodeId, node_start: usize) {
+    fn open(&mut self, node: NodeId, node_start: usize) {
         self.origins.push(Origin {
             node,
             start: self.source_len() as u32,
@@ -161,7 +161,7 @@ impl FlatParagraph {
     /// own text, and the source it covers.
     ///
     /// `None` where no node was walked: page furniture, an ornament.
-    pub(super) fn origin_at(&self, byte: usize) -> Option<(NodeId, u32, Range<usize>)> {
+    fn origin_at(&self, byte: usize) -> Option<(NodeId, u32, Range<usize>)> {
         let at = self.source_at(byte);
         let index = self
             .origins
@@ -205,7 +205,7 @@ impl FlatParagraph {
 
     /// Starts keeping the source text, backfilling what has been
     /// written so far, all of which stood as it was written.
-    pub(super) fn start_mapping(&mut self) {
+    fn start_mapping(&mut self) {
         if self.transformed {
             return;
         }
@@ -215,7 +215,7 @@ impl FlatParagraph {
     }
 
     /// Appends a stretch of text nothing transformed.
-    pub(super) fn push_verbatim(&mut self, value: &str) {
+    fn push_verbatim(&mut self, value: &str) {
         if self.transformed {
             let at = self.source.len() as u32;
             self.map
@@ -232,7 +232,7 @@ impl FlatParagraph {
     /// stands for the letter and the second stands for nothing.
     /// Extraction walks the glyphs in order and reads the source back
     /// once.
-    pub(super) fn push_mapped(&mut self, letter: char, written: &str) {
+    fn push_mapped(&mut self, letter: char, written: &str) {
         self.start_mapping();
         let at = self.source.len() as u32;
         self.source.push(letter);
@@ -283,13 +283,7 @@ impl FlatParagraph {
     }
 
     /// Records the span that ends where the text now does.
-    pub(super) fn span(
-        &mut self,
-        style: ParagraphStyle,
-        caps: SmallCaps,
-        small: bool,
-        start: usize,
-    ) {
+    fn span(&mut self, style: ParagraphStyle, caps: SmallCaps, small: bool, start: usize) {
         if start >= self.text.len() {
             return;
         }
@@ -314,7 +308,7 @@ impl FlatParagraph {
     /// end. Text written a character at a time is one run of one
     /// style as much as text written in a stretch, and a run shapes
     /// as a whole: kerning and ligatures do not reach across a span.
-    pub(super) fn merge_from(&mut self, from: usize) {
+    fn merge_from(&mut self, from: usize) {
         let mut at = from + 1;
         while at < self.spans.len() {
             let joins = self.spans[at - 1].range.end == self.spans[at].range.start
@@ -333,7 +327,7 @@ impl FlatParagraph {
 /// small one, and answers whether it is set at the reduced size. Only
 /// what was lowercase is: a face's own small capitals leave the word
 /// space and the comma the size they were.
-pub(super) fn raise(caps: SmallCaps, written: &mut String, changed: &mut bool) -> bool {
+fn raise(caps: SmallCaps, written: &mut String, changed: &mut bool) -> bool {
     if caps != SmallCaps::Synthesized || !written.chars().any(char::is_lowercase) {
         return false;
     }
@@ -345,7 +339,7 @@ pub(super) fn raise(caps: SmallCaps, written: &mut String, changed: &mut bool) -
 /// Whether a character continues a word rather than ending it.
 /// `capitalize` raises the letter after every other kind, which is
 /// why `well-known` comes out with two capitals and `don't` with one.
-pub(super) fn continues_word(letter: char) -> bool {
+fn continues_word(letter: char) -> bool {
     letter.is_alphanumeric() || letter == '\'' || letter == '\u{2019}'
 }
 
@@ -372,7 +366,7 @@ impl LineLayout<'_> {
         flat
     }
 
-    pub(super) fn walk_inlines(
+    fn walk_inlines(
         &self,
         inlines: &[Inline],
         style: ParagraphStyle,
@@ -406,7 +400,7 @@ impl LineLayout<'_> {
     /// time, so the switch can fall inside a word; the spans it
     /// writes merge back into one, and the whole of the opening line
     /// shapes together.
-    pub(super) fn push_text(
+    fn push_text(
         &self,
         flat: &mut FlatParagraph,
         node: NodeId,

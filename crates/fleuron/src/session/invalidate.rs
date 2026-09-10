@@ -23,9 +23,9 @@ use super::key::{hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape}
 /// A book that gains its first image builds its sections again.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Against {
-    pub(super) measure: f32,
-    pub(super) height: Option<f32>,
-    pub(super) exclusions: Option<u64>,
+    measure: f32,
+    height: Option<f32>,
+    exclusions: Option<u64>,
 }
 
 impl Against {
@@ -83,14 +83,14 @@ pub(super) fn has_images(book: &Book) -> bool {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct Prints {
     /// Which nodes ask for a contour to be traced, and from what.
-    pub(super) trace: u64,
+    trace: u64,
     /// The measure, what every distinct style says about breaking,
     /// and which style each node resolved to.
-    pub(super) breaks: u64,
+    breaks: u64,
     /// Page geometry, and the named page each element asks for.
-    pub(super) flow: u64,
+    flow: u64,
     /// The margin boxes, and what they paint.
-    pub(super) paint: u64,
+    paint: u64,
 }
 
 impl Prints {
@@ -165,7 +165,7 @@ pub(super) fn section_local(styles: &StyleTree) -> bool {
 /// Whether every master breaks to the same measure. One that does
 /// not makes where a line breaks depend on which page it lands on,
 /// and that on everything before it.
-pub(super) fn uniform_measure(styles: &StyleTree) -> bool {
+fn uniform_measure(styles: &StyleTree) -> bool {
     let measure = styles.default_page().geometry.measure().to_bits();
     styles
         .masters()
@@ -177,7 +177,7 @@ pub(super) fn uniform_measure(styles: &StyleTree) -> bool {
 /// `counter(page)` and `string()` in prose would make inline text
 /// depend on where the prose fell, which is a fixpoint rather than a
 /// cache invalidation.
-pub(super) fn paginated_prose(styles: &[ComputedStyle]) -> bool {
+fn paginated_prose(styles: &[ComputedStyle]) -> bool {
     styles
         .iter()
         .any(|style| matches!(style.content, Content::Counter(_) | Content::String(_)))

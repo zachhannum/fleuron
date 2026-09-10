@@ -45,8 +45,8 @@ impl Span {
 /// the paragraph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measure {
-    pub(super) leading: Vec<Span>,
-    pub(super) rest: Span,
+    leading: Vec<Span>,
+    rest: Span,
 }
 
 impl Measure {

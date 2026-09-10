@@ -12,36 +12,36 @@ use super::paragraph::{HangEnd, LineBreakOptions};
 /// gaping one; the rest are the surcharges for breaking a word, for
 /// doing it twice running, and for setting a tight line under a
 /// loose one.
-pub(super) const LINE_PENALTY: f64 = 10.0;
+const LINE_PENALTY: f64 = 10.0;
 
-pub(super) const HYPHEN_PENALTY: f64 = 50.0;
+const HYPHEN_PENALTY: f64 = 50.0;
 
-pub(super) const DOUBLE_HYPHEN_DEMERITS: f64 = 10_000.0;
+const DOUBLE_HYPHEN_DEMERITS: f64 = 10_000.0;
 
-pub(super) const ADJACENT_DEMERITS: f64 = 10_000.0;
+const ADJACENT_DEMERITS: f64 = 10_000.0;
 
 /// What breaking before a dash costs. UAX #14 allows a line to end
 /// on either side of one; a book only ever ends on the far side, so
 /// the near side has to be worth something to be taken.
-pub(super) const DASH_PENALTY: f64 = 200.0;
+const DASH_PENALTY: f64 = 200.0;
 
 /// The worst a line may be counted as. Without a ceiling a single
 /// unbreakable line swamps every other term in the paragraph.
-pub(super) const MAX_BADNESS: f64 = 10_000.0;
+const MAX_BADNESS: f64 = 10_000.0;
 
 /// What a line that overflows the measure costs, per em it overflows
 /// by and once besides. Larger than any feasible paragraph, so text
 /// runs into the margin only where nothing else will set, and the
 /// least of it wins.
-pub(super) const OVERFULL_DEMERITS: f64 = 1e12;
+const OVERFULL_DEMERITS: f64 = 1e12;
 
 /// Hyphenated line ends allowed in a row.
-pub(super) const MAX_CONSECUTIVE_HYPHENS: u8 = 2;
+const MAX_CONSECUTIVE_HYPHENS: u8 = 2;
 
 /// What a ragged line may leave at the right, as a fraction of the
 /// measure, before it counts as loose. Ragged setting has no glue to
 /// stretch, so badness has nothing else to read the gap against.
-pub(super) const RAGGED_STRETCH: f32 = 0.1;
+const RAGGED_STRETCH: f32 = 0.1;
 
 /// A chosen span end, with the adjustment its glue takes.
 #[derive(Debug, Clone, Copy)]
@@ -87,52 +87,52 @@ pub(super) struct Breaker<'a> {
 
 /// How one candidate line comes out: how far its glue is from its
 /// natural width, and what that costs.
-pub(super) struct Fit {
-    pub(super) ratio: f32,
-    pub(super) badness: f64,
+struct Fit {
+    ratio: f32,
+    badness: f64,
     /// Font units the line runs past the measure by, if it does.
-    pub(super) overflow: f32,
-    pub(super) overhang: f32,
-    pub(super) protrusion: f32,
+    overflow: f32,
+    overhang: f32,
+    protrusion: f32,
     /// Whether the span this fills ends the band it sits in.
-    pub(super) ends_band: bool,
+    ends_band: bool,
 }
 
 /// A breakpoint reached by a path, and the best path to it.
-pub(super) struct Node {
+struct Node {
     /// Index into the break list.
-    pub(super) at: usize,
+    at: usize,
     /// Slots the paragraph has filled to get here.
-    pub(super) slot: usize,
+    slot: usize,
     /// Which of the four fitness classes the line ending here fell
     /// in.
-    pub(super) fitness: u8,
+    fitness: u8,
     /// Hyphenated line ends in a row up to and including this one.
-    pub(super) hyphens: u8,
-    pub(super) demerits: f64,
-    pub(super) ratio: f32,
-    pub(super) overhang: f32,
-    pub(super) protrusion: f32,
+    hyphens: u8,
+    demerits: f64,
+    ratio: f32,
+    overhang: f32,
+    protrusion: f32,
     /// The node this one was reached from; the root has none.
-    pub(super) previous: Option<usize>,
+    previous: Option<usize>,
 }
 
 /// A span end worth keeping, before it becomes a node.
-pub(super) struct Candidate {
-    pub(super) at: usize,
-    pub(super) slot: usize,
-    pub(super) fitness: u8,
-    pub(super) hyphens: u8,
-    pub(super) demerits: f64,
-    pub(super) ratio: f32,
-    pub(super) overhang: f32,
-    pub(super) protrusion: f32,
-    pub(super) previous: usize,
+struct Candidate {
+    at: usize,
+    slot: usize,
+    fitness: u8,
+    hyphens: u8,
+    demerits: f64,
+    ratio: f32,
+    overhang: f32,
+    protrusion: f32,
+    previous: usize,
 }
 
 impl Breaker<'_> {
     /// The span slot `index` is set in.
-    pub(super) fn span(&self, index: usize) -> Span {
+    fn span(&self, index: usize) -> Span {
         if index < self.settled {
             self.measure.at(index)
         } else {
@@ -141,7 +141,7 @@ impl Breaker<'_> {
     }
 
     /// Points → the paragraph's font units.
-    pub(super) fn units(&self, points: f32) -> f32 {
+    fn units(&self, points: f32) -> f32 {
         if self.size > 0.0 {
             points / self.size * self.upem
         } else {
@@ -156,7 +156,7 @@ impl Breaker<'_> {
 
     /// Measures the text that runs from break `a` to break `b`, set
     /// in slot `slot`.
-    pub(super) fn fit(&self, a: usize, b: usize, slot: usize) -> Fit {
+    fn fit(&self, a: usize, b: usize, slot: usize) -> Fit {
         let span = self.span(slot - 1);
         let start = self.breaks[a].next;
         let end = self.breaks[b].content_end.max(start);
@@ -237,13 +237,13 @@ impl Breaker<'_> {
     }
 
     /// Whether the band the span at `index` sits in opens there.
-    pub(super) fn opens_band(&self, index: usize) -> bool {
+    fn opens_band(&self, index: usize) -> bool {
         index == 0 || self.span(index - 1).ends_band
     }
 
     /// What hangs past the measure at break `b`, given how wide the
     /// line would otherwise be.
-    pub(super) fn overhang(&self, b: usize, natural: f32, measure: f32) -> f32 {
+    fn overhang(&self, b: usize, natural: f32, measure: f32) -> f32 {
         let hang = self.breaks[b].hang_end;
         if hang <= 0.0 {
             return 0.0;
@@ -370,7 +370,7 @@ impl Breaker<'_> {
     /// the paragraph can see are interchangeable, so only the cheaper
     /// survives, which is what keeps the active list from growing
     /// with the paragraph.
-    pub(super) fn keep_best(&self, candidates: &mut Vec<Candidate>, candidate: Candidate) {
+    fn keep_best(&self, candidates: &mut Vec<Candidate>, candidate: Candidate) {
         let key = |candidate: &Candidate| {
             (
                 candidate.fitness,
@@ -394,14 +394,7 @@ impl Breaker<'_> {
     /// Break `b` reached from node `a` whatever it costs: the line
     /// between them is wider than the measure, and setting it is
     /// still better than losing the words.
-    pub(super) fn forced(
-        &self,
-        from: &Node,
-        a: usize,
-        b: usize,
-        slot: usize,
-        fit: &Fit,
-    ) -> Candidate {
+    fn forced(&self, from: &Node, a: usize, b: usize, slot: usize, fit: &Fit) -> Candidate {
         Candidate {
             at: b,
             slot,
@@ -417,7 +410,7 @@ impl Breaker<'_> {
 
     /// Hyphenated line ends in a row, counting the one break `b`
     /// would add.
-    pub(super) fn hyphens(&self, from: &Node, b: usize) -> u8 {
+    fn hyphens(&self, from: &Node, b: usize) -> u8 {
         if self.breaks[b].hyphen {
             from.hyphens + 1
         } else {
@@ -427,7 +420,7 @@ impl Breaker<'_> {
 
     /// Break `b` reached from node `a`, if the line between them can
     /// be set at all.
-    pub(super) fn candidate(
+    fn candidate(
         &self,
         from: &Node,
         a: usize,
@@ -483,7 +476,7 @@ impl Breaker<'_> {
 
 /// How bad a line of this adjustment ratio is. Cubic, so one gaping
 /// line costs more than several slightly loose ones.
-pub(super) fn badness(ratio: f32) -> f64 {
+fn badness(ratio: f32) -> f64 {
     if !ratio.is_finite() {
         return MAX_BADNESS;
     }
@@ -494,7 +487,7 @@ pub(super) fn badness(ratio: f32) -> f64 {
 /// tight line under a very loose one reads as a mistake even when
 /// each of them on its own does not, which is why the class and not
 /// the ratio is what the demerits compare.
-pub(super) fn fitness(ratio: f32) -> u8 {
+fn fitness(ratio: f32) -> u8 {
     if ratio < -0.5 {
         0
     } else if ratio <= 0.5 {

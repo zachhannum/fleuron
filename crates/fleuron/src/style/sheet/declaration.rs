@@ -58,13 +58,13 @@ pub(super) fn at<'i: 't, 't, T>(
 }
 
 /// The declaration parser for style rules.
-pub(super) struct Properties {
+struct Properties {
     /// Whether the rule this body belongs to selects `::first-line`.
-    pub(super) first_line: bool,
+    first_line: bool,
 }
 
 /// What one declaration expands to: a shorthand is several longhands.
-pub(super) type Longhands = (Vec<Declaration>, Importance);
+type Longhands = (Vec<Declaration>, Importance);
 
 impl<'i> DeclarationParser<'i> for Properties {
     type Declaration = Longhands;
@@ -134,7 +134,7 @@ pub(crate) struct Spec<D> {
 
 /// Reads one declaration's value, from after the colon to the end of
 /// the declaration.
-pub(super) type Reader<D> = for<'i, 't> fn(
+type Reader<D> = for<'i, 't> fn(
     &CowRcStr<'i>,
     &mut Parser<'i, 't>,
 ) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>>;
@@ -188,7 +188,7 @@ pub(super) fn sides<'i, T: Copy, D>(
 /// Reads `border` or one of its per-edge longhands: a width, a style
 /// and a colour in any order, any of them left out. What is left out
 /// goes back to its initial value, as the shorthand asks.
-pub(super) fn border<'i>(
+fn border<'i>(
     name: &CowRcStr<'i>,
     input: &mut Parser<'i, '_>,
     edges: &[Edge],
@@ -229,7 +229,7 @@ pub(super) fn border<'i>(
 }
 
 /// Every edge, for the shorthands that set all four.
-pub(super) const ALL_EDGES: &[Edge] = &[Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
+const ALL_EDGES: &[Edge] = &[Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 
 /// The properties of a style rule.
 pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[

@@ -15,7 +15,7 @@ pub(super) type Strings = BTreeMap<String, String>;
 
 /// What one page's furniture resolves its content against: the folio
 /// the page counted to, and the running strings it opened with.
-pub(super) struct Furniture<'a> {
+struct Furniture<'a> {
     folio: u32,
     strings: &'a Strings,
 }

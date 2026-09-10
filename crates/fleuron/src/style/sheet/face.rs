@@ -115,7 +115,7 @@ pub(crate) const FONT_FACE_DESCRIPTORS: &[Spec<FaceDeclaration>] = &[
 ];
 
 /// The body of one `@font-face`.
-pub(super) struct FontFaceBody;
+struct FontFaceBody;
 
 /// One `@font-face` descriptor.
 pub(crate) enum FaceDeclaration {
@@ -171,9 +171,7 @@ impl<'i> RuleBodyItemParser<'i, Vec<FaceDeclaration>, StyleError<'i>> for FontFa
 /// A `src` list: urls for the host to resolve, or faces it may
 /// already have. `format()` hints are read and dropped — the loader
 /// hands back bytes and the registry decides what they are.
-pub(super) fn sources<'i>(
-    input: &mut Parser<'i, '_>,
-) -> Result<Vec<Src>, ParseError<'i, StyleError<'i>>> {
+fn sources<'i>(input: &mut Parser<'i, '_>) -> Result<Vec<Src>, ParseError<'i, StyleError<'i>>> {
     input.parse_comma_separated(|input| {
         if let Ok(url) = input.try_parse(|input| input.expect_url()) {
             let source = Src::Url(url.as_ref().to_string());

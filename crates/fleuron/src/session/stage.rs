@@ -49,7 +49,7 @@ impl Session<'_> {
 
     /// Traces the contours the cascade asks for, keeping the ones an
     /// earlier run already traced.
-    pub(super) fn trace(&mut self) {
+    fn trace(&mut self) {
         self.stages.trace += self
             .contours
             .update(&self.book, &self.styles, self.assets.get());
@@ -57,7 +57,7 @@ impl Session<'_> {
 
     /// Breaks the sections whose lines the cache cannot answer for,
     /// and keeps the rest as they stand.
-    pub(super) fn rebreak(&mut self) {
+    fn rebreak(&mut self) {
         let against = Against::of(&self.styles, self.images);
         // An image that arrives is a box that was not reserved
         // before it, so the sections are broken again around it. The
@@ -129,7 +129,7 @@ impl Session<'_> {
     }
 
     /// Flows the cached lines into pages. Nothing here measures.
-    pub(super) fn reflow(&mut self) {
+    fn reflow(&mut self) {
         let registry = self.registry.get();
         let assets = self.assets.get();
         let paginator = Paginator::with_contours(
@@ -150,7 +150,7 @@ impl Session<'_> {
     }
 
     /// Repaints the furniture over pages the flow already settled.
-    pub(super) fn repaint(&mut self) {
+    fn repaint(&mut self) {
         let paginator = Paginator::with_contours(
             self.registry.get(),
             &self.styles,
@@ -164,7 +164,7 @@ impl Session<'_> {
     }
 
     /// The whole pipeline, one section's lines alive at a time.
-    pub(super) fn run_once(&mut self) {
+    fn run_once(&mut self) {
         let registry = self.registry.get();
         let assets = self.assets.get();
         let paginator = Paginator::with_contours(
@@ -185,7 +185,7 @@ impl Session<'_> {
 
     /// Everything the run has to complain about, in the order the
     /// stages raised it.
-    pub(super) fn collect_warnings(&mut self) {
+    fn collect_warnings(&mut self) {
         let mut warnings = self.source_warnings.clone();
         warnings.extend(self.styles.warnings().iter().cloned());
         warnings.extend(self.assets.get().warnings().iter().cloned());

@@ -21,9 +21,7 @@ pub(super) fn color(input: &mut Parser<'_, '_>) -> Option<Color> {
 
 /// `rgb(r, g, b)`, with either commas or spaces between the
 /// channels. All three are numbers or all three are percentages.
-pub(super) fn rgb_function<'i>(
-    input: &mut Parser<'i, '_>,
-) -> Result<Color, ParseError<'i, StyleError<'i>>> {
+fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, StyleError<'i>>> {
     input.expect_function_matching("rgb")?;
     input.parse_nested_block(|input| {
         let (red, percentages) = channel(input, None)?;
@@ -41,7 +39,7 @@ pub(super) fn rgb_function<'i>(
 /// One channel of `rgb()`: `0` to `255`, or a percentage of it, and
 /// which of the two it was. `written` is how the channels before it
 /// were written, and a channel that disagrees is not a colour.
-pub(super) fn channel<'i>(
+fn channel<'i>(
     input: &mut Parser<'i, '_>,
     written: Option<bool>,
 ) -> Result<(u8, bool), ParseError<'i, StyleError<'i>>> {
@@ -58,7 +56,7 @@ pub(super) fn channel<'i>(
 
 /// The two hex forms. `#abc` is `#aabbcc`: each digit stands for a
 /// pair of itself.
-pub(super) fn hex(digits: &str) -> Option<Color> {
+fn hex(digits: &str) -> Option<Color> {
     let spelled: String = match digits.len() {
         3 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
         6 => digits.to_string(),
@@ -68,7 +66,7 @@ pub(super) fn hex(digits: &str) -> Option<Color> {
 }
 
 /// One of the CSS colour names, whatever case it was written in.
-pub(super) fn named(name: &str) -> Option<Color> {
+fn named(name: &str) -> Option<Color> {
     let lowercase = name.to_ascii_lowercase();
     let at = NAMED
         .binary_search_by_key(&lowercase.as_str(), |(known, _)| known)

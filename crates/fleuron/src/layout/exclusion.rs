@@ -85,12 +85,7 @@ impl Paginator<'_> {
     /// inside its margins. An image the tracer had no alpha for
     /// contributes its box. A polygon is read against the whole box,
     /// margins and all, which is what a percentage in it measures.
-    pub(super) fn shape(
-        &self,
-        style: &ComputedStyle,
-        asset: u32,
-        size: (f32, f32),
-    ) -> Option<Shape> {
+    fn shape(&self, style: &ComputedStyle, asset: u32, size: (f32, f32)) -> Option<Shape> {
         // The one predicate the trace stage keys on as well, so that
         // what is traced and what is read cannot drift apart.
         if !style.excludes() {
@@ -155,7 +150,7 @@ pub(super) struct AnchoredImage {
 /// A contour in the coordinates of the box the insets place: `(0, 0)`
 /// its top left corner, points down and across from there.
 #[derive(Debug, Clone)]
-pub(super) struct Shape {
+struct Shape {
     /// The rings, each closed by its own first point.
     rings: Vec<Vec<[f32; 2]>>,
     /// How far the prose keeps off them, from `shape-margin`.
@@ -251,7 +246,7 @@ impl AnchoredImages {
 
 /// An image's size inside a box that has to hold it: its own, scaled
 /// down in proportion where either side does not fit.
-pub(super) fn fit((width, height): (f32, f32), available: f32, room: f32) -> (f32, f32) {
+fn fit((width, height): (f32, f32), available: f32, room: f32) -> (f32, f32) {
     let scale = |value: f32, from: f32, to: f32| {
         if from > 0.0 { value * to / from } else { value }
     };
@@ -511,7 +506,7 @@ impl Flow<'_, '_> {
 /// covers, the contour inside that rectangle where it has one, and
 /// which side of it the prose sets on.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Hole<'a> {
+struct Hole<'a> {
     rect: Rect,
     wrap: WrapFlow,
     shape: Option<&'a Shape>,
@@ -544,7 +539,7 @@ impl Hole<'_> {
 /// The bands a paragraph is set in beside an image: what each of them
 /// is left of the measure, and the space above a band that had to
 /// move past an image that covers the whole of it.
-pub(super) struct Profile {
+struct Profile {
     measure: Measure,
     gaps: Vec<f32>,
     /// Where the initial letter goes, from the paragraph's leading
@@ -570,7 +565,7 @@ impl Profile {
 
 /// A rectangle on the page, in page coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Rect {
+struct Rect {
     x: f32,
     y: f32,
     w: f32,
@@ -601,13 +596,7 @@ impl Rect {
 ///
 /// A stretch narrower than `narrowest` holds nothing worth setting
 /// and is not one.
-pub(super) fn clear(
-    base: Span,
-    holes: &[Hole],
-    top: f32,
-    bottom: f32,
-    narrowest: f32,
-) -> Vec<(f32, f32)> {
+fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> Vec<(f32, f32)> {
     let mut free = vec![(base.origin, base.origin + base.width)];
     for hole in holes {
         let Some((left, right)) = hole.covering(top, bottom) else {
@@ -641,7 +630,7 @@ pub(super) fn clear(
 /// by its own first point. An edge inside the band contributes its
 /// ends, and one that crosses the band's edge contributes where it
 /// crosses.
-pub(super) fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option<(f32, f32)> {
+fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option<(f32, f32)> {
     let mut reach: Option<(f32, f32)> = None;
     let mut widen = |x: f32| {
         reach = Some(match reach {
@@ -677,12 +666,7 @@ pub(super) fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option
 ///
 /// A stretch narrower than `narrowest` holds nothing worth setting
 /// and is not one.
-pub(super) fn taking(
-    free: Vec<(f32, f32)>,
-    at: f32,
-    reserved: f32,
-    narrowest: f32,
-) -> Vec<(f32, f32)> {
+fn taking(free: Vec<(f32, f32)>, at: f32, reserved: f32, narrowest: f32) -> Vec<(f32, f32)> {
     free.into_iter()
         .map(|(origin, width)| {
             let end = origin + width;

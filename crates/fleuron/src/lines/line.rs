@@ -180,7 +180,7 @@ impl Line {
 /// subtraction.
 pub(super) struct Widths {
     /// Advance of every glyph whose cluster starts before byte `i`.
-    pub(super) text: Vec<f32>,
+    text: Vec<f32>,
     /// The same for space glyphs alone, which is where the glue is.
     pub(super) spaces: Vec<f32>,
     /// Whether a glyph's cluster starts at byte `i`. A break inside
@@ -188,7 +188,7 @@ pub(super) struct Widths {
     pub(super) starts: Vec<bool>,
     /// Tracking charged to the last cluster starting before byte `i`.
     /// Empty where nothing is tracked, which is most paragraphs.
-    pub(super) trailing: Vec<f32>,
+    trailing: Vec<f32>,
 }
 
 impl Widths {

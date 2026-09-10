@@ -18,9 +18,9 @@ use super::furniture::Strings;
 /// the named page in force, and the situation the page is in.
 #[derive(Debug, Clone)]
 pub(super) struct PageSlot {
-    pub(super) name: Option<String>,
+    name: Option<String>,
     /// The page a section opens on: `@page :first`.
-    pub(super) first: bool,
+    first: bool,
     /// Inserted to square the sheet: `@page :blank`.
     pub(super) blank: bool,
 }
@@ -64,21 +64,21 @@ pub(super) struct Placed {
     /// The section its content came out of. The fragment records it, so
     /// a fragment moved onto the next page counts toward the page it
     /// ends on rather than the one it was measured for.
-    pub(super) section: NodeId,
+    section: NodeId,
     /// The column of the page it landed in.
-    pub(super) column: u32,
+    column: u32,
     /// Top of its box, from its column's top.
     pub(super) top: f32,
     /// Its own height.
     pub(super) height: f32,
     /// Whether a page may end above it.
-    pub(super) break_before: BreakPoint,
+    break_before: BreakPoint,
     /// What it paints, already positioned on this page.
-    pub(super) items: Vec<DrawItem>,
+    items: Vec<DrawItem>,
     /// What it sets for the furniture of whichever page it ends on.
-    pub(super) marks: Option<Box<Marks>>,
+    marks: Option<Box<Marks>>,
     /// The decorated blocks it opens and closes.
-    pub(super) decorations: Option<Box<Decorations>>,
+    decorations: Option<Box<Decorations>>,
     /// The images anchored above it, which land on the page it ends
     /// on.
     pub(super) anchors: Vec<NodeId>,
@@ -93,18 +93,18 @@ pub(super) struct Placed {
 pub(super) struct Flow<'a, 'p> {
     pub(super) paginator: &'p Paginator<'a>,
     pub(super) pages: Vec<Page>,
-    pub(super) infos: Vec<PageInfo>,
+    infos: Vec<PageInfo>,
     pub(super) placed: Vec<Placed>,
     pub(super) slot: PageSlot,
     /// The running strings as the page being built opened. The flow
     /// only advances them when a page closes, so this is what
     /// `string()` reads.
-    pub(super) strings: Strings,
+    strings: Strings,
     /// The slot the next page opens with: a section waiting for a
     /// page of its own.
-    pub(super) pending_slot: Option<PageSlot>,
+    pending_slot: Option<PageSlot>,
     /// The section whose fragments are being placed.
-    pub(super) section: NodeId,
+    section: NodeId,
     /// Bottom of what is placed, from the column's top.
     pub(super) cursor: f32,
     /// Height of the column being filled, which is the content box's.
@@ -112,24 +112,24 @@ pub(super) struct Flow<'a, 'p> {
     /// The column being filled, counting from the leading edge.
     pub(super) column: u32,
     /// How many the page divides into.
-    pub(super) columns: u32,
+    columns: u32,
     /// Where in `placed` the column being filled began. A break backs
     /// up to a fragment of this column, never past its head.
     pub(super) column_start: usize,
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
-    pub(super) carried: Vec<Decoration>,
+    carried: Vec<Decoration>,
     /// The images to place, and the page each one landed on. Empty
     /// on the pass that answers where they land.
     pub(super) anchored: &'p AnchoredImages,
     /// Where each anchor landed, filled in as pages close.
-    pub(super) anchors: BTreeMap<NodeId, usize>,
+    anchors: BTreeMap<NodeId, usize>,
     /// Anchors waiting for the fragment whose page they take.
     pub(super) pending_anchors: Vec<NodeId>,
     /// Whether what is placed is painted. The pass that settles where
     /// the anchors land keeps no pages, so it paints nothing: which
     /// page a fragment falls on is a question about heights.
-    pub(super) paints: bool,
+    paints: bool,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -598,7 +598,7 @@ impl<'a, 'p> Flow<'a, 'p> {
 
 /// One decorated block resolved against one page: the border box it
 /// takes there, and which of its edges the page boundary cut.
-pub(super) struct Painted {
+struct Painted {
     decoration: Decoration,
     /// Top of the border box, from the page content box's top.
     top: f32,
@@ -662,7 +662,7 @@ impl Painted {
 
 /// Where one paragraph's fragments end: the run of them that share
 /// the paragraph `from` opens.
-pub(super) fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> usize {
+fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> usize {
     fragments[from..]
         .iter()
         .position(|fragment| {
@@ -677,7 +677,7 @@ pub(super) fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Re
 
 /// Moves already-painted items: what moving a fragment to the next
 /// page comes to.
-pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
+fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
     for item in items {
         match item {
             DrawItem::Text { x, y, glyphs, .. } => {

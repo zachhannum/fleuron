@@ -15,7 +15,7 @@ pub(super) fn registry() -> &'static FontRegistry {
     REGISTRY.get_or_init(|| crate::fonts::bundled_registry().expect("bundled font parses"))
 }
 
-pub(super) fn text(value: &str) -> Inline {
+fn text(value: &str) -> Inline {
     Inline::Text {
         id: NodeId::UNASSIGNED,
         value: value.into(),
@@ -86,7 +86,7 @@ pub(super) fn ua() -> &'static StyleTree {
 }
 
 /// The font size the built-in sheet computes for one element.
-pub(super) fn size_of(element: &str) -> f32 {
+fn size_of(element: &str) -> f32 {
     let styles = ua();
     let node = styles
         .nodes()

@@ -66,7 +66,7 @@ impl LineLayout<'_> {
     }
 
     /// A span's tracking in its own font units.
-    pub(super) fn tracking_units(&self, span: &StyleSpan) -> i64 {
+    fn tracking_units(&self, span: &StyleSpan) -> i64 {
         if span.tracking == 0.0 || span.size <= 0.0 {
             return 0;
         }
@@ -81,7 +81,7 @@ impl LineLayout<'_> {
     /// What a span's own font units are worth in the paragraph's.
     /// One em of a 6pt face is not one em of an 11pt one, and the
     /// measure is written in the paragraph's.
-    pub(super) fn scale(&self, font_id: u16, size: f32, style: ParagraphStyle, upem: f32) -> f32 {
+    fn scale(&self, font_id: u16, size: f32, style: ParagraphStyle, upem: f32) -> f32 {
         let span_upem = self
             .registry
             .metrics(font_id)

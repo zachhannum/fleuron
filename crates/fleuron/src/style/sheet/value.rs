@@ -114,7 +114,7 @@ pub(super) fn column_gap(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
 }
 
 /// A value that may be written `auto`.
-pub(super) fn auto_or<T>(
+fn auto_or<T>(
     input: &mut Parser<'_, '_>,
     parse: fn(&mut Parser<'_, '_>) -> Option<T>,
 ) -> Option<Option<T>> {
@@ -343,9 +343,7 @@ pub(super) fn counter_reset(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
 
 /// `content()`, the element's own text, with no argument list the
 /// engine has a second answer for.
-pub(super) fn content_function<'i>(
-    input: &mut Parser<'i, '_>,
-) -> Result<(), ParseError<'i, StyleError<'i>>> {
+fn content_function<'i>(input: &mut Parser<'i, '_>) -> Result<(), ParseError<'i, StyleError<'i>>> {
     let function = input.expect_function()?.clone();
     if !function.eq_ignore_ascii_case("content") {
         return Err(input.new_custom_error(StyleError::UnsupportedValue(function)));
@@ -358,9 +356,7 @@ pub(super) fn content_function<'i>(
 }
 
 /// The `none` keyword, consumed only when that is what is there.
-pub(super) fn none_keyword<'i>(
-    input: &mut Parser<'i, '_>,
-) -> Result<(), ParseError<'i, StyleError<'i>>> {
+fn none_keyword<'i>(input: &mut Parser<'i, '_>) -> Result<(), ParseError<'i, StyleError<'i>>> {
     let keyword = input.expect_ident()?.clone();
     if keyword.eq_ignore_ascii_case("none") {
         Ok(())
@@ -458,7 +454,7 @@ pub(super) fn length(input: &mut Parser<'_, '_>) -> Option<Length> {
 }
 
 /// One unit's conversion into a `Length`.
-pub(super) type Convert = fn(f32) -> Length;
+type Convert = fn(f32) -> Length;
 
 /// The units a `<length>` may carry, each with its conversion. The
 /// absolute ones become points; the font-relative ones stay relative

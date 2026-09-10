@@ -43,7 +43,7 @@ impl Paginator<'_> {
 
 /// Builds one section's fragments: blocks in, everything the flow
 /// needs to place them out.
-pub(super) struct Builder<'a, 'p> {
+struct Builder<'a, 'p> {
     paginator: &'p Paginator<'a>,
     /// The file the section was read from, for diagnostics.
     source: Option<&'p str>,
@@ -64,7 +64,7 @@ pub(super) struct Builder<'a, 'p> {
 }
 
 /// A decorated block while its fragments are still being built.
-pub(super) struct Pending {
+struct Pending {
     /// The fragment its first one will be.
     start: usize,
     /// What `fixed` stood at when the block's border box opened, and
@@ -573,14 +573,14 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
 pub(super) struct Setting {
     /// Leading edge, from the content box's own.
     pub(super) x: f32,
-    pub(super) align: TextAlign,
-    pub(super) orphans: usize,
-    pub(super) widows: usize,
+    align: TextAlign,
+    orphans: usize,
+    widows: usize,
     /// The initial letter beside the lines it is sunk over.
     pub(super) cap: Option<Cap>,
     /// Where the letter goes, from `x`. An image in the way of the
     /// bands it is sunk over moves it along with them.
-    pub(super) cap_x: f32,
+    cap_x: f32,
 }
 
 impl Setting {
@@ -621,7 +621,7 @@ pub struct Reflow {
 }
 
 /// Where a line of `width` starts inside a measure of `available`.
-pub(super) fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
+fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
     match align {
         TextAlign::Left | TextAlign::Justify => 0.0,
         TextAlign::Right => (available - width).max(0.0),

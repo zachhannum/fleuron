@@ -79,7 +79,7 @@ pub(super) struct Cap {
 
 /// The letter a drop cap is set from, where it was written, and how
 /// far into the paragraph the rest of the prose starts.
-pub(super) struct Initial {
+struct Initial {
     letter: char,
     /// The node the letter came out of, and the bytes of it the cap
     /// holds: the letter and whatever space stood before it.
@@ -90,7 +90,7 @@ pub(super) struct Initial {
 
 /// The first character of a run of inlines, wherever the markup has
 /// put it: a paragraph opening in italic still opens with a letter.
-pub(super) fn take_initial(inlines: &[Inline]) -> Option<Initial> {
+fn take_initial(inlines: &[Inline]) -> Option<Initial> {
     fn walk(inlines: &[Inline], before: &mut usize) -> Option<Initial> {
         for inline in inlines {
             match inline {
@@ -125,7 +125,7 @@ pub(super) fn take_initial(inlines: &[Inline]) -> Option<Initial> {
 
 /// A face's cap height, falling back to its ascender when the file
 /// declares none.
-pub(super) fn cap_height(metrics: crate::fonts::FontMetricsTable) -> f32 {
+fn cap_height(metrics: crate::fonts::FontMetricsTable) -> f32 {
     if metrics.cap_height > 0 {
         metrics.cap_height as f32
     } else {
