@@ -351,8 +351,14 @@ impl Flow<'_, '_> {
             .unwrap_or(0.0);
     }
 
-    /// The images on the page being built, in the coordinates of the
-    /// column being filled.
+    /// The images on the page being built that reach the column being
+    /// filled, in that column's coordinates.
+    ///
+    /// An image is placed against the page and a column is a region
+    /// of the page, so which images a column sets around is the
+    /// overlap of the two. An image that reaches no part of this
+    /// column is not one of its holes, and an image that reaches two
+    /// columns is a hole in each of them.
     fn holes(&self) -> Vec<Hole<'_>> {
         let index = self.pages.len();
         let Some(anchored) = self.anchored.by_page.get(&index) else {
@@ -360,12 +366,20 @@ impl Flow<'_, '_> {
         };
         let geometry = self.paginator.master(index, &self.slot).geometry;
         let origin = geometry.column_origin(self.column);
+        let column = Rect {
+            x: origin.0,
+            y: origin.1,
+            w: geometry.measure(),
+            h: self.height,
+        };
         anchored
             .iter()
             .map(|at| &self.anchored.all[*at])
             .filter(|image| image.wrap != WrapFlow::Auto)
-            .map(|image| Hole {
-                rect: image.rect(geometry).within(origin),
+            .map(|image| (image, image.rect(geometry)))
+            .filter(|(_, rect)| rect.meets(column))
+            .map(|(image, rect)| Hole {
+                rect: rect.within(origin),
                 wrap: image.wrap,
                 shape: image.shape.as_ref(),
             })
@@ -581,6 +595,14 @@ impl Rect {
         self.y + self.h
     }
 
+    /// Whether two rectangles share any area.
+    fn meets(self, other: Rect) -> bool {
+        self.x < other.right()
+            && other.x < self.right()
+            && self.y < other.bottom()
+            && other.y < self.bottom()
+    }
+
     /// The same rectangle read from another origin.
     fn within(self, origin: (f32, f32)) -> Rect {
         Rect {
@@ -686,11 +708,12 @@ mod tests {
     use crate::LayoutOutput;
     use crate::content::{Attributes, Block, NodeId};
     use crate::layout::testing::{
-        Run, body_size, book_of, content_items, content_lines, heading, image, long_prose, master,
-        paginate_styled, painted, paragraph, png, registry, right_edge, section, styled,
-        tagged_lines, tagged_prose, with_image,
+        Run, body_size, book_of, content_items, content_lines, folio_size, heading, image,
+        image_of, long_prose, master, page_geometry, paginate_styled, painted, paragraph, png,
+        registry, right_edge, section, styled, styled_geometry, tagged_lines, tagged_prose,
+        with_image, with_images,
     };
-    use crate::pages::{Page, Side};
+    use crate::pages::{DrawItem, Page, Side};
     use crate::style::Situation;
 
     /// The image the tests anchor is 144pt square.
@@ -1282,5 +1305,344 @@ mod tests {
             chosen < filled,
             "the break the flow chose leaves {chosen} of slack against the greedy {filled}",
         );
+    }
+
+    /// A page box divided in two, with a gutter wide enough that a
+    /// rectangle over it reaches both columns and covers neither.
+    ///
+    /// The columns come out 144pt wide, which is the anchored image's
+    /// own width, so an image at the leading edge covers the first
+    /// column exactly.
+    const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 48pt }";
+
+    /// The page box `TWO_COLUMNS` resolves to on the page the fixture
+    /// sections open on.
+    fn two_columns() -> crate::style::PageGeometry {
+        styled_geometry(TWO_COLUMNS, Situation::First(Side::Recto))
+    }
+
+    /// Every content run of one page as `(column, baseline, start,
+    /// end)`, in paint order. The folio is furniture and is not one.
+    fn column_runs(page: &Page, geometry: crate::style::PageGeometry) -> Vec<(u32, f32, f32, f32)> {
+        page.items
+            .iter()
+            .filter_map(|item| {
+                let DrawItem::Text {
+                    x,
+                    y,
+                    font_id,
+                    size,
+                    glyphs,
+                    ..
+                } = item
+                else {
+                    return None;
+                };
+                if *size == folio_size() {
+                    return None;
+                }
+                let last = glyphs.last()?;
+                let upem = registry().metrics(*font_id)?.units_per_em as f32;
+                let advance = registry().advance_width(*font_id, last.id)? as f32;
+                let column = (0..geometry.column_count())
+                    .rev()
+                    .find(|column| *x >= geometry.column_origin(*column).0 - 1e-3)
+                    .unwrap_or(0);
+                Some((column, *y, *x, last.x + advance / upem * size))
+            })
+            .collect()
+    }
+
+    /// The baselines one column of a page carries, in the order the
+    /// flow filled them.
+    fn baselines(page: &Page, geometry: crate::style::PageGeometry, column: u32) -> Vec<f32> {
+        let mut found: Vec<f32> = Vec::new();
+        for (at, baseline, ..) in column_runs(page, geometry) {
+            if at == column && found.last() != Some(&baseline) {
+                found.push(baseline);
+            }
+        }
+        found
+    }
+
+    /// The book the composition tests lay out: an image anchored above
+    /// prose enough to fill both columns of a page and run on.
+    fn wrapped(css: &str) -> LayoutOutput {
+        with_image(
+            css,
+            vec![section(
+                std::iter::once(image()).chain(long_prose(14)).collect(),
+            )],
+        )
+    }
+
+    /// Acceptance: one rectangle over the gutter narrows the column on
+    /// either side of it, each from its own edge.
+    ///
+    /// The image is page geometry and a column is a region of the
+    /// page, so neither column owns it. The first column gives up its
+    /// trailing edge and the second gives up its leading edge, out of
+    /// the one rectangle.
+    #[test]
+    fn an_image_over_the_gutter_narrows_the_column_on_either_side_of_it() {
+        let css = format!(
+            "{TWO_COLUMNS} img {{ position: absolute; top: 0; left: 120pt; wrap-flow: both }}"
+        );
+        let geometry = two_columns();
+        let (left, top) = geometry.content_origin();
+        let measure = geometry.measure();
+        let (near, far) = (left + 120.0, left + 120.0 + IMAGE);
+        let foot = top + IMAGE;
+        let page = &wrapped(&css).pages[0];
+        assert_eq!(painted(page), vec![(near, top, IMAGE, IMAGE)]);
+        // One rectangle over the gutter: it reaches into both columns
+        // and covers the whole of neither.
+        assert!(near > geometry.column_origin(0).0 && near < geometry.column_origin(0).0 + measure);
+        assert!(far > geometry.column_origin(1).0 && far < geometry.column_origin(1).0 + measure);
+
+        let mut beside = [0, 0];
+        let mut clear = [0, 0];
+        for (column, baseline, start, end) in column_runs(page, geometry) {
+            let origin = geometry.column_origin(column).0;
+            if baseline <= foot {
+                beside[column as usize] += 1;
+                match column {
+                    0 => assert!(
+                        end <= near + 1e-3,
+                        "a line at {baseline} reaches {end}, over the image"
+                    ),
+                    _ => assert!(
+                        start >= far - 1e-3,
+                        "a line at {baseline} starts at {start}, over the image"
+                    ),
+                }
+                continue;
+            }
+            clear[column as usize] += 1;
+            assert!(
+                start >= origin - 1e-3 && end <= origin + measure + 1e-3,
+                "a line at {baseline} runs {start}..{end}, outside column {column}",
+            );
+        }
+        assert!(
+            beside[0] > 0 && beside[1] > 0,
+            "no column set beside the image: {beside:?}"
+        );
+        assert!(
+            clear[0] > 0 && clear[1] > 0,
+            "no column reached past the image: {clear:?}"
+        );
+
+        // Under the image each column has its whole measure back.
+        let reach = |column: u32| {
+            column_runs(page, geometry)
+                .into_iter()
+                .filter(|(at, baseline, ..)| *at == column && *baseline > foot)
+                .fold((f32::MAX, f32::MIN), |(from, to), (_, _, start, end)| {
+                    (from.min(start), to.max(end))
+                })
+        };
+        assert!(
+            reach(0).1 > near,
+            "the first column never reached past the image"
+        );
+        assert!(
+            reach(1).0 < far - 1e-3,
+            "the second column never reached back to its own edge"
+        );
+    }
+
+    /// Acceptance: an image over the whole width of one column leaves
+    /// the other one alone.
+    ///
+    /// A band the image covers the whole of holds nothing, so the
+    /// flow carries the prose of that column to the first band under
+    /// it. The other column is set as if the image is not on the page.
+    #[test]
+    fn an_image_over_a_whole_column_leaves_the_other_alone() {
+        let css =
+            format!("{TWO_COLUMNS} img {{ position: absolute; top: 0; left: 0; wrap-flow: both }}");
+        let geometry = two_columns();
+        let (left, top) = geometry.content_origin();
+        let measure = geometry.measure();
+        assert_eq!(measure, IMAGE, "the image covers the first column exactly");
+        let page = &wrapped(&css).pages[0];
+        assert_eq!(painted(page), vec![(left, top, IMAGE, IMAGE)]);
+
+        // The same page with the image excluding nothing, which is
+        // what an untouched column is read against.
+        let plain =
+            format!("{TWO_COLUMNS} img {{ position: absolute; top: 0; left: 0; wrap-flow: auto }}");
+        let untouched = &wrapped(&plain).pages[0];
+        assert_eq!(
+            baselines(page, geometry, 1),
+            baselines(untouched, geometry, 0),
+            "the second column is not set the way an untouched column is",
+        );
+        for (column, baseline, start, end) in column_runs(page, geometry) {
+            if column != 1 {
+                continue;
+            }
+            let origin = geometry.column_origin(1).0;
+            assert!(
+                start >= origin - 1e-3 && end <= origin + measure + 1e-3,
+                "a line at {baseline} runs {start}..{end}, outside the second column",
+            );
+        }
+
+        // Nothing is set in the bands the image covers, and the first
+        // column opens on the first band under it.
+        let first = baselines(page, geometry, 0);
+        assert!(!first.is_empty(), "the first column set nothing at all");
+        assert!(
+            first[0] > top + IMAGE,
+            "a line at {} is set over the image",
+            first[0],
+        );
+        let leading = first[1] - first[0];
+        assert!(
+            first[0] - leading <= top + IMAGE,
+            "the first column opened {} below the image",
+            first[0] - leading - top - IMAGE,
+        );
+    }
+
+    /// One column's exclusion is not the other's: an image in the
+    /// second column does not carry the first column's prose past its
+    /// own image.
+    #[test]
+    fn an_image_in_one_column_is_no_exclusion_in_the_other() {
+        let css = format!(
+            "{TWO_COLUMNS} \
+             .near {{ position: absolute; top: 0; left: 0; wrap-flow: both }} \
+             .far {{ position: absolute; top: 0; left: 192pt; wrap-flow: both }}"
+        );
+        let geometry = two_columns();
+        let (left, top) = geometry.content_origin();
+        let blocks = || {
+            vec![
+                image_of("near.png", vec!["near".into()]),
+                image_of("far.png", vec!["far".into()]),
+            ]
+            .into_iter()
+            .chain(long_prose(14))
+            .collect()
+        };
+        let output = with_images(
+            &css,
+            vec![section(blocks())],
+            vec![("near.png", png(192, 192)), ("far.png", png(192, 384))],
+        );
+        let page = &output.pages[0];
+        let tall = IMAGE * 2.0;
+        assert_eq!(
+            painted(page),
+            vec![(left, top, IMAGE, IMAGE), (left + 192.0, top, IMAGE, tall),],
+        );
+
+        // The first column resumes under its own image rather than
+        // under the taller one beside it.
+        let first = baselines(page, geometry, 0);
+        assert!(
+            first[0] > top + IMAGE,
+            "a line at {} is set over the near image",
+            first[0]
+        );
+        assert!(
+            first[0] < top + tall,
+            "the first column waited on the far column's image: {}",
+            first[0],
+        );
+        let second = baselines(page, geometry, 1);
+        assert!(
+            second[0] > top + tall,
+            "a line at {} is set over the far image",
+            second[0],
+        );
+    }
+
+    /// Acceptance: reading order holds. A wrapped column reads to its
+    /// foot before the next one begins, and no page turns back.
+    #[test]
+    fn a_wrapped_column_reads_to_its_foot_before_the_next_begins() {
+        let css = format!(
+            "{TWO_COLUMNS} img {{ position: absolute; top: 0; left: 120pt; wrap-flow: both }}"
+        );
+        let output = with_image(
+            &css,
+            vec![section(
+                std::iter::once(image()).chain(tagged_prose(24)).collect(),
+            )],
+        );
+        let mut order: Vec<String> = Vec::new();
+        for page in &output.pages {
+            let geometry = page_geometry(&css, page);
+            let runs = column_runs(page, geometry);
+            let columns: Vec<u32> = runs.iter().map(|(column, ..)| *column).collect();
+            assert!(
+                columns.windows(2).all(|pair| pair[0] <= pair[1]),
+                "page {}: the flow went back to a column it had left",
+                page.number,
+            );
+            for column in 0..geometry.column_count() {
+                let found = baselines(page, geometry, column);
+                assert!(
+                    found.windows(2).all(|pair| pair[1] > pair[0]),
+                    "page {}: column {column} does not read down the page",
+                    page.number,
+                );
+            }
+            for (_, baseline, start, _) in runs {
+                let tag = content_lines(page)
+                    .iter()
+                    .find(|(at, runs)| (at - baseline).abs() < 1e-3 && runs[0].0 == start)
+                    .and_then(|(_, runs)| runs[0].2.split_whitespace().next())
+                    .unwrap_or_default()
+                    .to_string();
+                if order.last() != Some(&tag) {
+                    order.push(tag);
+                }
+            }
+        }
+        let mut seen = order.clone();
+        seen.dedup();
+        assert_eq!(order, seen, "a paragraph is read in two places: {order:?}");
+        assert!(
+            order.len() > 8,
+            "too few paragraphs to prove an order: {order:?}"
+        );
+    }
+
+    /// Acceptance: nothing crosses a gutter, the exclusion included.
+    /// Every line of every page sits inside the column it was set in,
+    /// and no line is set in the space between two columns.
+    #[test]
+    fn nothing_crosses_a_gutter_beside_an_image() {
+        let css = format!(
+            "{TWO_COLUMNS} img {{ position: absolute; top: 0; left: 120pt; wrap-flow: both }}"
+        );
+        let output = wrapped(&css);
+        assert!(
+            output.pages.len() > 1,
+            "one page proves nothing about a book"
+        );
+        for page in &output.pages {
+            let geometry = page_geometry(&css, page);
+            let measure = geometry.measure();
+            let gutter = geometry.column_origin(1).0 - geometry.columns.gap;
+            for (column, baseline, start, end) in column_runs(page, geometry) {
+                let origin = geometry.column_origin(column).0;
+                assert!(
+                    start >= origin - 1e-3 && end <= origin + measure + 1e-3,
+                    "page {}: a line at {baseline} runs {start}..{end}, outside column {column}",
+                    page.number,
+                );
+                assert!(
+                    end <= gutter + 1e-3 || start >= gutter + geometry.columns.gap - 1e-3,
+                    "page {}: a line at {baseline} runs {start}..{end}, into the gutter",
+                    page.number,
+                );
+            }
+        }
     }
 }

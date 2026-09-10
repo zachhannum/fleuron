@@ -365,25 +365,50 @@ pub(super) fn png(width: u32, height: u32) -> Vec<u8> {
 /// A book laid out with one image in it, which the sheet can
 /// anchor to the page. The image is 2in square at 96dpi.
 pub(super) fn with_image(css: &str, sections: Vec<Section>) -> LayoutOutput {
-    struct Png;
-    impl crate::images::ImageLoader for Png {
+    with_images(css, sections, vec![("image.png", png(192, 192))])
+}
+
+/// The same over as many images as the caller names, each with its
+/// own url and its own header.
+pub(super) fn with_images(
+    css: &str,
+    sections: Vec<Section>,
+    files: Vec<(&str, Vec<u8>)>,
+) -> LayoutOutput {
+    struct Named(Vec<(String, Vec<u8>)>);
+    impl crate::images::ImageLoader for Named {
         fn load(&self, url: &str) -> Option<Vec<u8>> {
-            (url == "image.png").then(|| png(192, 192))
+            self.0
+                .iter()
+                .find(|(name, _)| name == url)
+                .map(|(_, bytes)| bytes.clone())
         }
     }
+    let loader = Named(
+        files
+            .into_iter()
+            .map(|(url, bytes)| (url.to_string(), bytes))
+            .collect(),
+    );
     let book = book_of(sections);
     let styles = styled(css, &book);
-    let assets = crate::images::Assets::probe(&book, &Png);
+    let assets = crate::images::Assets::probe(&book, &loader);
     layout_book(&book, &styles, registry(), &assets)
 }
 
 /// The image the anchoring tests place.
 pub(super) fn image() -> Block {
+    image_of("image.png", Vec::new())
+}
+
+/// The same at whatever url the caller names, under the classes it
+/// asks for, so a sheet can style two images apart.
+pub(super) fn image_of(url: &str, classes: Vec<String>) -> Block {
     Block::Image {
         id: NodeId::UNASSIGNED,
-        url: "image.png".into(),
+        url: url.into(),
         alt: "a map of Lilliput".into(),
-        attributes: Attributes::default(),
+        attributes: Attributes { id: None, classes },
         position: Some(SourcePos { line: 3, column: 1 }),
         span: None,
     }
