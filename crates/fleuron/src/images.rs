@@ -382,11 +382,10 @@ impl Contours {
         }
         let mut traced = 0;
         for section in &book.sections {
-            let source = section.source.clone();
             walk(
                 self,
                 &section.blocks,
-                source.as_deref(),
+                section.source.as_deref(),
                 styles,
                 assets,
                 &mut traced,

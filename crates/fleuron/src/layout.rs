@@ -2700,8 +2700,8 @@ fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option<(f32, f32)
     for ring in rings {
         for (at, from) in ring.iter().enumerate() {
             let to = ring[(at + 1) % ring.len()];
-            let (high, low) = (from[1].min(to[1]), from[1].max(to[1]));
-            if low < top || high > bottom {
+            let (above, below) = (from[1].min(to[1]), from[1].max(to[1]));
+            if below < top || above > bottom {
                 continue;
             }
             for point in [*from, to] {
@@ -2710,7 +2710,7 @@ fn scanline(rings: &[Vec<[f32; 2]>], top: f32, bottom: f32) -> Option<(f32, f32)
                 }
             }
             for cut in [top, bottom] {
-                if cut > high && cut < low {
+                if cut > above && cut < below {
                     let along = (cut - from[1]) / (to[1] - from[1]);
                     widen(from[0] + along * (to[0] - from[0]));
                 }
