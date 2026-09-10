@@ -16,3 +16,6 @@
 /packages/react/node_modules
 /packages/react/dist
 /packages/react/*.tgz
+
+# Working notes and specs, not shipped.
+/fleuron-vault
