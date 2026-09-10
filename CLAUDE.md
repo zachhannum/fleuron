@@ -167,9 +167,11 @@ the lockfiles that mirror all of it.
 ## Documentation rules
 
 `STYLE.md` is the voice the docs, the README, and the npm READMEs are
-written in. Its before-and-after pairs come from edits made to
-finished pages, so they are the samples to match. Read them before
-writing prose and check a draft against them after.
+written in: Simplified English, in the spirit of ASD-STE100. Short
+sentences, active voice, simple tenses, and one word for one meaning.
+Its before-and-after pairs come from edits made to finished pages, so
+they are the samples to match. Read them before writing prose, and
+read a draft against them after.
 
 **Code comments**
 

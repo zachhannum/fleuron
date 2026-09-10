@@ -29,6 +29,7 @@ import {
   styleOp,
   wireVersion,
   type Folios,
+  type ImageItem,
   type LayoutOutput,
   type Op,
   type Page,
@@ -791,6 +792,71 @@ check(
   'and the second column opens above the foot of the first',
   turn > 0 && (columns[turn]?.y ?? 0) <= (columns[turn - 1]?.y ?? 0),
   `${columns[turn]?.y} against ${columns[turn - 1]?.y}`,
+);
+
+// An anchored image. The sheet takes the map out of the text and
+// against the page. The prose of that page sets beside it, and the
+// painter draws both where the display structure put them. The PDF
+// writer places the same items, so this is the preview half of that
+// agreement.
+const illustrated = await client.preview([
+  styleOp('.map { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }'),
+]);
+const wrapped =
+  illustrated?.pages.find((page) =>
+    page.items.some(
+      (item) =>
+        item.kind === 'image' &&
+        page.items.some((run) => run.kind === 'text' && run.x >= item.x + item.w),
+    ),
+  ) ?? null;
+const image = wrapped?.items.find((item): item is ImageItem => item.kind === 'image') ?? null;
+const beside = (wrapped?.items ?? []).filter(
+  (item): item is TextItem =>
+    item.kind === 'text' && image !== null && item.x >= image.x + image.w,
+);
+check(
+  'a page the sheet anchored an image to sets its prose beside it',
+  image !== null && beside.length > 0,
+  image === null ? 'no image on any page' : `${beside.length} runs beside it`,
+);
+const illustratedSvg =
+  wrapped === null
+    ? ''
+    : paintPage(wrapped, {
+        fonts: illustrated?.fonts ?? [],
+        assets: illustrated?.assets ?? [],
+        asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      });
+const drawnImages: Record<string, number>[] = [...illustratedSvg.matchAll(/<image\b([^>]*)\/>/g)].map(
+  (match) =>
+    Object.fromEntries(
+      [...(match[1] ?? '').matchAll(/(\w+)="([-\d.]+)"/g)].map((attribute) => [
+        attribute[1] ?? '',
+        Number(attribute[2]),
+      ]),
+    ),
+);
+check(
+  'and the painter draws the image where the display structure put it',
+  image !== null &&
+    drawnImages.length === 1 &&
+    near(drawnImages[0]?.['x'], image.x) &&
+    near(drawnImages[0]?.['y'], image.y) &&
+    near(drawnImages[0]?.['width'], image.w) &&
+    near(drawnImages[0]?.['height'], image.h),
+  image === null
+    ? ''
+    : `${JSON.stringify(drawnImages)} against ${image.x}, ${image.y}, ${image.w}, ${image.h}`,
+);
+const clear = texts(illustratedSvg).filter(
+  (run) => image !== null && Number(run.x[0]) >= image.x + image.w,
+);
+check(
+  'and it starts the lines beside it where their runs start',
+  clear.length === beside.length &&
+    clear.every((run, index) => near(Number(run.x[0]), beside[index]?.x ?? -1)),
+  `${clear.length} lines painted beside the image, ${beside.length} on the page`,
 );
 
 // Named sheets. A host that builds its styling out of layers sends

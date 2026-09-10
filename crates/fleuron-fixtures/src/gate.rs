@@ -48,6 +48,14 @@ pub mod budget {
     /// the host cannot read yet is not a page anyone can see.
     pub const WASM_LAYOUT: Duration = Duration::from_millis(500);
 
+    /// The same for a book with images on it. The one-shot call builds
+    /// every section twice. The pass that settles which page each image
+    /// lands on needs the whole book, and to hold every section's
+    /// fragments for it costs more memory than the second build costs
+    /// time. A session builds them once and settles over what it has,
+    /// which is what the worker does.
+    pub const WASM_ANCHORED_LAYOUT: Duration = Duration::from_millis(900);
+
     /// Bytes a book-scale layout may allocate at its peak, over what the
     /// content tree already costs. The display structure is the floor —
     /// every glyph of every page is retained — and a section's lines
@@ -67,6 +75,14 @@ pub mod budget {
     /// the lines it already has, and a reader dragging a margin
     /// should see the page turn over rather than wait on it.
     pub const STYLE_RERENDER: Duration = Duration::from_millis(20);
+
+    /// The same for a book with images anchored to its pages, which is
+    /// a longer way round. An image makes the page's own height an
+    /// input to line breaking. A sheet that moves the page box breaks
+    /// every section again rather than re-fragments over the lines it
+    /// has. The flow then breaks the paragraphs beside an image once
+    /// more.
+    pub const ANCHORED_RERENDER: Duration = Duration::from_millis(500);
 }
 
 /// The page box a book is measured on. The budgets are the same on
@@ -103,6 +119,41 @@ impl Division {
     }
 }
 
+/// What a measurement anchors to the page beside the prose.
+///
+/// A book with an image on it pays for two things a book without one
+/// does not: the pass that settles which page each image lands on, and
+/// the second break of the paragraphs beside an image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Illustration {
+    /// Prose alone.
+    Bare,
+    /// An image at the head of every chapter, with the prose beside it
+    /// set around it.
+    Anchored,
+}
+
+impl Illustration {
+    /// Both, in the order the gate reports them.
+    pub const ALL: [Illustration; 2] = [Illustration::Bare, Illustration::Anchored];
+
+    /// The author CSS this illustration adds to the sheet.
+    pub fn css(self) -> &'static str {
+        match self {
+            Illustration::Bare => "",
+            Illustration::Anchored => crate::anchored_images::CSS,
+        }
+    }
+
+    /// What reports call it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Illustration::Bare => "no images",
+            Illustration::Anchored => "an image a chapter",
+        }
+    }
+}
+
 /// Where the harness is running. The budgets differ; the measurements
 /// do not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,10 +178,13 @@ impl Target {
     /// against.
     /// Natively that is the whole pipeline; in the worker it is
     /// layout, which is all the reader is waiting for.
-    pub fn time_budget(self) -> (&'static str, Duration) {
-        match self {
-            Target::Native => ("end to end", budget::NATIVE_END_TO_END),
-            Target::Wasm => ("layout + wire", budget::WASM_LAYOUT),
+    pub fn time_budget(self, illustration: Illustration) -> (&'static str, Duration) {
+        match (self, illustration) {
+            (Target::Native, _) => ("end to end", budget::NATIVE_END_TO_END),
+            (Target::Wasm, Illustration::Bare) => ("layout + wire", budget::WASM_LAYOUT),
+            (Target::Wasm, Illustration::Anchored) => {
+                ("layout + wire", budget::WASM_ANCHORED_LAYOUT)
+            }
         }
     }
 
@@ -151,6 +205,8 @@ pub struct Report {
     pub corpus: Corpus,
     /// The page box it was measured on.
     pub division: Division,
+    /// What it anchored to the page.
+    pub illustration: Illustration,
     /// Pages the book fragmented into.
     pub pages: usize,
     /// Lines the paragraph pass produced, across every section.
@@ -195,9 +251,17 @@ impl Report {
         self.parse + self.style + self.layout + self.pdf
     }
 
+    /// What a re-render of this book is allowed to cost.
+    fn rerender_budget(&self) -> Duration {
+        match self.illustration {
+            Illustration::Bare => budget::STYLE_RERENDER,
+            Illustration::Anchored => budget::ANCHORED_RERENDER,
+        }
+    }
+
     /// The budgets this report is checked against on `target`.
     pub fn checks(&self, target: Target) -> Vec<Check> {
-        let (label, ceiling) = target.time_budget();
+        let (label, ceiling) = target.time_budget(self.illustration);
         let measured = match target {
             Target::Native => self.end_to_end(),
             Target::Wasm => self.layout + self.serialize,
@@ -224,7 +288,7 @@ impl Report {
             Check {
                 label: "re-render",
                 measured: self.style_rerender.as_secs_f64() * 1000.0,
-                ceiling: budget::STYLE_RERENDER.as_secs_f64() * 1000.0,
+                ceiling: self.rerender_budget().as_secs_f64() * 1000.0,
                 unit: "ms",
             },
             Check {
@@ -290,20 +354,36 @@ impl fmt::Display for Check {
 /// work. Memory goes the other way — a ceiling is only met if it is
 /// met every time.
 pub fn measure(corpus: Corpus, registry: &FontRegistry, runs: usize) -> Report {
-    measure_on(corpus, Division::Undivided, registry, runs)
+    measure_on(
+        corpus,
+        Division::Undivided,
+        Illustration::Bare,
+        registry,
+        runs,
+    )
 }
 
-/// The same on a page box the sheet divides.
+/// The same on a page box the sheet divides, with or without images
+/// anchored to it.
 pub fn measure_on(
     corpus: Corpus,
     division: Division,
+    illustration: Illustration,
     registry: &FontRegistry,
     runs: usize,
 ) -> Report {
     let markdown = corpus.markdown();
-    let book = corpus.book();
-    let styles = crate::styles_on(&book, division);
-    let paginator = Paginator::new(registry, &styles);
+    let bare = corpus.book();
+    let book = match illustration {
+        Illustration::Bare => bare,
+        Illustration::Anchored => crate::anchored_images::illustrated(&bare),
+    };
+    let styles = crate::styles_on(&book, division, illustration);
+    let assets = match illustration {
+        Illustration::Bare => Assets::none(),
+        Illustration::Anchored => crate::anchored_images::assets(&book),
+    };
+    let paginator = Paginator::with_assets(registry, &styles, &assets);
 
     let mut parse = Duration::MAX;
     let mut style = Duration::MAX;
@@ -327,7 +407,7 @@ pub fn measure_on(
         parse = parse.min(start.elapsed());
 
         let start = Instant::now();
-        black_box(crate::styles_on(&book, division));
+        black_box(crate::styles_on(&book, division, illustration));
         style = style.min(start.elapsed());
 
         let start = Instant::now();
@@ -350,7 +430,7 @@ pub fn measure_on(
 
         let (output, peak) = crate::alloc::measure(|| {
             let start = Instant::now();
-            let output = fleuron::layout::layout_book(&book, &styles, registry, &Assets::none());
+            let output = fleuron::layout::layout_book(&book, &styles, registry, &assets);
             layout = layout.min(start.elapsed());
             output
         });
@@ -365,7 +445,7 @@ pub fn measure_on(
 
         let start = Instant::now();
         let bytes = black_box(
-            pdf::write(&output, registry, &Assets::none(), &book.metadata)
+            pdf::write(&output, registry, &assets, &book.metadata)
                 .expect("fixture book writes PDF"),
         );
         pdf_time = pdf_time.min(start.elapsed());
@@ -377,13 +457,11 @@ pub fn measure_on(
         // ceiling is about what it builds over one, so the tree is
         // cloned before the measurement opens and moved in.
         let owned = book.clone();
+        let css = sheet(division, illustration);
         let (mut session, peak) = crate::alloc::measure(|| {
-            let mut session = Session::new(registry);
+            let mut session = Session::with_assets(registry, &assets);
             session.set_content(owned);
-            session.set_style(Stylesheets::parse(&[Source::author(
-                "gate.css",
-                division.css(),
-            )]));
+            session.set_style(Stylesheets::parse(&[Source::author("gate.css", &css)]));
             session.preview();
             session
         });
@@ -396,7 +474,7 @@ pub fn measure_on(
         // re-render rather than a cache that was already warm.
         let css = format!(
             "{}@page {{ margin-bottom: {}pt }}",
-            division.css(),
+            sheet(division, illustration),
             60 + index
         );
         let sheets = Stylesheets::parse(&[Source::author("gate.css", &css)]);
@@ -409,6 +487,7 @@ pub fn measure_on(
     Report {
         corpus,
         division,
+        illustration,
         pages,
         lines,
         parse,
@@ -427,6 +506,11 @@ pub fn measure_on(
     }
 }
 
+/// The author CSS one measurement is laid out under.
+fn sheet(division: Division, illustration: Illustration) -> String {
+    format!("{}{}", division.css(), illustration.css())
+}
+
 /// FNV-1a over the encoded display structure: a number two runs can be
 /// compared on without a hash crate in the harness.
 fn digest(bytes: &[u8]) -> u64 {
@@ -442,9 +526,10 @@ impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "{} — {}, {} pages, {} lines, {} KiB of PDF",
+            "{} — {}, {}, {} pages, {} lines, {} KiB of PDF",
             self.corpus.slug(),
             self.division.name(),
+            self.illustration.name(),
             self.pages,
             self.lines,
             self.pdf_bytes / 1024,
@@ -527,6 +612,7 @@ mod tests {
         let report = Report {
             corpus: Corpus::GATE,
             division: Division::Undivided,
+            illustration: Illustration::Bare,
             pages: 300,
             lines: 10_000,
             parse: Duration::from_millis(30),

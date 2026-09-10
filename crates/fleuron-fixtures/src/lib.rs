@@ -12,6 +12,7 @@
 #![deny(missing_docs)]
 
 pub mod alloc;
+pub mod anchored_images;
 pub mod corpus;
 pub mod gate;
 
@@ -31,20 +32,20 @@ pub fn styles(book: &fleuron::content::Book) -> fleuron::style::StyleTree {
     fleuron::style::defaults(book, registry())
 }
 
-/// The same on the page box `division` asks for. The undivided one is
-/// the built-in sheet alone.
+/// The same on the page box `division` asks for, with whatever
+/// `illustration` anchors to it. The undivided, bare pair is the
+/// built-in sheet alone.
 pub fn styles_on(
     book: &fleuron::content::Book,
     division: gate::Division,
+    illustration: gate::Illustration,
 ) -> fleuron::style::StyleTree {
-    if division == gate::Division::Undivided {
+    let css = format!("{}{}", division.css(), illustration.css());
+    if css.is_empty() {
         return styles(book);
     }
-    fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
-        "gate.css",
-        division.css(),
-    )])
-    .compile(book, registry())
+    fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("gate.css", &css)])
+        .compile(book, registry())
 }
 
 /// Every block of a book as the flat text one shaping call is handed,

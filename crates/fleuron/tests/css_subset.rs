@@ -177,7 +177,8 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("font-variant", "small-caps"),
         ("font", "italic 11pt serif"),
         ("width", "10em"),
-        ("position", "absolute"),
+        ("inset", "0"),
+        ("shape-outside", "circle()"),
     ];
     for (name, value) in outside {
         assert!(!described.contains(name), "{name} is in the description");

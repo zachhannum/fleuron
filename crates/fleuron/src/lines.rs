@@ -252,6 +252,11 @@ impl Measure {
         }
     }
 
+    /// The band every span past the listed ones is set in.
+    pub fn rest(&self) -> Span {
+        self.rest
+    }
+
     /// The span at `index`.
     pub fn at(&self, index: usize) -> Span {
         self.leading.get(index).copied().unwrap_or(self.rest)
@@ -1065,6 +1070,36 @@ impl<'a> LineLayout<'a> {
             .0
     }
 
+    /// The same, handing back the shaped paragraph beside the lines.
+    ///
+    /// A caller that can break this paragraph again keeps it.
+    /// [`LineLayout::rebreak`] sets the same text to a different
+    /// profile without shaping it twice.
+    pub fn layout_shaped(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        measure: &Measure,
+        options: LineBreakOptions,
+        opening: Opening,
+    ) -> (Broken, Option<Shaped>) {
+        let (broken, _, shaped) =
+            self.broken_shaped(inlines, style, styles, measure, options, opening);
+        (broken, shaped)
+    }
+
+    /// Breaks a paragraph that was already shaped to `measure`,
+    /// starting from the end of the line `from`, which is `0` for the
+    /// whole of it.
+    ///
+    /// The style over the opening line is not held to the text it
+    /// covered before. The profile decides where the lines end. A
+    /// line pinned to a width it no longer has runs past that width.
+    pub fn rebreak(&self, shaped: &Shaped, measure: &Measure, from: usize) -> Broken {
+        self.break_shaped(shaped, measure, from, None)
+    }
+
     /// Breaks one paragraph, and how many times the breaker ran.
     ///
     /// A first-line style takes two runs. What it sets changes the
@@ -1086,58 +1121,101 @@ impl<'a> LineLayout<'a> {
         options: LineBreakOptions,
         opening: Opening,
     ) -> (Vec<Line>, u8) {
-        let lead = Lead {
-            style: opening.first_line,
-            extent: None,
-            taken: opening.taken,
-        };
-        if lead.style.is_none() {
-            return (
-                self.break_once(inlines, style, styles, measure, options, lead)
-                    .0,
-                1,
-            );
-        }
-        let (lines, extent) = self.break_once(inlines, style, styles, measure, options, lead);
-        if extent == 0 {
-            return (lines, 1);
-        }
-        let lead = Lead {
-            extent: Some(extent),
-            ..lead
-        };
-        let (lines, _) = self.break_once(inlines, style, styles, measure, options, lead);
-        (lines, 2)
+        let (broken, runs, _) =
+            self.broken_shaped(inlines, style, styles, measure, options, opening);
+        (broken.lines, runs)
     }
 
-    /// One run of the breaker: the paragraph's lines, and where the
-    /// first of them ended in the shaped text.
-    ///
-    /// `lead` is the style the paragraph opens in, how far it
-    /// reaches in bytes of that text, and what a drop cap took.
-    fn break_once(
+    /// The same, handing back what the paragraph was shaped from.
+    fn broken_shaped(
         &self,
         inlines: &[Inline],
         style: ParagraphStyle,
         styles: &dyn InlineStyles,
         measure: &Measure,
         options: LineBreakOptions,
+        opening: Opening,
+    ) -> (Broken, u8, Option<Shaped>) {
+        let lead = Lead {
+            style: opening.first_line,
+            extent: None,
+            taken: opening.taken,
+        };
+        let once = |lead| {
+            let shaped = self.shaped(inlines, style, styles, options, lead);
+            let broken = shaped
+                .as_ref()
+                .map(|shaped| self.break_shaped(shaped, measure, 0, shaped.opening))
+                .unwrap_or_default();
+            (broken, shaped)
+        };
+        let (broken, shaped) = once(lead);
+        if lead.style.is_none() || broken.extent == 0 {
+            return (broken, 1, shaped);
+        }
+        let lead = Lead {
+            extent: Some(broken.extent),
+            ..lead
+        };
+        let (broken, shaped) = once(lead);
+        (broken, 2, shaped)
+    }
+
+    /// One paragraph flattened and shaped, which is everything about
+    /// it that the measure does not decide.
+    ///
+    /// `lead` is the style the paragraph opens in, how far it reaches
+    /// in bytes of that text, and what a drop cap took.
+    fn shaped(
+        &self,
+        inlines: &[Inline],
+        style: ParagraphStyle,
+        styles: &dyn InlineStyles,
+        options: LineBreakOptions,
         lead: Lead,
-    ) -> (Vec<Line>, usize) {
+    ) -> Option<Shaped> {
         let flat = self.flatten(inlines, style, styles, lead);
         if flat.text.is_empty() {
-            return (Vec::new(), 0);
+            return None;
         }
-        let Some(metrics) = self.registry.metrics(style.font_id) else {
-            return (Vec::new(), 0);
-        };
-        let upem = metrics.units_per_em as f32;
+        let upem = self.registry.metrics(style.font_id)?.units_per_em as f32;
+        let spans = self.shape_spans(&flat, style, upem);
+        Some(Shaped {
+            flat,
+            spans,
+            style,
+            options,
+            upem,
+            opening: lead.extent,
+        })
+    }
+
+    /// Breaks a shaped paragraph to `measure`, starting from the
+    /// break `from`.
+    ///
+    /// `opening` is where the line the paragraph opens on has to end,
+    /// which is the extent of the style over it.
+    fn break_shaped(
+        &self,
+        shaped: &Shaped,
+        measure: &Measure,
+        from: usize,
+        opening: Option<usize>,
+    ) -> Broken {
+        let Shaped {
+            flat,
+            spans,
+            style,
+            options,
+            upem,
+            ..
+        } = shaped;
+        let (style, options, upem) = (*style, *options, *upem);
         // Points → font units: measure / size gives ems, ems *
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
 
-        let shaped = self.shape_spans(&flat, style, upem);
-        let widths = Widths::build(&flat.text, &shaped);
+        let widths = Widths::build(&flat.text, spans);
         let hyphen = self.hyphen_advance(style) as f32;
         let breaks = self.break_points(&flat.text, &widths, hyphen, options);
         let breaker = Breaker {
@@ -1151,20 +1229,19 @@ impl<'a> LineLayout<'a> {
             size: style.size,
             hyphen,
             options,
-            opening: lead
-                .extent
+            from,
+            opening: opening
                 .and_then(|extent| breaks.iter().position(|at| at.content_end == extent)),
         };
 
-        let mut lines = Vec::new();
-        let mut extent = 0usize;
-        let mut start = 0usize;
+        let mut broken = Broken::default();
+        let mut start = breaks[from.min(breaks.len() - 1)].next;
         // The band being filled, and where its first span was set:
         // a span's offset is from there, so a painter handed the
         // line's leading edge places the rest. One buffer gathers the
         // spans of every band.
         let mut band: Option<(Line, f32)> = None;
-        let mut spans: Vec<LineSpan> = Vec::new();
+        let mut spans = Vec::new();
         for fit in breaker.run() {
             let at = &breaks[fit.at];
             let span = measure.at(fit.slot);
@@ -1176,7 +1253,7 @@ impl<'a> LineLayout<'a> {
                 });
                 let first = line.runs.len();
                 line.runs
-                    .extend(cut_runs(&flat, &shaped, start, at.content_end));
+                    .extend(cut_runs(flat, &shaped.spans, start, at.content_end));
                 adjust(&mut line.runs[first..], &flat.text, fit.ratio, options);
                 if at.hyphen {
                     self.hyphenate(&mut line.runs, style);
@@ -1199,20 +1276,22 @@ impl<'a> LineLayout<'a> {
             line.overhang = to_points(fit.overhang);
             line.box_ = self.line_box(&line.runs, style);
             line.spans = gather(&mut spans);
-            if lines.is_empty() {
-                extent = at.content_end;
+            if broken.lines.is_empty() {
+                broken.extent = at.content_end;
             }
-            lines.push(line);
+            broken.lines.push(line);
+            broken.ends.push(fit.at);
         }
         // A paragraph that ran out inside a band still sets what it
         // reached.
         if let Some((mut line, _)) = band.take() {
             line.box_ = self.line_box(&line.runs, style);
             line.spans = gather(&mut spans);
-            lines.push(line);
+            broken.lines.push(line);
+            broken.ends.push(breaker.end());
         }
-        tile(&mut lines, &flat);
-        (lines, extent)
+        tile(&mut broken.lines, flat);
+        broken
     }
 
     /// One string as shaped runs, set the way `style` asks for it.
@@ -1621,6 +1700,54 @@ fn hang_start(mark: char) -> f32 {
     }
 }
 
+/// A paragraph shaped once, and everything about it the measure does
+/// not decide: the flattened text, the runs it shaped into, and the
+/// style and options it was set with.
+///
+/// Shaping is the expensive half of setting a paragraph, and it does
+/// not depend on where the lines end. A caller that can break the
+/// same paragraph again against a different profile keeps this. It
+/// breaks the paragraph through [`LineLayout::rebreak`].
+pub struct Shaped {
+    flat: FlatParagraph,
+    spans: Vec<ShapedSpan>,
+    style: ParagraphStyle,
+    options: LineBreakOptions,
+    upem: f32,
+    /// Where the line the paragraph opens on has to end, when an
+    /// opening style covers exactly that much of the text.
+    opening: Option<usize>,
+}
+
+impl std::fmt::Debug for Shaped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Shaped")
+            .field("text", &self.flat.text)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Shaped {
+    /// The style the paragraph is set in.
+    pub fn style(&self) -> ParagraphStyle {
+        self.style
+    }
+}
+
+/// One paragraph broken into lines: the lines themselves, and where
+/// each of them ended.
+#[derive(Debug, Default)]
+pub struct Broken {
+    /// The lines, in reading order.
+    pub lines: Vec<Line>,
+    /// Where each line ended, as the paragraph counts the places it
+    /// can be broken. A break from the end of a line sets the text
+    /// that line left.
+    pub ends: Vec<usize>,
+    /// Where the first line ended in the shaped text.
+    extent: usize,
+}
+
 /// One paragraph's total-fit pass: break list in, chosen line ends
 /// out.
 struct Breaker<'a> {
@@ -1639,6 +1766,9 @@ struct Breaker<'a> {
     /// Font units a hyphenated break is charged for.
     hyphen: f32,
     options: LineBreakOptions,
+    /// The break the first line starts from. Everything before it is
+    /// set already.
+    from: usize,
     /// Where the opening line has to end, when an opening style
     /// covers exactly that much of the text.
     opening: Option<usize>,
@@ -1820,7 +1950,7 @@ impl Breaker<'_> {
     /// The chosen line ends, first to last.
     fn run(&self) -> Vec<Fitted> {
         let mut nodes = vec![Node {
-            at: 0,
+            at: self.from,
             slot: 0,
             fitness: 1,
             hyphens: 0,
@@ -1833,7 +1963,7 @@ impl Breaker<'_> {
         let mut active = vec![0usize];
         let mut candidates: Vec<Candidate> = Vec::new();
 
-        for b in 1..self.breaks.len() {
+        for b in self.from + 1..self.breaks.len() {
             let forced = b == self.end();
             // The cheapest way to break here anyway, for a paragraph
             // that cannot be set inside the measure at all.
@@ -2272,6 +2402,76 @@ mod tests {
             span: None,
         }];
         layout.layout(&inlines, body(), measure_pt, options)
+    }
+
+    /// Text as one paragraph draws it, run by run.
+    fn drawn(lines: &[Line]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| {
+                line.runs
+                    .iter()
+                    .map(|run| run.text.as_str())
+                    .collect::<String>()
+            })
+            .collect()
+    }
+
+    /// A paragraph shaped once breaks to the same lines as the same
+    /// text shaped and broken together. A break from the end of one
+    /// line sets the text that line left.
+    #[test]
+    fn a_shaped_paragraph_breaks_again_to_the_same_lines() {
+        let layout = LineLayout::new(registry());
+        let measure = Measure::uniform(120.0);
+        let (first, shaped) = layout.layout_shaped(
+            &one_run(OPENING),
+            body(),
+            &Inherited,
+            &measure,
+            LineBreakOptions::default(),
+            Opening::default(),
+        );
+        let shaped = shaped.expect("the paragraph shaped");
+        let lines = first.lines;
+        assert!(lines.len() > 3, "{} lines is too few to cut", lines.len());
+
+        let again = layout.rebreak(&shaped, &measure, 0);
+        assert_eq!(drawn(&again.lines), drawn(&lines));
+        assert_eq!(again.ends.len(), again.lines.len());
+
+        let tail = layout.rebreak(&shaped, &measure, again.ends[1]);
+        assert_eq!(drawn(&tail.lines), drawn(&lines[2..]));
+    }
+
+    /// The same paragraph broken to a narrower measure holds the same
+    /// words in more lines. No line runs past the measure it was set
+    /// to.
+    #[test]
+    fn a_shaped_paragraph_breaks_again_to_a_narrower_measure() {
+        let layout = LineLayout::new(registry());
+        let (wide, shaped) = layout.layout_shaped(
+            &one_run(OPENING),
+            body(),
+            &Inherited,
+            &Measure::uniform(200.0),
+            LineBreakOptions::default(),
+            Opening::default(),
+        );
+        let shaped = shaped.expect("the paragraph shaped");
+        let lines = wide.lines;
+        let narrow = Measure::uniform(100.0);
+        let again = layout.rebreak(&shaped, &narrow, 0);
+        assert!(again.lines.len() > lines.len());
+        assert_eq!(
+            drawn(&again.lines).join(" ").replace("  ", " "),
+            drawn(&lines).join(" ").replace("  ", " ")
+        );
+        let upem = units_per_em() as f32;
+        for line in &again.lines {
+            let width = line.width as f32 / upem * body().size;
+            assert!(width <= 100.0 + 0.5, "{width} runs past the measure");
+        }
     }
 
     fn units_per_em() -> u16 {

@@ -67,9 +67,16 @@ h3 {
   border-bottom: 1pt solid #8a7a5c;
 }
 
-/* The map is one image rather than every image: the class the
-   manuscript wrote on it moves this one, and the ornament that
-   closes the chapter stays where the built-in sheet put it. */
+/* The map is one image rather than every image. The class the
+   manuscript wrote on it takes this one out of the text and against
+   the page, and the prose of that page wraps down its right. The
+   ornament that closes the chapter stays where the built-in sheet
+   put it. */
 .map {
-  text-align: right;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  margin-right: 14pt;
+  margin-top: 8pt;
+  wrap-flow: end;
 }

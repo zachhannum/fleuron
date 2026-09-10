@@ -830,8 +830,88 @@ mod tests {
         );
     }
 
+    /// Acceptance: the preview and the export of a wrapped page
+    /// agree.
+    ///
+    /// Both painters read the same display structure. The question is
+    /// whether the export puts each item where that structure says.
+    /// The image lands at the box its item carries. The line beside
+    /// it starts at the x and the baseline its own item carries.
+    #[test]
+    fn a_wrapped_page_exports_where_the_display_structure_put_it() {
+        let mut book = book(
+            "My father had a small estate in Nottinghamshire, and I was the third of \
+             five sons. He sent me to Emanuel College in Cambridge at fourteen years \
+             old, where I resided three years and applied myself close to my studies.",
+        );
+        book.sections[0].blocks.insert(
+            0,
+            Block::Image {
+                id: Default::default(),
+                url: "plate.jpg".into(),
+                alt: "a map of Lilliput".into(),
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+        );
+        book.assign_node_ids();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "anchored.css",
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
+        )])
+        .compile(&book, registry());
+        let table = assets(&[("plate.jpg", MAP)]);
+        let output = crate::layout::layout_book(&book, &styles, registry(), &table);
+        let page = &output.pages[0];
+
+        let image = page
+            .items
+            .iter()
+            .find_map(|item| match item {
+                DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+                _ => None,
+            })
+            .expect("the image is on the page");
+        let (x, baseline) = page
+            .items
+            .iter()
+            .find_map(|item| match item {
+                DrawItem::Text { x, y, .. } if *x > image.0 + image.2 => Some((*x, *y)),
+                _ => None,
+            })
+            .expect("a line is set beside the image");
+        assert!(
+            baseline > image.1 && baseline < image.1 + image.3,
+            "the line at {baseline} is not beside the image at {image:?}",
+        );
+
+        let pdf = content(&with_images(&output, &table, &Metadata::default()));
+        // krilla draws an image into the unit square, so the box is
+        // the transform. It carries the size and the corner of the
+        // item, measured up from the foot of the page.
+        let box_ = format!(
+            "{} 0 0 {} {} {} cm",
+            image.2,
+            image.3,
+            image.0,
+            page.height - image.1 - image.3,
+        );
+        assert!(
+            pdf.contains(&box_),
+            "the image is not placed at {box_}:\n{pdf}",
+        );
+        // krilla writes text under a flip, so the line sits at the x
+        // and the baseline the item carries.
+        let text = format!("1 0 0 -1 {x} {baseline} Tm");
+        assert!(
+            pdf.contains(&text),
+            "the line beside the image is not set at {text}:\n{pdf}",
+        );
+    }
+
     /// An image nothing supplied is no draw item, and one warning
-    /// naming the url.
+    /// names the url.
     #[test]
     fn an_image_no_host_supplied_is_reported_and_skipped() {
         let mut book = Book {

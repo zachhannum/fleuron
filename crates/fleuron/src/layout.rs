@@ -17,21 +17,23 @@
 //! something does not fit, walks back to the last place a break was
 //! allowed.
 
-use std::cell::{Cell, RefCell};
+use std::borrow::Cow;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::content::{Block, Book, Inline, Metadata, NodeId, Section, SourceRange, origin, text};
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::lines::{
-    Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns, Span,
+    Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle, Patterns, Shaped, Span,
 };
 use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::session::Session;
 use crate::style::{
-    Align, Band, BoxDecorationBreak, Break, Color, ComputedStyle, Content, Edges, Hyphens,
-    MarginBox, MarginBoxStyle, PageQuery, PageStyle, Situation, StringPiece, StyleTree, TextAlign,
-    TextJustify,
+    Align, Band, BoxDecorationBreak, Break, Color, ComputedStyle, Content, Edges, Hyphens, Inset,
+    MarginBox, MarginBoxStyle, PageGeometry, PageQuery, PageStyle, Position, Situation,
+    StringPiece, StyleTree, TextAlign, TextJustify, WrapFlow,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -105,6 +107,10 @@ pub enum Piece {
     /// Space with nothing in it: what a thematic break set in space
     /// rather than in an ornament comes to.
     Blank,
+    /// Where an image the sheet lifted out of the flow was written.
+    /// It takes no space and paints nothing. The page the flow
+    /// reaches here is the page that places the image.
+    Anchor(NodeId),
 }
 
 /// An initial letter sunk beside the lines that follow it.
@@ -146,6 +152,29 @@ pub struct Fragment {
     /// The decorated blocks this fragment opens and closes. Boxed
     /// for the same reason: most fragments decorate nothing.
     pub decorations: Option<Box<Decorations>>,
+    /// The paragraph this line came out of, shared by every line of
+    /// it, and `None` on everything else. The flow reads it where an
+    /// image narrows the bands the paragraph is set in. A book that
+    /// anchors nothing keeps none of this.
+    pub reflow: Option<Arc<Reflow>>,
+}
+
+impl Fragment {
+    /// A fragment with nothing above it: what a block emits before
+    /// the margins and breaks around it are folded in.
+    fn plain(x: f32, height: f32, piece: Piece) -> Fragment {
+        Fragment {
+            x,
+            lead: 0.0,
+            fixed: 0.0,
+            height,
+            break_before: BreakPoint::Allowed,
+            piece,
+            marks: None,
+            decorations: None,
+            reflow: None,
+        }
+    }
 }
 
 /// What one fragment does to the blocks decorated around it.
@@ -259,6 +288,10 @@ pub struct Paginator<'a> {
     /// message: a book that scales the same image twice has one
     /// problem, not two.
     warnings: RefCell<Vec<Warning>>,
+    /// Whether the sheet anchors anything to the page, answered once.
+    wraps: OnceCell<bool>,
+    /// How many times the flow set a paragraph again beside an image.
+    rebreaks: Cell<u32>,
 }
 
 impl<'a> Paginator<'a> {
@@ -282,6 +315,8 @@ impl<'a> Paginator<'a> {
             patterns: Cell::new(Patterns::default()),
             unknown: RefCell::new(None),
             warnings: RefCell::new(Vec::new()),
+            wraps: OnceCell::new(),
+            rebreaks: Cell::new(0),
         }
     }
 
@@ -320,6 +355,99 @@ impl<'a> Paginator<'a> {
         self.warnings.borrow().clone()
     }
 
+    /// How many times the flow set a paragraph again beside an image.
+    /// A book that anchors nothing never does.
+    pub fn rebreaks(&self) -> u32 {
+        self.rebreaks.get()
+    }
+
+    /// Whether the sheet takes anything out of the flow and against
+    /// the page.
+    ///
+    /// A book that anchors nothing never sets a paragraph twice, so
+    /// its fragments keep nothing to set one from.
+    fn wraps(&self) -> bool {
+        *self.wraps.get_or_init(|| {
+            self.styles
+                .styles()
+                .iter()
+                .any(|style| style.position == Position::Absolute)
+        })
+    }
+
+    /// The images the sheet anchored to the page, in document order.
+    ///
+    /// Each is sized as CSS 2.1 sizes a replaced element with no
+    /// width or height of its own: its intrinsic size, scaled down
+    /// where that does not fit the page area.
+    fn anchored_images(&self, book: &Book) -> Vec<AnchoredImage> {
+        fn walk(
+            paginator: &Paginator,
+            blocks: &[Block],
+            source: Option<&str>,
+            anchored: &mut Vec<AnchoredImage>,
+        ) {
+            for block in blocks {
+                match block {
+                    Block::Blockquote { blocks, .. } => walk(paginator, blocks, source, anchored),
+                    Block::Image {
+                        id, url, position, ..
+                    } => {
+                        let style = paginator.styles.style(*id);
+                        if style.position != Position::Absolute {
+                            continue;
+                        }
+                        let origin = origin(source, *position);
+                        let Some((asset, intrinsic)) = paginator.assets.lookup(url) else {
+                            paginator.missing(url, origin);
+                            continue;
+                        };
+                        let (available, height) =
+                            paginator.styles.default_page().geometry.content_size();
+                        let margin = style.margin;
+                        let (width, height) = fit(
+                            intrinsic.size(),
+                            (available - margin.inline()).max(0.0),
+                            (height - margin.top - margin.bottom).max(0.0),
+                        );
+                        anchored.push(AnchoredImage {
+                            node: *id,
+                            asset,
+                            width,
+                            height,
+                            inset: style.inset,
+                            margin,
+                            wrap: style.wrap_flow,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut anchored = Vec::new();
+        for section in &book.sections {
+            walk(
+                self,
+                &section.blocks,
+                section.source.as_deref(),
+                &mut anchored,
+            );
+        }
+        anchored
+    }
+
+    /// Says so where the host supplied no image for a url. The table
+    /// complains about a url it probed and refused. A url the table
+    /// was never offered means the host supplied nothing at all.
+    fn missing(&self, url: &str, origin: String) {
+        if !self.assets.probed(url) {
+            self.warn(
+                format!("image {url}: no image was supplied for it; it is skipped"),
+                (!origin.is_empty()).then_some(origin),
+            );
+        }
+    }
+
     /// Flows one book into numbered, side-tagged pages.
     ///
     /// A section's fragments are built, flowed, and released before
@@ -327,7 +455,23 @@ impl<'a> Paginator<'a> {
     /// pages, not every line it was ever broken into.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         self.language(&book.metadata);
-        let mut flow = Flow::new(self);
+        let anchored = self.anchored_images(book);
+        // The pass that answers where the anchors land keeps no
+        // fragments either. It builds a section, flows it, and drops
+        // it, the same way the pass that keeps the pages does.
+        let bare = AnchoredImages::default();
+        let anchors = if anchored.is_empty() {
+            BTreeMap::new()
+        } else {
+            let mut flow = Flow::settling(self, &bare);
+            for section in &book.sections {
+                let fragments = self.section_fragments(section);
+                flow.section(section, &fragments);
+            }
+            flow.finish().anchors
+        };
+        let anchored = AnchoredImages::on(anchored, &anchors);
+        let mut flow = Flow::new(self, &anchored);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
@@ -375,8 +519,20 @@ impl<'a> Paginator<'a> {
         book: &Book,
         sections: impl IntoIterator<Item = &'f [Fragment]>,
     ) -> Paged {
-        let mut flow = Flow::new(self);
-        for (section, fragments) in book.sections.iter().zip(sections) {
+        let sections: Vec<&[Fragment]> = sections.into_iter().collect();
+        let anchored = self.anchored_images(book);
+        let bare = AnchoredImages::default();
+        let anchored = if anchored.is_empty() {
+            AnchoredImages::default()
+        } else {
+            let mut flow = Flow::settling(self, &bare);
+            for (section, fragments) in book.sections.iter().zip(&sections) {
+                flow.section(section, fragments);
+            }
+            AnchoredImages::on(anchored, &flow.finish().anchors)
+        };
+        let mut flow = Flow::new(self, &anchored);
+        for (section, fragments) in book.sections.iter().zip(&sections) {
             flow.section(section, fragments);
         }
         flow.finish()
@@ -616,6 +772,7 @@ fn decoration(style: &ComputedStyle, x: f32, measure: f32) -> Option<Decoration>
 
 /// The initial letter of one paragraph, sized and shaped, with the
 /// text it was taken out of.
+#[derive(Debug, Clone)]
 struct Cap {
     /// The letter, shaped at the size the sink works out to.
     line: Line,
@@ -623,6 +780,231 @@ struct Cap {
     reserved: f32,
     /// Lines it is sunk over.
     lines: usize,
+}
+
+/// What one paragraph's lines are set against once they are broken:
+/// where they start, how they fill a band, and what must not be split
+/// from what.
+#[derive(Debug, Clone)]
+struct Setting {
+    /// Leading edge, from the content box's own.
+    x: f32,
+    align: TextAlign,
+    orphans: usize,
+    widows: usize,
+    /// The initial letter beside the lines it is sunk over.
+    cap: Option<Cap>,
+    /// Where the letter goes, from `x`. An image in the way of the
+    /// bands it is sunk over moves it along with them.
+    cap_x: f32,
+}
+
+impl Setting {
+    /// The same over the bands a profile left. An initial letter
+    /// belongs to the line a paragraph opens on rather than to the
+    /// line the rest of it opens on, and an image can move it.
+    fn wrapped(&self, opening: bool, letter: Option<f32>) -> Cow<'_, Setting> {
+        if opening && letter.is_none() {
+            return Cow::Borrowed(self);
+        }
+        Cow::Owned(Setting {
+            cap: opening.then(|| self.cap.clone()).flatten(),
+            cap_x: letter.unwrap_or(0.0),
+            ..self.clone()
+        })
+    }
+}
+
+/// A paragraph the flow can set again.
+///
+/// The lines a section is built with are broken against the measure
+/// with nothing in the way. A paragraph that lands beside an image is
+/// broken again against the bands the image leaves. This is what that
+/// takes: the shaped runs, which the measure has no say in, and
+/// everything settled around them.
+#[derive(Debug)]
+pub struct Reflow {
+    shaped: Shaped,
+    setting: Setting,
+    /// The bands with nothing in the way. A first-line indent and a
+    /// drop cap are already in them.
+    base: Measure,
+    /// Height of one band, which is what an image is snapped to.
+    leading: f32,
+    /// Where each line ended, so the rest of the paragraph can be set
+    /// from any of them.
+    ends: Vec<usize>,
+}
+
+/// A rectangle on the page, in page coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+impl Rect {
+    fn right(self) -> f32 {
+        self.x + self.w
+    }
+
+    fn bottom(self) -> f32 {
+        self.y + self.h
+    }
+
+    /// The same rectangle read from another origin.
+    fn within(self, origin: (f32, f32)) -> Rect {
+        Rect {
+            x: self.x - origin.0,
+            y: self.y - origin.1,
+            ..self
+        }
+    }
+}
+
+/// One image the sheet lifted out of the flow: what it paints, how
+/// far its insets put it from the page area, and which side the prose
+/// sets on.
+#[derive(Debug, Clone)]
+struct AnchoredImage {
+    /// The node it was written at, which is what decides its page.
+    node: NodeId,
+    /// Index into the asset table.
+    asset: u32,
+    /// Width in points, after any scaling.
+    width: f32,
+    /// Height in points, after any scaling.
+    height: f32,
+    /// What the insets say about where it sits.
+    inset: Edges<Inset>,
+    /// What it keeps clear of prose around itself.
+    margin: Edges,
+    /// Which side of it the prose sets on.
+    wrap: WrapFlow,
+}
+
+impl AnchoredImage {
+    /// What it keeps to itself on a page of this geometry: the image
+    /// and the margins around it.
+    ///
+    /// An inset measures from the page area, the box the margins
+    /// leave, and a negative inset reaches into the margin. Where
+    /// both insets of an axis are lengths, the leading one places the
+    /// box. Where neither is a length, the box sits at the edge of
+    /// the page area.
+    fn rect(&self, geometry: PageGeometry) -> Rect {
+        let (left, top) = geometry.content_origin();
+        let (width, height) = geometry.content_size();
+        let w = self.width + self.margin.inline();
+        let h = self.height + self.margin.top + self.margin.bottom;
+        let place =
+            |start: Option<f32>, end: Option<f32>, origin: f32, available: f32, size: f32| match (
+                start, end,
+            ) {
+                (Some(start), _) => origin + start,
+                (None, Some(end)) => origin + available - end - size,
+                (None, None) => origin,
+            };
+        Rect {
+            x: place(
+                self.inset.left.points(),
+                self.inset.right.points(),
+                left,
+                width,
+                w,
+            ),
+            y: place(
+                self.inset.top.points(),
+                self.inset.bottom.points(),
+                top,
+                height,
+                h,
+            ),
+            w,
+            h,
+        }
+    }
+
+    /// The image itself, inside the margins it keeps.
+    fn item(&self, geometry: PageGeometry) -> DrawItem {
+        let rect = self.rect(geometry);
+        DrawItem::Image {
+            x: rect.x + self.margin.left,
+            y: rect.y + self.margin.top,
+            w: self.width,
+            h: self.height,
+            asset: self.asset,
+        }
+    }
+}
+
+/// The images one book anchors, and the page each one landed on.
+///
+/// Which page an image falls on comes from the flow. Where it sits on
+/// that page comes from the sheet. The flow runs once with nothing in
+/// the way to answer the first question, and it then holds the
+/// answer. An image narrows the page it was given, and the flow never
+/// asks that page again.
+#[derive(Debug, Default)]
+pub(crate) struct AnchoredImages {
+    all: Vec<AnchoredImage>,
+    /// Which images a page carries, by page index.
+    by_page: BTreeMap<usize, Vec<usize>>,
+}
+
+impl AnchoredImages {
+    /// The images of a book, on the pages the anchor pass gave them.
+    fn on(all: Vec<AnchoredImage>, anchors: &BTreeMap<NodeId, usize>) -> AnchoredImages {
+        let mut by_page: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for (index, image) in all.iter().enumerate() {
+            let Some(page) = anchors.get(&image.node) else {
+                continue;
+            };
+            by_page.entry(*page).or_default().push(index);
+        }
+        AnchoredImages { all, by_page }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.by_page.is_empty()
+    }
+}
+
+/// One image as the column being filled sees it: the rectangle it
+/// covers, and which side of it the prose sets on.
+#[derive(Debug, Clone, Copy)]
+struct Hole {
+    rect: Rect,
+    wrap: WrapFlow,
+}
+
+/// The bands a paragraph is set in beside an image: what each of them
+/// is left of the measure, and the space above a band that had to
+/// move past an image that covers the whole of it.
+struct Profile {
+    measure: Measure,
+    gaps: Vec<f32>,
+    /// Where the initial letter goes, from the paragraph's leading
+    /// edge, when an image moved it.
+    letter: Option<f32>,
+}
+
+impl Profile {
+    /// The bands with nothing in the way: what a paragraph moved off
+    /// the page it was narrowed on is set to instead.
+    fn plain(reflow: &Reflow, opening: bool) -> Profile {
+        Profile {
+            measure: if opening {
+                reflow.base.clone()
+            } else {
+                Measure::new(Vec::new(), reflow.base.rest())
+            },
+            gaps: Vec::new(),
+            letter: None,
+        }
+    }
 }
 
 /// Builds one section's fragments: blocks in, everything the flow
@@ -815,13 +1197,14 @@ impl Builder<'_, '_> {
     /// for above the block goes on it, there being no other fragment
     /// for it.
     fn emit_one(&mut self, x: f32, height: f32, piece: Piece) {
-        self.emit(&mut true, BreakPoint::Allowed, x, height, piece);
+        self.emit(&mut true, Fragment::plain(x, height, piece));
     }
 
     /// Emits one fragment. The first of a block gets the break the
     /// cascade asked for above it and the space its margins left; the
-    /// rest get what the block says about splitting itself.
-    fn emit(&mut self, first: &mut bool, inner: BreakPoint, x: f32, height: f32, piece: Piece) {
+    /// rest keep what they arrived with, which is what the block says
+    /// about splitting itself.
+    fn emit(&mut self, first: &mut bool, mut fragment: Fragment) {
         // This fragment settles how far the border box of every
         // block opening on it sits above it.
         let (index, fixed) = (self.fragments.len(), self.fixed);
@@ -830,27 +1213,23 @@ impl Builder<'_, '_> {
                 pending.decoration.above = fixed - pending.open_fixed;
             }
         }
-        let (break_before, lead, fixed, marks) = if *first {
+        if *first {
             *first = false;
-            (
-                std::mem::replace(&mut self.pending, BreakPoint::Allowed),
-                std::mem::take(&mut self.margin),
-                std::mem::take(&mut self.fixed),
-                self.pending_marks.take(),
-            )
-        } else {
-            (inner, 0.0, 0.0, None)
-        };
-        self.fragments.push(Fragment {
-            x,
-            lead,
-            fixed,
-            height,
-            break_before,
-            piece,
-            marks,
-            decorations: None,
-        });
+            fragment.break_before = std::mem::replace(&mut self.pending, BreakPoint::Allowed);
+            fragment.lead = std::mem::take(&mut self.margin);
+            fragment.fixed = std::mem::take(&mut self.fixed);
+            fragment.marks = self.pending_marks.take();
+        }
+        self.fragments.push(fragment);
+    }
+
+    /// Marks where an image the sheet lifted out of the flow was
+    /// written. The fragment takes no space. The page the flow
+    /// reaches when it passes here is the page that carries the
+    /// image.
+    fn anchor(&mut self, id: NodeId) {
+        self.fragments
+            .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }
 
     /// Every block of one nesting level, at `x` from the content
@@ -878,6 +1257,13 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
+                    // An image against the page is not in the flow:
+                    // it takes no space here, and the margins that
+                    // met around it still meet.
+                    if style.position == Position::Absolute {
+                        self.anchor(*id);
+                        continue;
+                    }
                     let start = self.open(&style, &[], x, measure);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
@@ -886,8 +1272,12 @@ impl Builder<'_, '_> {
         }
     }
 
-    /// One paragraph or heading: its lines, the drop cap beside the
-    /// first of them, and where a page may end between them.
+    /// One paragraph's lines as fragments: alignment against each
+    /// band, the initial letter beside the first of them, and where a
+    /// page can end between them.
+    ///
+    /// `spec` is the profile the lines were broken to, and `gaps` the
+    /// space above a band the profile had to move past an image.
     fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
         let computed = self.styles().style(id).clone();
         let start = self.open(&computed, inlines, x, measure);
@@ -930,7 +1320,7 @@ impl Builder<'_, '_> {
             first_line: self.styles().opening_line(id),
             taken: cap.as_ref().map_or(0, |(_, taken)| *taken),
         };
-        let lines = self.paginator.lines.layout_styled(
+        let (broken, shaped) = self.paginator.lines.layout_shaped(
             inlines,
             style,
             self.styles(),
@@ -939,56 +1329,28 @@ impl Builder<'_, '_> {
             opening,
         );
 
-        let count = lines.len();
-        let sunk = cap
-            .as_ref()
-            .map(|(cap, _)| cap.lines.min(count))
-            .unwrap_or(0);
-        // The cap's baseline is the last sunk line's, which is only
-        // known once the lines are broken.
-        let drop = if sunk > 0 {
-            lines[1..sunk]
-                .iter()
-                .map(|line| line.box_.height)
-                .sum::<f32>()
-                + lines[sunk - 1].box_.baseline
-                - lines[0].box_.baseline
-        } else {
-            0.0
-        };
-        let mut cap = cap.map(|(cap, _)| DropCap {
-            line: cap.line,
+        let setting = Setting {
             x,
-            drop,
+            align: computed.text_align,
+            orphans: computed.orphans as usize,
+            widows: computed.widows as usize,
+            cap: cap.map(|(cap, _)| cap),
+            cap_x: 0.0,
+        };
+        let fragments = set_lines(self.paginator, broken.lines, &spec, &[], &setting);
+        let reflow = shaped.filter(|_| self.paginator.wraps()).map(|shaped| {
+            Arc::new(Reflow {
+                leading: self.paginator.lines.strut(style).height(),
+                shaped,
+                setting,
+                base: spec,
+                ends: broken.ends,
+            })
         });
-
-        let (orphans, widows) = (computed.orphans as usize, computed.widows as usize);
         let mut first = true;
-        let mut slot = 0;
-        for (index, mut line) in lines.into_iter().enumerate() {
-            let last = line.spans.len() - 1;
-            // A band's slack is at the end of its last span, so that
-            // is where alignment moves the text.
-            let offset = align_offset(
-                computed.text_align,
-                self.paginator.span_width(&line, last),
-                spec.at(slot + last).width,
-            );
-            line.spans[last].offset += offset;
-            let origin = spec.at(slot).origin;
-            slot += line.spans.len();
-            let inner = if index < orphans || count - index < widows || index < sunk {
-                BreakPoint::Forbidden
-            } else {
-                BreakPoint::Allowed
-            };
-            let height = line.box_.height;
-            let protrusion = line.protrusion;
-            let piece = Piece::Line {
-                line,
-                cap: (index == 0).then(|| cap.take()).flatten(),
-            };
-            self.emit(&mut first, inner, x + origin - protrusion, height, piece);
+        for mut fragment in fragments {
+            fragment.reflow = reflow.clone();
+            self.emit(&mut first, fragment);
         }
         self.close(&computed, start);
     }
@@ -1023,15 +1385,7 @@ impl Builder<'_, '_> {
     /// down when that does not fit the page.
     fn image(&mut self, style: &ComputedStyle, url: &str, origin: String, x: f32, measure: f32) {
         let Some((asset, intrinsic)) = self.paginator.assets.lookup(url) else {
-            // A url the table probed and refused was complained about
-            // there; one it was never offered is a host that supplied
-            // no image for it at all.
-            if !self.paginator.assets.probed(url) {
-                self.paginator.warn(
-                    format!("image {url}: no image was supplied for it; it is skipped"),
-                    (!origin.is_empty()).then_some(origin),
-                );
-            }
+            self.paginator.missing(url, origin);
             return;
         };
         let (x, measure) = style.content_box(x, measure);
@@ -1068,6 +1422,113 @@ impl Builder<'_, '_> {
                 asset,
             },
         );
+    }
+}
+
+/// One paragraph's lines as fragments: alignment against each band,
+/// the initial letter beside the first of them, and where a page may
+/// end between them.
+///
+/// `spec` is the profile the lines were broken to, and `gaps` the
+/// space above a band the profile had to move past an image.
+fn set_lines(
+    paginator: &Paginator,
+    lines: Vec<Line>,
+    spec: &Measure,
+    gaps: &[f32],
+    setting: &Setting,
+) -> Vec<Fragment> {
+    let count = lines.len();
+    let sunk = setting
+        .cap
+        .as_ref()
+        .map(|cap| cap.lines.min(count))
+        .unwrap_or(0);
+    // The cap's baseline is the last sunk line's, which is only
+    // known once the lines are broken.
+    let drop = if sunk > 0 {
+        lines[1..sunk]
+            .iter()
+            .map(|line| line.box_.height)
+            .sum::<f32>()
+            + lines[sunk - 1].box_.baseline
+            - lines[0].box_.baseline
+    } else {
+        0.0
+    };
+    let mut cap = setting.cap.as_ref().map(|cap| DropCap {
+        line: cap.line.clone(),
+        x: setting.x + setting.cap_x,
+        drop,
+    });
+
+    let mut fragments = Vec::with_capacity(count);
+    let mut slot = 0;
+    for (index, mut line) in lines.into_iter().enumerate() {
+        let last = line.spans.len() - 1;
+        // A band's slack is at the end of its last span, so that
+        // is where alignment moves the text.
+        let offset = align_offset(
+            setting.align,
+            paginator.span_width(&line, last),
+            spec.at(slot + last).width,
+        );
+        line.spans[last].offset += offset;
+        let origin = spec.at(slot).origin;
+        slot += line.spans.len();
+        let height = line.box_.height;
+        let protrusion = line.protrusion;
+        let piece = Piece::Line {
+            line,
+            cap: (index == 0).then(|| cap.take()).flatten(),
+        };
+        let mut fragment = Fragment::plain(setting.x + origin - protrusion, height, piece);
+        fragment.break_before =
+            if index < setting.orphans || count - index < setting.widows || index < sunk {
+                BreakPoint::Forbidden
+            } else {
+                BreakPoint::Allowed
+            };
+        fragment.fixed = gaps.get(index).copied().unwrap_or(0.0);
+        fragments.push(fragment);
+    }
+    fragments
+}
+
+/// Moves what the flow reads off the fragments a paragraph arrived as
+/// onto the ones it was set again as: the space and the break above
+/// the first of them, what it tells the page furniture, and the
+/// decorations that open and close over the paragraph.
+fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
+    let (Some(head), Some(last)) = (old.first(), old.last()) else {
+        return;
+    };
+    let opens = head
+        .decorations
+        .as_ref()
+        .map(|decorations| decorations.opens.clone())
+        .unwrap_or_default();
+    let closes = last
+        .decorations
+        .as_ref()
+        .map(|decorations| decorations.closes)
+        .unwrap_or(0);
+    if let Some(first) = fresh.first_mut() {
+        first.break_before = head.break_before;
+        first.lead = head.lead;
+        first.fixed += head.fixed;
+        first.marks = head.marks.clone();
+        if !opens.is_empty() {
+            first.decorations = Some(Box::new(Decorations {
+                opens,
+                ..Default::default()
+            }));
+        }
+    }
+    if let Some(end) = fresh.last_mut()
+        && closes > 0
+    {
+        end.decorations.get_or_insert_with(Box::default).closes += closes;
     }
 }
 
@@ -1140,6 +1601,24 @@ fn cap_height(metrics: crate::fonts::FontMetricsTable) -> f32 {
 }
 
 /// Where a line of `width` starts inside a measure of `available`.
+/// An image's size inside a box that has to hold it: its own, scaled
+/// down in proportion where either side does not fit.
+fn fit((width, height): (f32, f32), available: f32, room: f32) -> (f32, f32) {
+    let scale = |value: f32, from: f32, to: f32| {
+        if from > 0.0 { value * to / from } else { value }
+    };
+    let (mut width, mut height) = (width, height);
+    if width > available {
+        height = scale(height, width, available);
+        width = available;
+    }
+    if height > room {
+        width = scale(width, height, room);
+        height = room;
+    }
+    (width, height)
+}
+
 fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
     match align {
         TextAlign::Left | TextAlign::Justify => 0.0,
@@ -1214,6 +1693,9 @@ struct Placed {
     marks: Option<Box<Marks>>,
     /// The decorated blocks it opens and closes.
     decorations: Option<Box<Decorations>>,
+    /// The images anchored above it, which land on the page it ends
+    /// on.
+    anchors: Vec<NodeId>,
 }
 
 /// One decorated block resolved against one page: the border box it
@@ -1297,6 +1779,8 @@ pub(crate) struct PageInfo {
 pub(crate) struct Paged {
     pub(crate) pages: Vec<Page>,
     pub(crate) infos: Vec<PageInfo>,
+    /// The page each anchor landed on, by the node it was written at.
+    pub(crate) anchors: BTreeMap<NodeId, usize>,
 }
 
 /// The flow: fragments in, pages out.
@@ -1334,10 +1818,21 @@ struct Flow<'a, 'p> {
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
     carried: Vec<Decoration>,
+    /// The images to place, and the page each one landed on. Empty
+    /// on the pass that answers where they land.
+    anchored: &'p AnchoredImages,
+    /// Where each anchor landed, filled in as pages close.
+    anchors: BTreeMap<NodeId, usize>,
+    /// Anchors waiting for the fragment whose page they take.
+    pending_anchors: Vec<NodeId>,
+    /// Whether what is placed is painted. The pass that settles where
+    /// the anchors land keeps no pages, so it paints nothing: which
+    /// page a fragment falls on is a question about heights.
+    paints: bool,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
-    fn new(paginator: &'p Paginator<'a>) -> Flow<'a, 'p> {
+    fn new(paginator: &'p Paginator<'a>, anchored: &'p AnchoredImages) -> Flow<'a, 'p> {
         let slot = PageSlot {
             name: None,
             first: true,
@@ -1359,6 +1854,18 @@ impl<'a, 'p> Flow<'a, 'p> {
             columns: geometry.column_count(),
             column_start: 0,
             carried: Vec::new(),
+            anchored,
+            anchors: BTreeMap::new(),
+            pending_anchors: Vec::new(),
+            paints: true,
+        }
+    }
+
+    /// A flow that answers where the anchors land and nothing else.
+    fn settling(paginator: &'p Paginator<'a>, bare: &'p AnchoredImages) -> Flow<'a, 'p> {
+        Flow {
+            paints: false,
+            ..Flow::new(paginator, bare)
         }
     }
 
@@ -1373,15 +1880,264 @@ impl<'a, 'p> Flow<'a, 'p> {
             first: true,
             blank: false,
         });
-        for fragment in fragments {
-            self.place(fragment);
-            self.pending_slot = None;
+        // A book with nothing anchored places one fragment at a time.
+        // One with an image on the page places a paragraph at a time,
+        // because an image narrows the bands the paragraph is set in.
+        // The whole of it is then broken again.
+        let mut index = 0;
+        while index < fragments.len() {
+            index = match fragments[index].reflow.as_ref() {
+                Some(reflow) if !self.anchored.is_empty() => {
+                    let end = paragraph_end(fragments, index, reflow);
+                    self.paragraph(&fragments[index..end], reflow);
+                    end
+                }
+                _ => {
+                    self.place(&fragments[index]);
+                    index + 1
+                }
+            };
         }
+    }
+
+    /// Places one paragraph, and breaks it again where an image
+    /// narrows the bands it is set in.
+    ///
+    /// This is the one thing the flow measures. Everywhere else a
+    /// fragment arrives with its box decided. Here the box depends on
+    /// where the paragraph lands. The flow breaks the paragraph again
+    /// through `LineLayout`, and what comes back is what it places.
+    ///
+    /// A page boundary inside the paragraph starts it over. The flow
+    /// takes the lines that crossed off the fresh column and sets the
+    /// rest of the paragraph again from where they now sit. The page
+    /// index only rises, so the flow breaks the paragraph at most
+    /// twice on any page it tries.
+    fn paragraph(&mut self, original: &[Fragment], reflow: &Reflow) {
+        let mut set: Cow<'_, [Fragment]> = Cow::Borrowed(original);
+        let mut ends: Cow<'_, [usize]> = Cow::Borrowed(&reflow.ends);
+        let mut at = 0;
+        // Whether what is in hand was broken beside an image. The
+        // lines a section arrives with fit any page. Lines broken
+        // against a notch fit the page they were broken on, so a page
+        // boundary under them is a break to do again.
+        let mut narrowed = false;
+        while at < set.len() {
+            // The profile is read against where the line sits, which
+            // is where `place` is about to put it.
+            let lead = if self.column_empty() {
+                0.0
+            } else {
+                set[at].lead
+            };
+            let top = self.cursor + lead + set[at].fixed;
+            let from = if at == 0 { 0 } else { ends[at - 1] };
+            let profile = self.profile(top, reflow, from == 0);
+            if profile.is_some() || narrowed {
+                narrowed = profile.is_some();
+                let profile = profile.unwrap_or_else(|| Profile::plain(reflow, from == 0));
+                let paginator = self.paginator;
+                paginator.rebreaks.set(paginator.rebreaks.get() + 1);
+                let broken = paginator
+                    .lines
+                    .rebreak(&reflow.shaped, &profile.measure, from);
+                if broken.lines.is_empty() {
+                    return;
+                }
+                let mut fresh = set_lines(
+                    self.paginator,
+                    broken.lines,
+                    &profile.measure,
+                    &profile.gaps,
+                    &reflow.setting.wrapped(from == 0, profile.letter),
+                );
+                carry_over(&mut fresh, &set[at..]);
+                set = Cow::Owned(fresh);
+                ends = Cow::Owned(broken.ends);
+                at = 0;
+            }
+            let mut split = None;
+            for index in at..set.len() {
+                let opened = (self.pages.len(), self.column);
+                self.place(&set[index]);
+                if (self.pages.len(), self.column) != opened {
+                    split = Some(index);
+                    break;
+                }
+            }
+            let Some(index) = split else { return };
+            // What crossed the boundary is this paragraph's again:
+            // the fresh column is where the rest of it starts.
+            let crossed = (index + 1 - at).min(self.placed.len() - self.column_start);
+            at = index + 1 - crossed;
+            self.unplace(crossed);
+        }
+    }
+
+    /// Takes the last `count` fragments off the column being filled,
+    /// so the paragraph they came from can be set again where they
+    /// now sit.
+    fn unplace(&mut self, count: usize) {
+        let keep = self.placed.len() - count;
+        for placed in self.placed.drain(keep..) {
+            self.pending_anchors.extend(placed.anchors);
+        }
+        self.cursor = self.placed[self.column_start..]
+            .last()
+            .map(|placed| placed.top + placed.height)
+            .unwrap_or(0.0);
+    }
+
+    /// The images on the page being built, in the coordinates of the
+    /// column being filled.
+    fn holes(&self) -> Vec<Hole> {
+        let index = self.pages.len();
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
+            return Vec::new();
+        };
+        let geometry = self.paginator.master(index, &self.slot).geometry;
+        let origin = geometry.column_origin(self.column);
+        anchored
+            .iter()
+            .map(|at| &self.anchored.all[*at])
+            .filter(|image| image.wrap != WrapFlow::Auto)
+            .map(|image| Hole {
+                rect: image.rect(geometry).within(origin),
+                wrap: image.wrap,
+            })
+            .collect()
+    }
+
+    /// The bands a paragraph that starts at `top` in the column being
+    /// filled is set in, and `None` where no image reaches them.
+    ///
+    /// An image covers whole bands. The flow snaps it to the
+    /// paragraph's own leading, so a line is either set beside it or
+    /// clear of it. A band it covers the whole of is a band nothing
+    /// is set in, and the paragraph goes on below it.
+    fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
+        // The bands are the paragraph's own, from its leading edge.
+        // The images are the column's. One of them has to move.
+        let holes: Vec<Hole> = self
+            .holes()
+            .into_iter()
+            .map(|hole| Hole {
+                rect: hole.rect.within((reflow.setting.x, 0.0)),
+                ..hole
+            })
+            .collect();
+        if holes.is_empty() {
+            return None;
+        }
+        let leading = reflow.leading.max(1.0);
+        let narrowest = reflow.shaped.style().size;
+        // The band every band past the profile is set in, and the one
+        // the profile has to list a band that differs from.
+        let plain = reflow.base.rest();
+        let cap = reflow.setting.cap.as_ref().filter(|_| opening);
+        // An initial letter is one box over the bands it is sunk
+        // over, so it goes where they are clear for the whole of its
+        // height, with room for a line beside it. Its own bands are
+        // read against the plain band and give up its column. The
+        // bands the profile was built with hold the column the letter
+        // takes with nothing in the way, which is not the column to
+        // read here.
+        let column = |cap: &Cap, y: f32| {
+            let bottom = y + cap.lines as f32 * leading;
+            clear(plain, &holes, y, bottom, cap.reserved + narrowest)
+                .first()
+                .map(|(origin, _)| *origin)
+        };
+        let mut letter = None;
+        let mut spans = Vec::new();
+        let mut gaps = Vec::new();
+        // Whether an image reached any band at all, and how far down
+        // the profile has to be listed: the shorter it is, the fewer
+        // states the break has to keep.
+        let mut reached = false;
+        let mut listed = (0, 0);
+        let (mut y, mut band, mut gap) = (top, 0, 0.0);
+        while y < self.height {
+            let sunk = cap.filter(|cap| band < cap.lines);
+            // A first-line indent and a drop cap belong to the line
+            // the paragraph opens on. What is left of it opens on a
+            // band like any other.
+            let base = match (opening, sunk) {
+                (_, Some(_)) => plain,
+                (true, None) => reflow.base.at(band),
+                (false, None) => plain,
+            };
+            let mut free = clear(base, &holes, y, y + leading, narrowest);
+            if let Some(cap) = sunk {
+                // Where the letter goes is settled on the first of
+                // its bands and held for the rest of them.
+                let at = match letter {
+                    Some(at) => Some(at),
+                    None => column(cap, y),
+                };
+                free = match at {
+                    Some(at) => taking(free, at, cap.reserved, narrowest),
+                    None => Vec::new(),
+                };
+                letter = at;
+            }
+            let Some((last, rest)) = free.split_last() else {
+                // Nothing is set in a band an image covers the whole
+                // of, so the next band is the first one under it.
+                let below = holes
+                    .iter()
+                    .filter(|hole| hole.rect.y < y + leading && hole.rect.bottom() > y)
+                    .fold(y, |below: f32, hole| below.max(hole.rect.bottom()));
+                if below <= y {
+                    break;
+                }
+                gap += below - y;
+                y = below;
+                continue;
+            };
+            for (origin, width) in rest {
+                spans.push(Span {
+                    origin: *origin,
+                    width: *width,
+                    ends_band: false,
+                });
+            }
+            spans.push(Span::band(last.0, last.1));
+            let above = std::mem::take(&mut gap);
+            gaps.push(above);
+            band += 1;
+            y += leading;
+            let alone = |span: Span| free.len() == 1 && *last == (span.origin, span.width);
+            let unmoved = match (opening, sunk) {
+                (true, Some(_)) => alone(reflow.base.at(band - 1)),
+                _ => alone(base),
+            };
+            reached = reached || above != 0.0 || !unmoved;
+            if above != 0.0 || !alone(plain) {
+                listed = (spans.len(), band);
+            }
+        }
+        if !reached {
+            return None;
+        }
+        spans.truncate(listed.0);
+        gaps.truncate(listed.1);
+        Some(Profile {
+            measure: Measure::new(spans, plain),
+            gaps,
+            letter,
+        })
     }
 
     /// Places one fragment, ending columns and pages as its break
     /// point demands.
     fn place(&mut self, fragment: &Fragment) {
+        // An anchor is not placed. It binds to the next fragment that
+        // is, and takes the page that fragment ends on.
+        if let Piece::Anchor(node) = fragment.piece {
+            self.pending_anchors.push(node);
+            return;
+        }
         if let BreakPoint::Forced(wanted) = fragment.break_before {
             match wanted {
                 Break::Column => self.break_column(),
@@ -1394,13 +2150,15 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
         }
         // Nothing laid on the page yet means the page the section is
-        // waiting for is this one.
+        // waiting for is this one. Either way the section had its
+        // chance to claim one.
         if self.placed.is_empty()
             && let Some(slot) = self.pending_slot.take()
         {
             self.slot = slot;
             self.remaster();
         }
+        self.pending_slot = None;
         // A fragment that does not fit ends the column. Where it ends
         // is the last point a break was allowed — which may be
         // several fragments back, and may be nowhere, in which case
@@ -1491,6 +2249,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let (x, y) = self.origin();
         let top = self.cursor + lead + fragment.fixed;
         let items = match &fragment.piece {
+            _ if !self.paints => Vec::new(),
             Piece::Line { line, cap } => {
                 let baseline = y + top + line.box_.baseline;
                 let mut items = self.paginator.text_items(line, x + fragment.x, baseline);
@@ -1514,7 +2273,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 h: *height,
                 asset: *asset,
             }],
-            Piece::Blank => Vec::new(),
+            Piece::Blank | Piece::Anchor(_) => Vec::new(),
         };
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
@@ -1526,6 +2285,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             items,
             marks: fragment.marks.clone(),
             decorations: fragment.decorations.clone(),
+            anchors: std::mem::take(&mut self.pending_anchors),
         });
     }
 
@@ -1636,6 +2396,19 @@ impl<'a, 'p> Flow<'a, 'p> {
             .collect()
     }
 
+    /// The images the page being built carries, as paint ops.
+    fn anchored_items(&self) -> Vec<DrawItem> {
+        let index = self.pages.len();
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
+            return Vec::new();
+        };
+        let geometry = self.paginator.master(index, &self.slot).geometry;
+        anchored
+            .iter()
+            .map(|at| self.anchored.all[*at].item(geometry))
+            .collect()
+    }
+
     /// Ends the page being built, if anything is on it.
     ///
     /// What the page's fragments set takes effect here, not where
@@ -1649,15 +2422,23 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let placed = std::mem::take(&mut self.placed);
-        // Backgrounds, borders and column rules go in front of the
-        // page's text: `DrawItem` order is paint order, and the
-        // display structure has no layers.
-        let mut items = self.decorate(&placed);
-        items.append(&mut self.rules(&placed));
+        // Backgrounds, borders, column rules and images go in front
+        // of the page's text: `DrawItem` order is paint order, and
+        // the display structure has no layers.
+        let mut items = Vec::new();
+        if self.paints {
+            items = self.decorate(&placed);
+            items.append(&mut self.rules(&placed));
+            items.append(&mut self.anchored_items());
+        }
+        let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
         for placed in placed {
             if sections.last() != Some(&placed.section) {
                 sections.push(placed.section);
+            }
+            for node in placed.anchors {
+                self.anchors.insert(node, index);
             }
             if let Some(marks) = placed.marks {
                 for (name, value) in marks.strings {
@@ -1729,11 +2510,85 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     fn finish(mut self) -> Paged {
         self.close();
+        // An anchor with nothing after it lands on the last page the
+        // book reached.
+        let last = self.pages.len().saturating_sub(1);
+        for node in std::mem::take(&mut self.pending_anchors) {
+            self.anchors.insert(node, last);
+        }
         Paged {
             pages: self.pages,
             infos: self.infos,
+            anchors: self.anchors,
         }
     }
+}
+
+/// Where one paragraph's fragments end: the run of them that share
+/// the paragraph `from` opens.
+fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> usize {
+    fragments[from..]
+        .iter()
+        .position(|fragment| {
+            !fragment
+                .reflow
+                .as_ref()
+                .is_some_and(|other| Arc::ptr_eq(other, reflow))
+        })
+        .map(|at| from + at)
+        .unwrap_or(fragments.len())
+}
+
+/// What one band has left of it where the images on its page cover
+/// it: the stretches the prose can be set in, in reading order.
+///
+/// A stretch narrower than `narrowest` holds nothing worth setting
+/// and is not one.
+fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> Vec<(f32, f32)> {
+    let mut free = vec![(base.origin, base.origin + base.width)];
+    for hole in holes {
+        if hole.rect.bottom() <= top || hole.rect.y >= bottom {
+            continue;
+        }
+        let (left, right) = (hole.rect.x, hole.rect.right());
+        free = free
+            .iter()
+            .flat_map(|(start, end)| {
+                if right <= *start || left >= *end {
+                    return vec![(*start, *end)];
+                }
+                match hole.wrap {
+                    WrapFlow::Auto => vec![(*start, *end)],
+                    WrapFlow::Start => vec![(*start, end.min(left))],
+                    WrapFlow::End => vec![(start.max(right), *end)],
+                    WrapFlow::Both => vec![(*start, end.min(left)), (start.max(right), *end)],
+                }
+            })
+            .filter(|(start, end)| end - start >= narrowest)
+            .collect();
+    }
+    free.into_iter()
+        .map(|(start, end)| (start, end - start))
+        .collect()
+}
+
+/// What one band has left of it once the initial letter beside it
+/// takes its column, which starts at `at` and runs `reserved` wide.
+///
+/// A stretch narrower than `narrowest` holds nothing worth setting
+/// and is not one.
+fn taking(free: Vec<(f32, f32)>, at: f32, reserved: f32, narrowest: f32) -> Vec<(f32, f32)> {
+    free.into_iter()
+        .map(|(origin, width)| {
+            let end = origin + width;
+            if at + reserved <= origin || at >= end {
+                return (origin, width);
+            }
+            let start = origin.max(at + reserved);
+            (start, end - start)
+        })
+        .filter(|(_, width)| *width >= narrowest)
+        .collect()
 }
 
 /// Moves already-painted items: what moving a fragment to the next
@@ -3789,6 +4644,431 @@ mod tests {
                 .iter()
                 .any(|w| w.message.contains("small.png")),
             "an image that fits is not worth a diagnostic",
+        );
+    }
+
+    /// A book laid out with one image in it, which the sheet can
+    /// anchor to the page. The image is 2in square at 96dpi.
+    fn with_image(css: &str, sections: Vec<Section>) -> LayoutOutput {
+        struct Png;
+        impl crate::images::ImageLoader for Png {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "image.png").then(|| png(192, 192))
+            }
+        }
+        let book = book_of(sections);
+        let styles = styled(css, &book);
+        let assets = crate::images::Assets::probe(&book, &Png);
+        layout_book(&book, &styles, registry(), &assets)
+    }
+
+    /// The image the anchoring tests place.
+    fn image() -> Block {
+        Block::Image {
+            id: NodeId::UNASSIGNED,
+            url: "image.png".into(),
+            alt: "a map of Lilliput".into(),
+            attributes: Attributes::default(),
+            position: Some(SourcePos { line: 3, column: 1 }),
+            span: None,
+        }
+    }
+
+    /// The images one page paints: `(x, y, width, height)`.
+    fn painted(page: &Page) -> Vec<(f32, f32, f32, f32)> {
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The image the tests anchor is 144pt square.
+    const IMAGE: f32 = 144.0;
+
+    /// Acceptance: the prose sets around an image anchored to the
+    /// page, on the side the sheet asks for.
+    ///
+    /// The same image is anchored at either edge of the page area.
+    /// `wrap-flow: end` puts the prose beside it at the end of the
+    /// line, and `wrap-flow: start` at the start. Either way the
+    /// lines below it run the full measure.
+    #[test]
+    fn prose_sets_around_an_anchored_image_on_the_side_the_sheet_asks_for() {
+        let (left, measure) = {
+            let geometry = master(Situation::First(Side::Recto)).geometry;
+            (geometry.content_origin().0, geometry.measure())
+        };
+        let blocks = || std::iter::once(image()).chain(long_prose(8)).collect();
+
+        let beside = with_image(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
+             wrap-flow: end }",
+            vec![section(blocks())],
+        );
+        let page = &beside.pages[0];
+        assert_eq!(painted(page), vec![(left, 54.0, IMAGE, IMAGE)]);
+        let lines = content_lines(page);
+        let leading = lines[1].0 - lines[0].0;
+        let beside = |runs: &[Run<'_>]| (runs[0].0 - (left + IMAGE + 12.0)).abs() < 1e-3;
+        let narrowed = lines.iter().take_while(|(_, runs)| beside(runs)).count();
+        assert!(narrowed > 0, "no line was set beside the image");
+        assert!(narrowed < lines.len(), "every line was");
+        for (baseline, runs) in &lines[narrowed..] {
+            assert!(
+                !beside(runs),
+                "the line at {baseline} is set beside the image under it",
+            );
+        }
+        // A line is set beside the image when its own band meets it,
+        // which the baseline a leading above stands for.
+        assert!(lines[narrowed - 1].0 - leading < 54.0 + IMAGE);
+        assert!(lines[narrowed].0 - leading >= 54.0 + IMAGE);
+
+        let before = with_image(
+            "img { position: absolute; top: 0; right: 0; margin-left: 12pt; \
+             wrap-flow: start }",
+            vec![section(blocks())],
+        );
+        let page = &before.pages[0];
+        assert_eq!(
+            painted(page),
+            vec![(left + measure - IMAGE, 54.0, IMAGE, IMAGE)],
+        );
+        for (baseline, _) in content_lines(page)
+            .iter()
+            .filter(|(baseline, _)| *baseline < 54.0 + IMAGE)
+        {
+            let edge = right_edge(page, *baseline);
+            assert!(
+                edge <= left + measure - IMAGE - 12.0 + 1e-3,
+                "the line at {baseline} reaches {edge}, into the image",
+            );
+        }
+    }
+
+    /// Acceptance: an image anchored above a paragraph lands on the
+    /// page that paragraph flows onto, not the page the anchor was
+    /// written on.
+    #[test]
+    fn an_anchored_image_lands_on_the_page_the_paragraph_after_it_flows_onto() {
+        let css = "img { position: absolute; top: 0; left: 0; wrap-flow: auto }";
+        // Which paragraph opens the second page, with nothing
+        // anchored: the image goes above that one.
+        let bare = with_image(css, vec![section(tagged_prose(30))]);
+        assert!(bare.pages.len() > 1, "one page proves nothing here");
+        let above: Vec<String> = tagged_lines(&bare.pages[0]);
+        let opening = tagged_lines(&bare.pages[1])
+            .into_iter()
+            .find(|tag| !above.contains(tag))
+            .expect("a paragraph opens on the second page");
+        let nth: usize = opening
+            .trim_start_matches('p')
+            .parse()
+            .expect("the tag counts the paragraph");
+
+        let mut blocks = tagged_prose(30);
+        blocks.insert(nth, image());
+        let output = with_image(css, vec![section(blocks)]);
+        assert!(painted(&output.pages[0]).is_empty(), "the image waited");
+        assert_eq!(painted(&output.pages[1]).len(), 1, "for the page it opens");
+    }
+
+    /// Acceptance: an image that asks for no wrapping is positioned
+    /// and painted, and the prose under it breaks as if the image is
+    /// not there.
+    #[test]
+    fn an_image_that_asks_for_no_wrapping_leaves_the_prose_where_it_was() {
+        let blocks = || std::iter::once(image()).chain(long_prose(6)).collect();
+        let bare = with_image("img { position: absolute; top: 0; left: 0 }", vec![]);
+        assert!(bare.pages.is_empty());
+
+        let over = with_image(
+            "img { position: absolute; top: 0; left: 0 }",
+            vec![section(blocks())],
+        );
+        let without = paginate_styled("img { display: none }", vec![section(long_prose(6))]);
+        let page = &over.pages[0];
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let (left, top) = geometry.content_origin();
+        assert_eq!(painted(page), vec![(left, top, IMAGE, IMAGE)]);
+        assert_eq!(
+            content_items(page),
+            content_items(&without[0]),
+            "the prose broke around an image that excludes nothing",
+        );
+    }
+
+    /// An image reaches the prose of a quotation as it reaches any
+    /// other prose: the bands a quotation is set in are its own, and
+    /// the image is the page's.
+    #[test]
+    fn an_anchored_image_narrows_a_quotation_from_its_own_edge() {
+        let quote = Block::Blockquote {
+            id: NodeId::UNASSIGNED,
+            blocks: long_prose(3),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let output = with_image(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end } \
+             blockquote { margin-left: 36pt }",
+            vec![section(vec![image(), quote])],
+        );
+        let page = &output.pages[0];
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        for (baseline, runs) in content_lines(page)
+            .iter()
+            .filter(|(baseline, _)| *baseline < 54.0 + IMAGE)
+        {
+            assert!(
+                runs[0].0 >= left + IMAGE + 12.0 - 1e-3,
+                "the quoted line at {baseline} starts at {}, over the image",
+                runs[0].0,
+            );
+        }
+    }
+
+    /// An initial letter goes where the bands it is sunk over are
+    /// clear. An image that reaches those bands moves the letter with
+    /// them rather than leaves it behind on the image.
+    #[test]
+    fn an_initial_letter_moves_to_the_bands_an_anchored_image_leaves() {
+        let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
+                   wrap-flow: end } p::first-letter { initial-letter: 3 }";
+        let output = with_image(
+            css,
+            vec![section(vec![image(), paragraph(&"prose ".repeat(60))])],
+        );
+        let page = &output.pages[0];
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let beside = left + IMAGE + 12.0;
+        let lines = content_lines(page);
+        let (baseline, runs) = lines.first().expect("the paragraph is set");
+        assert!(
+            *baseline < 54.0 + IMAGE,
+            "the paragraph opens at {baseline}, under the image",
+        );
+        // The letter is the one item larger than the prose, and it
+        // stands at the head of the bands the image left.
+        let letter = content_items(page)
+            .into_iter()
+            .find(|(_, _, size, _)| *size > body_size())
+            .expect("the initial letter is drawn");
+        assert!(
+            (letter.0 - beside).abs() < 1e-3,
+            "the initial letter is at {} rather than {beside}",
+            letter.0,
+        );
+        assert!(
+            runs[0].0 > beside,
+            "the first line does not open beside the letter",
+        );
+    }
+
+    /// Where the bands a letter is sunk over have no room for it, the
+    /// paragraph starts under the image instead.
+    #[test]
+    fn an_initial_letter_with_no_room_beside_it_starts_under_the_image() {
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let (left, measure) = (geometry.content_origin().0, geometry.measure());
+        // A gutter wide enough that what is left of the measure holds
+        // the letter but not a line beside it.
+        let gutter = measure - IMAGE - 30.0;
+        let css = format!(
+            "img {{ position: absolute; top: 0; left: 0; margin-right: {gutter}pt; \
+             wrap-flow: end }} p::first-letter {{ initial-letter: 3 }}"
+        );
+        let output = with_image(
+            &css,
+            vec![section(vec![image(), paragraph(&"prose ".repeat(60))])],
+        );
+        let page = &output.pages[0];
+        let lines = content_lines(page);
+        let (baseline, _) = lines.first().expect("the paragraph is set");
+        assert!(
+            *baseline > 54.0 + IMAGE,
+            "the paragraph opens at {baseline}, beside an image with no room for the letter",
+        );
+        let letter = content_items(page)
+            .into_iter()
+            .find(|(_, _, size, _)| *size > body_size())
+            .expect("the initial letter is drawn");
+        assert!(
+            (letter.0 - left).abs() < 1e-3,
+            "the initial letter is at {} rather than {left}",
+            letter.0,
+        );
+    }
+
+    /// Acceptance: the anchor map is settled with nothing in the way
+    /// and then held. An image that narrows its own page can push the
+    /// paragraph it hangs from onto the next page. The image stays
+    /// where the settle put it.
+    #[test]
+    fn the_anchor_map_is_settled_once_and_held() {
+        let css = |wrap| {
+            format!(
+                "img {{ position: absolute; top: 0; left: 0; margin-right: 12pt; \
+                 wrap-flow: {wrap} }}"
+            )
+        };
+        let mut blocks = tagged_prose(30);
+        // Anchored on a page the image then narrows, so the
+        // paragraph under the anchor moves and the image does not.
+        blocks.insert(4, image());
+        let settled = with_image(&css("auto"), vec![section(blocks.clone())]);
+        let wrapped = with_image(&css("end"), vec![section(blocks)]);
+
+        let page_of = |output: &LayoutOutput| {
+            output
+                .pages
+                .iter()
+                .position(|page| !painted(page).is_empty())
+                .expect("the image is painted")
+        };
+        assert_eq!(page_of(&settled), page_of(&wrapped));
+        assert!(
+            tagged_lines(&wrapped.pages[0]).len() < tagged_lines(&settled.pages[0]).len(),
+            "the image did not narrow the page it landed on",
+        );
+    }
+
+    /// The two ways through the pipeline agree over a book with an
+    /// image on it as well: the settle the flow runs first sees the
+    /// same pages whether the sections were built one at a time or
+    /// all at once.
+    #[test]
+    fn the_stages_compose_over_an_illustrated_book_too() {
+        struct Png;
+        impl crate::images::ImageLoader for Png {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                (url == "image.png").then(|| png(192, 192))
+            }
+        }
+        let book = book_of(vec![
+            section([vec![image()], long_prose(20)].concat()),
+            section([vec![heading("Two"), image()], long_prose(16)].concat()),
+        ]);
+        let styles = styled(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
+            &book,
+        );
+        let assets = crate::images::Assets::probe(&book, &Png);
+        let paginator = Paginator::with_assets(registry(), &styles, &assets);
+
+        let staged: Vec<Vec<Fragment>> = book
+            .sections
+            .iter()
+            .map(|section| paginator.section_fragments(section))
+            .collect();
+        let by_stage = paginator.flow(&book, &staged);
+        let in_one = paginator.paginate(&book);
+
+        assert!(in_one.len() > 2, "a book worth splitting");
+        assert!(paginator.rebreaks() > 0, "no paragraph met an image");
+        assert_eq!(by_stage.len(), in_one.len());
+        for (staged, whole) in by_stage.iter().zip(&in_one) {
+            assert_eq!(format!("{:?}", staged.items), format!("{:?}", whole.items));
+        }
+    }
+
+    /// Acceptance: the paragraph beside an image is broken by total
+    /// fit, not filled band by band.
+    ///
+    /// The greedy break of the same text against the same bands packs
+    /// every line as far as it goes. The break the flow chose does
+    /// not, and its lines sit closer to the bands they were set in:
+    /// the slack a break leaves is what its demerits are read from.
+    #[test]
+    fn the_wrapped_paragraph_is_broken_by_total_fit() {
+        let text = "my father had a small estate in nottinghamshire and i was the third \
+                    of five sons he sent me to emanuel college in cambridge at fourteen \
+                    years old where i resided three years and applied myself close to my \
+                    studies but the charge of maintaining me was too great for a narrow \
+                    fortune";
+        let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
+                   wrap-flow: end } p { text-indent: 0 }";
+        let book = book_of(vec![section(vec![image(), paragraph(text)])]);
+        let styles = styled(css, &book);
+        let output = with_image(css, vec![section(vec![image(), paragraph(text)])]);
+        let page = &output.pages[0];
+
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let measure = geometry.measure();
+        let narrow = measure - IMAGE - 12.0;
+        let lines = content_lines(page);
+        let bands: Vec<f32> = lines
+            .iter()
+            .map(|(baseline, _)| {
+                if *baseline < 54.0 + IMAGE {
+                    narrow
+                } else {
+                    measure
+                }
+            })
+            .collect();
+        let set: Vec<String> = lines
+            .iter()
+            .map(|(_, runs)| runs.iter().map(|run| run.2).collect::<String>())
+            .collect();
+        assert!(set.len() > 4, "too few lines to disagree over: {set:?}");
+
+        let paginator = Paginator::new(registry(), &styles);
+        let style = styles.root().paragraph();
+        let width = |text: &str| {
+            paginator
+                .line_of(text, style)
+                .map(|line| paginator.line_width(&line))
+                .unwrap_or_default()
+        };
+        // What filling each band as far as it goes comes to.
+        let mut greedy: Vec<String> = Vec::new();
+        let mut band = 0;
+        for word in text.split_whitespace() {
+            let room = bands.get(band).copied().unwrap_or(measure);
+            match greedy.last_mut() {
+                Some(line) if width(&format!("{line} {word}")) <= room => {
+                    line.push(' ');
+                    line.push_str(word);
+                }
+                _ => {
+                    greedy.push(word.to_string());
+                    band = greedy.len() - 1;
+                }
+            }
+        }
+        let chose: Vec<&str> = set.iter().map(|line| line.trim()).collect();
+        let packed: Vec<&str> = greedy.iter().map(String::as_str).collect();
+        assert_ne!(chose, packed, "the two breaks agree, so nothing is proved");
+
+        // The last line of a break fills what it fills, so the slack
+        // under it is not a fault either break is charged for.
+        let slack = |broken: &[String]| -> f64 {
+            broken
+                .iter()
+                .take(broken.len() - 1)
+                .enumerate()
+                .map(|(index, line)| {
+                    let room = bands.get(index).copied().unwrap_or(measure);
+                    let gap = (room - width(line.trim())) as f64;
+                    gap * gap
+                })
+                .sum()
+        };
+        let (chosen, filled) = (slack(&set), slack(&greedy));
+        assert!(
+            chosen < filled,
+            "the break the flow chose leaves {chosen} of slack against the greedy {filled}",
         );
     }
 

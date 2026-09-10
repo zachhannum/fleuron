@@ -476,6 +476,9 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `string-set` | `string-set: chapter content()` |
 | `counter-reset` | `counter-reset: page` |
 | `initial-letter` | `initial-letter: 3` |
+| `position` | `position: absolute` |
+| `top`, `right`, `bottom`, `left` | `top: 0` |
+| `wrap-flow` | `wrap-flow: end` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -493,6 +496,12 @@ content:              none | <string>;
 string-set:           none | [ <name> [ content() | <string> ]+ ]#;
 counter-reset:        none | page <integer>?;
 initial-letter:       <integer>;
+position:             static | absolute;
+top:                  auto | <length>;
+right:                auto | <length>;
+bottom:               auto | <length>;
+left:                 auto | <length>;
+wrap-flow:            auto | both | start | end;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -592,6 +601,40 @@ hr {
   margin: 1.5em 0;
 }
 ```
+
+## Images against the page
+
+You can put an image against the page rather than among the paragraphs. The text then wraps around it.
+
+`position: absolute` takes the image out of the text. The insets say where on the page it goes. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
+
+The image keeps the size its own file gives it. The engine scales it down where that size does not fit the content box. The margins of the image are the space it keeps clear of the text.
+
+`wrap-flow` says which side of the image the text wraps on.
+
+| value | what goes beside the image |
+|---|---|
+| `auto` | Nothing. The text breaks as if the image is not there. |
+| `start` | the side a line starts at |
+| `end` | the side a line ends at |
+| `both` | both sides |
+
+This example puts an image in the top right corner of the page it lands on. The text of that page wraps down the left side of the image.
+
+```css
+img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-left: 12pt;
+  margin-bottom: 6pt;
+  wrap-flow: start;
+}
+```
+
+The place where you write an image decides which page it lands on. An image written above a paragraph lands on the page that the paragraph starts on, and it takes up no room of its own. An image written a line or two from a page break is different. It can land on the page before or after the paragraph you wrote it beside.
+
+The engine shortens every line the image reaches to the space the image leaves. The lines under the image run the full width. Where the image covers the full width, the text continues below it.
 
 ## Chapter openings
 
@@ -788,6 +831,7 @@ code { font-family: monospace }
 | area | not supported yet |
 |---|---|
 | layout | floats, tables, grid, flexbox, transforms |
+| positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |

@@ -43,7 +43,8 @@ use crate::lines::Patterns;
 use crate::pages::{DrawItem, Folios};
 use crate::pdf::{self, PdfError};
 use crate::style::{
-    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, StyleTree, Stylesheets,
+    ColumnRule, Columns, ComputedStyle, Content, Edges, PageGeometry, Position, StyleTree,
+    Stylesheets,
 };
 use crate::{LayoutOutput, Warning};
 
@@ -148,6 +149,9 @@ impl Cached {
             return;
         }
         for fragment in &mut self.fragments {
+            if let Piece::Anchor(node) = &mut fragment.piece {
+                *node = node.shifted(step);
+            }
             let Piece::Line { line, cap } = &mut fragment.piece else {
                 continue;
             };
@@ -731,23 +735,51 @@ fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOutput {
 /// page's own height, so a book without one never reads that height,
 /// and a page that grows taller leaves its prose broken where it
 /// was.
+///
+/// A book that anchors an image to the page carries the exclusions as
+/// well. The flow resolves their geometry. A section whose paragraphs
+/// can be set again beside an image keeps what it takes to set them.
+/// A book that gains its first image builds its sections again.
 #[derive(Debug, Clone, Copy)]
 struct Against {
     measure: f32,
     height: Option<f32>,
+    exclusions: Option<u64>,
 }
 
 impl Against {
     fn of(styles: &StyleTree, images: bool) -> Against {
         let geometry = styles.default_page().geometry;
+        let mut anchored = DefaultHasher::new();
+        let mut any = false;
+        for style in styles
+            .styles()
+            .iter()
+            .filter(|style| style.position == Position::Absolute)
+        {
+            any = true;
+            style.position.hash(&mut anchored);
+            style.wrap_flow.hash(&mut anchored);
+            for inset in [
+                style.inset.top,
+                style.inset.right,
+                style.inset.bottom,
+                style.inset.left,
+            ] {
+                inset.points().map(f32::to_bits).hash(&mut anchored);
+            }
+            hash_edges(style.margin, &mut anchored);
+        }
         Against {
             measure: geometry.measure(),
             height: images.then(|| geometry.content_size().1),
+            exclusions: any.then(|| anchored.finish()),
         }
     }
 
     fn hash_into(self, h: &mut DefaultHasher) {
         (self.measure.to_bits(), self.height.map(f32::to_bits)).hash(h);
+        self.exclusions.hash(h);
     }
 }
 
@@ -1057,6 +1089,12 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         string_set,
         counter_reset,
         initial_letter,
+        // Whether an image is in the flow decides whether the section
+        // holds a fragment for it or an anchor. Where the image then
+        // sits, and which side the prose sets on, belong to the flow.
+        position,
+        inset: _,
+        wrap_flow: _,
         margin,
         padding,
         border,
@@ -1071,6 +1109,7 @@ fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
+    position.hash(h);
     (break_before, break_after, break_inside).hash(h);
     (background_color, box_decoration_break).hash(h);
     hash_edges(*margin, h);
@@ -1529,6 +1568,97 @@ mod tests {
         ]));
         session.preview();
         session
+    }
+
+    /// A session sets the prose around an image the sheet anchors. A
+    /// sheet that moves the image builds the narrowed sections again,
+    /// because the lines beside an image cannot be kept when the
+    /// image moves.
+    #[test]
+    fn a_sheet_that_moves_an_anchored_image_builds_the_sections_again() {
+        let mut book = book(vec![section(
+            "one.md",
+            [
+                vec![Block::Image {
+                    id: NodeId::UNASSIGNED,
+                    url: "plate.jpg".into(),
+                    alt: "a map".into(),
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                }],
+                prose("alpha", 6),
+            ]
+            .concat(),
+        )]);
+        book.assign_node_ids();
+        let mut session =
+            Session::owning(crate::fonts::bundled_registry().expect("bundled font parses"));
+        session.set_content(book);
+        session.add_image("plate.jpg", MAP.to_vec()).unwrap();
+        session.set_style(sheets(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
+        ));
+        let output = session.preview();
+        let image = output
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Image { x, w, .. } => Some((*x, *w)),
+                _ => None,
+            })
+            .expect("the image is painted");
+        let beside = output.pages[0]
+            .items
+            .iter()
+            .filter(|item| matches!(item, DrawItem::Text { x, .. } if *x >= image.0 + image.1))
+            .count();
+        assert!(beside > 0, "no line is set beside the image");
+
+        let before = session.stages();
+        session.set_style(sheets(
+            "img { position: absolute; top: 0; right: 0; margin-left: 12pt; wrap-flow: start }",
+        ));
+        session.preview();
+        assert_eq!(
+            session.stages().lines,
+            before.lines + 1,
+            "the section was kept over an image that moved",
+        );
+    }
+
+    /// Acceptance: a book with nothing anchored to the page breaks
+    /// its lines as often as it did before exclusions existed. The
+    /// pass that settles where an image lands is a cost only a book
+    /// with an image pays.
+    #[test]
+    fn a_book_with_nothing_anchored_breaks_its_lines_as_often_as_ever() {
+        let mut session = three_chapters();
+        let before = session.stages();
+        assert_eq!(before.lines, 3, "one break per section, once");
+
+        // This sheet says something about anchoring, but the book
+        // has no image to anchor. Nothing the sheet says reaches a
+        // node, so no stage runs again.
+        session.set_style(sheets("img { position: absolute; wrap-flow: end }"));
+        session.preview();
+        assert_eq!(
+            session.stages(),
+            Stages {
+                style: before.style + 1,
+                ..before
+            },
+            "a sheet that reaches no node reached a stage",
+        );
+
+        // A page box that moves still re-fragments over the lines it
+        // has.
+        session.set_style(sheets("@page { margin-bottom: 108pt }"));
+        session.preview();
+        let after = session.stages();
+        assert_eq!(after.lines, before.lines, "the lines were broken again");
+        assert_eq!(after.flow, before.flow + 1, "fragmentation did not run");
     }
 
     /// Naming a book costs nothing: a rename that leaves the

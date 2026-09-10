@@ -14,7 +14,7 @@
 
 use std::process::ExitCode;
 
-use fleuron_fixtures::gate::{self, Division, Target};
+use fleuron_fixtures::gate::{self, Division, Illustration, Target};
 use fleuron_fixtures::{Corpus, alloc, registry};
 
 /// The gate is the one place the tracker belongs: a binary imposes a
@@ -56,8 +56,8 @@ fn main() -> ExitCode {
         } else {
             &[Division::Undivided]
         };
-        for division in divisions {
-            let report = gate::measure_on(*corpus, *division, registry(), runs);
+        for (division, illustration) in measurements(divisions, *corpus == Corpus::GATE) {
+            let report = gate::measure_on(*corpus, division, illustration, registry(), runs);
             println!("\n{report}");
             // Only the gate book has budgets. The big book is there to
             // show the curve, and a book four times the size failing a
@@ -86,6 +86,21 @@ fn main() -> ExitCode {
         println!("warning only: pass --strict to fail on this");
         ExitCode::SUCCESS
     }
+}
+
+/// What the gate measures for one book: every page box, and the gate
+/// book once more with images anchored to it. An image is a different
+/// path through the flow rather than a different page box. The gate
+/// measures it on one page box only.
+fn measurements(divisions: &[Division], gate: bool) -> Vec<(Division, Illustration)> {
+    let mut measurements: Vec<(Division, Illustration)> = divisions
+        .iter()
+        .map(|division| (*division, Illustration::Bare))
+        .collect();
+    if gate {
+        measurements.push((Division::Undivided, Illustration::Anchored));
+    }
+    measurements
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {

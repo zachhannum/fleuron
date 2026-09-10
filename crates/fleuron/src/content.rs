@@ -62,7 +62,9 @@ use serde::{Deserialize, Serialize};
 /// incremental relayout.
 ///
 /// Assigned in document order, starting at 1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub struct NodeId(u32);
 
 impl NodeId {
