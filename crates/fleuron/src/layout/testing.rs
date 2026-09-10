@@ -450,3 +450,46 @@ pub(super) fn assert_orphans_and_widows_over(
         "only {boundaries} split paragraphs to check",
     );
 }
+
+/// The text runs of one page, grouped by the baseline they share,
+/// each with whether it was shaped in small capitals.
+pub(super) fn small_caps_lines(page: &Page) -> Vec<(f32, Vec<(&str, bool)>)> {
+    let mut lines: Vec<(f32, Vec<(&str, bool)>)> = Vec::new();
+    for item in &page.items {
+        let DrawItem::Text {
+            y,
+            size,
+            text,
+            features,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        if *size == folio_size() {
+            continue;
+        }
+        let run = (text.as_str(), features.small_caps);
+        match lines.last_mut() {
+            Some((baseline, runs)) if (*baseline - y).abs() < 1e-3 => runs.push(run),
+            _ => lines.push((*y, vec![run])),
+        }
+    }
+    lines
+}
+
+/// A section of an `h3` and one long paragraph, which is what a
+/// chapter opening styled through `h3 + p` needs.
+pub(super) fn under_h3(prose: &str) -> Vec<Section> {
+    vec![section(vec![
+        Block::Heading {
+            id: NodeId::UNASSIGNED,
+            level: HeadingLevel::H3,
+            inlines: vec![text("A Voyage")],
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        },
+        paragraph(prose),
+    ])]
+}

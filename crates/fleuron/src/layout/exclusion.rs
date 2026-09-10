@@ -10,7 +10,8 @@ use crate::pages::DrawItem;
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
 
 use super::Paginator;
-use super::build::{Cap, Reflow, carry_over, set_lines};
+use super::build::{Reflow, carry_over, set_lines};
+use super::cap::Cap;
 use super::flow::Flow;
 use super::fragment::Fragment;
 

@@ -23,6 +23,7 @@
 //! and `text` turns a shaped line into paint ops.
 
 mod build;
+mod cap;
 mod exclusion;
 mod flow;
 mod fragment;
