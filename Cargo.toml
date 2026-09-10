@@ -43,6 +43,13 @@ icu_segmenter = "2"
 # already shaped.
 krilla = { version = "0.5", default-features = false, features = ["raster-images"] }
 
+# Alpha decoding, for `shape-outside: auto`. The same three the PDF
+# writer already links through krilla, so a contour costs the module
+# nothing it was not carrying.
+png = "0.17"
+gif = "0.13"
+image-webp = "0.2"
+
 # diagnostics & errors
 thiserror = "2"
 
