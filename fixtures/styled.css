@@ -79,9 +79,8 @@ h3 {
   wrap-flow: end;
 }
 
-/* The ornament that closes the chapter: every image this sheet has
-   not named the map. The text wraps around the shape its alpha
-   channel covers rather than around its box. */
+/* Every image except the map. The text wraps around the shape the
+   ornament's alpha channel covers rather than around its box. */
 img:not(.map) {
   position: absolute;
   top: 0;

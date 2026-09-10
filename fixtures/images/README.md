@@ -18,7 +18,7 @@ embedded as it arrived, and a raster format whose alpha channel
 becomes a soft mask.
 
 The ornament's alpha channel does a second job. `fixtures/styled.css`
-wraps the text around the shape that channel covers. The ornament is
-therefore what drives `shape-outside: auto` through the fixture run.
-The map has no alpha channel at all, which covers the other half:
-where the engine finds none, the text goes around the box.
+wraps the text around the shape that channel covers, so the ornament
+is what drives `shape-outside: auto` through the fixture run. The map
+covers the other case. It has no alpha channel at all, so the text
+goes around its box.

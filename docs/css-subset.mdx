@@ -610,11 +610,11 @@ hr {
 
 You can put an image against the page rather than among the paragraphs. The text then wraps around it.
 
-`position: absolute` takes the image out of the text. The insets say where on the page it goes. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
+`position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
 
-The image keeps the size its own file gives it. The engine makes it smaller where that size does not fit the content box. The margins of the image hold the text away from it.
+The image keeps the size its own file gives it. If that size does not fit the content box, the engine makes the image smaller. Margins on the image add space between it and the text.
 
-`wrap-flow` says which side of the image the text wraps on.
+Use `wrap-flow` to choose the side of the image the text wraps on.
 
 | value | what goes beside the image |
 |---|---|
@@ -623,7 +623,7 @@ The image keeps the size its own file gives it. The engine makes it smaller wher
 | `end` | the side a line ends at |
 | `both` | both sides |
 
-This example puts an image in the top right corner of the page it lands on. The text of that page wraps down the left side of the image.
+The following example puts an image in the top right corner of the page it lands on. The text of that page wraps down the left side of the image.
 
 ```css
 img {
@@ -642,9 +642,9 @@ The engine shortens every line the image reaches to the space the image leaves. 
 
 ### Wrapping to the shape of an image
 
-`shape-outside` wraps the text around the shape of an image instead of around its box. That shape is a contour: the outline the text goes around.
+`shape-outside` wraps the text around the shape of an image instead of around its box. That outline is called a contour.
 
-A contour works only on an image you put against the page and give a `wrap-flow` other than `auto`. Text goes beside an image only there.
+A contour works only on an image you put against the page with a `wrap-flow` other than `auto`. Those are the only images that text goes beside.
 
 | value | the shape the text goes around |
 |---|---|
@@ -666,15 +666,11 @@ img {
 }
 ```
 
-`auto` reads the shape from the file. The engine decodes the image to do it. It decodes no image that no rule asks it to, and it never decodes an image you leave among the paragraphs.
+`auto` takes the shape from the image's own alpha channel. PNG, GIF and WebP carry one. JPEG does not, and neither does a PNG saved without transparency. Where there is no alpha channel, the text goes around the box instead, and the engine warns you.
 
-PNG, GIF and WebP carry an alpha channel. JPEG does not. Where the engine finds no alpha channel, the text goes around the box and the engine warns you.
+`shape-margin` adds space between the contour and the text. Margins on the image do not, because a contour replaces the box they surround. Use `shape-margin` instead. An upright edge gets exactly the space you ask for, and a sloping edge gets at least that much.
 
-`shape-margin` holds the text away from the contour. The margins of the image do not. A contour replaces the box those margins surround, so use `shape-margin` where you want a gap between the image and the text.
-
-The engine reads the contour over a band that `shape-margin` makes taller. A sloping edge therefore holds the text away by at least the distance you ask for.
-
-The following example wraps the text around the shape the image's own alpha channel covers, and keeps 9pt between the two:
+The following example wraps the text around the shape the image's own alpha channel covers, with 9pt of space between them:
 
 ```css
 img {
@@ -687,7 +683,7 @@ img {
 }
 ```
 
-The engine reads a contour one line-height at a time. A line goes either beside the image or below it. Where the contour leaves a band empty across the whole image, the text of that band runs the full width.
+The text wraps to the contour one line at a time. A line goes either beside the image or below it. Where the contour leaves a whole line's height empty across the image, that line runs the full width.
 
 ## Chapter openings
 
