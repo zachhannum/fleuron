@@ -119,7 +119,7 @@ Two blocks also take the run written after them. A heading takes it at the end o
 
 Nothing else takes a trailing run. On a blockquote it stays inside the quote's last paragraph, as prose. After `---` the line is prose too, and no longer a break.
 
-A line that names nothing is set as the prose it was read as, and warns: the source ends under it, or another attribute line follows it. So is a brace run that is not classes and an id: `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
+A line that names nothing becomes plain prose, and warns. This happens when the source ends under it, or when another attribute line follows it. A brace run that is not classes and an id does the same. `{key=value}` is prose and a warning, like every other construct the vocabulary has no room for.
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 
@@ -160,7 +160,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | strikethrough, superscript, subscript | plain text |
 | math | plain text |
 | an image among prose | a block after the paragraph |
-| html, a footnote reference, a task marker | nothing; there is no prose in them |
+| html, a footnote reference, a task marker | nothing. There is no prose in them |
 | an attribute line naming nothing | a paragraph of its own |
 | a brace run that is not classes and an id | a paragraph of its own |
 

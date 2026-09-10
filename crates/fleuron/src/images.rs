@@ -257,7 +257,7 @@ impl Assets {
     fn refuse(&mut self, url: &str, origin: Option<String>) {
         if self.refused.insert(url.to_string()) {
             self.warnings.push(Warning {
-                message: format!("image {url}: no size could be read; it is skipped"),
+                message: format!("Image {url} has no size in it. The image is skipped."),
                 origin,
             });
         }
@@ -377,8 +377,8 @@ impl Contours {
                             let origin = crate::content::origin(source, *position);
                             contours.warnings.push(Warning {
                                 message: format!(
-                                    "image {url}: no alpha channel to trace; the prose keeps \
-                                     clear of its box"
+                                    "Missing alpha channel in {url}. Text wraps around the \
+                                     image rectangle."
                                 ),
                                 origin: (!origin.is_empty()).then_some(origin),
                             });

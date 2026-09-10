@@ -129,6 +129,16 @@ fn an_unknown_language_warns_once_and_breaks_nothing() {
         "the warning says nothing about hyphenation: {}",
         named[0]
     );
+    assert!(
+        named[0].starts_with(|opens: char| opens.is_uppercase()),
+        "{}",
+        named[0]
+    );
+    assert!(
+        named[0].ends_with('.') && !named[0].contains(';'),
+        "{}",
+        named[0]
+    );
     assert_eq!(lines(&output), ["Wassermann", "malheureusement"]);
 }
 

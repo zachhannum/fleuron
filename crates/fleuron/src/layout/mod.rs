@@ -186,7 +186,10 @@ impl Paginator<'_> {
     fn patterns(&self) -> Patterns {
         if let Some(tag) = self.unknown.borrow().as_deref() {
             self.warn(
-                format!("no hyphenation patterns for language `{tag}`; its words are left whole"),
+                format!(
+                    "No hyphenation patterns for `{tag}`. Hyphenation is skipped for that \
+                     language."
+                ),
                 None,
             );
         }
@@ -233,7 +236,7 @@ impl Paginator<'_> {
     fn missing(&self, url: &str, origin: String) {
         if !self.assets.probed(url) {
             self.warn(
-                format!("image {url}: no image was supplied for it; it is skipped"),
+                format!("No image was supplied for {url}. The image is skipped."),
                 (!origin.is_empty()).then_some(origin),
             );
         }
