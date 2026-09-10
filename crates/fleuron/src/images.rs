@@ -459,9 +459,9 @@ impl Mask {
 /// no alpha, where the file does not decode, or where it is larger
 /// than the tracer decodes.
 ///
-/// The outline is reported over [`ROWS`] bands rather than over the
-/// image's own rows, so two images of the same shape and different
-/// resolutions trace to the same size of outline.
+/// The outline is reported over a fixed number of bands rather than
+/// over the image's own rows, so two images of the same shape and
+/// different resolutions trace to the same size of outline.
 pub fn trace(bytes: &[u8]) -> Option<Contour> {
     let mask = mask(bytes)?;
     let rows = mask.rows();
