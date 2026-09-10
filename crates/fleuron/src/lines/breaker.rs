@@ -508,7 +508,6 @@ pub(super) fn fitness(ratio: f32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-
     use crate::lines::testing::{hyphenated, layout_body, layout_body_opts, line_text};
 
     /// Acceptance: hyphenation never runs to three line ends in a

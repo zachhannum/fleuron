@@ -199,10 +199,8 @@ impl Session<'_> {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::content::{Attributes, Block, Inline, Metadata, NodeId};
-
     use crate::Warning;
+    use crate::content::{Attributes, Block, Inline, Metadata, NodeId};
     use crate::pages::DrawItem;
     use crate::session::testing::{
         MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, painted,

@@ -173,7 +173,6 @@ impl LineLayout<'_> {
 
 #[cfg(test)]
 mod tests {
-
     use crate::lines::testing::{
         body, hyphenated, layout_body, layout_body_opts, line_text, units_per_em,
     };

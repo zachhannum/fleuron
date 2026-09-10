@@ -70,9 +70,7 @@ pub(super) fn skip_spaces(text: &str, mut at: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-
     use crate::lines::testing::{body, justified, layout_body_opts, registry, units_per_em};
-
     use crate::lines::{Line, LineBreakOptions};
 
     /// Justified: every line but the last reaches the right edge of

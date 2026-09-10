@@ -115,7 +115,6 @@ pub(super) fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOu
 mod tests {
     use super::*;
     use crate::content::NodeId;
-
     use crate::session::Session;
     use crate::session::testing::{
         book, heading, named_on, prose, registry, section, sheets, three_chapters,

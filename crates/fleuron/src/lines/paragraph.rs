@@ -242,7 +242,6 @@ mod tests {
     use crate::lines::testing::{
         body, hyphenated, layout_body, layout_body_opts, line_text, registry, units_per_em,
     };
-
     use crate::lines::{LineBreakOptions, Patterns};
 
     /// A BCP 47 tag is read by its primary subtag, whatever the

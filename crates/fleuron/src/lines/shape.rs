@@ -198,13 +198,11 @@ impl ShapedSpan {
 
 #[cfg(test)]
 mod tests {
-
     use crate::content::{Attributes, Inline, NodeId};
     use crate::lines::flatten::SMALL_CAPS_RATIO;
     use crate::lines::testing::{
         body, hyphenated, layout_body_opts, layout_style, line_text, registry, units_per_em,
     };
-
     use crate::lines::{LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle};
     use crate::style::FontVariantCaps;
 

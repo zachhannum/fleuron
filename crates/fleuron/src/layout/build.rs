@@ -631,7 +631,6 @@ pub(super) fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 
 
 #[cfg(test)]
 mod tests {
-
     use crate::content::{Attributes, Block, NodeId, Section, SourcePos};
     use crate::layout::layout_book;
     use crate::layout::testing::{
@@ -639,7 +638,6 @@ mod tests {
         long_prose, master, origin_of, ornament, paginate, paginate_styled, paragraph, png, quote,
         registry, right_edge, scene_break, section, small_caps_lines, tagged_prose, ua, under_h3,
     };
-
     use crate::pages::{DrawItem, Side};
     use crate::style::Situation;
 

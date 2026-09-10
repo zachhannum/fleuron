@@ -699,15 +699,13 @@ pub(super) fn taking(
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::LayoutOutput;
     use crate::content::{Attributes, Block, NodeId};
     use crate::layout::testing::{
         Run, body_size, book_of, content_items, content_lines, heading, image, long_prose, master,
         paginate_styled, painted, paragraph, png, registry, right_edge, section, styled,
         tagged_lines, tagged_prose, with_image,
     };
-
-    use crate::LayoutOutput;
     use crate::pages::{Page, Side};
     use crate::style::Situation;
 

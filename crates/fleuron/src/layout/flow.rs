@@ -698,7 +698,6 @@ pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::content::{Block, NodeId};
     use crate::layout::testing::{
         Run, assert_orphans_and_widows_over, body_size, book_of, chapter, chapter_size,
@@ -706,7 +705,6 @@ mod tests {
         page_geometry, paginate, paginate_styled, paragraph, prose, quote, rects, registry,
         scene_break, section, styled_geometry, tagged_prose, ua,
     };
-
     use crate::pages::{DrawItem, Page, Side};
     use crate::style::{Color, Situation};
 

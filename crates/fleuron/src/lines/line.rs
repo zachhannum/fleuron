@@ -337,7 +337,6 @@ pub(super) fn tile(lines: &mut [Line], flat: &FlatParagraph) {
 
 #[cfg(test)]
 mod tests {
-
     use crate::lines::testing::layout_body;
 
     /// A run's glyphs map back to the characters they were shaped

@@ -122,11 +122,9 @@ pub fn margin_band(master: &PageStyle, band: Band, style: ParagraphStyle) -> (f3
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::layout::testing::{
         chapter, folio, master, opens_a_chapter, paginate, run_width_pt, ua,
     };
-
     use crate::pages::{DrawItem, Side};
     use crate::style::{MarginBox, Situation};
 

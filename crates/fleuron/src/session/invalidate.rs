@@ -196,7 +196,6 @@ pub(super) fn hyphenation(metadata: &Metadata) -> (Patterns, Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::session::testing::{prose, section, sheets, three_chapters};
     use crate::style::CounterStyle;
 

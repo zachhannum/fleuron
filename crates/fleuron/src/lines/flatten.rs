@@ -461,7 +461,6 @@ mod tests {
     use super::*;
     use crate::content::{Attributes, Inline, NodeId};
     use crate::lines::testing::{body, layout_body, layout_style, line_text, registry};
-
     use crate::lines::{LineLayout, ParagraphStyle};
     use crate::style::TextTransform;
 

@@ -96,11 +96,9 @@ impl Paginator<'_> {
 
 #[cfg(test)]
 mod tests {
-
     use crate::layout::testing::{
         heading, paginate, paginate_styled, paragraph, registry, section,
     };
-
     use crate::pages::DrawItem;
 
     /// A run's `text` is what was drawn, and its `source` is what was

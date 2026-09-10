@@ -17,10 +17,11 @@
 //! something does not fit, walks back to the last place a break was
 //! allowed.
 //!
-//! The stages have a file each: `build` turns blocks into fragments,
-//! `flow` stacks fragments into pages, `exclusion` sets prose around
-//! an image the sheet anchored, `furniture` paints the margin boxes,
-//! and `text` turns a shaped line into paint ops.
+//! The stages have a file each: `fragment` is what the flow moves,
+//! `build` turns blocks into fragments, `cap` sets the initial letter
+//! beside them, `flow` stacks fragments into pages, `exclusion` sets
+//! prose around an image the sheet anchored, `furniture` paints the
+//! margin boxes, and `text` turns a shaped line into paint ops.
 
 mod build;
 mod cap;

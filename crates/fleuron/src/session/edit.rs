@@ -166,7 +166,6 @@ impl Session<'_> {
 mod tests {
     use super::*;
     use crate::content::{Attributes, Block, Book, NodeId, Section};
-
     use crate::pages::DrawItem;
     use crate::session::Session;
     use crate::session::testing::{

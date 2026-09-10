@@ -5,10 +5,10 @@
 //! unit, and `line-height` computes to a unitless multiple of the
 //! font size whatever it was written as.
 //!
-//! The vocabulary has a file each: `value` holds the simple values,
+//! The vocabulary is split by kind: `value` holds the simple values,
 //! `edges` the four edges of a box, `page` the page box, `counter`
-//! what a margin box holds, `exclusion` a block against the page, and
-//! `computed` what one node comes to.
+//! what a margin box holds, `exclusion` a block placed against the
+//! page, and `computed` what one node comes to.
 
 use crate::lines::HangingPunctuation;
 

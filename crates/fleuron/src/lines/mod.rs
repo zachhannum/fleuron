@@ -411,12 +411,10 @@ pub struct Broken {
 
 #[cfg(test)]
 mod tests {
-
     use crate::lines::flatten::SMALL_CAPS_RATIO;
     use crate::lines::testing::{
         OPENING, body, drawn, layout_body, layout_first, line_text, one_run, registry, units_per_em,
     };
-
     use crate::lines::{FirstLine, Inherited, LineBreakOptions, LineLayout, Measure, Opening};
     use crate::style::{FontVariantCaps, TextTransform};
 

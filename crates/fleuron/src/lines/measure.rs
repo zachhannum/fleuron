@@ -93,13 +93,11 @@ impl From<f32> for Measure {
 
 #[cfg(test)]
 mod tests {
-
     use crate::content::{Attributes, Inline, NodeId};
     use crate::lines::testing::{
         OPENING, body, divided_band, justified, line_text, one_run, registry, span_text,
         span_width_pt, units_per_em,
     };
-
     use crate::lines::{Line, LineBreakOptions, LineLayout, Measure, Span};
 
     /// A band set in two spans sets text in both, in reading order:
