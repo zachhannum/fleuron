@@ -78,7 +78,7 @@ impl Paginator<'_> {
         furniture: Furniture<'_>,
     ) {
         let text = match &box_style.content {
-            Content::None => return,
+            Content::None | Content::Pieces(_) => return,
             Content::Counter(counter) => counter.format(furniture.folio),
             Content::String(name) => furniture.strings.get(name).cloned().unwrap_or_default(),
             Content::Text(text) => text.clone(),

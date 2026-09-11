@@ -53,6 +53,8 @@ pub(crate) const COMBINATORS: &[(&str, &str)] = &[
 pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[
     ("::first-letter", "p::first-letter"),
     ("::first-line", "p::first-line"),
+    ("::before", "a::before"),
+    ("::after", "a::after"),
 ];
 
 /// What `::first-line` takes. Everything but `color` changes the

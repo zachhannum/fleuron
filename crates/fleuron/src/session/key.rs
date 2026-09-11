@@ -177,11 +177,15 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
     }
 }
 
-/// One node's resolved styling, the initial letter and the opening
-/// line beside it.
+/// One node's resolved styling, and its pseudo-elements beside it.
 fn hash_node(id: NodeId, styles: &StyleTree, h: &mut DefaultHasher) {
     hash_layout(styles.style(id), h);
-    for pseudo in [styles.first_letter(id), styles.first_line(id)] {
+    for pseudo in [
+        styles.first_letter(id),
+        styles.first_line(id),
+        styles.before(id),
+        styles.after(id),
+    ] {
         match pseudo {
             Some(style) => {
                 1u8.hash(h);
@@ -322,6 +326,6 @@ pub(super) fn hash_edges(edges: Edges, h: &mut DefaultHasher) {
 pub(super) fn hash_nodes(styles: &StyleTree, h: &mut DefaultHasher) {
     for node in styles.nodes() {
         (node.id, node.element, node.style, node.first_letter).hash(h);
-        node.first_line.hash(h);
+        (node.first_line, node.before, node.after).hash(h);
     }
 }

@@ -107,13 +107,18 @@ impl NonTSPseudoClass for PseudoClass {
 }
 
 /// The pseudo-elements the engine styles: the initial letter a drop
-/// cap is set from, the line a chapter opens on, and nothing else.
+/// cap is set from, the line a chapter opens on, and the text the
+/// sheet sets before and after an inline element.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PseudoElement {
     /// `::first-letter`
     FirstLetter,
     /// `::first-line`
     FirstLine,
+    /// `::before`
+    Before,
+    /// `::after`
+    After,
 }
 
 impl ToCss for PseudoElement {
@@ -121,9 +126,15 @@ impl ToCss for PseudoElement {
         match self {
             PseudoElement::FirstLetter => dest.write_str("::first-letter"),
             PseudoElement::FirstLine => dest.write_str("::first-line"),
+            PseudoElement::Before => dest.write_str("::before"),
+            PseudoElement::After => dest.write_str("::after"),
         }
     }
 }
+
+/// The elements that sit inside a line of text rather than making
+/// one. `::before` and `::after` generate text on these alone.
+pub const INLINE_ELEMENTS: [&str; 4] = ["code", "em", "strong", "a"];
 
 impl PseudoElementTrait for PseudoElement {
     type Impl = Fleuron;

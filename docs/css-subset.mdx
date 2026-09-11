@@ -338,7 +338,7 @@ p.epigraph {
 
 {/* generated: pseudo-elements */}
 
-The pseudo-elements are `::first-letter` and `::first-line`.
+The pseudo-elements are `::first-letter`, `::first-line`, `::before` and `::after`.
 
 {/* end generated */}
 
@@ -521,7 +521,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `column-span` | `column-span: all` |
 
 ```css
-content:              none | <string>;
+content:              none | [ <string> | target-counter( <target> , page , <counter-style>? ) | target-text( <target> ) ]+;
 string-set:           none | [ <name> [ content() | <string> ]+ ]#;
 counter-reset:        none | page <integer>?;
 initial-letter:       <integer>;

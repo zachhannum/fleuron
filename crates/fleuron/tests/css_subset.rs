@@ -85,7 +85,15 @@ fn every_listed_property_parses_a_value_the_description_names() {
 
     for property in &subset.properties {
         accepts_property("p", property);
-        accepts_property("@page { @top-center", property);
+        // A margin box reads its own `content`, checked below.
+        let shadowed = subset
+            .page
+            .margin_box_properties
+            .iter()
+            .any(|own| own.name == property.name);
+        if !shadowed {
+            accepts_property("@page { @top-center", property);
+        }
     }
     for property in &subset.page.properties {
         accepts_property("@page", property);
@@ -230,8 +238,8 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ":focus",
         ":lang(en)",
         ":dir(ltr)",
-        "::before",
-        "::after",
+        "::marker",
+        "::selection",
     ] {
         let css = format!("p {{ color: black }}\n  p{selector} {{ color: red }}");
         warns_on_line_two(&css, "selector");
