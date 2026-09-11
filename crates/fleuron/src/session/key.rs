@@ -8,7 +8,8 @@ use crate::content::{Block, Inline, NodeId, Section, rows};
 use crate::layout::{Named, References};
 use crate::lines::Patterns;
 use crate::style::{
-    ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry, ShapeOutside, StyleTree, Width,
+    Background, BackgroundSize, ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry,
+    ShapeOutside, StyleTree, Width,
 };
 
 use super::invalidate::Against;
@@ -266,7 +267,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         margin,
         padding,
         border,
-        background_color,
+        background,
         box_decoration_break,
         width,
         border_collapse,
@@ -289,12 +290,51 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (content, string_set, counter_reset, initial_letter).hash(h);
     position.hash(h);
     (break_before, break_after, break_inside, column_span).hash(h);
-    (background_color, box_decoration_break).hash(h);
+    hash_background(background, h);
+    box_decoration_break.hash(h);
     hash_edges(*margin, h);
     hash_edges(*padding, h);
     hash_edges(border.widths(), h);
     for edge in [border.top, border.right, border.bottom, border.left] {
         edge.color.hash(h);
+    }
+}
+
+/// What one box paints behind its content. The tint and the image
+/// both reach the display structure through the flow, and neither
+/// moves a line, but a section keyed without them would serve a page
+/// still painted the way it was.
+pub(super) fn hash_background(background: &Background, h: &mut DefaultHasher) {
+    let Background {
+        color,
+        image,
+        repeat,
+        size,
+        position,
+    } = background;
+    (color, image, repeat).hash(h);
+    match size {
+        BackgroundSize::Auto => 0u8.hash(h),
+        BackgroundSize::Cover => 1u8.hash(h),
+        BackgroundSize::Contain => 2u8.hash(h),
+        BackgroundSize::Fixed { width, height } => {
+            3u8.hash(h);
+            for axis in [width, height] {
+                hash_coord(*axis, h);
+            }
+        }
+    }
+    hash_coord(Some(position.x), h);
+    hash_coord(Some(position.y), h);
+}
+
+/// One coordinate, or the absence of one: `f32` is not `Hash`, and a
+/// percentage and a length of the same number are different answers.
+fn hash_coord(coord: Option<Coord>, h: &mut DefaultHasher) {
+    match coord {
+        None => 0u8.hash(h),
+        Some(Coord::Points(points)) => (1u8, points.to_bits()).hash(h),
+        Some(Coord::Percent(percent)) => (2u8, percent.to_bits()).hash(h),
     }
 }
 

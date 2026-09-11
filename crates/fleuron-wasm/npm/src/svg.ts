@@ -23,7 +23,16 @@
  * pattern over glyphs rather than a canvas.
  */
 
-import type { Asset, DrawItem, FontRefEntry, ImageItem, Page, RectItem, TextItem } from './wire.js';
+import type {
+  Asset,
+  BackgroundItem,
+  DrawItem,
+  FontRefEntry,
+  ImageItem,
+  Page,
+  RectItem,
+  TextItem,
+} from './wire.js';
 
 /** How a page is painted. */
 export interface PaintOptions {
@@ -71,7 +80,10 @@ export function faceFamily(fontId: number): string {
 export function paintPage(page: Page, options: PaintOptions = {}): string {
   const zoom = options.zoom ?? 1;
   const paper = options.paper === undefined ? '#ffffff' : options.paper;
-  const body = page.items.map((item) => paint(item, options)).join('');
+  // A background needs a definition of its own, and two of them on
+  // one page must not share a name.
+  let next = 0;
+  const body = page.items.map((item) => paint(item, options, () => (next += 1))).join('');
   const overlay = selectionOverlay(page.items);
   const ground =
     paper === null
@@ -87,7 +99,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   );
 }
 
-function paint(item: DrawItem, options: PaintOptions): string {
+function paint(item: DrawItem, options: PaintOptions, id: () => number): string {
   switch (item.kind) {
     case 'text':
       return text(item, options);
@@ -95,6 +107,8 @@ function paint(item: DrawItem, options: PaintOptions): string {
       return rect(item);
     case 'image':
       return image(item, options);
+    case 'background':
+      return background(item, options, id());
   }
 }
 
@@ -148,6 +162,44 @@ function image(item: ImageItem, options: PaintOptions): string {
   return href === null || href === undefined
     ? `<rect ${box} fill="none" stroke="currentColor" stroke-dasharray="3 3" data-missing-asset="${item.asset}"/>`
     : `<image ${box} href="${escape(href)}" preserveAspectRatio="none"/>`;
+}
+
+/**
+ * An image behind a box. The box clips it, and a tile that repeats
+ * is a pattern the size of one copy, which is what tiles it across
+ * and down the box without the painter counting the copies.
+ *
+ * An image the host cannot supply paints nothing: a background is
+ * behind the text, and the dashed box a missing plate is drawn as
+ * would be read as a rule around the page.
+ */
+function background(item: BackgroundItem, options: PaintOptions, id: number): string {
+  const asset = options.assets?.[item.asset];
+  const href = asset === undefined ? undefined : options.asset?.(asset, item.asset);
+  if (href === null || href === undefined) {
+    return '';
+  }
+  const box =
+    `x="${num(item.x)}" y="${num(item.y)}"` +
+    ` width="${num(item.w)}" height="${num(item.h)}"`;
+  const name = `fleuron-background-${id}`;
+  if (!item.repeat) {
+    return (
+      `<defs><clipPath id="${name}"><rect ${box}/></clipPath></defs>` +
+      `<image x="${num(item.tileX)}" y="${num(item.tileY)}"` +
+      ` width="${num(item.tileW)}" height="${num(item.tileH)}"` +
+      ` href="${escape(href)}" preserveAspectRatio="none"` +
+      ` clip-path="url(#${name})"/>`
+    );
+  }
+  return (
+    `<defs><pattern id="${name}" patternUnits="userSpaceOnUse"` +
+    ` x="${num(item.tileX)}" y="${num(item.tileY)}"` +
+    ` width="${num(item.tileW)}" height="${num(item.tileH)}">` +
+    `<image x="0" y="0" width="${num(item.tileW)}" height="${num(item.tileH)}"` +
+    ` href="${escape(href)}" preserveAspectRatio="none"/></pattern></defs>` +
+    `<rect ${box} fill="url(#${name})"/>`
+  );
 }
 
 /**

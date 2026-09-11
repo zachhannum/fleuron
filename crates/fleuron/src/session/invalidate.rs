@@ -8,7 +8,7 @@ use crate::lines::Patterns;
 use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree};
 
 use super::Stale;
-use super::key::{hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
+use super::key::{hash_background, hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
 
 /// The page a section's lines were broken against: the measure
 /// always, and the content height only for a book with an image in
@@ -124,6 +124,7 @@ impl Prints {
         for master in styles.masters() {
             (&master.page, master.situation).hash(&mut flow);
             hash_geometry(master.style.geometry, &mut flow);
+            hash_background(&master.style.background, &mut flow);
         }
         for style in styles.styles() {
             style.page.hash(&mut flow);
@@ -134,6 +135,7 @@ impl Prints {
         for master in styles.masters() {
             (&master.page, master.situation).hash(&mut paint);
             hash_geometry(master.style.geometry, &mut paint);
+            hash_background(&master.style.background, &mut paint);
             for box_ in &master.style.boxes {
                 (box_.which, &box_.content).hash(&mut paint);
                 hash_layout(&box_.style, &mut paint);

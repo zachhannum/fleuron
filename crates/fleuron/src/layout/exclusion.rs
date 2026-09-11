@@ -761,7 +761,7 @@ mod tests {
             std::iter::once(image()).chain(long_prose(6)).collect(),
         )]);
         let styles = styled(css, &book);
-        let assets = crate::images::Assets::probe(&book, &Alpha(alpha_png(covered)));
+        let assets = crate::images::Assets::probe(&book, &styles, &Alpha(alpha_png(covered)));
         let mut contours = crate::images::Contours::none();
         contours.update(&book, &styles, &assets);
         Paginator::with_contours(registry(), &styles, &assets, &contours).paginate(&book)
@@ -1207,7 +1207,7 @@ mod tests {
             "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }",
             &book,
         );
-        let assets = crate::images::Assets::probe(&book, &Png);
+        let assets = crate::images::Assets::probe(&book, &styles, &Png);
         let paginator = Paginator::with_assets(registry(), &styles, &assets);
 
         let staged: Vec<Vec<Fragment>> = book

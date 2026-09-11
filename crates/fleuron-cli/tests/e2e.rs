@@ -610,7 +610,7 @@ fn styled_pages_with(extra: &str) -> Vec<Page> {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1239,7 +1239,7 @@ fn wrapped_column_pages() -> (Vec<Page>, fleuron::style::StyleTree) {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     let pages = fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages;
     (pages, styles)
 }
@@ -1272,7 +1272,7 @@ fn column_pages() -> Vec<Page> {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1324,7 +1324,7 @@ fn pages_under(css: &str) -> Vec<Page> {
         fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("table.css", css)])
             .compile(&book, &registry);
     assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1663,7 +1663,7 @@ fn fixture_display_list() -> Vec<u8> {
     let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
     let book = fixture_book();
     let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     postcard::to_stdvec(&output).expect("a display structure encodes")
 }

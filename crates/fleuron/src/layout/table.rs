@@ -116,10 +116,10 @@ impl<'a> Builder<'a, '_> {
             cells.push((column, cell_style, top, content));
         }
 
-        let mut items = Vec::new();
-        if let Some(color) = style.background_color {
-            rect(&mut items, grid.left, above, grid.width, height, color);
-        }
+        let mut items = self
+            .paginator
+            .backdrop(&style.background)
+            .items(grid.left, above, grid.width, height);
         for (column, cell_style, _, _) in &cells {
             let decoration = Decoration {
                 x: grid.x[*column],
@@ -128,7 +128,7 @@ impl<'a> Builder<'a, '_> {
                 below: 0.0,
                 border: table.border(cell_style),
                 colors: inks(cell_style),
-                background: cell_style.background_color,
+                backdrop: self.paginator.backdrop(&cell_style.background),
                 cloned: false,
             };
             items.extend(

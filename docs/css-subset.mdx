@@ -48,6 +48,11 @@ book {
   margin-right: <length> | <percentage>;
   margin-bottom: <length> | <percentage>;
   margin-left: <length> | <percentage>;
+  background-color: <color> | transparent;
+  background-image: none | <url>;
+  background-repeat: repeat | no-repeat;
+  background-size: auto | cover | contain | [ <length> | <percentage> | auto ]{1,2};
+  background-position: [ left | center | right | <length> | <percentage> ] [ top | center | bottom | <length> | <percentage> ]?;
   column-count: auto | <integer>;
   column-width: auto | <length>;
   column-gap: normal | <length>;
@@ -518,6 +523,10 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `border-style` | `border-style: solid` |
 | `border-color` | `border-color: crimson` |
 | `background-color` | `background-color: #f4f1ea` |
+| `background-image` | `background-image: url("scan.webp")` |
+| `background-repeat` | `background-repeat: repeat` |
+| `background-size` | `background-size: cover` |
+| `background-position` | `background-position: center` |
 | `box-decoration-break` | `box-decoration-break: slice` |
 | `break-before`, `break-after`, `break-inside` | `break-before: recto` |
 | `column-span` | `column-span: all` |
@@ -555,6 +564,10 @@ border-width:         [ <length> | thin | medium | thick ]{1,4};
 border-style:         [ none | solid ]{1,4};
 border-color:         <color>{1,4};
 background-color:     <color> | transparent;
+background-image:     none | <url>;
+background-repeat:    repeat | no-repeat;
+background-size:      auto | cover | contain | [ <length> | <percentage> | auto ]{1,2};
+background-position:  [ left | center | right | <length> | <percentage> ] [ top | center | bottom | <length> | <percentage> ]?;
 box-decoration-break: slice | clone;
 break-before:         auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;
 break-after:          auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso;

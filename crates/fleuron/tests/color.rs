@@ -200,6 +200,21 @@ fn described(item: &DrawItem) -> String {
         DrawItem::Image { x, y, w, h, asset } => {
             format!("image {x:?} {y:?} {w:?} {h:?} asset {asset}")
         }
+        DrawItem::Background {
+            x,
+            y,
+            w,
+            h,
+            tile_x,
+            tile_y,
+            tile_w,
+            tile_h,
+            repeat,
+            asset,
+        } => format!(
+            "background {x:?} {y:?} {w:?} {h:?} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
+             repeat {repeat} asset {asset}"
+        ),
     }
 }
 
@@ -281,7 +296,7 @@ fn a_sheet_that_names_no_colour_sets_the_book_unchanged() {
         .flat_map(|page| &page.items)
         .map(|item| match item {
             DrawItem::Text { color, .. } | DrawItem::Rect { color, .. } => *color,
-            DrawItem::Image { .. } => Color::BLACK,
+            DrawItem::Image { .. } | DrawItem::Background { .. } => Color::BLACK,
         })
         .collect();
     assert!(

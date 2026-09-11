@@ -7,10 +7,10 @@ use crate::fonts::GenericFamily;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content, ContentPiece,
-    CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS,
-    Length, LineHeight, Position, ShapeSource, StringPiece, StringSet, Target, TextAlign,
-    TextJustify, TextTransform, WrapFlow,
+    BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content,
+    ContentPiece, CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps, Hyphens,
+    LINE_WIDTHS, Length, LineHeight, Position, ShapeSource, SizeSource, StringPiece, StringSet,
+    Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -249,6 +249,121 @@ pub(super) fn inset(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
         return Some(None);
     }
     length(input).map(Some)
+}
+
+/// `background-image: none | url(<string>)`: the image painted
+/// behind the box.
+///
+/// The url is handed to the host as it was written. It never has to
+/// be a real URL; the host is what turns a name into bytes.
+pub(super) fn background_image(input: &mut Parser<'_, '_>) -> Option<Option<Url>> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned())
+        && keyword.eq_ignore_ascii_case("none")
+    {
+        return Some(None);
+    }
+    let url = input.try_parse(|input| input.expect_url()).ok()?;
+    Some(Some(Url::new(url.as_ref())))
+}
+
+/// `background-repeat: repeat | no-repeat`.
+pub(super) fn background_repeat(input: &mut Parser<'_, '_>) -> Option<BackgroundRepeat> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "repeat" => Some(BackgroundRepeat::Repeat),
+        "no-repeat" => Some(BackgroundRepeat::NoRepeat),
+        _ => None,
+    }
+}
+
+/// `background-size: auto | cover | contain | [ <length> | auto ]{1,2}`.
+///
+/// One length sizes the image across the box and its own ratio sizes
+/// it down the box, which is what `auto` on the second axis means.
+pub(super) fn background_size(input: &mut Parser<'_, '_>) -> Option<SizeSource> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return match_ignore_ascii_case! { &keyword,
+            "cover" => Some(SizeSource::Cover),
+            "contain" => Some(SizeSource::Contain),
+            "auto" => Some(match auto_axis(input).flatten() {
+                Some(height) => SizeSource::Fixed(None, Some(height)),
+                None => SizeSource::Auto,
+            }),
+            _ => None,
+        };
+    }
+    let width = length(input)?;
+    Some(SizeSource::Fixed(Some(width), auto_axis(input).flatten()))
+}
+
+/// The second axis of `background-size`, where one is written:
+/// `Some(None)` for `auto`, `None` where nothing follows.
+fn auto_axis(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    Some(Some(input.try_parse(|input| length(input).ok_or(())).ok()?))
+}
+
+/// `background-position`: one or two of a keyword, a length or a
+/// percentage, across the box and then down it.
+///
+/// A single value places the image across the box and centres it
+/// down the box, as CSS does. Two keywords may be written either way
+/// round, since `top left` names the same corner as `left top`.
+pub(super) fn background_position(input: &mut Parser<'_, '_>) -> Option<(Length, Length)> {
+    let first = position_component(input)?;
+    let Some(second) = input
+        .try_parse(|input| position_component(input).ok_or(()))
+        .ok()
+    else {
+        return match first {
+            Component::Down(down) => Some((CENTRE, down)),
+            Component::Across(across) | Component::Either(across) => Some((across, CENTRE)),
+        };
+    };
+    match (first, second) {
+        (Component::Across(_), Component::Across(_)) | (Component::Down(_), Component::Down(_)) => {
+            None
+        }
+        (Component::Down(down), Component::Across(across)) => Some((across, down)),
+        (Component::Down(down), Component::Either(across)) => Some((across, down)),
+        (Component::Either(down), Component::Across(across)) => Some((across, down)),
+        (Component::Across(across), Component::Down(down)) => Some((across, down)),
+        (Component::Across(across), Component::Either(down)) => Some((across, down)),
+        (Component::Either(across), Component::Down(down)) => Some((across, down)),
+        (Component::Either(across), Component::Either(down)) => Some((across, down)),
+    }
+}
+
+/// `background-position: 50%`, and what a value left out comes to.
+const CENTRE: Length = Length::Percent(50.0);
+
+/// One value of `background-position`, and which axis it can be on.
+enum Component {
+    /// `left` or `right`.
+    Across(Length),
+    /// `top` or `bottom`.
+    Down(Length),
+    /// `center`, a length or a percentage, which either axis takes.
+    Either(Length),
+}
+
+fn position_component(input: &mut Parser<'_, '_>) -> Option<Component> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return match_ignore_ascii_case! { &keyword,
+            "left" => Some(Component::Across(Length::Percent(0.0))),
+            "right" => Some(Component::Across(Length::Percent(100.0))),
+            "top" => Some(Component::Down(Length::Percent(0.0))),
+            "bottom" => Some(Component::Down(Length::Percent(100.0))),
+            "center" => Some(Component::Either(CENTRE)),
+            _ => None,
+        };
+    }
+    length(input).map(Component::Either)
 }
 
 /// `wrap-flow: auto | both | start | end`: which side of an exclusion

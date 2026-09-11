@@ -174,7 +174,8 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
 
     let outside = [
         ("background", "white"),
-        ("background-image", "url(paper.png)"),
+        ("background-attachment", "fixed"),
+        ("background-clip", "content-box"),
         ("border-radius", "3pt"),
         ("border-top-width", "1pt"),
         ("float", "left"),

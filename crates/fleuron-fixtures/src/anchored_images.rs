@@ -11,6 +11,7 @@
 
 use fleuron::content::{Attributes, Block, Book, NodeId};
 use fleuron::images::{Assets, ImageLoader};
+use fleuron::style::StyleTree;
 
 /// The image every chapter of an illustrated book opens with: the map
 /// that faces page 1 of the fixture book, 180pt wide.
@@ -73,7 +74,7 @@ pub fn illustrated_with(book: &Book, url: &str) -> Book {
 
 /// The images themselves, in an asset table that layout can size
 /// from.
-pub fn assets(book: &Book) -> Assets {
+pub fn assets(book: &Book, styles: &StyleTree) -> Assets {
     struct Images;
     impl ImageLoader for Images {
         fn load(&self, url: &str) -> Option<Vec<u8>> {
@@ -84,7 +85,7 @@ pub fn assets(book: &Book) -> Assets {
             }
         }
     }
-    Assets::probe(book, &Images)
+    Assets::probe(book, styles, &Images)
 }
 
 #[cfg(test)]
@@ -105,7 +106,12 @@ mod tests {
                 .count();
             assert_eq!(images, 1, "one image a chapter");
         }
-        let assets = assets(&book);
+        let styles = crate::styles_on(
+            &book,
+            crate::gate::Division::Undivided,
+            crate::gate::Illustration::Anchored,
+        );
+        let assets = assets(&book, &styles);
         assert_eq!(assets.assets().len(), 1, "one image, however often placed");
     }
 }

@@ -11,13 +11,14 @@ use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
 
 use super::color::{background_color, border_color, color};
 use super::value::{
-    border_collapse, break_value, column_span, count, counter_reset, decoration_break, edges,
-    families, font_style, generated, hanging, hyphens, inset, keyword_or, length, letter_spacing,
-    line_height, line_style, line_width, page_name, positioning, property, shape_outside,
-    string_set, text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
+    background_image, background_position, background_repeat, background_size, border_collapse,
+    break_value, column_span, count, counter_reset, decoration_break, edges, families, font_style,
+    generated, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
+    line_style, line_width, page_name, positioning, property, shape_outside, string_set,
+    text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
-use super::{Importance, StyleError, warning};
+use super::{Importance, StyleError, position, warning};
 
 /// Every declaration in one style-rule body, plus a warning for each
 /// one that fell outside the subset. `first_line` narrows the subset
@@ -27,7 +28,10 @@ pub(super) fn declarations(
     sheet: &str,
     first_line: bool,
 ) -> (Vec<(Declaration, Importance)>, Vec<Warning>) {
-    let mut properties = Properties { first_line };
+    let mut properties = Properties {
+        first_line,
+        sheet: sheet.to_string(),
+    };
     let mut kept = Vec::new();
     let mut warnings = Vec::new();
     for result in RuleBodyParser::new(input, &mut properties) {
@@ -61,6 +65,9 @@ pub(super) fn at<'i: 't, 't, T>(
 struct Properties {
     /// Whether the rule this body belongs to selects `::first-line`.
     first_line: bool,
+    /// What diagnostics call the sheet, which a url carries with it
+    /// so that a missing image names where it was asked for.
+    sheet: String,
 }
 
 /// What one declaration expands to: a shorthand is several longhands.
@@ -80,7 +87,8 @@ impl<'i> DeclarationParser<'i> for Properties {
             if self.first_line && !FIRST_LINE_PROPERTIES.contains(&&*name.to_ascii_lowercase()) {
                 return Err(input.new_custom_error(StyleError::NotOnFirstLine(name.clone())));
             }
-            let declarations = property(&name, input)?;
+            let mut declarations = property(&name, input)?;
+            written_at(&mut declarations, &self.sheet, start);
             let importance = if input.try_parse(cssparser::parse_important).is_ok() {
                 Importance::Important
             } else {
@@ -154,6 +162,17 @@ impl<D> Spec<D> {
         input: &mut Parser<'i, '_>,
     ) -> Result<Vec<D>, ParseError<'i, StyleError<'i>>> {
         (self.read)(name, input)
+    }
+}
+
+/// Pins every url in a declaration to where the declaration was
+/// written. Probing happens long after parsing, so the position has
+/// to travel with the url rather than be looked up again.
+pub(super) fn written_at(declarations: &mut [Declaration], sheet: &str, start: &ParserState) {
+    for declaration in declarations {
+        if let Declaration::BackgroundImage(Some(url)) = declaration {
+            url.origin = Some(position(sheet, start.source_location()));
+        }
     }
 }
 
@@ -646,6 +665,46 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "<color> | transparent",
         examples: &["#f4f1ea", "transparent"],
         read: |name, input| longhand(name, input, background_color, Declaration::BackgroundColor),
+    },
+    Spec {
+        name: "background-image",
+        inherited: false,
+        syntax: "none | <url>",
+        examples: &["none", "url(\"scan.webp\")", "url(art/plate.png)"],
+        read: |name, input| longhand(name, input, background_image, Declaration::BackgroundImage),
+    },
+    Spec {
+        name: "background-repeat",
+        inherited: false,
+        syntax: "repeat | no-repeat",
+        examples: &["repeat", "no-repeat"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                background_repeat,
+                Declaration::BackgroundRepeat,
+            )
+        },
+    },
+    Spec {
+        name: "background-size",
+        inherited: false,
+        syntax: "auto | cover | contain | [ <length> | <percentage> | auto ]{1,2}",
+        examples: &["auto", "cover", "contain", "120pt", "100% auto"],
+        read: |name, input| longhand(name, input, background_size, Declaration::BackgroundSize),
+    },
+    Spec {
+        name: "background-position",
+        inherited: false,
+        syntax: "[ left | center | right | <length> | <percentage> ] \
+                 [ top | center | bottom | <length> | <percentage> ]?",
+        examples: &["center", "right bottom", "50% 50%", "12pt 18pt", "top left"],
+        read: |name, input| {
+            longhand(name, input, background_position, |(x, y)| {
+                Declaration::BackgroundPosition(x, y)
+            })
+        },
     },
     Spec {
         name: "box-decoration-break",

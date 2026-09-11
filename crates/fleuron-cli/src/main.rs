@@ -292,7 +292,7 @@ fn render(
     stylesheets.load_fonts(&mut registry, &files);
     let styles = stylesheets.compile(&book, &registry);
 
-    let assets = Assets::probe(&book, &files);
+    let assets = Assets::probe(&book, &styles, &files);
     let laid_out = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     let bytes = fleuron::pdf::write(&laid_out, &registry, &assets, &book.metadata)
         .with_context(|| format!("{}", inputs[0].display()))?;

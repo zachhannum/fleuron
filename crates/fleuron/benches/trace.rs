@@ -37,13 +37,13 @@ fn stage(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace/book");
     for corpus in Corpus::ALL {
         let book = illustrated_with(&corpus.book(), ORNAMENT_URL);
-        let assets = assets(&book);
         let wrapping = fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author(
             "trace.css",
             CONTOUR_CSS,
         )])
         .compile(&book, registry());
         let bare = styles(&book);
+        let assets = assets(&book, &bare);
         group.throughput(Throughput::Elements(book.sections.len() as u64));
         for (asks, styles) in [("a contour", &wrapping), ("no contour", &bare)] {
             group.bench_with_input(

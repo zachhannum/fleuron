@@ -392,7 +392,7 @@ pub(super) fn with_images(
     );
     let book = book_of(sections);
     let styles = styled(css, &book);
-    let assets = crate::images::Assets::probe(&book, &loader);
+    let assets = crate::images::Assets::probe(&book, &styles, &loader);
     layout_book(&book, &styles, registry(), &assets)
 }
 

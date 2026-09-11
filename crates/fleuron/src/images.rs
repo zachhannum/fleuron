@@ -6,6 +6,11 @@
 //! JFIF density, GIF's screen descriptor, WebP's chunk headers. The
 //! file is kept as it arrived, and a painter is what decodes it.
 //!
+//! A url reaches the table from two places. The content tree names
+//! one for every image the manuscript places, and the style tree
+//! names one for every box the sheet puts art behind, so probing
+//! takes both.
+//!
 //! One thing else decodes it: `shape-outside: auto`, which sets prose
 //! around the shape of an image rather than around its box. That is
 //! not reachable from where probing happens, because probing has not
@@ -25,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Warning;
 use crate::content::{Block, Book};
-use crate::style::{ComputedStyle, ShapeOutside, StyleTree};
+use crate::style::{ComputedStyle, ShapeOutside, StyleTree, Url};
 
 /// Resolves image urls to bytes.
 ///
@@ -145,13 +150,20 @@ impl Assets {
         Assets::default()
     }
 
-    /// Probes every image in `book`, in document order. A url the
+    /// Probes every image the book places and every image its sheet
+    /// puts behind a box, the manuscript's own first. A url the
     /// loader cannot resolve, or bytes no probe recognises, is a
     /// diagnostic and no asset.
-    pub fn probe(book: &Book, loader: &dyn ImageLoader) -> Assets {
+    ///
+    /// A sheet that names no background image offers the loader
+    /// nothing beyond what the manuscript named.
+    pub fn probe(book: &Book, styles: &StyleTree, loader: &dyn ImageLoader) -> Assets {
         let mut assets = Assets::default();
         for section in &book.sections {
             assets.walk(&section.blocks, loader);
+        }
+        for background in backgrounds(styles) {
+            assets.take(background, loader);
         }
         assets
     }
@@ -263,6 +275,28 @@ impl Assets {
         }
     }
 
+    /// Probes one url the sheet named, at the position it was
+    /// written.
+    fn take(&mut self, url: &Url, loader: &dyn ImageLoader) {
+        if self.probed(&url.value) {
+            return;
+        }
+        match loader.load(&url.value) {
+            Some(bytes) => match probe(&bytes) {
+                Some(intrinsic) => {
+                    self.assets.push(Asset {
+                        url: url.value.clone(),
+                        intrinsic,
+                    });
+                    self.hashes.push(content_hash(&bytes));
+                    self.files.push(bytes);
+                }
+                None => self.refuse(&url.value, url.origin.clone()),
+            },
+            None => self.refuse(&url.value, url.origin.clone()),
+        }
+    }
+
     fn walk(&mut self, blocks: &[Block], loader: &dyn ImageLoader) {
         for block in blocks {
             match block {
@@ -296,6 +330,22 @@ impl Assets {
             }
         }
     }
+}
+
+/// Every image a book's sheet puts behind a box: one per block style
+/// and one per page master, in a stable order.
+pub fn backgrounds(styles: &StyleTree) -> Vec<&Url> {
+    styles
+        .styles()
+        .iter()
+        .filter_map(|style| style.background.image.as_ref())
+        .chain(
+            styles
+                .masters()
+                .iter()
+                .filter_map(|master| master.style.background.image.as_ref()),
+        )
+        .collect()
 }
 
 /// Every contour a book's sheet asked for, traced once and kept by
@@ -1178,7 +1228,13 @@ mod tests {
             }],
         };
         book.assign_node_ids();
-        let assets = Assets::probe(&book, &Two);
+        let styles = crate::style::defaults(
+            &book,
+            crate::fonts::bundled_registry()
+                .as_ref()
+                .expect("the bundled face parses"),
+        );
+        let assets = Assets::probe(&book, &styles, &Two);
         assert_eq!(assets.assets().len(), 2, "a.png was probed twice");
         assert_eq!(assets.lookup("a.png").map(|(index, _)| index), Some(0));
         assert_eq!(assets.lookup("b.jpg").map(|(index, _)| index), Some(1));
@@ -1216,7 +1272,13 @@ mod tests {
             }],
         };
         book.assign_node_ids();
-        let mut assets = Assets::probe(&book, &One);
+        let styles = crate::style::defaults(
+            &book,
+            crate::fonts::bundled_registry()
+                .as_ref()
+                .expect("the bundled face parses"),
+        );
+        let mut assets = Assets::probe(&book, &styles, &One);
 
         assert_eq!(
             assets.add("a.png", png_bytes(96, 48, None)),

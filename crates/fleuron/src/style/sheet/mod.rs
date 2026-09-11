@@ -21,7 +21,10 @@ use selectors::parser::{ParseRelative, SelectorParseErrorKind};
 use crate::Warning;
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
-use crate::style::properties::{BorderStyle, Content, Declaration, Edge, Length, MarginBox};
+use crate::style::properties::{
+    BackgroundRepeat, BorderStyle, Color, Content, Declaration, Edge, Length, MarginBox,
+    SizeSource, Url,
+};
 
 mod color;
 mod declaration;
@@ -141,6 +144,12 @@ pub enum PageDeclaration {
     /// Trim size in points.
     Size(f32, f32),
     Margin(Edge, Length),
+    BackgroundColor(Option<Color>),
+    BackgroundImage(Option<Url>),
+    BackgroundRepeat(BackgroundRepeat),
+    BackgroundSize(SizeSource),
+    /// Across the page, then down it.
+    BackgroundPosition(Length, Length),
     /// `column-count`, or `None` for `auto`.
     ColumnCount(Option<u32>),
     /// `column-width`, or `None` for `auto`.
@@ -281,7 +290,7 @@ pub fn warning(sheet: &str, error: &ParseError<'_, StyleError<'_>>) -> Warning {
 }
 
 /// A CSS position as diagnostics spell it: `author.css:12:3`.
-fn position(sheet: &str, location: SourceLocation) -> String {
+pub(super) fn position(sheet: &str, location: SourceLocation) -> String {
     format!("{sheet}:{}:{}", location.line + 1, location.column)
 }
 

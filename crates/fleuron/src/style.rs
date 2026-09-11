@@ -36,11 +36,12 @@ use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule,
-    ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges,
-    Family, FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox,
-    PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, Target,
-    TextAlign, TextJustify, TextTransform, Width, WrapFlow,
+    Align, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band, Border,
+    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan, Columns,
+    ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges, Family, FontStyle,
+    FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position,
+    ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign,
+    TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -138,6 +139,9 @@ pub struct PageQuery<'a> {
 pub struct PageStyle {
     /// Trim size and margins.
     pub geometry: PageGeometry,
+    /// What is painted behind the whole page box, margins included.
+    #[serde(skip_serializing_if = "properties::no_background")]
+    pub background: Background,
     /// The margin boxes the page's rules mentioned, in CSS order.
     pub boxes: Vec<MarginBoxStyle>,
 }
@@ -398,6 +402,7 @@ fn resolve_page(
         margin: Edges::all(0.0),
         columns: Columns::undivided(root_size),
     };
+    let mut background = Background::NONE;
     let mut boxes: BTreeMap<MarginBox, MarginBoxStyle> = BTreeMap::new();
     for (_, rule) in matching {
         for declaration in &rule.declarations {
@@ -413,6 +418,18 @@ fn resolve_page(
                         Edge::Right => geometry.margin.right = points,
                         Edge::Bottom => geometry.margin.bottom = points,
                         Edge::Left => geometry.margin.left = points,
+                    }
+                }
+                PageDeclaration::BackgroundColor(color) => background.color = *color,
+                PageDeclaration::BackgroundImage(url) => background.image = url.clone(),
+                PageDeclaration::BackgroundRepeat(repeat) => background.repeat = *repeat,
+                PageDeclaration::BackgroundSize(size) => {
+                    background.size = properties::computed_size(*size, root_size, root_size)
+                }
+                PageDeclaration::BackgroundPosition(x, y) => {
+                    background.position = BackgroundPosition {
+                        x: Coord::of(*x, root_size, root_size),
+                        y: Coord::of(*y, root_size, root_size),
                     }
                 }
                 PageDeclaration::ColumnCount(count) => geometry.columns.count = *count,
@@ -453,6 +470,7 @@ fn resolve_page(
     }
     PageStyle {
         geometry,
+        background,
         boxes: boxes.into_values().collect(),
     }
 }
@@ -1307,10 +1325,10 @@ mod tests {
             "tbody tr:nth-child(odd) { background-color: #e3e3e3 }",
         );
         let rows: Vec<Option<Color>> = (0..4)
-            .map(|index| nth(&tree, "tr", index).background_color)
+            .map(|index| nth(&tree, "tr", index).background.color)
             .collect();
         assert_eq!(rows, [None, tint, None, tint]);
-        assert_eq!(first(&tree, "thead").background_color, None);
+        assert_eq!(first(&tree, "thead").background.color, None);
     }
 
     /// Acceptance: the alignment the delimiter row wrote beats the
@@ -2717,11 +2735,11 @@ mod tests {
         assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
         assert_eq!(first(&tree, "p").color, Color::rgb(0, 128, 128));
         assert_eq!(
-            first(&tree, "p").background_color,
+            first(&tree, "p").background.color,
             Some(Color::rgb(0xf4, 0xf1, 0xea))
         );
         assert_eq!(first(&tree, "em").color, Color::rgb(0, 128, 128));
-        assert_eq!(first(&tree, "em").background_color, None);
+        assert_eq!(first(&tree, "em").background.color, None);
     }
 
     /// A face with no small capitals of its own is reported once,
