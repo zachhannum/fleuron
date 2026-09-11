@@ -104,9 +104,9 @@ impl<'a> Builder<'a, '_> {
             let padding = cell_style.padding;
             let x = grid.x[column] + border.left + padding.left;
             let measure = (grid.widths[column] - border.inline() - padding.inline()).max(0.0);
-            let content = self.cell(&cell.blocks, x, measure);
-            anchors.extend(content.anchors.iter().copied());
-            gather(&mut marks, content.marks.clone());
+            let mut content = self.cell(&cell.blocks, x, measure);
+            anchors.append(&mut content.anchors);
+            gather(&mut marks, content.marks.take());
             let top = border.top + padding.top;
             height = height.max(top + content.height + padding.bottom + border.bottom);
             cells.push((column, cell_style, top, content));
@@ -181,8 +181,7 @@ impl<'a> Builder<'a, '_> {
                 repeats: headers > 0 && !head,
             })),
         );
-        let row_style = style;
-        self.ask(row_style.break_before);
+        self.ask(style.break_before);
         gather(&mut self.pending_marks, marks);
         if !*first {
             // The header rows stay together, and the first body row
@@ -205,7 +204,7 @@ impl<'a> Builder<'a, '_> {
         for node in anchors {
             self.anchor(node);
         }
-        self.ask(row_style.break_after);
+        self.ask(style.break_after);
     }
 
     /// What one cell's blocks come to: what they paint, from the top
