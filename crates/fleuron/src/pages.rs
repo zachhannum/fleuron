@@ -113,7 +113,8 @@ pub enum DrawItem {
         /// manuscript lands on a run and a run lands back on the
         /// manuscript. Absent on text the engine wrote itself: a
         /// folio, a running head, a scene break's ornament, a table's
-        /// header row set again on a later page.
+        /// header row set again on a later page, the text of
+        /// `::before` and `::after`.
         origin: Option<SourceRange>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs

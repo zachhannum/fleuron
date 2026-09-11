@@ -342,7 +342,9 @@ The pseudo-elements are `::first-letter`, `::first-line`, `::before` and `::afte
 
 {/* end generated */}
 
-Both start from the style of the element they belong to, so a rule on `p::first-letter` begins with that paragraph's own font and size. `::first-letter` produces [a drop cap](#drop-caps), and `::first-line` styles [a paragraph's opening line](#first-lines). Where both apply to the same paragraph, `::first-letter` takes the initial letter and `::first-line` styles the rest of that line.
+Each pseudo-element starts from the style of the element it belongs to, so a rule on `p::first-letter` begins with that paragraph's own font and size. `::first-letter` produces [a drop cap](#drop-caps), and `::first-line` styles [a paragraph's opening line](#first-lines). Where both apply to the same paragraph, `::first-letter` takes the initial letter and `::first-line` styles the rest of that line.
+
+`::before` and `::after` add text before and after an inline element: a link, emphasis, strong text, or code. `content` gives the text, and the text properties style it. A rule with no `content` adds nothing. On a block, the engine warns and adds nothing. See [Cross-references](#cross-references) for the page numbers and headings they can print.
 
 ## Declarations, values, and units
 
@@ -815,6 +817,50 @@ Which words fall on that line depends on the style applied to it. Every property
 
 `font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
 
+## Cross-references
+
+A rulebook, a table of contents, and an index all refer the reader to other pages. You can print the page number of the element a link goes to, or the words of that element.
+
+The element must have an id. In markdown, you write the id of a heading in braces after its text, and the id in a link after a `#`. See [the markdown mapping](reference/markdown.mdx) for the other ways to give an element an id.
+
+```markdown
+## The Hunter {#the-hunter}
+
+For the rules on tracking game, see [the hunter](#the-hunter).
+```
+
+The following example prints the page number after every link. When the heading is on page 12, the text above prints as "see the hunter (page 12)".
+
+```css
+a::after {
+  content: " (page " target-counter(attr(href url), page) ")";
+}
+```
+
+`target-counter()` takes these arguments:
+
+- The target. `attr(href url)` is the url of the link. A string such as `"#the-hunter"` names the same target for every element the rule selects.
+- The counter. `page` is the only counter a reference can print.
+- The counter style, which is optional. `upper-roman` prints the page number the way the front matter prints it.
+
+The number is the page number printed on the page of the target, so it follows every `counter-reset` before the target.
+
+`target-text()` takes only the target. It prints the words of the target: the text of a heading or a paragraph, or the description of an image. The following example prints the words of the heading after each link with the class `see`:
+
+```css
+a.see::after {
+  content: " (" target-text(attr(href url)) ")";
+}
+```
+
+A reference prints only in `::before` and `::after` on an inline element. If no element has the id that a reference names, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for a url that is not an id, such as `https://example.com`.
+
+### Two layouts
+
+The engine lays out a book with page references twice. The first layout finds the page of each target, and the second prints those numbers. The engine lays out a book without page references once, and `target-text()` alone does not add a layout.
+
+A printed number can change the width of its line, and a line that changes width can move a target to another page. If the second layout moves a target, the reference prints the page from the first layout. The engine warns and names the target.
+
 ## Fonts
 
 `@font-face` registers a font under the family name the stylesheet gives it.
@@ -988,7 +1034,7 @@ code { font-family: monospace }
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
-| generated content | anything beyond page margin boxes, `string-set`, and `content` on an empty element |
+| generated content | `::before` and `::after` on a block, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, and every background property but `background-color` |
 | borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
