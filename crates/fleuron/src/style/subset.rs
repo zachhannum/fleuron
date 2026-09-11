@@ -498,6 +498,7 @@ mod tests {
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",
             Declaration::BreakInside(_) => "break-inside",
+            Declaration::ColumnSpan(_) => "column-span",
         }
     }
 

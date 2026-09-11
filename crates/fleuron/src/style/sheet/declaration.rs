@@ -11,8 +11,8 @@ use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
 
 use super::color::{background_color, border_color, color};
 use super::value::{
-    border_collapse, break_value, count, counter_reset, decoration_break, edges, families,
-    font_style, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
+    border_collapse, break_value, column_span, count, counter_reset, decoration_break, edges,
+    families, font_style, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
     line_style, line_width, ornament, page_name, positioning, property, shape_outside, string_set,
     text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
 };
@@ -675,5 +675,12 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso",
         examples: &["avoid"],
         read: |name, input| longhand(name, input, break_value, Declaration::BreakInside),
+    },
+    Spec {
+        name: "column-span",
+        inherited: false,
+        syntax: "none | all",
+        examples: &["all"],
+        read: |name, input| longhand(name, input, column_span, Declaration::ColumnSpan),
     },
 ];

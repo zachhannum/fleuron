@@ -11,8 +11,9 @@ use super::counter::{Content, StringSet};
 use super::edges::{Border, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens,
-    Length, NORMAL_LINE_HEIGHT, TextAlign, TextJustify, TextTransform, Width,
+    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
+    FontVariantCaps, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign, TextJustify, TextTransform,
+    Width,
 };
 
 /// One node's resolved style: what every downstream pass reads.
@@ -117,6 +118,10 @@ pub struct ComputedStyle {
     pub break_after: Break,
     /// Whether this element may be split across pages.
     pub break_inside: Break,
+    /// Whether this element is set across every column of a divided
+    /// page, from `column-span`.
+    #[serde(skip_serializing_if = "one_column")]
+    pub column_span: ColumnSpan,
 }
 
 impl ComputedStyle {
@@ -161,6 +166,7 @@ impl ComputedStyle {
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
+            column_span: ColumnSpan::None,
         }
     }
 
@@ -186,6 +192,7 @@ impl ComputedStyle {
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
+            column_span: ColumnSpan::None,
             ..self.clone()
         }
     }
@@ -276,6 +283,7 @@ impl ComputedStyle {
             Declaration::BreakBefore(value) => self.break_before = *value,
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
+            Declaration::ColumnSpan(value) => self.column_span = *value,
         }
     }
 
@@ -379,6 +387,10 @@ fn auto_width(width: &Width) -> bool {
 
 fn separate(collapse: &BorderCollapse) -> bool {
     *collapse == BorderCollapse::Separate
+}
+
+fn one_column(span: &ColumnSpan) -> bool {
+    *span == ColumnSpan::None
 }
 
 fn no_shape_margin(margin: &f32) -> bool {
