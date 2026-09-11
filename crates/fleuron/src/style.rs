@@ -1495,6 +1495,106 @@ mod tests {
         assert_eq!(folio.style.line_height, 1.4);
     }
 
+    /// The four background properties compute on a block: a url the
+    /// sheet wrote, and how it is drawn.
+    #[test]
+    fn the_background_properties_compute_on_a_block() {
+        let tree = compile(
+            &sample(),
+            "p {\n  background-color: #f4f1ea;\n  background-image: url(\"scan.webp\");\n  \
+             background-repeat: no-repeat;\n  background-size: cover;\n  \
+             background-position: right bottom;\n}",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+        let background = first(&tree, "p").background;
+        assert_eq!(background.color, Some(Color::rgb(0xf4, 0xf1, 0xea)));
+        assert_eq!(
+            background.image.as_ref().map(|url| url.value.as_str()),
+            Some("scan.webp"),
+        );
+        assert_eq!(background.repeat, BackgroundRepeat::NoRepeat);
+        assert_eq!(background.size, BackgroundSize::Cover);
+        assert_eq!(background.position.x, Coord::Percent(100.0));
+        assert_eq!(background.position.y, Coord::Percent(100.0));
+        assert!(!first(&tree, "blockquote").background.paints());
+    }
+
+    /// A url carries where it was written, so a warning about it can
+    /// name the line and column long after the sheet was parsed.
+    #[test]
+    fn a_background_url_carries_where_the_sheet_wrote_it() {
+        let tree = compile(&sample(), "p {\n  background-image: url(scan.webp);\n}");
+        let url = first(&tree, "p")
+            .background
+            .image
+            .expect("the url reached the style");
+        assert_eq!(url.origin.as_deref(), Some("author.css:2:3"));
+    }
+
+    /// `background-size` and `background-position` take their length
+    /// forms, and the cascade resolves `em` against the font size in
+    /// force while a percentage stays one.
+    #[test]
+    fn background_lengths_compute_and_percentages_stay() {
+        let tree = compile(
+            &sample(),
+            "p {\n  font-size: 10pt;\n  background-size: 2em 50%;\n  \
+             background-position: 1em 25%;\n}",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+        let background = first(&tree, "p").background;
+        assert_eq!(
+            background.size,
+            BackgroundSize::Fixed {
+                width: Some(Coord::Points(20.0)),
+                height: Some(Coord::Percent(50.0)),
+            },
+        );
+        assert_eq!(background.position.x, Coord::Points(10.0));
+        assert_eq!(background.position.y, Coord::Percent(25.0));
+    }
+
+    /// A background does not inherit: a rule on the quotation leaves
+    /// the paragraph inside it painting nothing.
+    #[test]
+    fn a_background_does_not_reach_the_children_of_the_box() {
+        let tree = compile(&sample(), "blockquote { background-image: url(scan.webp) }");
+        assert!(first(&tree, "blockquote").background.paints());
+        assert!(!first(&tree, "p").background.paints());
+    }
+
+    /// Each side of the spread takes its own scan, and `@page` reads
+    /// the same four properties a block does.
+    #[test]
+    fn each_side_of_the_spread_takes_its_own_background() {
+        let tree = compile(
+            &sample(),
+            "@page :left { background-image: url(verso.webp); background-size: cover }\n\
+             @page :right { background-image: url(recto.webp); background-size: contain }",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+        let named = |side| {
+            tree.page(PageQuery {
+                name: Some("chapter"),
+                situation: Situation::Body(side),
+            })
+            .background
+            .clone()
+        };
+        let verso = named(Side::Verso);
+        assert_eq!(
+            verso.image.as_ref().map(|url| url.value.as_str()),
+            Some("verso.webp"),
+        );
+        assert_eq!(verso.size, BackgroundSize::Cover);
+        let recto = named(Side::Recto);
+        assert_eq!(
+            recto.image.as_ref().map(|url| url.value.as_str()),
+            Some("recto.webp"),
+        );
+        assert_eq!(recto.size, BackgroundSize::Contain);
+    }
+
     /// The column properties resolve to points against the page's
     /// content box: a count divides it, a width takes as many columns
     /// of that width as fit, the two together take the smaller

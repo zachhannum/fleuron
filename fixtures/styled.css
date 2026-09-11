@@ -27,6 +27,10 @@
    author CSS outranks the defaults whatever their specificity. */
 @page chapter:first {
   margin-top: 2in;
+  background-image: url(images/lord.png);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
 }
 
 book {
@@ -49,14 +53,17 @@ h2 + p::first-letter {
   initial-letter: 3;
 }
 
-/* A quotation in a box: a rule around it, padding inside it and a
-   tint behind it. The excerpt's inventory of the man-mountain's
-   pockets is long enough to carry the box over a page turn, and
-   `clone` closes the rule on both pieces. */
+/* A quotation in a box: a rule around it, padding inside it, a tint
+   behind it and the ornament tiled over the tint. The excerpt's
+   inventory of the man-mountain's pockets is long enough to carry the
+   box over a page turn, and `clone` closes the rule on both pieces. */
 blockquote {
   padding: 10pt 14pt;
   border: 1pt solid #8a7a5c;
   background-color: #f4f1ea;
+  background-image: url(images/fleuron.webp);
+  background-repeat: repeat;
+  background-size: 24pt;
   box-decoration-break: clone;
 }
 

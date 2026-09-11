@@ -151,3 +151,199 @@ fn offset(position: Coord, box_extent: f32, tile_extent: f32) -> f32 {
         Coord::Percent(percent) => percent / 100.0 * (box_extent - tile_extent),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::style::{BackgroundPosition, Url};
+
+    /// An image 80 by 40 points, at the CSS resolution.
+    fn intrinsic() -> Intrinsic {
+        Intrinsic {
+            width: 80,
+            height: 40,
+            dpi_x: 72.0,
+            dpi_y: 72.0,
+        }
+    }
+
+    fn backdrop(size: BackgroundSize, position: BackgroundPosition) -> Backdrop {
+        Backdrop::of(
+            &Background {
+                image: Some(Url::new("plate.png")),
+                size,
+                position,
+                ..Background::NONE
+            },
+            Some((0, intrinsic())),
+        )
+    }
+
+    /// The tile one backdrop draws over a box 200 by 100 points at the
+    /// page's own corner: `(left, top, width, height)`.
+    fn tile(backdrop: &Backdrop) -> (f32, f32, f32, f32) {
+        match backdrop.items(0.0, 0.0, 200.0, 100.0).pop() {
+            Some(DrawItem::Background {
+                tile_x,
+                tile_y,
+                tile_w,
+                tile_h,
+                ..
+            }) => (tile_x, tile_y, tile_w, tile_h),
+            other => panic!("the backdrop painted {other:?}"),
+        }
+    }
+
+    /// `auto` draws the image at the size its header asks for.
+    #[test]
+    fn an_unsized_image_is_drawn_at_its_own_size() {
+        let backdrop = backdrop(BackgroundSize::Auto, BackgroundPosition::ORIGIN);
+        assert_eq!(tile(&backdrop), (0.0, 0.0, 80.0, 40.0));
+    }
+
+    /// `cover` is the smallest size that covers the box, so the image
+    /// reaches past the box on the axis it does not fit.
+    #[test]
+    fn cover_fills_the_box_and_leaves_the_rest_to_the_crop() {
+        let backdrop = backdrop(BackgroundSize::Cover, BackgroundPosition::ORIGIN);
+        let (_, _, width, height) = tile(&backdrop);
+        assert_eq!((width, height), (200.0, 100.0));
+    }
+
+    /// A box of another ratio still covers, and the overflow is on
+    /// the axis the scale ran past.
+    #[test]
+    fn cover_keeps_the_images_own_ratio() {
+        let backdrop = backdrop(BackgroundSize::Cover, BackgroundPosition::ORIGIN);
+        let Some(DrawItem::Background {
+            tile_w,
+            tile_h,
+            w,
+            h,
+            ..
+        }) = backdrop.items(0.0, 0.0, 200.0, 200.0).pop()
+        else {
+            panic!("the backdrop painted nothing");
+        };
+        assert_eq!((tile_w, tile_h), (400.0, 200.0));
+        assert!(tile_w > w && tile_h <= h, "cover left the box uncovered");
+    }
+
+    /// `contain` is the largest size that fits, so the box keeps the
+    /// remainder on one axis.
+    #[test]
+    fn contain_fits_the_box_and_leaves_the_remainder() {
+        let backdrop = backdrop(BackgroundSize::Contain, BackgroundPosition::ORIGIN);
+        let (_, _, width, height) = tile(&backdrop);
+        assert_eq!((width, height), (200.0, 100.0));
+
+        let Some(DrawItem::Background { tile_w, tile_h, .. }) =
+            backdrop.items(0.0, 0.0, 200.0, 200.0).pop()
+        else {
+            panic!("the backdrop painted nothing");
+        };
+        assert_eq!((tile_w, tile_h), (200.0, 100.0));
+    }
+
+    /// One length sizes the image across the box, and its own ratio
+    /// sizes it down the box.
+    #[test]
+    fn one_length_sizes_the_other_axis_by_the_ratio() {
+        let backdrop = backdrop(
+            BackgroundSize::Fixed {
+                width: Some(Coord::Points(40.0)),
+                height: None,
+            },
+            BackgroundPosition::ORIGIN,
+        );
+        assert_eq!(tile(&backdrop), (0.0, 0.0, 40.0, 20.0));
+    }
+
+    /// A percentage size measures against the box the image is
+    /// behind.
+    #[test]
+    fn a_percentage_size_measures_against_the_box() {
+        let backdrop = backdrop(
+            BackgroundSize::Fixed {
+                width: Some(Coord::Percent(50.0)),
+                height: Some(Coord::Percent(100.0)),
+            },
+            BackgroundPosition::ORIGIN,
+        );
+        assert_eq!(tile(&backdrop), (0.0, 0.0, 100.0, 100.0));
+    }
+
+    /// A percentage position aligns that fraction of the image with
+    /// the same fraction of the box, which is what centres it.
+    #[test]
+    fn a_percentage_position_aligns_the_image_with_the_box() {
+        let centred = backdrop(
+            BackgroundSize::Auto,
+            BackgroundPosition {
+                x: Coord::Percent(50.0),
+                y: Coord::Percent(50.0),
+            },
+        );
+        assert_eq!(tile(&centred), (60.0, 30.0, 80.0, 40.0));
+
+        let corner = backdrop(
+            BackgroundSize::Auto,
+            BackgroundPosition {
+                x: Coord::Percent(100.0),
+                y: Coord::Percent(100.0),
+            },
+        );
+        assert_eq!(tile(&corner), (120.0, 60.0, 80.0, 40.0));
+    }
+
+    /// A length position is an offset from the box's own corner.
+    #[test]
+    fn a_length_position_is_an_offset_from_the_corner() {
+        let backdrop = backdrop(
+            BackgroundSize::Auto,
+            BackgroundPosition {
+                x: Coord::Points(12.0),
+                y: Coord::Points(18.0),
+            },
+        );
+        assert_eq!(tile(&backdrop), (12.0, 18.0, 80.0, 40.0));
+    }
+
+    /// The tint is painted first and the image over it, so a block
+    /// that names both shows the colour wherever the image does not
+    /// reach.
+    #[test]
+    fn a_tinted_and_imaged_box_paints_the_colour_under_the_image() {
+        let backdrop = Backdrop::of(
+            &Background {
+                color: Some(Color::rgb(0xf4, 0xf1, 0xea)),
+                image: Some(Url::new("plate.png")),
+                ..Background::NONE
+            },
+            Some((0, intrinsic())),
+        );
+        let items = backdrop.items(0.0, 0.0, 200.0, 100.0);
+        assert!(
+            matches!(items[0], DrawItem::Rect { .. }),
+            "the tint is not painted first: {items:?}",
+        );
+        assert!(matches!(items[1], DrawItem::Background { .. }));
+    }
+
+    /// A url the asset table does not answer for leaves the tint and
+    /// paints no image.
+    #[test]
+    fn an_unresolved_url_leaves_the_box_painting_its_tint() {
+        let backdrop = Backdrop::of(
+            &Background {
+                color: Some(Color::rgb(0xf4, 0xf1, 0xea)),
+                image: Some(Url::new("missing.png")),
+                ..Background::NONE
+            },
+            None,
+        );
+        let items = backdrop.items(0.0, 0.0, 200.0, 100.0);
+        assert_eq!(items.len(), 1);
+        assert!(matches!(items[0], DrawItem::Rect { .. }));
+    }
+}
