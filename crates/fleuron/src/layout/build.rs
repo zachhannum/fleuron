@@ -4,11 +4,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::content::{Block, Inline, NodeId, Section, origin, text};
+use crate::content::{Block, Inline, NodeId, Section, block_id, origin, text};
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::style::{
-    Break, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree, TextAlign,
-    TextJustify,
+    Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
+    TextAlign, TextJustify,
 };
 
 use super::Paginator;
@@ -20,13 +20,35 @@ use super::fragment::{
 impl Paginator<'_> {
     /// One section's blocks as fragments, in document order:
     /// everything measurement decides, and nothing pagination does.
+    ///
+    /// A block of the section that spans the columns breaks to the
+    /// whole content box, and one that does not breaks to a column. A
+    /// spanning block moves to the next page whole rather than split
+    /// under the columns above it.
     pub fn section_fragments(&self, section: &Section) -> Vec<Fragment> {
-        let measure = self.styles.default_page().geometry.measure();
+        let geometry = self.styles.default_page().geometry;
+        let measure = geometry.measure();
         let mut builder = Builder::new(self, section.source.as_deref());
         let style = self.styles.style(section.id).clone();
         let start = builder.open(&style, &[], 0.0, measure);
-        let (x, narrowed) = style.content_box(0.0, measure);
-        builder.blocks(&section.blocks, x, narrowed);
+        let column = style.content_box(0.0, measure);
+        let whole = style.content_box(0.0, geometry.content_size().0);
+        for block in &section.blocks {
+            builder.spanning = self.styles.style(block_id(block)).column_span == ColumnSpan::All;
+            let (x, measure) = if builder.spanning { whole } else { column };
+            let first = builder.fragments.len();
+            builder.blocks(std::slice::from_ref(block), x, measure);
+            if builder.spanning {
+                for fragment in builder.fragments[first..]
+                    .iter_mut()
+                    .filter(|fragment| !matches!(fragment.piece, Piece::Anchor(_)))
+                    .skip(1)
+                {
+                    fragment.break_before = BreakPoint::Forbidden;
+                }
+            }
+        }
+        builder.spanning = false;
         builder.close(&style, start);
         builder.fragments
     }
@@ -52,6 +74,8 @@ pub(super) struct Builder<'a, 'p> {
     pub(super) pending_marks: Option<Box<Marks>>,
     /// The decorated blocks still open, outermost first.
     open: Vec<Pending>,
+    /// Whether the block being built spans every column.
+    spanning: bool,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -67,6 +91,7 @@ impl<'a, 'p> Builder<'a, 'p> {
             fixed: 0.0,
             pending_marks: None,
             open: Vec::new(),
+            spanning: false,
         }
     }
 }
@@ -268,6 +293,7 @@ impl Builder<'_, '_> {
             fragment.fixed = std::mem::take(&mut self.fixed);
             fragment.marks = self.pending_marks.take();
         }
+        fragment.spanning = self.spanning;
         self.fragments.push(fragment);
     }
 
@@ -558,6 +584,9 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
     let (Some(head), Some(last)) = (old.first(), old.last()) else {
         return;
     };
+    for fragment in fresh.iter_mut() {
+        fragment.spanning = head.spanning;
+    }
     let opens = head
         .decorations
         .as_ref()
@@ -653,14 +682,60 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use crate::content::{Attributes, Block, NodeId, Section, SourcePos};
-    use crate::layout::layout_book;
     use crate::layout::testing::{
         assert_orphans_and_widows, book_of, chapter_size, content_lines, folio_size, heading,
-        long_prose, master, origin_of, ornament, paginate, paginate_styled, paragraph, png, quote,
-        registry, right_edge, scene_break, section, small_caps_lines, tagged_prose, ua, under_h3,
+        long_prose, master, origin_of, ornament, paginate, paginate_styled, paragraph, png, prose,
+        quote, registry, right_edge, scene_break, section, small_caps_lines, styled, tagged_prose,
+        ua, under_h3,
     };
+    use crate::layout::{BreakPoint, Fragment, Paginator, Piece, layout_book};
     use crate::pages::{DrawItem, Side};
     use crate::style::Situation;
+
+    /// A block that spans the columns breaks to the whole content
+    /// box, and the prose around it breaks to one column. Past its
+    /// first fragment it forbids every break, so it moves whole.
+    #[test]
+    fn a_spanning_block_breaks_to_the_content_box() {
+        let css = "@page { column-count: 2; column-gap: 18pt } \
+                   blockquote { column-span: all; margin: 0 }";
+        let quoted = paragraph(&"a quiet sentence of prose ".repeat(18));
+        let book = book_of(vec![section(vec![prose(), quote(vec![quoted]), prose()])]);
+        let styles = styled(css, &book);
+        let paginator = Paginator::new(registry(), &styles);
+        let geometry = styles.default_page().geometry;
+        let fragments = paginator.section_fragments(&book.sections[0]);
+        let widest = |spanning: bool| {
+            fragments
+                .iter()
+                .filter(|fragment| fragment.spanning == spanning)
+                .filter_map(|fragment| match &fragment.piece {
+                    Piece::Line { line, .. } => Some(fragment.x + paginator.line_width(line)),
+                    _ => None,
+                })
+                .fold(0.0f32, f32::max)
+        };
+        assert!(widest(false) <= geometry.measure() + 1e-3);
+        assert!(
+            widest(true) > geometry.measure(),
+            "the quotation broke to {} in a {} column",
+            widest(true),
+            geometry.measure(),
+        );
+        assert!(widest(true) <= geometry.content_size().0 + 1e-3);
+
+        let spanning: Vec<&Fragment> = fragments.iter().filter(|f| f.spanning).collect();
+        assert!(
+            spanning.len() > 2,
+            "the quotation set {} lines",
+            spanning.len()
+        );
+        assert!(
+            spanning[1..]
+                .iter()
+                .all(|fragment| fragment.break_before == BreakPoint::Forbidden)
+        );
+    }
 
     /// Acceptance: no single line of a paragraph is stranded at a
     /// page boundary, either end — under the built-in sheet's two and

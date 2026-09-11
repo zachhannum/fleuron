@@ -118,6 +118,10 @@ pub struct Fragment {
     /// image narrows the bands the paragraph is set in. A book that
     /// anchors nothing keeps none of this.
     pub reflow: Option<Arc<Reflow>>,
+    /// Whether it came out of a block that spans every column, from
+    /// `column-span: all`. Its leading edge and its measure are then
+    /// the whole content box's rather than one column's.
+    pub spanning: bool,
 }
 
 impl Fragment {
@@ -134,6 +138,7 @@ impl Fragment {
             marks: None,
             decorations: None,
             reflow: None,
+            spanning: false,
         }
     }
 }
