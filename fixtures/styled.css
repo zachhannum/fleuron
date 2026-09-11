@@ -79,6 +79,11 @@ h3 {
   wrap-flow: end;
 }
 
+/* A link to a chapter prints the page the chapter opens on. */
+a::after {
+  content: " (page " target-counter(attr(href url), page) ")";
+}
+
 /* Every image except the map. The text wraps around the shape the
    ornament's alpha channel covers rather than around its box. */
 img:not(.map) {

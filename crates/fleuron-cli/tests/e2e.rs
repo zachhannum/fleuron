@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "a9dd65be1c0be6753a691202d68842447dc64354cf61d8fa9381ca6f3bb8c77b";
+    "5439d996b5c63e8454a6a3b14c895e55e35e54bf264d467136243e51137e3986";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -633,10 +633,44 @@ fn the_styled_pdf_holds_every_word_of_the_book() {
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    let rendered = strip_furniture(&text, None);
+    // The sheet prints the page a link names after the link, which
+    // is text the book does not hold.
+    let printed = format!("(page{})", chapter_three_folio(&text));
+    let rendered = squeeze(&strip_furniture(&text, None)).replacen(&printed, "", 1);
     if let Err(difference) = holds(&fixture_book(), &rendered, squeeze, true) {
         panic!("the styled PDF's prose is not the book's: {difference}");
     }
+}
+
+/// Acceptance: `pdftotext` round-trips the printed number. The fixture
+/// book refers from the end of its second chapter to the heading its
+/// third opens on, and `fixtures/styled.css` prints that page after
+/// the link.
+#[test]
+fn a_link_prints_the_page_its_chapter_opens_on() {
+    let (pdf, stderr) = render("reference", &[&styled_sheet()]);
+    assert!(
+        !stderr.contains("Nothing is generated"),
+        "the reference names nothing: {stderr}",
+    );
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    let pages = pages_of(&text);
+    let at = pages
+        .iter()
+        .position(|page| page.contains("CHAPTER III."))
+        .expect("chapter III is set");
+    let folio = chapter_three_folio(&text);
+    assert_eq!(
+        folio,
+        (at + 1).to_string(),
+        "the folio is not the page's own"
+    );
+    assert!(
+        squeeze(&text).contains(&format!("chapterIII(page{folio})")),
+        "the PDF does not read back the page the link names:\n{text}",
+    );
 }
 
 /// The styled book is a different book on the page: more of them, and
@@ -1416,7 +1450,22 @@ fn dump_tree_emits_a_stable_tree() {
         blocks.iter().any(|block| block["type"] == "table"),
         "the table is not in the tree",
     );
-    assert!(!dumped.contains("\"id\""), "ids do not travel");
+    // A node's number is the engine's and does not travel. The id a
+    // manuscript names a node by is a string, and does.
+    fn numbered(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::Object(fields) => fields
+                .iter()
+                .any(|(key, value)| (key == "id" && value.is_number()) || numbered(value)),
+            serde_json::Value::Array(items) => items.iter().any(numbered),
+            _ => false,
+        }
+    }
+    assert!(!numbered(&tree), "node numbers travel");
+    assert!(
+        dumped.contains("\"chapter-iii\""),
+        "the id the manuscript names chapter III by is not in the tree",
+    );
     assert_eq!(dumped, dump_tree(), "the dump moved between runs");
 }
 
@@ -1659,6 +1708,17 @@ fn pages_of(text: &str) -> Vec<&str> {
         pages.pop();
     }
     pages
+}
+
+/// The folio of the page chapter III opens on, which is the page
+/// that carries its heading.
+fn chapter_three_folio(text: &str) -> String {
+    let pages = pages_of(text);
+    let at = pages
+        .iter()
+        .position(|page| page.contains("CHAPTER III."))
+        .expect("chapter III is set");
+    folio_of(pages[at]).expect("the page chapter III opens on has a folio")
 }
 
 /// The folio on one extracted page: its last non-empty line, when
