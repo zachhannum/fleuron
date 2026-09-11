@@ -199,10 +199,9 @@ fn block_text(block: &Block) -> String {
         Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => text(inlines),
         Block::Image { alt, .. } => alt.clone(),
         Block::Blockquote { blocks, .. } => blocks_text(blocks),
-        Block::Table { head, body, .. } => rows(head, body)
-            .map(row_text)
-            .collect::<Vec<_>>()
-            .join(" "),
+        Block::Table { head, body, .. } => {
+            rows(head, body).map(row_text).collect::<Vec<_>>().join(" ")
+        }
         Block::ThematicBreak { .. } => String::new(),
     }
 }
@@ -477,7 +476,10 @@ mod tests {
                 _ => None,
             })
             .collect();
-        runs.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+        runs.join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// The first page whose words hold `words`.
@@ -500,7 +502,8 @@ mod tests {
         assert_eq!(settles, 1);
 
         let folio = |title: &str| page_with(&pages, title).number;
-        let (voyage, storm, hunter) = (folio("The Voyage"), folio("The Storm"), folio("The Hunter"));
+        let (voyage, storm, hunter) =
+            (folio("The Voyage"), folio("The Storm"), folio("The Hunter"));
         assert!(
             voyage < storm && storm < hunter && hunter - voyage > 4,
             "the chapters are pages apart: {voyage}, {storm}, {hunter}",
@@ -737,7 +740,10 @@ mod tests {
     #[test]
     fn an_element_the_second_pass_moved_is_named() {
         let folios = |pairs: [(&str, u32); 3]| -> BTreeMap<String, u32> {
-            pairs.into_iter().map(|(id, folio)| (id.into(), folio)).collect()
+            pairs
+                .into_iter()
+                .map(|(id, folio)| (id.into(), folio))
+                .collect()
         };
         let found = folios([("moved", 12), ("stayed", 99), ("unprinted", 3)]);
         let landed = folios([("moved", 13), ("stayed", 99), ("unprinted", 4)]);

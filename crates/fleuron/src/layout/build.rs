@@ -16,10 +16,10 @@ use crate::style::{
 
 use super::Paginator;
 use super::cap::Cap;
-use super::reference::Referring;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decorated, decoration,
 };
+use super::reference::Referring;
 
 impl Paginator<'_> {
     /// One section's blocks as fragments, in document order:
@@ -436,9 +436,10 @@ impl Builder<'_, '_> {
             paginator: self.paginator,
             source: self.source,
         };
-        let (broken, shaped) = self.paginator.lines.layout_shaped(
-            inlines, style, &referring, &spec, options, opening,
-        );
+        let (broken, shaped) = self
+            .paginator
+            .lines
+            .layout_shaped(inlines, style, &referring, &spec, options, opening);
 
         let setting = Setting {
             x,

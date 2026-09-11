@@ -2315,10 +2315,8 @@ mod tests {
         ] {
             let tree = compile(&book, css);
             assert!(
-                tree.warnings()
-                    .iter()
-                    .any(|warning| warning.message
-                        == "Unsupported value for `content`. The declaration is ignored."),
+                tree.warnings().iter().any(|warning| warning.message
+                    == "Unsupported value for `content`. The declaration is ignored."),
                 "{css}: {:?}",
                 tree.warnings(),
             );
@@ -2362,7 +2360,10 @@ mod tests {
     #[test]
     fn a_pseudo_element_with_no_content_generates_nothing() {
         let book = linked();
-        let tree = compile(&book, "a::after { color: red } em::before { content: none }");
+        let tree = compile(
+            &book,
+            "a::after { color: red } em::before { content: none }",
+        );
         assert!(tree.after(id_of(&tree, "a")).is_none());
         assert!(tree.before(id_of(&tree, "em")).is_none());
         assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
@@ -2402,9 +2403,18 @@ mod tests {
         for (css, counts) in [
             ("", false),
             ("a::after { content: \" (see below)\" }", false),
-            ("a::after { content: \" \" target-text(attr(href url)) }", false),
-            ("a::after { content: \" \" target-counter(attr(href url), page) }", true),
-            ("p::after { content: target-counter(\"#the-hunter\", page) }", false),
+            (
+                "a::after { content: \" \" target-text(attr(href url)) }",
+                false,
+            ),
+            (
+                "a::after { content: \" \" target-counter(attr(href url), page) }",
+                true,
+            ),
+            (
+                "p::after { content: target-counter(\"#the-hunter\", page) }",
+                false,
+            ),
         ] {
             assert_eq!(compile(&book, css).counts_pages(), counts, "{css}");
         }

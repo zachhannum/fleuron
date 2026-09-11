@@ -30,6 +30,13 @@
 //! legal only inside a margin box. When either one fails, the session re-breaks
 //! everything instead of serving stale lines.
 //!
+//! A reference that prints a page is the one piece of inline text
+//! that pagination decides, and it is set on a pass of its own. The
+//! first pass sets a placeholder where the number goes, so its lines
+//! are section-local like any others. The second builds again only
+//! the sections whose references print a page, and keys each one by
+//! the folios it prints.
+//!
 //! The parts have a file each: `edit` is what a host changes,
 //! `output` is what it asks for, `stage` runs the stages, `invalidate`
 //! decides which of them an edit reaches, and `key` fingerprints one
@@ -40,7 +47,7 @@ use std::borrow::Cow;
 use crate::content::{Book, NodeId};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
-use crate::layout::{Fragment, PageInfo, Piece, no_assets};
+use crate::layout::{Fragment, PageInfo, Piece, References, no_assets};
 use crate::style::{StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
 
@@ -236,6 +243,16 @@ pub struct Session<'a> {
     /// lines at a time and drops each as it is flowed.
     retain: bool,
     lines: Vec<Cached>,
+    /// What the book's references resolve against on the pass that
+    /// finds the pages.
+    references: References,
+    /// Each section's lines on the pass that prints the pages its
+    /// references name. `None` for a section with no such reference,
+    /// whose lines from the pass before stand.
+    settled: Vec<Option<Cached>>,
+    /// What that pass had to complain about: its own sections, and
+    /// every element it set on another page than the pass before.
+    settle_warnings: Vec<Warning>,
     infos: Vec<PageInfo>,
     output: Option<LayoutOutput>,
     /// What building lines complained about, deduped in the order the
@@ -276,6 +293,9 @@ impl<'a> Session<'a> {
             styles: Cow::Owned(styles),
             retain: true,
             lines: Vec::new(),
+            references: References::default(),
+            settled: Vec::new(),
+            settle_warnings: Vec::new(),
             infos: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),
@@ -322,6 +342,9 @@ impl<'a> Session<'a> {
             images: false,
             retain: false,
             lines: Vec::new(),
+            references: References::default(),
+            settled: Vec::new(),
+            settle_warnings: Vec::new(),
             infos: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),

@@ -1,12 +1,13 @@
 //! The stages themselves, and how far down an edit reaches.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
-use crate::layout::Paginator;
+use crate::Warning;
+use crate::layout::{Named, Paged, Paginator, References, landed, moved};
 
 use super::invalidate::{Against, Prints, hyphenation, section_local};
-use super::key::section_key;
+use super::key::{section_key, settled_key};
 use super::output::blank_output;
 use super::{Cached, Session, Stale};
 
@@ -63,6 +64,11 @@ impl Session<'_> {
         // before it, so the sections are broken again around it. The
         // table only grows, so a count that moved is an image.
         let supplied = self.images.then(|| self.assets.get().assets().len());
+        self.references = if self.styles.refers() {
+            References::of(&self.book)
+        } else {
+            References::default()
+        };
         let mut previous: Vec<Option<Cached>> = std::mem::take(&mut self.lines)
             .into_iter()
             .map(Some)
@@ -82,6 +88,7 @@ impl Session<'_> {
                 against,
                 supplied,
                 hyphenation(&self.book.metadata),
+                &self.references,
             );
             let kept = spare
                 .get_mut(&key)
@@ -102,6 +109,7 @@ impl Session<'_> {
                         &self.contours,
                     );
                     paginator.language(&self.book.metadata);
+                    paginator.refer(self.references.clone());
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -128,25 +136,106 @@ impl Session<'_> {
         }
     }
 
-    /// Flows the cached lines into pages. Nothing here measures.
+    /// Flows the cached lines into pages. Nothing here measures, but
+    /// for the sections whose references print a page, which are
+    /// built again once the pages are known.
     fn reflow(&mut self) {
-        let registry = self.registry.get();
-        let assets = self.assets.get();
+        let mut paged = self.fragment(false);
+        if self.styles.counts_pages() {
+            paged = self.settle(&paged);
+        } else {
+            self.settled.clear();
+            self.settle_warnings.clear();
+        }
+        self.infos = paged.infos;
+        let (registry, assets) = (self.registry.get(), self.assets.get());
+        self.output
+            .get_or_insert_with(|| blank_output(registry, assets))
+            .pages = paged.pages;
+    }
+
+    /// Fragments the book over each section's lines: the lines of the
+    /// pass that finds the pages, or, where `settled` asks for them
+    /// and a section has them, the lines of the pass that prints them.
+    fn fragment(&mut self, settled: bool) -> Paged {
         let paginator = Paginator::with_contours(
             self.registry.get(),
             &self.styles,
             self.assets.get(),
             &self.contours,
         );
-        let paged = paginator.fragment(
-            &self.book,
-            self.lines.iter().map(|cached| cached.fragments.as_slice()),
-        );
+        let sections = self.lines.iter().enumerate().map(|(index, cached)| {
+            let kept = settled
+                .then(|| self.settled.get(index).and_then(Option::as_ref))
+                .flatten();
+            kept.unwrap_or(cached).fragments.as_slice()
+        });
+        let paged = paginator.fragment(&self.book, sections);
         self.stages.flow += 1;
-        self.infos = paged.infos;
-        self.output
-            .get_or_insert_with(|| blank_output(registry, assets))
-            .pages = paged.pages;
+        paged
+    }
+
+    /// Lays the book out again with the folio each reference prints,
+    /// read off the pages of the pass before. Only the sections whose
+    /// references print a page are built again, and one that prints
+    /// the folios it printed last time keeps the lines it had.
+    fn settle(&mut self, paged: &Paged) -> Paged {
+        let found = landed(paged);
+        let resolved = self.references.landed(found.clone());
+        let mut spare: HashMap<u64, Vec<Cached>> = HashMap::new();
+        for cached in std::mem::take(&mut self.settled).into_iter().flatten() {
+            if self.section_local {
+                spare.entry(cached.key).or_default().push(cached);
+            }
+        }
+        let mut printed = BTreeSet::new();
+        let mut warnings: Vec<Warning> = Vec::new();
+        let mut settled = Vec::with_capacity(self.book.sections.len());
+        for (section, first) in self.book.sections.iter().zip(&self.lines) {
+            let named = Named::in_section(section, &self.styles);
+            if named.pages.is_empty() {
+                settled.push(None);
+                continue;
+            }
+            let key = settled_key(first.key, &named.pages, &found);
+            printed.extend(named.pages);
+            let cached = match spare.get_mut(&key).and_then(Vec::pop) {
+                Some(mut cached) => {
+                    cached.renumber(section.id);
+                    cached
+                }
+                None => {
+                    let paginator = Paginator::with_contours(
+                        self.registry.get(),
+                        &self.styles,
+                        self.assets.get(),
+                        &self.contours,
+                    );
+                    paginator.language(&self.book.metadata);
+                    paginator.refer(resolved.clone());
+                    let fragments = paginator.section_fragments(section);
+                    self.stages.lines += 1;
+                    Cached {
+                        key,
+                        section: section.id,
+                        fragments,
+                        warnings: paginator.warnings(),
+                    }
+                }
+            };
+            for warning in &cached.warnings {
+                if !warnings.iter().any(|seen| seen.message == warning.message) {
+                    warnings.push(warning.clone());
+                }
+            }
+            settled.push(Some(cached));
+        }
+        self.settled = settled;
+        self.stages.settle += 1;
+        let paged = self.fragment(true);
+        warnings.extend(moved(&found, &landed(&paged), &printed));
+        self.settle_warnings = warnings;
+        paged
     }
 
     /// Repaints the furniture over pages the flow already settled.
@@ -193,6 +282,11 @@ impl Session<'_> {
         warnings.extend(self.assets.get().warnings().iter().cloned());
         warnings.extend(self.contours.warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
+        for warning in &self.settle_warnings {
+            if !warnings.iter().any(|seen| seen.message == warning.message) {
+                warnings.push(warning.clone());
+            }
+        }
         if let Some(output) = &mut self.output {
             output.warnings = warnings;
         }
@@ -202,7 +296,7 @@ impl Session<'_> {
 #[cfg(test)]
 mod tests {
     use crate::Warning;
-    use crate::content::{Attributes, Block, Inline, Metadata, NodeId};
+    use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, NodeId, Section};
     use crate::pages::DrawItem;
     use crate::session::testing::{
         MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, painted,
@@ -591,6 +685,217 @@ mod tests {
         assert_eq!(after.lines, before.lines, "the lines were broken again");
         assert_eq!(after.flow, before.flow, "the pages were fragmented again");
         assert_eq!(after.paint, before.paint, "the furniture was painted again");
+    }
+
+    const PAGE_REFERENCE: &str =
+        "a::after { content: \" (page \" target-counter(attr(href url), page) \")\" }";
+
+    /// A chapter read from `source` that opens on a heading carrying
+    /// `id`, whose first paragraph links to `to`, over eight
+    /// paragraphs of prose tagged `tag`.
+    fn linked_chapter(source: &str, title: &str, id: &str, to: &str, tag: &str) -> Section {
+        let words = |value: &str| Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: value.into(),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let mut blocks = vec![
+            Block::Heading {
+                id: NodeId::UNASSIGNED,
+                level: HeadingLevel::H1,
+                inlines: vec![words(title)],
+                attributes: Attributes {
+                    id: Some(id.into()),
+                    classes: Vec::new(),
+                },
+                position: None,
+                span: None,
+            },
+            Block::Paragraph {
+                id: NodeId::UNASSIGNED,
+                inlines: vec![
+                    words("See "),
+                    Inline::Link {
+                        id: NodeId::UNASSIGNED,
+                        url: to.into(),
+                        children: vec![words("there")],
+                        attributes: Attributes::default(),
+                        position: None,
+                        span: None,
+                    },
+                    words("."),
+                ],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+        ];
+        blocks.extend(prose(tag, 8));
+        section(source, blocks)
+    }
+
+    /// Three chapters, one file each. The first links to the heading
+    /// the third opens on, the third links back to the first, and the
+    /// second links to nothing.
+    fn referring() -> Session<'static> {
+        let mut session = Session::new(crate::session::testing::registry());
+        session.set_content(book(vec![
+            linked_chapter("one.md", "The Voyage", "the-voyage", "#the-hunter", "alpha"),
+            section("two.md", prose("beta", 8)),
+            linked_chapter(
+                "three.md",
+                "The Hunter",
+                "the-hunter",
+                "#the-voyage",
+                "gamma",
+            ),
+        ]));
+        session.set_style(sheets(PAGE_REFERENCE));
+        session.preview();
+        session
+    }
+
+    /// The folio the heading that opens one section is set on.
+    fn heading_folio(session: &mut Session<'_>, section: usize) -> u32 {
+        let node = crate::content::block_id(&session.book().sections[section].blocks[0]);
+        session.folios(&[node])[0]
+            .expect("the heading is set")
+            .first
+    }
+
+    /// Every page number the book's references print, in reading
+    /// order.
+    fn printed(output: &crate::LayoutOutput) -> Vec<u32> {
+        let whole = painted(output).join(" ");
+        whole
+            .split("(page ")
+            .skip(1)
+            .map(|rest| {
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse().expect("a number follows every reference")
+            })
+            .collect()
+    }
+
+    /// Acceptance: a book with no reference to a page lays out in one
+    /// pass. The words of the element a link names are in the book
+    /// before anything is laid out, so a sheet that prints them costs
+    /// no second pass either.
+    #[test]
+    fn a_book_with_no_page_reference_lays_out_in_one_pass() {
+        let mut session = three_chapters();
+        session.set_style(sheets(PAGE_REFERENCE));
+        session.preview();
+        let stages = session.stages();
+        assert_eq!(stages.settle, 0, "a book with no link settled");
+        assert_eq!(stages.flow, 1);
+
+        let mut session = referring();
+        let before = session.stages();
+        session.set_style(sheets(
+            "a::after { content: \" (\" target-text(attr(href url)) \")\" }",
+        ));
+        session.preview();
+        let after = session.stages();
+        assert_eq!(after.settle, before.settle, "printing words settled");
+        assert_eq!(after.flow, before.flow + 1);
+    }
+
+    /// The second pass builds again only the sections whose references
+    /// print a page, and what they print is the folio each heading is
+    /// set on.
+    #[test]
+    fn the_second_pass_builds_only_the_sections_that_print_a_page() {
+        let mut session = referring();
+        let stages = session.stages();
+        assert_eq!(stages.settle, 1);
+        assert_eq!(stages.flow, 2);
+        assert_eq!(
+            stages.lines, 5,
+            "every section once, and the two that print a page once more",
+        );
+        let (voyage, hunter) = (
+            heading_folio(&mut session, 0),
+            heading_folio(&mut session, 2),
+        );
+        assert!(hunter > voyage);
+        assert_eq!(printed(session.preview()), [hunter, voyage]);
+        assert!(session.preview().warnings.is_empty());
+    }
+
+    /// A chapter that grows moves the chapter after it. The pass that
+    /// finds the pages builds the chapter that grew, and the pass that
+    /// prints them builds the chapter whose reference names the one
+    /// that moved. The chapter whose reference names a page that did
+    /// not move keeps its lines.
+    #[test]
+    fn a_target_that_moves_re_breaks_only_the_references_to_it() {
+        let mut session = referring();
+        let hunter = heading_folio(&mut session, 2);
+        let before = session.stages();
+
+        session.replace_source("two.md", vec![section("two.md", prose("beta", 24))]);
+        session.preview();
+        let after = session.stages();
+        let moved = heading_folio(&mut session, 2);
+        assert!(moved > hunter, "the chapter after the one that grew moved");
+        assert_eq!(
+            after.lines,
+            before.lines + 2,
+            "the chapter that grew, and the reference to the one that moved",
+        );
+        assert_eq!(after.settle, before.settle + 1);
+        let voyage = heading_folio(&mut session, 0);
+        assert_eq!(printed(session.preview()), [moved, voyage]);
+    }
+
+    /// The preview prints the numbers a single run over the same book
+    /// prints, on the same pages.
+    #[test]
+    fn the_preview_prints_what_a_single_run_prints() {
+        let mut session = referring();
+        session.replace_source("two.md", vec![section("two.md", prose("beta", 24))]);
+        let preview = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
+        let styles = session.styles().clone();
+        let once = crate::layout::layout_book(
+            session.book(),
+            &styles,
+            crate::session::testing::registry(),
+            crate::layout::no_assets(),
+        );
+        assert_eq!(
+            serde_json::to_vec(&once.pages).expect("pages serialize"),
+            preview,
+        );
+    }
+
+    /// The words of a heading are part of every section that prints
+    /// them. A heading that changes its words builds its own section
+    /// again, and the section whose reference prints them.
+    #[test]
+    fn a_heading_that_changes_its_words_re_breaks_the_references_to_it() {
+        let mut session = referring();
+        session.set_style(sheets(
+            "a::after { content: \" (\" target-text(attr(href url)) \")\" }",
+        ));
+        session.preview();
+        let before = session.stages();
+
+        session.replace_source(
+            "three.md",
+            vec![linked_chapter(
+                "three.md",
+                "The Huntress",
+                "the-hunter",
+                "#the-voyage",
+                "gamma",
+            )],
+        );
+        let words = painted(session.preview()).join(" ");
+        assert!(words.contains("(The Huntress)"), "{words}");
+        assert_eq!(session.stages().lines, before.lines + 2);
     }
 
     /// A colour edit breaks the lines again: the runs the broken

@@ -338,7 +338,9 @@ pub(super) fn generated(input: &mut Parser<'_, '_>) -> Option<Content> {
 
 /// `target-counter(<target>, page, <counter-style>?)` or
 /// `target-text(<target>)`. `page` is the only counter there is.
-fn reference<'i>(input: &mut Parser<'i, '_>) -> Result<ContentPiece, ParseError<'i, StyleError<'i>>> {
+fn reference<'i>(
+    input: &mut Parser<'i, '_>,
+) -> Result<ContentPiece, ParseError<'i, StyleError<'i>>> {
     let function = input.expect_function()?.clone();
     input.parse_nested_block(|input| {
         let target = target(input)?;
