@@ -287,6 +287,11 @@ impl Assets {
                     }
                 }
                 Block::Blockquote { blocks, .. } => self.walk(blocks, loader),
+                Block::Table { head, body, .. } => {
+                    for blocks in crate::content::cell_blocks(head, body) {
+                        self.walk(blocks, loader);
+                    }
+                }
                 _ => {}
             }
         }
@@ -354,6 +359,11 @@ impl Contours {
                 match block {
                     Block::Blockquote { blocks, .. } => {
                         walk(contours, blocks, source, styles, assets, traced)
+                    }
+                    Block::Table { head, body, .. } => {
+                        for blocks in crate::content::cell_blocks(head, body) {
+                            walk(contours, blocks, source, styles, assets, traced);
+                        }
                     }
                     Block::Image {
                         id, url, position, ..

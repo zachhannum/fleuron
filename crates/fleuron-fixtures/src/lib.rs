@@ -63,6 +63,11 @@ pub fn shaped_texts(book: &fleuron::content::Book) -> Vec<String> {
                     }
                 }
                 Block::Blockquote { blocks, .. } => walk(blocks, out),
+                Block::Table { head, body, .. } => {
+                    for blocks in fleuron::content::cell_blocks(head, body) {
+                        walk(blocks, out);
+                    }
+                }
                 Block::ThematicBreak { .. } | Block::Image { .. } => {}
             }
         }

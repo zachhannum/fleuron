@@ -264,3 +264,39 @@ pub enum BoxDecorationBreak {
     /// edges.
     Clone,
 }
+
+/// The width a box is asked to take, from `width`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Width {
+    /// `auto`: the box takes the width that layout gives it.
+    Auto,
+    /// A length, in points.
+    Points(f32),
+    /// A percentage of the width of the box around it.
+    Percent(f32),
+}
+
+impl Width {
+    /// The width in points inside a box `of` points wide, or `None`
+    /// for `auto`.
+    pub fn resolve(self, of: f32) -> Option<f32> {
+        match self {
+            Width::Auto => None,
+            Width::Points(points) => Some(points),
+            Width::Percent(percent) => Some(percent / 100.0 * of),
+        }
+    }
+}
+
+/// Whether the cells of a table share their borders, from
+/// `border-collapse`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BorderCollapse {
+    /// `separate`: every cell draws its own border, beside the border
+    /// of the cell next to it.
+    Separate,
+    /// `collapse`: two cells that meet draw one border between them.
+    Collapse,
+}

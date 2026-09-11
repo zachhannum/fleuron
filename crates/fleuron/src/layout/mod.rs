@@ -19,9 +19,10 @@
 //!
 //! The stages have a file each: `fragment` is what the flow moves,
 //! `build` turns blocks into fragments, `cap` sets the initial letter
-//! beside them, `flow` stacks fragments into pages, `exclusion` sets
-//! prose around an image the sheet anchored, `furniture` paints the
-//! margin boxes, and `text` turns a shaped line into paint ops.
+//! beside them, `table` sets a table a row at a time, `flow` stacks
+//! fragments into pages, `exclusion` sets prose around an image the
+//! sheet anchored, `furniture` paints the margin boxes, and `text`
+//! turns a shaped line into paint ops.
 
 mod build;
 mod cap;
@@ -29,13 +30,16 @@ mod exclusion;
 mod flow;
 mod fragment;
 mod furniture;
+mod table;
 mod text;
 
 #[cfg(test)]
 mod testing;
 
 pub use build::Reflow;
-pub use fragment::{BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece};
+pub use fragment::{
+    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, TableRow,
+};
 pub use furniture::margin_band;
 
 pub(crate) use exclusion::AnchoredImages;

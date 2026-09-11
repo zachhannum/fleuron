@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::content::NodeId;
 use crate::lines::Line;
+use crate::pages::DrawItem;
 use crate::style::{BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
 
 use super::build::Reflow;
@@ -52,6 +53,25 @@ pub enum Piece {
     /// It takes no space and paints nothing. The page the flow
     /// reaches here is the page that places the image.
     Anchor(NodeId),
+    /// One row of a table, set whole.
+    Row(Box<TableRow>),
+}
+
+/// One row of a table, set whole: what it paints, and what the flow
+/// needs to set the table's header rows again on a new page.
+#[derive(Debug, Clone)]
+pub struct TableRow {
+    /// What the row paints, from the top of the row and the leading
+    /// edge of the content box.
+    pub items: Vec<DrawItem>,
+    /// Whether this is the first row of its table.
+    pub opens: bool,
+    /// Whether this is a header row, which is set again at the top of
+    /// every page or column the table continues onto.
+    pub head: bool,
+    /// Whether the header rows are set above this row when it is the
+    /// first thing on a page or in a column.
+    pub repeats: bool,
 }
 
 /// An initial letter sunk beside the lines that follow it.

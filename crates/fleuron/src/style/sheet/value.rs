@@ -7,9 +7,9 @@ use crate::fonts::GenericFamily;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    BorderStyle, BoxDecorationBreak, Break, Content, Declaration, Edge, Family, FontStyle,
-    FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position, ShapeSource, StringPiece,
-    StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
+    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Content, Declaration, Edge, Family,
+    FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position, ShapeSource,
+    StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
 };
 
 use super::StyleError;
@@ -125,6 +125,20 @@ fn auto_or<T>(
         return Some(None);
     }
     parse(input).map(Some)
+}
+
+/// `width`: `auto`, or a length or a percentage.
+pub(super) fn width(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    auto_or(input, length)
+}
+
+pub(super) fn border_collapse(input: &mut Parser<'_, '_>) -> Option<BorderCollapse> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "separate" => Some(BorderCollapse::Separate),
+        "collapse" => Some(BorderCollapse::Collapse),
+        _ => None,
+    }
 }
 
 pub(super) fn decoration_break(input: &mut Parser<'_, '_>) -> Option<BoxDecorationBreak> {

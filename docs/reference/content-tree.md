@@ -76,6 +76,53 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
 | `image` | `url` and `alt`. The string in `url` is the name the image is matched under, and it does not have to be a real URL, since the engine neither resolves it nor decodes the image. `alt` is not laid out, reaches painters and accessibility tools unchanged, and is not optional. |
+| `table` | `head` and `body`, each a list of rows. See [Tables](#tables). |
+
+## Tables
+
+A table holds rows, and a row holds cells. A cell holds blocks, as a blockquote does. A cell that the frontend reads from markdown holds one paragraph.
+
+```json
+{
+  "type": "table",
+  "head": [
+    {
+      "cells": [
+        {
+          "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "Pocket" }] }],
+          "align": "left"
+        },
+        {
+          "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "Found" }] }]
+        }
+      ]
+    }
+  ],
+  "body": [
+    {
+      "cells": [
+        {
+          "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "The right fob" }] }],
+          "align": "left"
+        },
+        {
+          "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "A watch" }] }]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| field | |
+|---|---|
+| `head` | The header rows, which name the columns, in reading order. |
+| `body` | The body rows, in reading order. |
+| `cells` | The cells of one row, from the left. A row with fewer cells than the table has columns leaves the rest of them empty. |
+| `blocks` | The content of one cell. An empty cell has none. |
+| `align` | `left`, `center` or `right`: the alignment that the delimiter row wrote on the column of the cell. A column with no alignment leaves the field out. |
+
+A row and a cell each take an optional `position`, `span` and `attributes`, the same as a block.
 
 ## Inlines
 

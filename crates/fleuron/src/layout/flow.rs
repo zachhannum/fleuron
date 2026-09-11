@@ -82,6 +82,9 @@ pub(super) struct Placed {
     /// The images anchored above it, which land on the page it ends
     /// on.
     pub(super) anchors: Vec<NodeId>,
+    /// Whether it is a table's body row, which has the header rows
+    /// set above it when it opens a column.
+    repeats: bool,
 }
 
 /// The flow: fragments in, pages out.
@@ -130,6 +133,10 @@ pub(super) struct Flow<'a, 'p> {
     /// the anchors land keeps no pages, so it paints nothing: which
     /// page a fragment falls on is a question about heights.
     paints: bool,
+    /// The header rows of the table being placed, each with its
+    /// height, to set again where the table continues onto a new page
+    /// or column.
+    header: Vec<(f32, Vec<DrawItem>)>,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -159,6 +166,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             anchors: BTreeMap::new(),
             pending_anchors: Vec::new(),
             paints: true,
+            header: Vec::new(),
         }
     }
 
@@ -210,6 +218,22 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.pending_anchors.push(node);
             return;
         }
+        if let Piece::Row(row) = &fragment.piece {
+            if row.opens {
+                self.header.clear();
+            }
+            if row.head {
+                // A header set again is text the engine wrote itself,
+                // so the runs that name a node still tile it once.
+                let mut items = row.items.clone();
+                for item in &mut items {
+                    if let DrawItem::Text { origin, .. } = item {
+                        *origin = None;
+                    }
+                }
+                self.header.push((fragment.height, items));
+            }
+        }
         if let BreakPoint::Forced(wanted) = fragment.break_before {
             match wanted {
                 Break::Column => self.break_column(),
@@ -240,7 +264,13 @@ impl<'a, 'p> Flow<'a, 'p> {
             let opening = self.column_empty();
             let lead = if opening { 0.0 } else { fragment.lead };
             if opening || self.cursor + lead + fragment.fixed + fragment.height <= self.height {
+                let headed = opening && repeats(fragment) && self.head_rows();
                 self.emit(fragment, lead);
+                // A page cannot end between the header rows and the
+                // row they were set again above.
+                if headed && let Some(placed) = self.placed.last_mut() {
+                    placed.break_before = BreakPoint::Forbidden;
+                }
                 return;
             }
             let cut = if forced || fragment.break_before != BreakPoint::Forbidden {
@@ -257,32 +287,10 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn emit(&mut self, fragment: &Fragment, lead: f32) {
         let (x, y) = self.origin();
         let top = self.cursor + lead + fragment.fixed;
-        let items = match &fragment.piece {
-            _ if !self.paints => Vec::new(),
-            Piece::Line { line, cap } => {
-                let baseline = y + top + line.box_.baseline;
-                let mut items = self.paginator.text_items(line, x + fragment.x, baseline);
-                if let Some(cap) = cap {
-                    items.append(&mut self.paginator.text_items(
-                        &cap.line,
-                        x + cap.x,
-                        baseline + cap.drop,
-                    ));
-                }
-                items
-            }
-            Piece::Image {
-                width,
-                height,
-                asset,
-            } => vec![DrawItem::Image {
-                x: x + fragment.x,
-                y: y + top,
-                w: *width,
-                h: *height,
-                asset: *asset,
-            }],
-            Piece::Blank | Piece::Anchor(_) => Vec::new(),
+        let items = if self.paints {
+            self.paginator.fragment_items(fragment, x, y + top)
+        } else {
+            Vec::new()
         };
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
@@ -295,7 +303,40 @@ impl<'a, 'p> Flow<'a, 'p> {
             marks: fragment.marks.clone(),
             decorations: fragment.decorations.clone(),
             anchors: std::mem::take(&mut self.pending_anchors),
+            repeats: repeats(fragment),
         });
+    }
+
+    /// Sets the header rows of the table being placed at the foot of
+    /// what the column holds, and answers whether there were any.
+    fn head_rows(&mut self) -> bool {
+        if self.header.is_empty() {
+            return false;
+        }
+        let (x, y) = self.origin();
+        for (height, items) in &self.header {
+            let top = self.cursor;
+            let mut items = if self.paints {
+                items.clone()
+            } else {
+                Vec::new()
+            };
+            shift(&mut items, x, y + top);
+            self.placed.push(Placed {
+                section: self.section,
+                column: self.column,
+                top,
+                height: *height,
+                break_before: BreakPoint::Forbidden,
+                items,
+                marks: None,
+                decorations: None,
+                anchors: Vec::new(),
+                repeats: false,
+            });
+            self.cursor = top + height;
+        }
+        true
     }
 
     /// Whether nothing stands in the column being filled.
@@ -324,19 +365,25 @@ impl<'a, 'p> Flow<'a, 'p> {
         let Some(head) = carried.first().map(|placed| placed.top) else {
             return;
         };
+        // A table's body row carried to the head of the column has the
+        // header rows set above it.
+        if carried[0].repeats && self.head_rows() {
+            carried[0].break_before = BreakPoint::Forbidden;
+        }
         // The carried group starts at the head of the fresh column,
         // and the space that was above it there is dropped.
-        let (dx, dy) = (to_x - from_x, to_y - from_y - head);
+        let below = self.cursor;
+        let (dx, dy) = (to_x - from_x, to_y - from_y - head + below);
         let column = self.column;
         for placed in &mut carried {
-            placed.top -= head;
+            placed.top += below - head;
             placed.column = column;
             shift(&mut placed.items, dx, dy);
         }
         self.cursor = carried
             .last()
             .map(|placed| placed.top + placed.height)
-            .unwrap_or(0.0);
+            .unwrap_or(below);
         self.placed.append(&mut carried);
     }
 
@@ -598,22 +645,22 @@ impl<'a, 'p> Flow<'a, 'p> {
 
 /// One decorated block resolved against one page: the border box it
 /// takes there, and which of its edges the page boundary cut.
-struct Painted {
-    decoration: Decoration,
+pub(super) struct Painted {
+    pub(super) decoration: Decoration,
     /// Top of the border box, from the page content box's top.
-    top: f32,
+    pub(super) top: f32,
     /// Its bottom, the same way.
-    bottom: f32,
+    pub(super) bottom: f32,
     /// Whether the block began on an earlier page.
-    cut_above: bool,
+    pub(super) cut_above: bool,
     /// Whether it goes on to the next one.
-    cut_below: bool,
+    pub(super) cut_below: bool,
 }
 
 impl Painted {
     /// The rects this box paints, background first: `origin` is the
     /// page's content box.
-    fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
+    pub(super) fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
         let (x, y) = (origin.0 + self.decoration.x, origin.1 + self.top);
         let (w, h) = (self.decoration.width, self.bottom - self.top);
         if w <= 0.0 || h <= 0.0 {
@@ -675,9 +722,15 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
         .unwrap_or(fragments.len())
 }
 
+/// Whether a fragment is a table's body row that has the header rows
+/// set above it when it opens a column.
+fn repeats(fragment: &Fragment) -> bool {
+    matches!(&fragment.piece, Piece::Row(row) if row.repeats)
+}
+
 /// Moves already-painted items: what moving a fragment to the next
 /// page comes to.
-fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
+pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
     for item in items {
         match item {
             DrawItem::Text { x, y, glyphs, .. } => {

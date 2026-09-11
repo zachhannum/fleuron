@@ -2,7 +2,8 @@
 //!
 //! The markdown frontend produces this; the element vocabulary is
 //! bounded by what a book needs — book/section, heading, paragraph,
-//! blockquote, thematic break, emphasis/strong/code, image, link.
+//! blockquote, thematic break, image, table, emphasis/strong/code,
+//! link.
 //!
 //! This module is the **input contract**: everything downstream (style,
 //! box construction, layout) consumes these types, and nothing widens
@@ -346,6 +347,27 @@ pub enum Block {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// A grid of cells. A cell holds blocks, as a blockquote does.
+    Table {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// The header rows, which name the columns, in reading order.
+        #[serde(default)]
+        head: Vec<Row>,
+        /// The body rows, in reading order.
+        #[serde(default)]
+        body: Vec<Row>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
 }
 
 /// A heading level: 1 to 6, the range markdown defines.
@@ -399,6 +421,74 @@ impl TryFrom<u8> for HeadingLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("heading level must be 1-6, got {0}")]
 pub struct InvalidHeadingLevel(pub u8);
+
+/// One row of a table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Row {
+    /// Engine-assigned identity, for diagnostics; never serialized.
+    #[serde(skip)]
+    pub id: NodeId,
+    /// The row's cells, from the leading edge. A row with fewer cells
+    /// than the table has columns leaves the rest of them empty.
+    #[serde(default)]
+    pub cells: Vec<Cell>,
+    /// What a sheet names it by.
+    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    pub attributes: Attributes,
+    /// Where the frontend read this from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<SourcePos>,
+    /// The bytes of that source it was read from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<SourceSpan>,
+}
+
+/// One cell of a table row.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Cell {
+    /// Engine-assigned identity, for diagnostics; never serialized.
+    #[serde(skip)]
+    pub id: NodeId,
+    /// The cell's content, in reading order. An empty cell has none.
+    #[serde(default)]
+    pub blocks: Vec<Block>,
+    /// The alignment the source wrote on the cell's column, if it
+    /// wrote one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<Alignment>,
+    /// What a sheet names it by.
+    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    pub attributes: Attributes,
+    /// Where the frontend read this from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<SourcePos>,
+    /// The bytes of that source it was read from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<SourceSpan>,
+}
+
+/// The alignment a table's delimiter row writes on a column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Alignment {
+    /// `:---`
+    Left,
+    /// `:---:`
+    Center,
+    /// `---:`
+    Right,
+}
+
+/// Every row of a table, the header rows first.
+pub fn rows<'a>(head: &'a [Row], body: &'a [Row]) -> impl Iterator<Item = &'a Row> {
+    head.iter().chain(body)
+}
+
+/// The blocks of every cell of a table, row by row, the header rows
+/// first.
+pub fn cell_blocks<'a>(head: &'a [Row], body: &'a [Row]) -> impl Iterator<Item = &'a [Block]> {
+    rows(head, body).flat_map(|row| row.cells.iter().map(|cell| cell.blocks.as_slice()))
+}
 
 /// An inline element: participates in line layout.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -625,6 +715,7 @@ fn subtree_in_blocks(blocks: &[Block], node: NodeId) -> Option<Range<u32>> {
                 subtree_in_inlines(inlines, node)
             }
             Block::Blockquote { blocks, .. } => subtree_in_blocks(blocks, node),
+            Block::Table { head, body, .. } => subtree_in_rows(rows(head, body), node),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
     }
@@ -659,8 +750,44 @@ fn block_nodes(block: &Block) -> u32 {
             inlines.iter().map(inline_nodes).sum()
         }
         Block::Blockquote { blocks, .. } => blocks.iter().map(block_nodes).sum(),
+        Block::Table { head, body, .. } => rows(head, body).map(row_nodes).sum(),
         Block::ThematicBreak { .. } | Block::Image { .. } => 0,
     }
+}
+
+/// The same, for one row of a table.
+fn row_nodes(row: &Row) -> u32 {
+    1 + row.cells.iter().map(cell_nodes).sum::<u32>()
+}
+
+/// The same, for one cell.
+fn cell_nodes(cell: &Cell) -> u32 {
+    1 + cell.blocks.iter().map(block_nodes).sum::<u32>()
+}
+
+/// The ids one node of a table's rows holds, by id.
+fn subtree_in_rows<'a>(rows: impl Iterator<Item = &'a Row>, node: NodeId) -> Option<Range<u32>> {
+    for row in rows {
+        let held = row.id.get()..row.id.get() + row_nodes(row);
+        if !held.contains(&node.get()) {
+            continue;
+        }
+        if row.id == node {
+            return Some(held);
+        }
+        for cell in &row.cells {
+            let held = cell.id.get()..cell.id.get() + cell_nodes(cell);
+            if !held.contains(&node.get()) {
+                continue;
+            }
+            if cell.id == node {
+                return Some(held);
+            }
+            return subtree_in_blocks(&cell.blocks, node);
+        }
+        return None;
+    }
+    None
 }
 
 /// The same, for one inline.
@@ -707,6 +834,7 @@ fn node_in_blocks(blocks: &[Block], byte: u32) -> Option<(NodeId, SourceSpan)> {
                 node_in_inlines(inlines, byte)
             }
             Block::Blockquote { blocks, .. } => node_in_blocks(blocks, byte),
+            Block::Table { head, body, .. } => node_in_rows(rows(head, body), byte),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
         let hit = narrowest((block_id(block), span), inner);
@@ -751,6 +879,7 @@ fn span_in_blocks(blocks: &[Block], node: NodeId) -> Option<SourceSpan> {
                 span_in_inlines(inlines, node)
             }
             Block::Blockquote { blocks, .. } => span_in_blocks(blocks, node),
+            Block::Table { head, body, .. } => span_in_rows(rows(head, body), node),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
         if found.is_some() {
@@ -779,6 +908,47 @@ fn span_in_inlines(inlines: &[Inline], node: NodeId) -> Option<SourceSpan> {
     None
 }
 
+/// The innermost row, cell, block or inline of a table's rows a byte
+/// was read into.
+fn node_in_rows<'a>(
+    rows: impl Iterator<Item = &'a Row>,
+    byte: u32,
+) -> Option<(NodeId, SourceSpan)> {
+    for row in rows {
+        let Some(span) = row.span.filter(|span| span.covers(byte)) else {
+            continue;
+        };
+        let inner = row.cells.iter().find_map(|cell| {
+            let span = cell.span.filter(|span| span.covers(byte))?;
+            Some(narrowest(
+                (cell.id, span),
+                node_in_blocks(&cell.blocks, byte),
+            ))
+        });
+        return Some(narrowest((row.id, span), inner));
+    }
+    None
+}
+
+/// The span of one node of a table's rows, by id.
+fn span_in_rows<'a>(rows: impl Iterator<Item = &'a Row>, node: NodeId) -> Option<SourceSpan> {
+    for row in rows {
+        if row.id == node {
+            return row.span;
+        }
+        for cell in &row.cells {
+            if cell.id == node {
+                return cell.span;
+            }
+            let found = span_in_blocks(&cell.blocks, node);
+            if found.is_some() {
+                return found;
+            }
+        }
+    }
+    None
+}
+
 /// What a sheet names one block by.
 pub fn block_attributes(block: &Block) -> &Attributes {
     match block {
@@ -786,7 +956,8 @@ pub fn block_attributes(block: &Block) -> &Attributes {
         | Block::Paragraph { attributes, .. }
         | Block::Blockquote { attributes, .. }
         | Block::ThematicBreak { attributes, .. }
-        | Block::Image { attributes, .. } => attributes,
+        | Block::Image { attributes, .. }
+        | Block::Table { attributes, .. } => attributes,
     }
 }
 
@@ -808,7 +979,8 @@ pub fn block_position(block: &Block) -> Option<SourcePos> {
         | Block::Paragraph { position, .. }
         | Block::Blockquote { position, .. }
         | Block::ThematicBreak { position, .. }
-        | Block::Image { position, .. } => *position,
+        | Block::Image { position, .. }
+        | Block::Table { position, .. } => *position,
     }
 }
 
@@ -830,7 +1002,8 @@ pub fn block_id(block: &Block) -> NodeId {
         | Block::Paragraph { id, .. }
         | Block::Blockquote { id, .. }
         | Block::ThematicBreak { id, .. }
-        | Block::Image { id, .. } => *id,
+        | Block::Image { id, .. }
+        | Block::Table { id, .. } => *id,
     }
 }
 
@@ -841,7 +1014,8 @@ pub fn block_span(block: &Block) -> Option<SourceSpan> {
         | Block::Paragraph { span, .. }
         | Block::Blockquote { span, .. }
         | Block::ThematicBreak { span, .. }
-        | Block::Image { span, .. } => *span,
+        | Block::Image { span, .. }
+        | Block::Table { span, .. } => *span,
     }
 }
 
@@ -890,6 +1064,18 @@ fn assign_block(block: &mut Block, next: &mut u32) {
         Block::ThematicBreak { id, .. } | Block::Image { id, .. } => {
             *id = next_id(next);
         }
+        Block::Table { id, head, body, .. } => {
+            *id = next_id(next);
+            for row in head.iter_mut().chain(body.iter_mut()) {
+                row.id = next_id(next);
+                for cell in &mut row.cells {
+                    cell.id = next_id(next);
+                    for nested in &mut cell.blocks {
+                        assign_block(nested, next);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -925,6 +1111,10 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
 ---
 
 ![The drawer of knives](images/drawer.png)
+
+| Pocket | Found |
+|:---|---:|
+| Right | A handkerchief |
 ";
 
     /// The bytes of the sample source one stretch of it covers.
@@ -946,6 +1136,111 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
             position: None,
             span: span(value),
         }
+    }
+
+    /// A row of the sample table, spanning the line it was written on.
+    fn row(line: &str, cells: Vec<Cell>) -> Row {
+        Row {
+            cells,
+            span: span(line),
+            ..Row::default()
+        }
+    }
+
+    /// A cell of the sample table: one paragraph of one run, under the
+    /// alignment its column was written with.
+    fn cell(value: &str, align: Alignment) -> Cell {
+        Cell {
+            blocks: vec![Block::Paragraph {
+                id: NodeId::UNASSIGNED,
+                inlines: vec![text(value)],
+                attributes: Attributes::default(),
+                position: None,
+                span: span(value),
+            }],
+            align: Some(align),
+            span: span(value),
+            ..Cell::default()
+        }
+    }
+
+    /// The sample book's table.
+    fn table(book: &Book) -> (&[Row], &[Row]) {
+        let Some(Block::Table { head, body, .. }) = book.sections[0].blocks.last() else {
+            panic!("the sample book ends with a table");
+        };
+        (head, body)
+    }
+
+    /// A table serializes as its rows, each row as its cells, and each
+    /// cell as its blocks and the alignment its column was written
+    /// with.
+    #[test]
+    fn a_table_serializes_as_rows_of_cells() {
+        let json = serde_json::to_value(sample_book().sections[0].blocks.last()).unwrap();
+        assert_eq!(json["type"], "table");
+        assert_eq!(json["head"][0]["cells"][1]["align"], "right");
+        assert_eq!(
+            json["body"][0]["cells"][1]["blocks"][0],
+            serde_json::json!({
+                "type": "paragraph",
+                "inlines": [{"type": "text", "value": "A handkerchief", "span": {
+                    "start": SOURCE.find("A handkerchief").unwrap(),
+                    "end": SOURCE.find("A handkerchief").unwrap() + "A handkerchief".len(),
+                }}],
+                "span": {
+                    "start": SOURCE.find("A handkerchief").unwrap(),
+                    "end": SOURCE.find("A handkerchief").unwrap() + "A handkerchief".len(),
+                },
+            }),
+        );
+    }
+
+    /// A table is numbered like every other node: the table before its
+    /// rows, a row before its cells, a cell before what it holds, and
+    /// the header rows before the body rows.
+    #[test]
+    fn a_table_numbers_its_rows_and_cells_in_reading_order() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let table_id = block_id(book.sections[0].blocks.last().unwrap());
+        let (head, body) = table(&book);
+        let header = &head[0];
+        let first = &body[0];
+        assert!(table_id < header.id);
+        assert!(header.id < header.cells[0].id);
+        assert!(header.cells[0].id < block_id(&header.cells[0].blocks[0]));
+        assert!(block_id(&header.cells[1].blocks[0]) < first.id);
+        assert!(first.id < first.cells[1].id);
+
+        // A row covers its cells, and a cell what is in it.
+        let held = book.subtree(first.id).expect("the book holds the row");
+        assert_eq!(held.start, first.id.get());
+        assert!(held.contains(&block_id(&first.cells[1].blocks[0]).get()));
+        assert_eq!(
+            book.subtree(table_id).map(|held| held.end),
+            book.subtree(book.sections[0].id).map(|held| held.end),
+            "the table is the last node of the book",
+        );
+    }
+
+    /// A byte of a cell answers with the run typed into it, and a
+    /// byte of the pipes between two cells answers with the row.
+    #[test]
+    fn a_byte_of_a_cell_answers_with_the_run_written_there() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let (_, body) = table(&book);
+        let Block::Paragraph { inlines, .. } = &body[0].cells[1].blocks[0] else {
+            panic!("the cell holds a paragraph");
+        };
+        let byte = SOURCE.find("handkerchief").unwrap() as u32;
+        assert_eq!(
+            book.node_at("chapter-01.md", byte),
+            Some(inline_id(&inlines[0]))
+        );
+        let pipe = SOURCE.find("| Right").unwrap() as u32;
+        assert_eq!(book.node_at("chapter-01.md", pipe), Some(body[0].id));
     }
 
     /// What the engine writes, a host may hand back. The fields
@@ -1029,6 +1324,29 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         position: Some(SourcePos { line: 9, column: 1 }),
                         span: span("![The drawer of knives](images/drawer.png)"),
                     },
+                    Block::Table {
+                        id: NodeId::UNASSIGNED,
+                        head: vec![row(
+                            "| Pocket | Found |\n",
+                            vec![
+                                cell("Pocket", Alignment::Left),
+                                cell("Found", Alignment::Right),
+                            ],
+                        )],
+                        body: vec![row(
+                            "| Right | A handkerchief |\n",
+                            vec![
+                                cell("Right", Alignment::Left),
+                                cell("A handkerchief", Alignment::Right),
+                            ],
+                        )],
+                        attributes: Attributes::default(),
+                        position: Some(SourcePos {
+                            line: 11,
+                            column: 1,
+                        }),
+                        span: span("| Pocket | Found |\n|:---|---:|\n| Right | A handkerchief |\n"),
+                    },
                 ],
                 position: Some(SourcePos { line: 1, column: 1 }),
                 span: Some(SourceSpan {
@@ -1054,6 +1372,18 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                     }
                 }
                 Block::ThematicBreak { id, .. } | Block::Image { id, .. } => ids.push(*id),
+                Block::Table { id, head, body, .. } => {
+                    ids.push(*id);
+                    for row in rows(head, body) {
+                        ids.push(row.id);
+                        for cell in &row.cells {
+                            ids.push(cell.id);
+                            for nested in &cell.blocks {
+                                walk_block(ids, nested);
+                            }
+                        }
+                    }
+                }
             }
         }
 

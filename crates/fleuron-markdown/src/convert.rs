@@ -10,8 +10,8 @@ use std::ops::Range;
 
 use fleuron::Warning;
 use fleuron::content::{
-    Attributes, Block, HeadingLevel, Inline, Section, SourcePos, SourceSpan, block_position,
-    block_span, origin, text as inline_text,
+    Alignment, Attributes, Block, Cell, HeadingLevel, Inline, Row, Section, SourcePos, SourceSpan,
+    block_position, block_span, origin, text as inline_text,
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
@@ -51,7 +51,7 @@ fn parser_options(options: &Options) -> ParserOptions {
         dialect.frontmatter,
     );
     parser.set(ParserOptions::ENABLE_GFM, dialect.gfm);
-    parser.set(ParserOptions::ENABLE_TABLES, dialect.gfm);
+    parser.set(ParserOptions::ENABLE_TABLES, dialect.tables);
     parser.set(ParserOptions::ENABLE_STRIKETHROUGH, dialect.gfm);
     parser.set(ParserOptions::ENABLE_TASKLISTS, dialect.gfm);
     parser.set(ParserOptions::ENABLE_WIKILINKS, dialect.wikilinks);
@@ -128,9 +128,24 @@ enum InlineFor {
     Image {
         url: String,
     },
+    /// A cell of the table being read.
+    Cell,
     /// Markup with no counterpart in the vocabulary: the children
     /// fold into the parent unwrapped.
     Plain,
+}
+
+/// A table while its rows are still arriving.
+struct TableFrame {
+    read: Read,
+    /// The alignment the delimiter row wrote on each column.
+    columns: Vec<Option<Alignment>>,
+    head: Vec<Row>,
+    body: Vec<Row>,
+    /// Whether the rows arriving are header rows.
+    in_head: bool,
+    /// The row whose cells are arriving, and where it was read from.
+    row: Option<(Vec<Cell>, Read)>,
 }
 
 struct Converter<'a> {
@@ -158,6 +173,9 @@ struct Converter<'a> {
     /// One held attribute line per open blockquote: the line before a
     /// quote names the quote, and the blocks inside it are their own.
     quoted: Vec<Option<Pending>>,
+    /// The table being read. A cell holds only inlines, so tables do
+    /// not nest.
+    table: Option<TableFrame>,
     /// Depth of metadata blocks, whose text is not content.
     metadata: u32,
 }
@@ -176,6 +194,7 @@ impl<'a> Converter<'a> {
             deferred: Vec::new(),
             pending: None,
             quoted: Vec::new(),
+            table: None,
             metadata: 0,
         }
     }
@@ -247,10 +266,36 @@ impl<'a> Converter<'a> {
                 "Lists are not supported. Falling back to one paragraph per item.",
                 at,
             ),
-            Event::Start(Tag::Table(_)) => self.warn(
-                "Tables are not supported. Falling back to one paragraph per cell.",
-                at,
-            ),
+            Event::Start(Tag::Table(columns)) => {
+                self.table = Some(TableFrame {
+                    read,
+                    columns: columns.iter().map(alignment).collect(),
+                    head: Vec::new(),
+                    body: Vec::new(),
+                    in_head: false,
+                    row: None,
+                })
+            }
+            Event::Start(Tag::TableHead) => {
+                if let Some(table) = self.table.as_mut() {
+                    table.in_head = true;
+                    table.row = Some((Vec::new(), read));
+                }
+            }
+            Event::Start(Tag::TableRow) => {
+                if let Some(table) = self.table.as_mut() {
+                    table.row = Some((Vec::new(), read));
+                }
+            }
+            Event::Start(Tag::TableCell) => self.push_inlines(InlineFor::Cell, read),
+            Event::End(TagEnd::TableRow) => self.close_row(),
+            Event::End(TagEnd::TableHead) => {
+                self.close_row();
+                if let Some(table) = self.table.as_mut() {
+                    table.in_head = false;
+                }
+            }
+            Event::End(TagEnd::Table) => self.close_table(),
             Event::Start(Tag::CodeBlock(_)) => {
                 self.warn(
                     "Code blocks are not supported. Falling back to a plain paragraph.",
@@ -273,12 +318,9 @@ impl<'a> Converter<'a> {
             // no paragraph around it. The frame catches that text; a
             // loose item's own paragraph closes first and leaves this
             // one empty.
-            Event::Start(
-                Tag::Item
-                | Tag::TableCell
-                | Tag::DefinitionListTitle
-                | Tag::DefinitionListDefinition,
-            ) => self.push_inlines(InlineFor::Paragraph, read),
+            Event::Start(Tag::Item | Tag::DefinitionListTitle | Tag::DefinitionListDefinition) => {
+                self.push_inlines(InlineFor::Paragraph, read)
+            }
 
             Event::End(
                 TagEnd::Paragraph
@@ -325,7 +367,7 @@ impl<'a> Converter<'a> {
             // markdown's ragged column.
             Event::SoftBreak | Event::HardBreak => self.text(" ", read),
             Event::Rule => self.rule(read),
-            Event::End(_) | Event::Start(_) => {}
+            Event::End(_) => {}
         }
     }
 
@@ -409,6 +451,23 @@ impl<'a> Converter<'a> {
                 for child in children {
                     self.inline(child);
                 }
+            }
+            // An image written in a cell stays in the cell, after the
+            // prose it was written in.
+            InlineFor::Cell => {
+                self.displaced(&children);
+                let mut blocks = Vec::new();
+                if !children.is_empty() {
+                    blocks.push(Block::Paragraph {
+                        id: Default::default(),
+                        inlines: children,
+                        attributes: Attributes::default(),
+                        position: at,
+                        span,
+                    });
+                }
+                blocks.append(&mut self.deferred);
+                self.cell(blocks, read);
             }
             // The content vocabulary has no inline image: the image
             // becomes a block, deferred until the paragraph it was
@@ -612,6 +671,69 @@ impl<'a> Converter<'a> {
         });
     }
 
+    /// Files one cell in the row being read, under the alignment its
+    /// column was written with. A cell with no row to go in is prose,
+    /// which is never dropped.
+    fn cell(&mut self, blocks: Vec<Block>, read: Read) {
+        let Some((table, cells)) = self
+            .table
+            .as_mut()
+            .and_then(|table| Some((&table.columns, &mut table.row.as_mut()?.0)))
+        else {
+            for block in blocks {
+                self.push_block(block);
+            }
+            return;
+        };
+        let align = table.get(cells.len()).copied().flatten();
+        cells.push(Cell {
+            id: Default::default(),
+            blocks,
+            align,
+            attributes: Attributes::default(),
+            position: Some(read.position),
+            span: Some(read.span),
+        });
+    }
+
+    /// Files the row whose cells have all arrived.
+    fn close_row(&mut self) {
+        let Some(table) = self.table.as_mut() else {
+            return;
+        };
+        let Some((cells, read)) = table.row.take() else {
+            return;
+        };
+        let row = Row {
+            id: Default::default(),
+            cells,
+            attributes: Attributes::default(),
+            position: Some(read.position),
+            span: Some(read.span),
+        };
+        if table.in_head {
+            table.head.push(row);
+        } else {
+            table.body.push(row);
+        }
+    }
+
+    /// Files the table whose rows have all arrived. It takes the
+    /// names of the attribute line above it, as any block does.
+    fn close_table(&mut self) {
+        let Some(table) = self.table.take() else {
+            return;
+        };
+        self.push_block(Block::Table {
+            id: Default::default(),
+            head: table.head,
+            body: table.body,
+            attributes: Attributes::default(),
+            position: Some(table.read.position),
+            span: Some(table.read.span),
+        });
+    }
+
     fn rule(&mut self, read: Read) {
         self.push_block(Block::ThematicBreak {
             id: Default::default(),
@@ -717,6 +839,9 @@ fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
         }
         | Block::Image {
             attributes, span, ..
+        }
+        | Block::Table {
+            attributes, span, ..
         } => (attributes, span),
     }
 }
@@ -754,6 +879,16 @@ fn identifier(word: &str) -> Option<String> {
     let opens = word.chars().next()?;
     let plain = |c: char| c.is_alphanumeric() || c == '-' || c == '_';
     (!opens.is_ascii_digit() && word.chars().all(plain)).then(|| word.to_string())
+}
+
+/// The alignment a delimiter row wrote on one column, if it wrote one.
+fn alignment(written: &pulldown_cmark::Alignment) -> Option<Alignment> {
+    match written {
+        pulldown_cmark::Alignment::None => None,
+        pulldown_cmark::Alignment::Left => Some(Alignment::Left),
+        pulldown_cmark::Alignment::Center => Some(Alignment::Center),
+        pulldown_cmark::Alignment::Right => Some(Alignment::Right),
+    }
 }
 
 fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
@@ -916,11 +1051,11 @@ mod tests {
         assert_eq!(sections[0].id, fleuron::content::NodeId::UNASSIGNED);
     }
 
-    /// The three constructs a manuscript most often reaches for that
+    /// The two constructs a manuscript most often reaches for that
     /// the vocabulary has no room for. Each says where it was
     /// written, and each leaves its prose behind.
     #[test]
-    fn lists_code_blocks_and_tables_warn_and_keep_their_prose() {
+    fn lists_and_code_blocks_warn_and_keep_their_prose() {
         let markdown = "\
 # C
 
@@ -930,10 +1065,6 @@ mod tests {
 ```
 code line
 ```
-
-| a | b |
-|---|---|
-| c | d |
 ";
         let (sections, warnings) = to_sections(
             markdown,
@@ -958,14 +1089,144 @@ code line
                     "Code blocks are not supported. Falling back to a plain paragraph.",
                     "test.md:6:1",
                 ),
-                (
-                    "Tables are not supported. Falling back to one paragraph per cell.",
-                    "test.md:10:1",
-                ),
             ],
         );
         let prose: Vec<String> = sections[0].blocks[1..].iter().map(text_of).collect();
-        assert_eq!(prose, ["one", "two", "code line\n", "a", "b", "c", "d"]);
+        assert_eq!(prose, ["one", "two", "code line\n"]);
+    }
+
+    /// The text of every cell of one row, from the leading edge.
+    fn cells_of(row: &Row) -> Vec<String> {
+        row.cells
+            .iter()
+            .map(|cell| cell.blocks.iter().map(text_of).collect())
+            .collect()
+    }
+
+    /// Acceptance: a table is a table. Its header row, its body rows,
+    /// the prose of each cell and the alignment the delimiter row
+    /// wrote on each column all reach the tree, and nothing warns.
+    #[test]
+    fn a_table_reads_into_rows_of_cells_and_warns_about_nothing() {
+        let markdown = "\
+# C
+
+| Pocket | Found | Kept |
+|:---|---:|:---:|
+| The right fob | A *watch* | no |
+| The girdle | A scimitar |
+";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::Table { head, body, .. } = &sections[0].blocks[1] else {
+            panic!("expected a table, got {:?}", sections[0].blocks[1]);
+        };
+        assert_eq!(head.len(), 1);
+        assert_eq!(cells_of(&head[0]), ["Pocket", "Found", "Kept"]);
+        assert_eq!(body.len(), 2);
+        assert_eq!(cells_of(&body[0]), ["The right fob", "A watch", "no"]);
+        assert_eq!(cells_of(&body[1])[..2], ["The girdle", "A scimitar"]);
+        assert!(body[1].cells[2..].iter().all(|cell| cell.blocks.is_empty()));
+
+        let written = [
+            Some(Alignment::Left),
+            Some(Alignment::Right),
+            Some(Alignment::Center),
+        ];
+        for row in head.iter().chain(body) {
+            let aligns: Vec<Option<Alignment>> = row.cells.iter().map(|cell| cell.align).collect();
+            assert_eq!(aligns, written[..aligns.len()]);
+        }
+        let Block::Paragraph { inlines, .. } = &body[0].cells[1].blocks[0] else {
+            panic!("a cell holds a paragraph");
+        };
+        assert!(matches!(inlines[1], Inline::Emphasis { .. }), "{inlines:?}");
+    }
+
+    /// A column the delimiter row wrote no colon on has no alignment.
+    #[test]
+    fn a_column_written_without_a_colon_has_no_alignment() {
+        let sections = read("| a | b |\n|---|--:|\n| c | d |\n");
+        let Block::Table { body, .. } = &sections[0].blocks[0] else {
+            panic!("expected a table");
+        };
+        let aligns: Vec<Option<Alignment>> = body[0].cells.iter().map(|cell| cell.align).collect();
+        assert_eq!(aligns, [None, Some(Alignment::Right)]);
+    }
+
+    /// Under CommonMark a table is the prose it was written as, and
+    /// nothing warns, because nothing was lost.
+    #[test]
+    fn common_mark_reads_a_table_as_prose() {
+        let plain = Options {
+            dialect: Dialect::common_mark(),
+            ..Options::default()
+        };
+        let (sections, warnings) =
+            to_sections("| a | b |\n|---|---|\n| c | d |\n", "test.md", &plain);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(
+            matches!(sections[0].blocks.as_slice(), [Block::Paragraph { .. }]),
+            "{:?}",
+            sections[0].blocks,
+        );
+    }
+
+    /// The line above a table names the table, as it names any
+    /// block.
+    #[test]
+    fn an_attribute_line_names_the_table_under_it() {
+        let sections = read("# C\n\n{.inventory}\n\n| a | b |\n|---|---|\n| c | d |\n");
+        assert!(matches!(sections[0].blocks[1], Block::Table { .. }));
+        assert_eq!(
+            block_attributes(&sections[0].blocks[1]).classes,
+            ["inventory"]
+        );
+    }
+
+    /// An image written in a cell is a block of that cell, and not of
+    /// the section around the table.
+    #[test]
+    fn an_image_in_a_cell_stays_in_the_cell() {
+        let (sections, warnings) = to_sections(
+            "| Plate |\n|---|\n| ![a map](map.png) |\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(sections[0].blocks.len(), 1);
+        let Block::Table { body, .. } = &sections[0].blocks[0] else {
+            panic!("expected a table");
+        };
+        assert!(
+            matches!(
+                body[0].cells[0].blocks.as_slice(),
+                [Block::Image { url, .. }] if url == "map.png"
+            ),
+            "{:?}",
+            body[0].cells[0].blocks,
+        );
+    }
+
+    /// A cell answers a cursor the way a paragraph does, with the run
+    /// the byte was typed into.
+    #[test]
+    fn a_cell_answers_a_cursor_as_prose_does() {
+        let markdown = "| Pocket | Found |\n|---|---|\n| The right fob | A watch |\n";
+        let (sections, _) = to_sections(markdown, "test.md", &Options::default());
+        let book = crate::assemble(Default::default(), sections);
+        for written in ["Pocket", "fob", "watch"] {
+            let byte = markdown.find(written).expect("the fixture holds it") as u32;
+            let node = book
+                .node_at("test.md", byte)
+                .unwrap_or_else(|| panic!("nothing was read from {written:?}"));
+            let (_, span) = book.source_of(node).expect("and it says where");
+            assert!(
+                markdown[span.start as usize..span.end as usize].contains(written),
+                "{written:?} answered with {:?}",
+                &markdown[span.start as usize..span.end as usize],
+            );
+        }
     }
 
     /// Obsidian's departures are switches, not a second mapping.

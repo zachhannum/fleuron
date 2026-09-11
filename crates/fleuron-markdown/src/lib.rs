@@ -13,11 +13,12 @@
 //! # What the vocabulary cannot express
 //!
 //! The content tree is a book's vocabulary: headings, prose,
-//! blockquotes, scene breaks, images. Markdown is wider than that.
-//! Constructs outside it degrade to prose and say so through the
-//! diagnostics channel, with the line and column they were written
-//! at. Text is never dropped, because a manuscript that quietly loses
-//! a paragraph is worse than one that warns about a table.
+//! blockquotes, scene breaks, images, tables. Markdown is wider than
+//! that. Constructs outside it degrade to prose and say so through
+//! the diagnostics channel, with the line and column they were
+//! written at. Text is never dropped, because a manuscript that
+//! quietly loses a paragraph is worse than one that warns about a
+//! list.
 //!
 //! # Dialects
 //!
@@ -89,7 +90,10 @@ pub struct Dialect {
     /// A line of nothing but `{.class #id}` names the block under it,
     /// and a heading or an image takes the same run written after it.
     pub attributes: bool,
-    /// GitHub's additions: tables, strikethrough, task lists.
+    /// Tables, written as GitHub writes them: a header row, a
+    /// delimiter row, and one line per row.
+    pub tables: bool,
+    /// GitHub's other additions: strikethrough and task lists.
     pub gfm: bool,
     /// `[[wikilinks]]`, as Obsidian writes them.
     pub wikilinks: bool,
@@ -105,13 +109,14 @@ impl Default for Dialect {
 }
 
 impl Dialect {
-    /// CommonMark, a frontmatter block and attribute lines: the
-    /// markdown a manuscript for this engine is written in, and what
-    /// a source is read as unless the host says otherwise.
+    /// CommonMark, a frontmatter block, attribute lines and tables:
+    /// the markdown a manuscript for this engine is written in, and
+    /// what a source is read as unless the host says otherwise.
     pub fn fleuron() -> Dialect {
         Dialect {
             frontmatter: true,
             attributes: true,
+            tables: true,
             gfm: false,
             wikilinks: false,
             smart_punctuation: false,
@@ -119,10 +124,11 @@ impl Dialect {
     }
 
     /// CommonMark, frontmatter included, and nothing besides. A brace
-    /// run is prose here.
+    /// run and a table are prose here.
     pub fn common_mark() -> Dialect {
         Dialect {
             attributes: false,
+            tables: false,
             ..Dialect::fleuron()
         }
     }

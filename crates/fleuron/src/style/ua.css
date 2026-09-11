@@ -54,6 +54,28 @@ section > :is(h1, h2, h3, h4, h5, h6):first-child {
   string-set: chapter content();
 }
 
+/* A table has a rule above it, a rule below it, and a rule under its
+   header row. Neighboring cells share one border. */
+table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  border-top: thin solid;
+  border-bottom: thin solid;
+}
+
+/* The text of a cell starts at the left of the cell, even where the
+   prose around the table is justified. Padding keeps the text off
+   the rules. */
+th, td {
+  padding: 0.25em 0.5em;
+  text-align: left;
+}
+
+th {
+  font-weight: bold;
+  border-bottom: thin solid;
+}
+
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }

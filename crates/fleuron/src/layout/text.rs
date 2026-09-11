@@ -4,8 +4,42 @@ use crate::lines::{Line, ParagraphStyle};
 use crate::pages::{DrawItem, Glyph};
 
 use super::Paginator;
+use super::flow::shift;
+use super::fragment::{Fragment, Piece};
 
 impl Paginator<'_> {
+    /// One fragment as paint ops. `x` is the leading edge its own `x`
+    /// is measured from, and `top` is where the top of its box falls.
+    pub(super) fn fragment_items(&self, fragment: &Fragment, x: f32, top: f32) -> Vec<DrawItem> {
+        match &fragment.piece {
+            Piece::Line { line, cap } => {
+                let baseline = top + line.box_.baseline;
+                let mut items = self.text_items(line, x + fragment.x, baseline);
+                if let Some(cap) = cap {
+                    items.append(&mut self.text_items(&cap.line, x + cap.x, baseline + cap.drop));
+                }
+                items
+            }
+            Piece::Image {
+                width,
+                height,
+                asset,
+            } => vec![DrawItem::Image {
+                x: x + fragment.x,
+                y: top,
+                w: *width,
+                h: *height,
+                asset: *asset,
+            }],
+            Piece::Row(row) => {
+                let mut items = row.items.clone();
+                shift(&mut items, x + fragment.x, top);
+                items
+            }
+            Piece::Blank | Piece::Anchor(_) => Vec::new(),
+        }
+    }
+
     /// One string as a single shaped line: page furniture, and the
     /// ornaments and initial letters that are content but not prose.
     pub(super) fn line_of(&self, text: &str, style: ParagraphStyle) -> Option<Line> {

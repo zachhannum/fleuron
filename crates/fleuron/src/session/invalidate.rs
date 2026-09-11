@@ -3,7 +3,7 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use crate::content::{Block, Book, Metadata};
+use crate::content::{Block, Book, Metadata, cell_blocks};
 use crate::lines::Patterns;
 use crate::style::{ComputedStyle, Content, Position, StyleTree};
 
@@ -72,6 +72,7 @@ pub(super) fn has_images(book: &Book) -> bool {
         blocks.iter().any(|block| match block {
             Block::Image { .. } => true,
             Block::Blockquote { blocks, .. } => walk(blocks),
+            Block::Table { head, body, .. } => cell_blocks(head, body).any(walk),
             _ => false,
         })
     }

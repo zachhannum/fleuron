@@ -4,11 +4,17 @@
 //! content tree does not have, so compilation flattens the tree once
 //! into an arena that does. Element names are the markdown vocabulary
 //! spelled the way an author writes them in CSS: `book`, `section`,
-//! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `em`, `strong`, `code`,
-//! `a`.
+//! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `table`, `thead`,
+//! `tbody`, `tr`, `th`, `td`, `em`, `strong`, `code`, `a`.
 //!
 //! An element carries the classes and the id the content tree gave
 //! it alongside the name.
+//!
+//! A table's header rows sit in a `thead` and its body rows in a
+//! `tbody`, as HTML puts them, so a row counts among the rows of its
+//! own group. The two groups are elements with no content node behind
+//! them: they pass on what they inherit, and nothing else of theirs
+//! reaches layout.
 //!
 //! Text runs are not elements, the same as in CSS: they have no style
 //! of their own and never count towards `:first-child`.
@@ -24,7 +30,7 @@ use selectors::matching::{ElementSelectorFlags, MatchingContext};
 use selectors::parser::{NonTSPseudoClass, PseudoElement as PseudoElementTrait, SelectorImpl};
 use selectors::{Element, OpaqueElement};
 
-use crate::content::{Attributes, Block, Book, Inline, NodeId};
+use crate::content::{Alignment, Attributes, Block, Book, Inline, NodeId, Row};
 
 /// An interned CSS identifier: element name, class, id, namespace.
 ///
@@ -143,7 +149,7 @@ impl SelectorImpl for Fleuron {
 /// Every element name the tree can hold, in the order the content
 /// tree introduces them. A selector names one of these or matches
 /// nothing.
-pub const ELEMENTS: [&str; 16] = [
+pub const ELEMENTS: [&str; 22] = [
     "book",
     "section",
     "h1",
@@ -156,6 +162,12 @@ pub const ELEMENTS: [&str; 16] = [
     "blockquote",
     "hr",
     "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
     "code",
     "em",
     "strong",
@@ -178,6 +190,9 @@ pub struct ElementNode {
     pub first_child: Option<usize>,
     /// True for elements with text of their own.
     pub has_text: bool,
+    /// The alignment the source wrote on a table cell's column, which
+    /// the cascade applies below every rule of the author's.
+    pub align: Option<Alignment>,
 }
 
 /// The content tree flattened into an arena, in document order. Index
@@ -283,8 +298,55 @@ impl ElementTree {
                 Block::Image { id, attributes, .. } => {
                     self.push("img", *id, attributes, Some(parent), false)
                 }
+                Block::Table {
+                    id,
+                    head,
+                    body,
+                    attributes,
+                    ..
+                } => {
+                    let index = self.push("table", *id, attributes, Some(parent), false);
+                    let mut groups = Vec::new();
+                    for (group, rows, cell) in [("thead", head, "th"), ("tbody", body, "td")] {
+                        if rows.is_empty() {
+                            continue;
+                        }
+                        let at = self.push(
+                            group,
+                            NodeId::UNASSIGNED,
+                            &Attributes::default(),
+                            Some(index),
+                            false,
+                        );
+                        let children = self.rows(rows, cell, at);
+                        self.link(at, &children);
+                        groups.push(at);
+                    }
+                    self.link(index, &groups);
+                    index
+                }
             })
             .collect()
+    }
+
+    /// The rows of one group of a table, each with its cells, which
+    /// are `cell` elements.
+    fn rows(&mut self, rows: &[Row], cell: &'static str, parent: usize) -> Vec<usize> {
+        let mut indices = Vec::with_capacity(rows.len());
+        for row in rows {
+            let index = self.push("tr", row.id, &row.attributes, Some(parent), false);
+            let mut cells = Vec::with_capacity(row.cells.len());
+            for content in &row.cells {
+                let at = self.push(cell, content.id, &content.attributes, Some(index), false);
+                self.nodes[at].align = content.align;
+                let children = self.blocks(&content.blocks, at);
+                self.link(at, &children);
+                cells.push(at);
+            }
+            self.link(index, &cells);
+            indices.push(index);
+        }
+        indices
     }
 
     /// The element children of an inline sequence, plus whether any
@@ -355,6 +417,7 @@ impl ElementTree {
             next: None,
             first_child: None,
             has_text,
+            align: None,
         });
         self.nodes.len() - 1
     }

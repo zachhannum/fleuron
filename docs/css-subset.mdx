@@ -241,8 +241,8 @@ Running heads and page numbers belong to the page rather than to a column, so di
 The element names come from markdown:
 
 ```
-book section h1 h2 h3 h4 h5 h6 p blockquote hr img code em
-strong a
+book section h1 h2 h3 h4 h5 h6 p blockquote hr img table
+thead tbody tr th td code em strong a
 ```
 
 {/* end generated */}
@@ -367,6 +367,7 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `hyphens` | `hyphens: auto` |
 | `orphans`, `widows` | `orphans: 3` |
 | `page` | `page: chapter` |
+| `border-collapse` | `border-collapse: collapse` |
 
 ```css
 font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
@@ -386,6 +387,7 @@ hyphens:             none | manual | auto;
 orphans:             <integer>;
 widows:              <integer>;
 page:                auto | <name>;
+border-collapse:     separate | collapse;
 ```
 
 {/* end generated */}
@@ -466,7 +468,7 @@ How far a mark hangs depends on the mark: nearly all of a period or comma, less 
 
 ## Blocks
 
-These do not inherit. A block is a paragraph, a heading, a quotation, an image, or a thematic break.
+These do not inherit. A block is a paragraph, a heading, a quotation, an image, a thematic break, or a table.
 
 {/* generated: block-properties */}
 
@@ -481,6 +483,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `wrap-flow` | `wrap-flow: end` |
 | `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
 | `shape-margin` | `shape-margin: 6pt` |
+| `width` | `width: 8em` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -506,6 +509,7 @@ left:                 auto | <length>;
 wrap-flow:            auto | both | start | end;
 shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
 shape-margin:         <length> | <percentage>;
+width:                auto | <length> | <percentage>;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -605,6 +609,30 @@ hr {
   margin: 1.5em 0;
 }
 ```
+
+### Tables
+
+A table in the manuscript becomes a grid. In the built-in stylesheet, the header row is bold, a rule runs under it, and a rule runs above and below the table.
+
+`width` on a cell of the first row is the width of that column. The columns with no `width` share the rest of the width of the table equally. `width` is the width of the content of the cell, so the column also takes the padding and the borders of the cell.
+
+The following example makes the first column 8em wide and tints every other row of the body:
+
+```css
+th:first-of-type { width: 8em }
+
+tbody tr:nth-child(odd) {
+  background-color: #e3e3e3;
+}
+```
+
+The header rows are in a `thead`, and the other rows are in a `tbody`. `tbody tr:nth-child(odd)` counts only the rows of the body. The rows inherit from `thead` and `tbody`. A border or a background on `thead` or `tbody` is not supported yet.
+
+`border-collapse: collapse` draws one border where two cells meet. Where the two borders differ in width, the wider border is drawn. Where they are the same width, the border of the cell above or to the left is drawn. A border on a cell takes priority over a border on its row. A border on a row takes priority over a border on the table. `border-collapse: separate` gives every cell its own border, so two borders stand side by side where two cells meet. The built-in stylesheet uses `collapse`.
+
+A table breaks across pages between two rows, and never inside a row. The header rows repeat at the top of every page that the table continues onto. A row that is taller than the page stays on one page and runs past the bottom of it, and the engine warns.
+
+The engine applies the alignment that the delimiter row gives a column as `text-align`. A `text-align` rule in a stylesheet takes priority over it.
 
 ## Images against the page
 
@@ -866,6 +894,28 @@ section > :is(h1, h2, h3, h4, h5, h6):first-child {
   string-set: chapter content();
 }
 
+/* A table has a rule above it, a rule below it, and a rule under its
+   header row. Neighboring cells share one border. */
+table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  border-top: thin solid;
+  border-bottom: thin solid;
+}
+
+/* The text of a cell starts at the left of the cell, even where the
+   prose around the table is justified. Padding keeps the text off
+   the rules. */
+th, td {
+  padding: 0.25em 0.5em;
+  text-align: left;
+}
+
+th {
+  font-weight: bold;
+  border-bottom: thin solid;
+}
+
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
@@ -905,7 +955,9 @@ code { font-family: monospace }
 
 | area | not supported yet |
 |---|---|
-| layout | floats, tables, grid, flexbox, transforms |
+| layout | floats, grid, flexbox, transforms |
+| tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
+| table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
 | positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |

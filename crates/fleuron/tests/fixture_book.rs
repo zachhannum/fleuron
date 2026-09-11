@@ -187,8 +187,10 @@ fn hyphenation_never_runs_three_line_ends_deep() {
 }
 
 /// Justification reaches the page: the body lines of the fullest
-/// page end at one right edge, which under the ragged setting the
-/// same book takes by default they do not.
+/// page of prose end at one right edge, which under the ragged
+/// setting the same book takes by default they do not. A page with a
+/// table on it is left out, because the built-in sheet sets the text
+/// of a cell flush left.
 #[test]
 fn justified_lines_end_at_one_right_edge() {
     let book = fixture();
@@ -197,6 +199,12 @@ fn justified_lines_end_at_one_right_edge() {
         let page = output
             .pages
             .iter()
+            .filter(|page| {
+                !page
+                    .items
+                    .iter()
+                    .any(|item| matches!(item, DrawItem::Rect { .. }))
+            })
             .max_by_key(|page| page.items.len())
             .expect("the fixture paginates");
         let ends = line_ends(page, body_size);
