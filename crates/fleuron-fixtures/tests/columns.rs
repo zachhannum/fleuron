@@ -118,6 +118,105 @@ fn a_novel_in_two_columns_fills_every_page_column_by_column() {
     );
 }
 
+/// Every text run of one page's content, as `(size, baseline, left,
+/// right)`. The folio sits in the margin, below the foot, and is left
+/// out.
+fn runs(page: &Page, foot: f32) -> Vec<(f32, f32, f32, f32)> {
+    page.items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Text {
+                y, size, glyphs, ..
+            } if *y <= foot => Some((*size, *y, glyphs.first()?.x, glyphs.last()?.x)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The gate novel in two columns with its chapters run together and
+/// every chapter heading across both columns. A heading falls partway
+/// down a page, between a tier of columns above it and a tier below.
+/// Every line keeps to the measure of its tier, no heading ends a
+/// page, and the run is repeatable.
+#[test]
+fn a_novel_with_spanning_heads_keeps_every_line_to_its_tier() {
+    let book = Corpus::GATE.book();
+    let css = format!(
+        "{} section {{ break-before: auto }} h2 {{ column-span: all }}",
+        Division::TwoColumn.css()
+    );
+    let styles =
+        fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("spanning.css", &css)])
+            .compile(&book, registry());
+    assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
+    let output = layout_book(&book, &styles, registry(), &Assets::none());
+    let body = styles.root().font_size;
+
+    let mut between = 0;
+    for page in &output.pages {
+        let geometry = geometry(&styles, page);
+        let (left, top) = geometry.content_origin();
+        let foot = top + geometry.content_size().1;
+        let width = geometry.content_size().0;
+        let measure = geometry.measure();
+        let gutter = geometry.column_origin(1).0 - geometry.columns.gap;
+        let runs = runs(page, foot);
+        for (size, baseline, x, right) in &runs {
+            if *size != body {
+                assert!(
+                    *x >= left - 1e-3 && *right <= left + width + 1e-3,
+                    "page {}: a heading on {baseline} runs {x}..{right}, past the content box",
+                    page.number,
+                );
+                continue;
+            }
+            let column = (0..geometry.column_count())
+                .rev()
+                .find(|column| *x >= geometry.column_origin(*column).0 - 1e-3)
+                .unwrap_or(0);
+            let origin = geometry.column_origin(column).0;
+            assert!(
+                *x >= origin - 1e-3 && *right <= origin + measure + 1e-3,
+                "page {}: a glyph box {x}..{right} leaves column {column}",
+                page.number,
+            );
+            assert!(
+                *right <= gutter + 1e-3 || *x >= gutter + geometry.columns.gap - 1e-3,
+                "page {}: a glyph box {x}..{right} lies in the gutter",
+                page.number,
+            );
+        }
+        if let Some((size, baseline, ..)) =
+            runs.iter().max_by(|one, other| one.1.total_cmp(&other.1))
+        {
+            assert!(
+                *size == body,
+                "page {}: the heading on {baseline} ends the page",
+                page.number,
+            );
+        }
+        if let Some(heading) = runs
+            .iter()
+            .filter(|run| run.0 != body)
+            .map(|run| run.1)
+            .reduce(f32::min)
+        {
+            between += usize::from(runs.iter().any(|run| run.0 == body && run.1 < heading));
+        }
+    }
+    assert!(
+        between > 10,
+        "only {between} heading(s) fell under a tier of columns"
+    );
+
+    let twice = layout_book(&book, &styles, registry(), &Assets::none());
+    assert_eq!(output.pages.len(), twice.pages.len());
+    assert_eq!(
+        fleuron::wire::encode(&output).expect("a display structure encodes"),
+        fleuron::wire::encode(&twice).expect("a display structure encodes"),
+    );
+}
+
 /// The gate novel in two columns with an image at the head of every
 /// chapter: the column properties hold with an exclusion on the page,
 /// no line is set where an image stands, and the run is repeatable.
