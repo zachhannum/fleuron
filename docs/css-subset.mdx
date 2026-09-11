@@ -232,7 +232,7 @@ Text fills the first column to the bottom, then the next, and only the last colu
 
 `column-rule-style: solid` draws a vertical rule in each space between columns, `column-rule-width` wide and centered in that space. The rule takes no width from the columns. A page that ends up with a single column draws no rule.
 
-Running heads and page numbers belong to the page rather than to a column, so dividing the content box leaves them where they are.
+Running heads and page numbers belong to the page rather than to a column, so dividing the content box leaves them where they are. An image you put against the page belongs to the page as well. See [Images on a divided page](#images-on-a-divided-page) for how the text of each column wraps around it.
 
 ## Selectors
 
@@ -684,6 +684,32 @@ img {
 ```
 
 The text wraps to the contour one line at a time. A line goes either beside the image or below it. Where the contour leaves a whole line's height empty across the image, that line runs the full width.
+
+### Images on a divided page
+
+An image against the page belongs to the page rather than to a column. It can reach more than one column.
+
+The engine shortens the lines of every column the image reaches. Each of those lines runs to the space the image leaves in its own column. A column the image does not reach keeps its full width.
+
+Where the image covers the whole width of a column, the text of that column continues below the image. The engine leaves the other column alone.
+
+The columns still fill in order. An image changes the width of a line, not the order of the columns.
+
+The following example divides the page in two and puts an image across the space between the columns. The text of the first column wraps down the left of the image, and the text of the second wraps down its right:
+
+```css
+@page {
+  column-count: 2;
+  column-gap: 18pt;
+}
+
+img {
+  position: absolute;
+  top: 0;
+  left: 120pt;
+  wrap-flow: both;
+}
+```
 
 ## Chapter openings
 

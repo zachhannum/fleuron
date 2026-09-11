@@ -88,17 +88,21 @@ fn main() -> ExitCode {
     }
 }
 
-/// What the gate measures for one book: every page box, and the gate
-/// book once more with images anchored to it. An image is a different
-/// path through the flow rather than a different page box. The gate
-/// measures it on one page box only.
+/// What the gate measures for one book: every page box bare, and the
+/// gate book on every page box again with images anchored to it. A
+/// divided page box asks the flow for the images each column reaches,
+/// so the two together are a path neither is on its own.
 fn measurements(divisions: &[Division], gate: bool) -> Vec<(Division, Illustration)> {
     let mut measurements: Vec<(Division, Illustration)> = divisions
         .iter()
         .map(|division| (*division, Illustration::Bare))
         .collect();
     if gate {
-        measurements.push((Division::Undivided, Illustration::Anchored));
+        measurements.extend(
+            divisions
+                .iter()
+                .map(|division| (*division, Illustration::Anchored)),
+        );
     }
     measurements
 }

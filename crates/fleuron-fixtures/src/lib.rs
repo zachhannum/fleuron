@@ -73,3 +73,50 @@ pub fn shaped_texts(book: &fleuron::content::Book) -> Vec<String> {
     }
     out
 }
+
+/// The box every image on one page covers, as `[left, top, right,
+/// bottom]` in page coordinates.
+pub fn image_boxes(page: &fleuron::pages::Page) -> Vec<[f32; 4]> {
+    use fleuron::pages::DrawItem;
+    page.items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Image { x, y, w, h, .. } => Some([*x, *y, *x + *w, *y + *h]),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The box every text run on one page covers, in the same form.
+///
+/// A run's height is the face's own ascender and descender at the
+/// size it was set in, which is the space a line of it claims.
+pub fn run_boxes(page: &fleuron::pages::Page) -> Vec<[f32; 4]> {
+    use fleuron::pages::DrawItem;
+    page.items
+        .iter()
+        .filter_map(|item| {
+            let DrawItem::Text {
+                x,
+                y,
+                font_id,
+                size,
+                glyphs,
+                ..
+            } = item
+            else {
+                return None;
+            };
+            let metrics = registry().metrics(*font_id)?;
+            let last = glyphs.last()?;
+            let upem = metrics.units_per_em as f32;
+            let advance = registry().advance_width(*font_id, last.id).unwrap_or(0) as f32;
+            Some([
+                *x,
+                y - metrics.ascender as f32 / upem * size,
+                last.x + advance / upem * size,
+                y - metrics.descender as f32 / upem * size,
+            ])
+        })
+        .collect()
+}
