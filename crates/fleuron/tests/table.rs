@@ -416,6 +416,69 @@ fn the_wider_border_draws_a_collapsed_rule_and_the_left_one_breaks_a_tie() {
     );
 }
 
+/// Acceptance: a table that spans the columns of a two-column page
+/// sets across the whole content box, and the columns resume under
+/// it.
+#[test]
+fn a_spanning_table_sets_across_the_page_and_the_columns_resume_under_it() {
+    let css = "@page { column-count: 2; column-gap: 18pt } table { column-span: all }";
+    let above = "The officers searched the pockets of the man-mountain. ".repeat(4);
+    let below = "They wrote down everything they found in a book. ".repeat(6);
+    let markdown = format!(
+        "{above}\n\n| Where | What |\n|---|---|\n| coat | handkerchief |\n| waistcoat | journal |\n\n\
+         {below}\n\n{below}\n\n{below}\n"
+    );
+    let output = lay_out(&markdown, css);
+    let geometry = opening(css);
+    let (left, _) = geometry.content_origin();
+    let second = geometry.column_origin(1).0;
+    let page = &output.pages[0];
+
+    // The rules over, inside and under the table run across the whole
+    // content box, gutter and all. Each cell draws its own stretch of
+    // a rule, so a rule is the rects that share a top.
+    let mut across: Vec<(f32, f32, f32)> = Vec::new();
+    for (x, y, w, h, _) in rects(page) {
+        if w <= h {
+            continue;
+        }
+        match across.iter_mut().find(|rule| close(rule.0, y)) {
+            Some(rule) => {
+                rule.1 = rule.1.min(x);
+                rule.2 = rule.2.max(x + w);
+            }
+            None => across.push((y, x, x + w)),
+        }
+    }
+    assert_eq!(across.len(), 3, "{across:?}");
+    let right = left + geometry.content_size().0;
+    for (y, from, to) in &across {
+        assert!(
+            close(*from, left) && close(*to, right),
+            "the rule at {y} runs {from}..{to}, not {left}..{right}"
+        );
+    }
+    let (top, bottom) = (across[0].0, across[2].0);
+
+    // Above it, the prose stays in the first column. Under it, the
+    // prose fills the first column and then the second.
+    let runs = runs(page);
+    assert!(
+        runs.iter()
+            .filter(|run| run.y < top)
+            .all(|run| run.right <= left + geometry.measure() + 0.05)
+    );
+    let under: Vec<&Run> = runs.iter().filter(|run| run.y > bottom).collect();
+    assert!(
+        under.iter().any(|run| run.x < second),
+        "nothing in the first column under it"
+    );
+    assert!(
+        under.iter().any(|run| run.x >= second),
+        "nothing in the second column under it"
+    );
+}
+
 /// Acceptance: the fixture lays out to the same bytes twice, on the
 /// same number of pages.
 #[test]
