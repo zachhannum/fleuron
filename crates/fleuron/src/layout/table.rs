@@ -94,7 +94,11 @@ impl<'a> Builder<'a, '_> {
 
         let mut cells = Vec::new();
         let mut anchors = Vec::new();
-        let mut marks = None;
+        let mut marks: Option<Box<Marks>> = None;
+        let named = std::iter::once(&row.attributes).chain(row.cells.iter().map(|c| &c.attributes));
+        for id in named.filter_map(|attributes| attributes.id.clone()) {
+            marks.get_or_insert_with(Box::default).targets.push(id);
+        }
         let mut height = 0.0f32;
         for (column, cell) in row.cells.iter().enumerate() {
             let Some(cell_style) = table.cells[index][column] else {
@@ -299,6 +303,7 @@ fn gather(into: &mut Option<Box<Marks>>, from: Option<Box<Marks>>) {
     let marks = into.get_or_insert_with(Box::default);
     marks.strings.extend(from.strings);
     marks.page_number = from.page_number.or(marks.page_number);
+    marks.targets.extend(from.targets);
 }
 
 /// What each border edge of one element is painted in, `currentColor`

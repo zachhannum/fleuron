@@ -1,7 +1,7 @@
 //! What a paragraph is set in: the style over its runs, the style
 //! over the line it opens on, and what it hangs into the margin.
 
-use crate::content::{Metadata, NodeId};
+use crate::content::{Inline, Metadata, NodeId};
 use crate::style::{Color, FontVariantCaps, TextTransform};
 use serde::Serialize;
 
@@ -103,6 +103,22 @@ impl Lead {
 pub trait InlineStyles {
     /// The style of `id`, given the style of the block it sits in.
     fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle;
+
+    /// The text the sheet generates around one inline element.
+    /// Nothing, for a caller with no sheet to ask.
+    fn generated(&self, _inline: &Inline) -> Generated {
+        Generated::default()
+    }
+}
+
+/// Text the sheet generates around one inline element: what
+/// `::before` and `::after` hold, each with the style it is set in.
+#[derive(Debug, Clone, Default)]
+pub struct Generated {
+    /// Set before the element's own text.
+    pub before: Option<(String, ParagraphStyle)>,
+    /// Set after it.
+    pub after: Option<(String, ParagraphStyle)>,
 }
 
 /// Every inline takes the style of the block around it.

@@ -203,6 +203,9 @@ pub struct StyleTree {
     /// Whether generated text prints the page an element lands on.
     #[serde(skip)]
     counts_pages: bool,
+    /// Whether generated text names another element at all.
+    #[serde(skip)]
+    refers: bool,
     warnings: Vec<Warning>,
 }
 
@@ -263,6 +266,12 @@ impl StyleTree {
     /// pages, and once to print them.
     pub fn counts_pages(&self) -> bool {
         self.counts_pages
+    }
+
+    /// Whether any generated text names another element, for its
+    /// page or for its text.
+    pub fn refers(&self) -> bool {
+        self.refers
     }
 
     /// The style of the book itself: the root of inheritance.
@@ -742,11 +751,15 @@ fn cascade(
         after_by_node[id] = afters[index];
     }
     by_node[0] = root;
-    let counts_pages = befores
-        .iter()
-        .chain(&afters)
-        .flatten()
-        .any(|index| styles[*index as usize].content.counts_pages());
+    let generated = || {
+        befores
+            .iter()
+            .chain(&afters)
+            .flatten()
+            .map(|index| &styles[*index as usize].content)
+    };
+    let counts_pages = generated().any(Content::counts_pages);
+    let refers = generated().any(|content| matches!(content, Content::Pieces(_)));
 
     if styles.is_empty() {
         styles.push(ComputedStyle::initial());
@@ -776,6 +789,7 @@ fn cascade(
         before_by_node,
         after_by_node,
         counts_pages,
+        refers,
         warnings,
     }
 }

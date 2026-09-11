@@ -57,6 +57,9 @@ pub(crate) struct Paged {
     pub(crate) infos: Vec<PageInfo>,
     /// The page each anchor landed on, by the node it was written at.
     pub(crate) anchors: BTreeMap<NodeId, usize>,
+    /// The page each id landed on: the page of the first fragment of
+    /// the first element that carries it.
+    pub(crate) targets: BTreeMap<String, usize>,
 }
 
 /// One fragment placed on the page being built.
@@ -158,6 +161,8 @@ pub(super) struct Flow<'a, 'p> {
     anchors: BTreeMap<NodeId, usize>,
     /// Anchors waiting for the fragment whose page they take.
     pub(super) pending_anchors: Vec<NodeId>,
+    /// Where each id landed, filled in as pages close.
+    targets: BTreeMap<String, usize>,
     /// Whether what is placed is painted. The pass that settles where
     /// the anchors land keeps no pages, so it paints nothing: which
     /// page a fragment falls on is a question about heights.
@@ -195,6 +200,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             anchored,
             anchors: BTreeMap::new(),
             pending_anchors: Vec::new(),
+            targets: BTreeMap::new(),
             paints: true,
             header: Vec::new(),
         }
@@ -566,6 +572,9 @@ impl<'a, 'p> Flow<'a, 'p> {
                     self.strings.insert(name, value);
                 }
                 reset = reset.or(marks.page_number);
+                for id in marks.targets {
+                    self.targets.entry(id).or_insert(index);
+                }
             }
             items.extend(placed.items);
         }
@@ -773,6 +782,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             pages: self.pages,
             infos: self.infos,
             anchors: self.anchors,
+            targets: self.targets,
         }
     }
 }

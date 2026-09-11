@@ -4,7 +4,10 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::content::{Block, Inline, NodeId, Section, block_id, origin, text};
+use crate::content::{
+    Attributes, Block, Inline, NodeId, Section, block_attributes, block_id, inline_attributes,
+    origin, text,
+};
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::style::{
     Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
@@ -13,6 +16,7 @@ use crate::style::{
 
 use super::Paginator;
 use super::cap::Cap;
+use super::reference::Referring;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decorated, decoration,
 };
@@ -214,6 +218,31 @@ impl Builder<'_, '_> {
         }
     }
 
+    /// Records the id an element carries. It lands on the first
+    /// fragment the element emits, the way a string it sets does, so
+    /// the page that fragment lands on is the page a reference to the
+    /// element prints.
+    fn name(&mut self, attributes: &Attributes) {
+        if let Some(id) = &attributes.id {
+            let marks = self.pending_marks.get_or_insert_with(Box::default);
+            marks.targets.push(id.clone());
+        }
+    }
+
+    /// The same for the inlines of one block, which land on the
+    /// block's first line.
+    fn name_inlines(&mut self, inlines: &[Inline]) {
+        for inline in inlines {
+            self.name(inline_attributes(inline));
+            if let Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. } = inline
+            {
+                self.name_inlines(children);
+            }
+        }
+    }
+
     /// Closes a block: `break-inside: avoid` glues everything it
     /// emitted, its bottom border and padding take height of their
     /// own, and its bottom margin becomes the next block's lead.
@@ -310,8 +339,10 @@ impl Builder<'_, '_> {
     /// box's leading edge and breaking to `measure`.
     pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
         for block in blocks {
+            self.name(block_attributes(block));
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
+                    self.name_inlines(inlines);
                     self.paragraph(*id, inlines, x, measure);
                 }
                 Block::Blockquote { id, blocks, .. } => {
@@ -401,13 +432,12 @@ impl Builder<'_, '_> {
             first_line: self.styles().opening_line(id),
             taken: cap.as_ref().map_or(0, |(_, taken)| *taken),
         };
+        let referring = Referring {
+            paginator: self.paginator,
+            source: self.source,
+        };
         let (broken, shaped) = self.paginator.lines.layout_shaped(
-            inlines,
-            style,
-            self.styles(),
-            &spec,
-            options,
-            opening,
+            inlines, style, &referring, &spec, options, opening,
         );
 
         let setting = Setting {

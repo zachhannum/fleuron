@@ -30,6 +30,7 @@ mod exclusion;
 mod flow;
 mod fragment;
 mod furniture;
+mod reference;
 mod table;
 mod text;
 
@@ -44,9 +45,10 @@ pub use furniture::margin_band;
 
 pub(crate) use exclusion::AnchoredImages;
 pub(crate) use flow::{PageInfo, Paged};
+pub(crate) use reference::{Named, References, landed, moved};
 
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::content::{Book, Metadata};
 use crate::fonts::FontRegistry;
@@ -123,6 +125,11 @@ pub struct Paginator<'a> {
     wraps: OnceCell<bool>,
     /// How many times the flow set a paragraph again beside an image.
     rebreaks: Cell<u32>,
+    /// What the references in the book resolve against.
+    references: RefCell<References>,
+    /// How many times the book was laid out again to print the pages
+    /// its references name.
+    settles: Cell<u32>,
 }
 
 impl<'a> Paginator<'a> {
@@ -162,6 +169,8 @@ impl<'a> Paginator<'a> {
             warnings: RefCell::new(Vec::new()),
             wraps: OnceCell::new(),
             rebreaks: Cell::new(0),
+            references: RefCell::new(References::default()),
+            settles: Cell::new(0),
         }
     }
 }
@@ -211,6 +220,20 @@ impl Paginator<'_> {
         self.rebreaks.get()
     }
 
+    /// How many times the book was laid out a second time, to print
+    /// the pages its references name. A book whose sheet prints no
+    /// page number is laid out once.
+    pub fn settles(&self) -> u32 {
+        self.settles.get()
+    }
+
+    /// Takes what the book's references resolve against. `paginate`
+    /// reads it from the book it is handed. A caller that builds one
+    /// section's fragments on its own sets it here.
+    pub(crate) fn refer(&self, references: References) {
+        *self.references.borrow_mut() = references;
+    }
+
     /// Whether the sheet takes anything out of the flow and against
     /// the page.
     ///
@@ -251,8 +274,36 @@ impl Paginator<'_> {
     /// A section's fragments are built, flowed, and released before
     /// the next one is measured: what exists at once is the book's
     /// pages, not every line it was ever broken into.
+    ///
+    /// A book whose references print pages is laid out twice: once to
+    /// find the page each element lands on, and once to print it.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
         self.language(&book.metadata);
+        if self.styles.refers() {
+            self.refer(References::of(book));
+        }
+        let mut paged = self.pass(book);
+        if self.styles.counts_pages() {
+            let found = landed(&paged);
+            let resolved = self.references.borrow().landed(found.clone());
+            self.refer(resolved);
+            self.settles.set(self.settles.get() + 1);
+            paged = self.pass(book);
+            let printed: BTreeSet<String> = book
+                .sections
+                .iter()
+                .flat_map(|section| Named::in_section(section, self.styles).pages)
+                .collect();
+            for warning in moved(&found, &landed(&paged), &printed) {
+                self.warn(warning.message, warning.origin);
+            }
+        }
+        self.paint(&mut paged.pages, &paged.infos);
+        paged.pages
+    }
+
+    /// One pass over the whole book, stopping short of the furniture.
+    fn pass(&self, book: &Book) -> Paged {
         let anchored = self.anchored_images(book);
         // The pass that answers where the anchors land keeps no
         // fragments either. It builds a section, flows it, and drops
@@ -274,9 +325,7 @@ impl Paginator<'_> {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
         }
-        let mut paged = flow.finish();
-        self.paint(&mut paged.pages, &paged.infos);
-        paged.pages
+        flow.finish()
     }
 
     /// Fragments in, numbered pages out: fragmentation and page

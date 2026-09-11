@@ -41,8 +41,8 @@ mod testing;
 pub use line::{Line, LineSpan, ShapedRun, Spans};
 pub use measure::{Measure, Span};
 pub use paragraph::{
-    FirstLine, HangEnd, HangingPunctuation, Inherited, InlineStyles, LineBreakOptions, Opening,
-    ParagraphStyle, Patterns,
+    FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineStyles, LineBreakOptions,
+    Opening, ParagraphStyle, Patterns,
 };
 
 use breaker::Breaker;

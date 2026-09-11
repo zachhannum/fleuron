@@ -174,8 +174,10 @@ impl Session<'_> {
             &self.contours,
         );
         let pages = paginator.paginate(&self.book);
-        self.stages.lines += self.book.sections.len() as u32;
-        self.stages.flow += 1;
+        let passes = 1 + paginator.settles();
+        self.stages.lines += self.book.sections.len() as u32 * passes;
+        self.stages.flow += passes;
+        self.stages.settle += paginator.settles();
         self.stages.paint += 1;
         self.flow_warnings = paginator.warnings();
         self.output

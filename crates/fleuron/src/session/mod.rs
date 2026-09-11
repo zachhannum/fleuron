@@ -73,6 +73,10 @@ pub struct Stages {
     pub flow: u32,
     /// Furniture paints: numbering and margin boxes.
     pub paint: u32,
+    /// Second layout passes, which print the pages the references in
+    /// the book name. A book whose sheet prints no page number never
+    /// runs one.
+    pub settle: u32,
 }
 
 /// The deepest stage a change invalidates, which is the shallowest
