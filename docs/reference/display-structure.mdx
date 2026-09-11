@@ -20,7 +20,7 @@ pub struct LayoutOutput {
 
 `fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry names the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
 
-`assets` is the table `Image.asset` indexes. An entry is the url the content tree named the image by and what its header reported: pixel dimensions and resolution. That is all layout read.
+`assets` is the table `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read.
 
 `warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
@@ -47,7 +47,7 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 
 ## `DrawItem`
 
-Three variants. A painter that handles all three can paint any page the engine produces.
+Four variants. A painter that handles all four can paint any page the engine produces.
 
 ### `Text`
 
@@ -136,7 +136,32 @@ Image { x: f32, y: f32, w: f32, h: f32, asset: u32 }
 
 A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter decodes the file.
 
-`w` and `h` are what layout decided, which is the intrinsic size at the header's own resolution unless the page had no room for it. A painter scales the image into that box; it does not read the header again.
+`w` and `h` are what layout decided, which is the intrinsic size at the header's own resolution unless the page had no room for it. A painter scales the image into that box, and does not read the header again.
+
+### `Background`
+
+```rust
+Background {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    tile_x: f32,
+    tile_y: f32,
+    tile_w: f32,
+    tile_h: f32,
+    repeat: bool,
+    asset: u32,
+}
+```
+
+An image painted behind a box: the page's own box, or a block's border box. `asset` indexes `LayoutOutput::assets`, the same table `Image` indexes.
+
+`x`, `y`, `w`, and `h` are the box. The image is clipped to it, and nothing outside it is painted.
+
+`tile_x`, `tile_y`, `tile_w`, and `tile_h` are where one copy of the image goes, which can reach outside the box. Layout has already resolved `background-size` and `background-position` into them.
+
+`repeat` says whether that copy tiles. A painter steps the tile by `tile_w` across and `tile_h` down, in both directions, until the box is covered.
 
 ## Writing a painter
 
@@ -147,5 +172,7 @@ For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `vari
 A painter that cannot place glyphs by id, and draws characters instead, draws `text` and turns the run's `features` on, which is how it reaches the glyphs the engine measured. It reads `source` back rather than `text` wherever the reader gets the words: selection, extraction and copy and paste.
 
 For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
+
+For a background, resolve `asset` the same way, clip to the box, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. A url nothing can supply paints nothing: a background sits behind the text, so a placeholder there reads as part of the page.
 
 The SVG painter in `fleuron` is a worked example. See [the preview](../wasm/preview.mdx).

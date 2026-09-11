@@ -133,6 +133,30 @@ section.front { page: front }
 
 Page rules cascade like any other rule: origin first, then specificity, then source order. A page name outranks `:first` and `:blank`, which outrank `:left` and `:right`.
 
+### Art behind the page
+
+A page carries a background: a color, an image, or a color with an image over it. The engine paints it over the whole page box, margins included, before anything else on the page. The text, the rules, and the page numbers are set over it.
+
+The following example puts one scan behind every left-hand page and another behind every right-hand page:
+
+```css
+@page :left {
+  background-image: url("scans/verso.webp");
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+@page :right {
+  background-image: url("scans/recto.webp");
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+```
+
+The four background properties are described under [backgrounds](#backgrounds). They mean the same thing on a page as on a block. The box they measure against is the page box rather than the border box.
+
+The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes, the same way `@font-face` resolves a face. A url nothing resolves warns at the line and column it was written at, and the page is set without the image.
+
 ### Running heads
 
 A margin box is a rule nested inside `@page`. `content` sets what it shows, and it accepts the text properties as well.
@@ -604,9 +628,37 @@ The only border styles are `none` and `solid`.
 
 A border or padding on the left or right narrows the text and moves its left edge inward. On the top and bottom they take vertical space, and they stop the margins on either side from collapsing: a top border on a block quote sits between the quote's own top margin and its first paragraph's margin, and both take space.
 
-`background-color` fills the area inside the border, and the border draws over it.
-
 Where two edges of different colors meet, the corner takes the color of the horizontal edge rather than splitting diagonally.
+
+### Backgrounds
+
+A background is a color, an image, or a color with an image over it. The engine paints it over the block's border box, and the border draws over it. A block broken across a page turn paints its background on each page, over the part of the block that page holds.
+
+The following example tints a block quote and tiles an ornament over the tint:
+
+```css
+blockquote {
+  padding: 0.5em 1em;
+  background-color: #f4f1ea;
+  background-image: url("ornaments/vine.webp");
+  background-repeat: repeat;
+  background-size: 24pt;
+}
+```
+
+| property | takes |
+|---|---|
+| `background-color` | a color, or `transparent` |
+| `background-image` | `none`, or a `url()` the host resolves |
+| `background-repeat` | `repeat` or `no-repeat` |
+| `background-size` | `auto`, `cover`, `contain`, or one or two lengths |
+| `background-position` | one or two of a keyword, a length, or a percentage |
+
+`background-size: cover` is the smallest size that covers the box, so the box crops what runs past it. `contain` is the largest size that fits inside the box, so the box keeps the remainder. One length sizes the image across the box, and the image's own proportions size it down the box. A percentage measures against the box.
+
+`background-position` places the image in the box. `left`, `center`, and `right` place it across the box. `top`, `center`, and `bottom` place it down the box. A single value centers the image on the other axis. A percentage aligns that fraction of the image with the same fraction of the box, which is why `50%` centers it. A length is an offset from the box's top left corner.
+
+The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes. A url nothing resolves warns at the line and column it was written at, and the block is set without the image.
 
 ### Breaking across pages
 
@@ -1049,9 +1101,9 @@ code { font-family: monospace }
 | counters | any counter other than `page`, and `counter-increment` |
 | generated content | `::before` and `::after` on a block, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
-| backgrounds | the `background` shorthand, and every background property but `background-color` |
+| backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
-| inline boxes | a border, padding, or background on an inline element, or on `@page` |
+| inline boxes | a border, padding, or background on an inline element, and a border or padding on `@page` |
 | columns | `column-fill`, `column-rule-color`, the `columns` and `column-rule` shorthands, columns on any element, and `column-span` on a block inside a quotation or a table cell |
 
 Two of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color.

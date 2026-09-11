@@ -28,6 +28,7 @@ import {
   paintPage,
   styleOp,
   wireVersion,
+  type BackgroundItem,
   type Folios,
   type ImageItem,
   type LayoutOutput,
@@ -961,6 +962,63 @@ check(
   contourLines.length > 0 &&
     contourLines.every((item) => contourStarts.some((x) => near(x, item.x))),
   `${contourStarts.length} lines painted, ${contourLines.length} beside the ornament`,
+);
+
+// Art behind the page. The sheet names a url the host has already
+// handed over, so it reaches the asset table off the cascade rather
+// than off the manuscript, and the page paints it over the whole page
+// box before anything else on the page.
+const scanned = await client.preview([
+  styleOp('@page { background-image: url("images/plate.jpg"); background-size: cover; ' +
+    'background-repeat: no-repeat }'),
+]);
+const scannedPage = scanned?.pages[0] ?? null;
+const scan =
+  scannedPage?.items.find((item): item is BackgroundItem => item.kind === 'background') ?? null;
+check(
+  'a page paints the scan the sheet named over the whole page box',
+  scan !== null &&
+    scan.x === 0 &&
+    scan.y === 0 &&
+    near(scan.w, scannedPage?.width ?? -1) &&
+    near(scan.h, scannedPage?.height ?? -1),
+  scan === null ? 'no background on page one' : JSON.stringify(scan),
+);
+check(
+  'and nothing on the page is painted under it',
+  scannedPage?.items[0]?.kind === 'background',
+  scannedPage?.items[0]?.kind ?? 'nothing',
+);
+check(
+  'and `cover` fills it, leaving the crop to the box',
+  scan !== null && scan.tileW >= scan.w - 1e-3 && scan.tileH >= scan.h - 1e-3,
+  scan === null ? '' : `${scan.tileW}x${scan.tileH} over ${scan.w}x${scan.h}`,
+);
+const scannedSvg =
+  scannedPage === null
+    ? ''
+    : paintPage(scannedPage, {
+        fonts: scanned?.fonts ?? [],
+        assets: scanned?.assets ?? [],
+        asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      });
+const clipped = [...scannedSvg.matchAll(/<clipPath\b[^>]*><rect\b([^>]*)\/>/g)].map((match) =>
+  Object.fromEntries(
+    [...(match[1] ?? '').matchAll(/(\w+)="([-\d.]+)"/g)].map((attribute) => [
+      attribute[1] ?? '',
+      Number(attribute[2]),
+    ]),
+  ),
+);
+check(
+  'and the painter clips it to that box',
+  scan !== null &&
+    clipped.length === 1 &&
+    near(clipped[0]?.['x'], scan.x) &&
+    near(clipped[0]?.['y'], scan.y) &&
+    near(clipped[0]?.['width'], scan.w) &&
+    near(clipped[0]?.['height'], scan.h),
+  JSON.stringify(clipped),
 );
 
 // Named sheets. A host that builds its styling out of layers sends

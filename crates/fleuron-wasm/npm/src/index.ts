@@ -40,6 +40,7 @@ export {
   decodeDisplayList,
   wireVersionOf,
   type Asset,
+  type BackgroundItem,
   type DrawItem,
   type AxisSetting,
   type FaceAttributes,

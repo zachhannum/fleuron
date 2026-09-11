@@ -556,7 +556,7 @@ export class Preview {
     const needed = new Set<string>();
     for (const page of this.held.values()) {
       for (const item of page.items) {
-        if (item.kind === 'image') {
+        if (item.kind === 'image' || item.kind === 'background') {
           const url = this.assets[item.asset]?.url;
           if (url !== undefined) {
             needed.add(url);
