@@ -24,7 +24,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use fleuron::content::{Block, Book, Inline};
+use fleuron::content::{Block, Book, Inline, Row};
 use fleuron::images::{Assets, ImageLoader};
 use fleuron::pages::{DrawItem, Page, Side};
 use fleuron::style::Color;
@@ -32,11 +32,11 @@ use fleuron_markdown::Options;
 
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
-const EXPECTED_PAGES: usize = 23;
+const EXPECTED_PAGES: usize = 24;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 35;
+const STYLED_PAGES: usize = 37;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "07e8908104e6b1300acde86ce6956864b7cf71fb36e355f3e331ca24d4830696";
+    "a9dd65be1c0be6753a691202d68842447dc64354cf61d8fa9381ca6f3bb8c77b";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -311,13 +311,9 @@ fn the_display_typography_book_extracts_as_it_was_written() {
         assert!(warnings.is_empty(), "the fixture is clean: {warnings:?}");
         fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections)
     };
-    let rendered = squeeze(&strip_furniture(&text, Some("A Voyage to Lilliput")));
-    let expected = squeeze(&laid_out_text(&book));
-    if rendered != expected {
-        panic!(
-            "the PDF's prose is not the book's: {}",
-            first_difference(&expected, &rendered)
-        );
+    let rendered = strip_furniture(&text, Some("A Voyage to Lilliput"));
+    if let Err(difference) = holds(&book, &rendered, squeeze, true) {
+        panic!("the PDF's prose is not the book's: {difference}");
     }
 }
 
@@ -637,13 +633,9 @@ fn the_styled_pdf_holds_every_word_of_the_book() {
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    let rendered = squeeze(&strip_furniture(&text, None));
-    let expected = squeeze(&laid_out_text(&fixture_book()));
-    if rendered != expected {
-        panic!(
-            "the styled PDF's prose is not the book's: {}",
-            first_difference(&expected, &rendered)
-        );
+    let rendered = strip_furniture(&text, None);
+    if let Err(difference) = holds(&fixture_book(), &rendered, squeeze, true) {
+        panic!("the styled PDF's prose is not the book's: {difference}");
     }
 }
 
@@ -743,11 +735,14 @@ fn emphasis_embeds_a_second_face_and_keeps_every_word() {
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    assert_eq!(
-        squeeze(&strip_furniture(&text, None)),
-        squeeze(&laid_out_text(&fixture_book())),
-        "the italic passages did not survive the round trip",
-    );
+    if let Err(difference) = holds(
+        &fixture_book(),
+        &strip_furniture(&text, None),
+        squeeze,
+        true,
+    ) {
+        panic!("the italic passages did not survive the round trip: {difference}");
+    }
 }
 
 /// The map is embedded as the file it came in as. PDF's `DCTDecode`
@@ -807,7 +802,7 @@ fn the_document_info_names_the_fixture_book() {
 const COLUMNS_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n";
 
 /// Pages the fixture book sets in two columns.
-const COLUMN_PAGES: usize = 25;
+const COLUMN_PAGES: usize = 27;
 
 /// The fixture book in two columns: structurally sound, every word of
 /// it still there, and the page count the layout settled.
@@ -831,14 +826,10 @@ fn a_two_column_book_reaches_the_pdf() {
         assert_eq!(pages_of(&text).len(), COLUMN_PAGES);
         // Reading order joins the halves of a word a line broke at a
         // hyphen and drops the hyphen with it, so the comparison is
-        // over text with none.
-        let rendered = unhyphenated(&strip_folios(&text));
-        let expected = unhyphenated(&laid_out_text(&fixture_book()));
-        if rendered != expected {
-            panic!(
-                "the two-column PDF's prose is not the book's: {}",
-                first_difference(&expected, &rendered)
-            );
+        // over text with none. It also reads a table a column at a
+        // time, so the table is compared whole.
+        if let Err(difference) = holds(&fixture_book(), &strip_folios(&text), unhyphenated, false) {
+            panic!("the two-column PDF's prose is not the book's: {difference}");
         }
     }
     let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
@@ -871,7 +862,11 @@ fn the_column_rule_reaches_the_display_structure_and_the_pdf() {
         "only {filled} page(s) of the two-column book paint a rule",
     );
     for (index, page) in pages.iter().enumerate() {
-        let rules: Vec<_> = fills(page, Color::BLACK).collect();
+        // The table's rules run across the page, and a column rule
+        // runs down it.
+        let rules: Vec<_> = fills(page, Color::BLACK)
+            .filter(|(_, _, w, h, _)| h > w)
+            .collect();
         assert!(
             rules.len() <= 1,
             "page {index} paints {} rules",
@@ -1141,20 +1136,98 @@ fn the_pdf_is_structurally_sound() {
     );
 }
 
+/// Acceptance: every word of the book comes back out of the PDF, and
+/// every cell of the table with it, row by row.
 #[test]
 fn the_pdf_holds_every_word_of_the_book() {
+    let book = fixture_book();
+    let laid = laid_out(&book);
+    assert!(
+        laid.iter()
+            .any(|part| matches!(part, Laid::Prose(prose) if !prose.is_empty())),
+        "the fixture has no prose to check",
+    );
+    assert!(
+        laid.iter()
+            .any(|part| matches!(part, Laid::Table { body, .. } if !body.is_empty())),
+        "the fixture has no table to check",
+    );
     let (pdf, _) = render("text", &[]);
     let Some(text) = extract_text(&pdf) else {
         return;
     };
-    let rendered = squeeze(&strip_furniture(&text, None));
-    let expected = squeeze(&laid_out_text(&fixture_book()));
-    assert!(!expected.is_empty(), "the fixture has no prose to check");
-    if rendered != expected {
-        panic!(
-            "the PDF's prose is not the book's: {}",
-            first_difference(&expected, &rendered)
-        );
+    if let Err(difference) = holds(&book, &strip_furniture(&text, None), squeeze, true) {
+        panic!("the PDF's prose is not the book's: {difference}");
+    }
+}
+
+/// The fixture book's pages under the built-in sheet and `css`, laid
+/// out the way the CLI lays them out.
+fn pages_under(css: &str) -> Vec<Page> {
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let book = fixture_book();
+    let styles =
+        fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("table.css", css)])
+            .compile(&book, &registry);
+    assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
+    let assets = Assets::probe(&book, &Beside);
+    fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
+}
+
+/// Where the first run that says `text` starts.
+fn run_x(pages: &[Page], text: &str) -> f32 {
+    pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .find_map(|item| match item {
+            DrawItem::Text { x, text: run, .. } if run == text => Some(*x),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("nothing says {text:?}"))
+}
+
+/// Acceptance: the alignment the delimiter row wrote reaches the PDF,
+/// and a rule in the sheet beats it. The manuscript writes the last
+/// column flush right and the first flush left, and
+/// `td { text-align: right }` moves the first over to the right too.
+/// The export places every run where the display structure does.
+#[test]
+fn the_table_alignment_reaches_the_pdf_and_a_rule_beats_it() {
+    let rule = "td { text-align: right }";
+    let written = pages_under("");
+    let ruled = pages_under(rule);
+    assert_eq!(
+        run_x(&written, "A handkerchief"),
+        run_x(&ruled, "A handkerchief")
+    );
+    assert!(
+        run_x(&ruled, "The right coat-pocket") > run_x(&written, "The right coat-pocket") + 1.0,
+        "the rule did not move the column the manuscript set flush left",
+    );
+
+    for (name, css, pages) in [("aligned", "", &written), ("aligned-right", rule, &ruled)] {
+        let sheet = write_sheet(name, css);
+        let (pdf, _) = render(name, &[&sheet]);
+        let Some(streams) = content_streams(&pdf) else {
+            return;
+        };
+        let painted: Vec<(f32, f32)> = pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .filter_map(|item| match item {
+                DrawItem::Text { x, y, .. } => Some((*x, *y)),
+                _ => None,
+            })
+            .collect();
+        let placed = placed_runs(&streams);
+        assert_eq!(painted.len(), placed.len(), "{name}");
+        for (index, (paints, writes)) in painted.iter().zip(&placed).enumerate() {
+            assert!(
+                (paints.0 - writes.0).abs() < 1e-3 && (paints.1 - writes.1).abs() < 1e-3,
+                "{name} run {index}: the display structure has it at {paints:?} and the PDF at \
+                 {writes:?}",
+            );
+        }
     }
 }
 
@@ -1218,6 +1291,10 @@ fn dump_tree_emits_a_stable_tree() {
     assert!(
         blocks.iter().any(|block| block["type"] == "thematic_break"),
         "the scene break is not in the tree",
+    );
+    assert!(
+        blocks.iter().any(|block| block["type"] == "table"),
+        "the table is not in the tree",
     );
     assert!(!dumped.contains("\"id\""), "ids do not travel");
     assert_eq!(dumped, dump_tree(), "the dump moved between runs");
@@ -1572,33 +1649,222 @@ fn strip_folios(text: &str) -> String {
     prose
 }
 
-/// Everything the engine lays out, in reading order: headings,
-/// paragraphs, the blocks a blockquote nests, and the ornament the
-/// built-in sheet sets a thematic break in. An image has no text.
-fn laid_out_text(book: &Book) -> String {
-    let mut text = String::new();
+/// What the engine lays out, in reading order.
+enum Laid {
+    /// One heading, one paragraph, or the ornament the built-in sheet
+    /// sets a thematic break in. A blockquote is the blocks it nests,
+    /// and an image has no text.
+    Prose(String),
+    /// A table, as the text of each of its rows.
+    Table {
+        head: Vec<String>,
+        body: Vec<String>,
+    },
+}
+
+fn laid_out(book: &Book) -> Vec<Laid> {
+    let mut laid = Vec::new();
     for section in &book.sections {
-        append_blocks(&section.blocks, &mut text);
+        append_blocks(&section.blocks, &mut laid);
+    }
+    laid
+}
+
+fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
+    for block in blocks {
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                let mut text = String::new();
+                append_inlines(inlines, &mut text);
+                laid.push(Laid::Prose(text));
+            }
+            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid),
+            Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
+            Block::Image { .. } => {}
+            Block::Table { head, body, .. } => laid.push(Laid::Table {
+                head: head.iter().map(row_text).collect(),
+                body: body.iter().map(row_text).collect(),
+            }),
+        }
+    }
+}
+
+/// The text of every cell of one row, from the leading edge.
+fn row_text(row: &Row) -> String {
+    let mut text = String::new();
+    for cell in &row.cells {
+        let mut inner = Vec::new();
+        append_blocks(&cell.blocks, &mut inner);
+        for part in inner {
+            if let Laid::Prose(prose) = part {
+                text.push_str(&prose);
+            }
+        }
     }
     text
 }
 
-fn append_blocks(blocks: &[Block], text: &mut String) {
-    for block in blocks {
-        match block {
-            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
-                append_inlines(inlines, text);
+/// Whether extracted text holds everything a book lays out, in the
+/// order it is laid out, or where the two part company.
+///
+/// `clean` makes the two comparable. Prose is compared character for
+/// character. A table row is compared as the characters of its cells,
+/// because an extraction reads the lines of a row across the cells in
+/// whatever order they stand on the page. The header rows can come
+/// back again where the table continues onto a new page.
+///
+/// `by_row` asks for each row in turn. Without it, the table and the
+/// blocks after it are compared as one set of characters, up to where
+/// the extraction returns to the book's own order. That is for an
+/// extraction in reading order, which does not keep a table in order
+/// with the prose around it.
+fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Result<(), String> {
+    let rendered: Vec<char> = clean(text).chars().collect();
+    let laid = laid_out(book);
+    let mut at = 0;
+    let mut index = 0;
+    while let Some(part) = laid.get(index) {
+        index += 1;
+        match part {
+            Laid::Prose(prose) => {
+                let expected: Vec<char> = clean(prose).chars().collect();
+                let end = at + expected.len();
+                if rendered.get(at..end) != Some(expected.as_slice()) {
+                    return Err(first_difference(
+                        &String::from_iter(&expected),
+                        &String::from_iter(&rendered[at.min(rendered.len())..]),
+                    ));
+                }
+                at = end;
             }
-            Block::Blockquote { blocks, .. } => append_blocks(blocks, text),
-            Block::ThematicBreak { .. } => text.push_str(ORNAMENT),
-            Block::Image { .. } => {}
-            Block::Table { head, body, .. } => {
-                for blocks in fleuron::content::cell_blocks(head, body) {
-                    append_blocks(blocks, text);
+            Laid::Table { head, body } => {
+                let head: Vec<Vec<char>> = head
+                    .iter()
+                    .map(|row| clean(row).chars().collect())
+                    .collect();
+                let body: Vec<Vec<char>> = body
+                    .iter()
+                    .map(|row| clean(row).chars().collect())
+                    .collect();
+                if by_row {
+                    at = rows_at(&rendered, at, &head, &body)?;
+                } else {
+                    let after: Vec<Vec<char>> = laid[index..]
+                        .iter()
+                        .map_while(|part| match part {
+                            Laid::Prose(prose) => Some(clean(prose).chars().collect()),
+                            Laid::Table { .. } => None,
+                        })
+                        .collect();
+                    let (end, taken) = table_at(&rendered, at, &head, &body, &after)?;
+                    at = end;
+                    index += taken;
                 }
             }
         }
     }
+    if at < rendered.len() {
+        return Err(format!(
+            "the PDF runs on past the book: {}",
+            String::from_iter(&rendered[at..(at + 80).min(rendered.len())]),
+        ));
+    }
+    Ok(())
+}
+
+/// Reads a table back one row at a time from `at`, and answers where
+/// it ends.
+fn rows_at(
+    rendered: &[char],
+    mut at: usize,
+    head: &[Vec<char>],
+    body: &[Vec<char>],
+) -> Result<usize, String> {
+    for row in head {
+        at = take(rendered, at, row).ok_or_else(|| missing(rendered, at, row))?;
+    }
+    for row in body {
+        if let Some(next) = take(rendered, at, row) {
+            at = next;
+            continue;
+        }
+        let mut again = at;
+        for header in head {
+            again = take(rendered, again, header).ok_or_else(|| missing(rendered, at, row))?;
+        }
+        at = take(rendered, again, row).ok_or_else(|| missing(rendered, again, row))?;
+    }
+    Ok(at)
+}
+
+/// Reads a table back from `at` together with the blocks `after` it.
+/// The stretch holds the characters of every row, those of the header
+/// rows once more for every page the table continued onto, and those
+/// of the first few blocks after it, in any order. It ends where the
+/// next block starts in the book's own order again. Answers where the
+/// stretch ends and how many of the blocks after the table it took.
+fn table_at(
+    rendered: &[char],
+    at: usize,
+    head: &[Vec<char>],
+    body: &[Vec<char>],
+    after: &[Vec<char>],
+) -> Result<(usize, usize), String> {
+    let header: Vec<char> = head.concat();
+    let mut expected: Vec<char> = head.iter().chain(body).flatten().copied().collect();
+    for taken in 0..=after.len().min(12) {
+        if taken > 0 {
+            expected.extend(&after[taken - 1]);
+        }
+        let mut wanted = expected.clone();
+        for _ in 0..=8 {
+            let end = at + wanted.len();
+            let Some(stretch) = rendered.get(at..end) else {
+                break;
+            };
+            let resumes = after.get(taken).is_none_or(|next| {
+                let opening = &next[..next.len().min(24)];
+                rendered[end..].starts_with(opening)
+            });
+            if resumes && same_characters(stretch, &wanted) {
+                return Ok((end, taken));
+            }
+            if header.is_empty() {
+                break;
+            }
+            wanted.extend(&header);
+        }
+    }
+    let until = (at + expected.len()).min(rendered.len());
+    Err(format!(
+        "a table did not come back whole: {}",
+        String::from_iter(&rendered[at..until]),
+    ))
+}
+
+/// Whether two stretches hold the same characters, in any order.
+fn same_characters(one: &[char], other: &[char]) -> bool {
+    let (mut one, mut other) = (one.to_vec(), other.to_vec());
+    one.sort_unstable();
+    other.sort_unstable();
+    one == other
+}
+
+/// Where one row's characters end, when they stand at `at` in any
+/// order.
+fn take(rendered: &[char], at: usize, row: &[char]) -> Option<usize> {
+    let end = at + row.len();
+    same_characters(rendered.get(at..end)?, row).then_some(end)
+}
+
+/// A row that did not come back, beside what came back in its place.
+fn missing(rendered: &[char], at: usize, row: &[char]) -> String {
+    let until = (at + row.len() + 20).min(rendered.len());
+    format!(
+        "a table row did not come back\n   row: {}\n   pdf: {}",
+        String::from_iter(row),
+        String::from_iter(&rendered[at.min(until)..until]),
+    )
 }
 
 fn append_inlines(inlines: &[Inline], text: &mut String) {
