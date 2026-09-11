@@ -338,13 +338,13 @@ p.epigraph {
 
 {/* generated: pseudo-elements */}
 
-The pseudo-elements are `::first-letter`, `::first-line`, `::before` and `::after`.
+The pseudo-elements are `::first-letter`, `::first-line`, `::before`, and `::after`.
 
 {/* end generated */}
 
 Each pseudo-element starts from the style of the element it belongs to, so a rule on `p::first-letter` begins with that paragraph's own font and size. `::first-letter` produces [a drop cap](#drop-caps), and `::first-line` styles [a paragraph's opening line](#first-lines). Where both apply to the same paragraph, `::first-letter` takes the initial letter and `::first-line` styles the rest of that line.
 
-`::before` and `::after` add text before and after an inline element: a link, emphasis, strong text, or code. `content` gives the text, and the text properties style it. A rule with no `content` adds nothing. On a block, the engine warns and adds nothing. See [Cross-references](#cross-references) for the page numbers and headings they can print.
+`::before` adds text before an inline element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, or code. The `content` property holds the text. The text properties style it. A rule with no `content` adds nothing. If the rule selects a block, the engine warns and adds nothing. See [Cross-references](#cross-references) for how `content` prints the page number or the text of another element.
 
 ## Declarations, values, and units
 
@@ -819,9 +819,9 @@ Which words fall on that line depends on the style applied to it. Every property
 
 ## Cross-references
 
-A rulebook, a table of contents, and an index all refer the reader to other pages. You can print the page number of the element a link goes to, or the words of that element.
+A rulebook, a table of contents, and an index all refer the reader to other pages. You can print the page number of the element that a link goes to, or the text of that element. That element is the target of the link. A reference is a `target-counter()` or a `target-text()` in `content`.
 
-The element must have an id. In markdown, you write the id of a heading in braces after its text, and the id in a link after a `#`. See [the markdown mapping](reference/markdown.mdx) for the other ways to give an element an id.
+The target must have an id. In markdown, you write the id of a heading in braces after its text. You write the id in a link after a `#`. See [the markdown mapping](reference/markdown.mdx) for the other ways to give an element an id.
 
 ```markdown
 ## The Hunter {#the-hunter}
@@ -839,13 +839,13 @@ a::after {
 
 `target-counter()` takes these arguments:
 
-- The target. `attr(href url)` is the url of the link. A string such as `"#the-hunter"` names the same target for every element the rule selects.
-- The counter. `page` is the only counter a reference can print.
-- The counter style, which is optional. `upper-roman` prints the page number the way the front matter prints it.
+- The target. `attr(href url)` is the url of the link. A string such as `"#the-hunter"` names the same target for every element that the rule selects.
+- The counter. `page` is the only counter that a reference can print.
+- The counter style, which is optional. It is one of the [counter styles](#page-numbers) that `counter(page)` takes. The default is `decimal`.
 
-The number is the page number printed on the page of the target, so it follows every `counter-reset` before the target.
+The number is the page number on the page of the target. If a `counter-reset` restarts the count before the target, the reference prints the number from the restarted count.
 
-`target-text()` takes only the target. It prints the words of the target: the text of a heading or a paragraph, or the description of an image. The following example prints the words of the heading after each link with the class `see`:
+`target-text()` takes only the target. It prints the text of a heading or a paragraph, or the description of an image. The following example prints the text of the target after each link with the class `see`:
 
 ```css
 a.see::after {
@@ -853,13 +853,13 @@ a.see::after {
 }
 ```
 
-A reference prints only in `::before` and `::after` on an inline element. If no element has the id that a reference names, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for a url that is not an id, such as `https://example.com`.
+A reference prints only in `::before` and `::after` on an inline element. If no element has the id that a reference names, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for a url that is not an id, such as `https://example.com`. It also does the same for `attr(href url)` on an element that is not a link.
 
 ### Two layouts
 
-The engine lays out a book with page references twice. The first layout finds the page of each target, and the second prints those numbers. The engine lays out a book without page references once, and `target-text()` alone does not add a layout.
+If a book prints a page number with `target-counter()`, the engine lays out the book twice. In the first layout, the engine finds the page of each target. In the second layout, it prints those page numbers. The engine lays out a book with no `target-counter()` once. `target-text()` does not add a second layout.
 
-A printed number can change the width of its line, and a line that changes width can move a target to another page. If the second layout moves a target, the reference prints the page from the first layout. The engine warns and names the target.
+A printed number can change the width of its line. A line that changes width can move a target to another page. If the second layout moves a target, the reference prints the page from the first layout. The engine warns and names the target and both pages.
 
 ## Fonts
 

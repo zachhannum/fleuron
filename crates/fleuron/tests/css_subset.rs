@@ -649,11 +649,13 @@ fn joined(items: &[String]) -> String {
     conjoined(items, "and")
 }
 
+/// Two items take no comma. Three or more take an Oxford comma.
 fn conjoined(items: &[String], conjunction: &str) -> String {
     match items.split_last() {
         None => String::new(),
         Some((last, [])) => last.clone(),
-        Some((last, rest)) => format!("{} {conjunction} {}", rest.join(", "), last),
+        Some((last, [first])) => format!("{first} {conjunction} {last}"),
+        Some((last, rest)) => format!("{}, {conjunction} {}", rest.join(", "), last),
     }
 }
 

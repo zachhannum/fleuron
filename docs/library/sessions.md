@@ -37,7 +37,7 @@ let bytes = session.export()?;       // the same run, as PDF
 
 `Session::stages()` reports how many times each stage has run, so a host or a test can see what an edit cost without timing it.
 
-The engine lays out a book whose references print page numbers twice, and `Stages::settle` counts the second layouts. The second layout breaks lines again only in the sections that print a page number, and only where a number changed. See [the CSS subset](../css-subset.mdx) for how a reference prints a page number.
+If the references in a book print page numbers, the engine lays out the book twice. `Stages::settle` counts the second layouts. In a second layout, the engine breaks lines again only in a section whose printed page numbers changed. See [the CSS subset](../css-subset.mdx) for how a reference prints a page number.
 
 ## Editing content
 
