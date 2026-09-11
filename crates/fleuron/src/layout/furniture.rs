@@ -20,6 +20,19 @@ struct Furniture<'a> {
     strings: &'a Strings,
 }
 
+/// The folio each page prints: one past the page before it, or the
+/// number a page restarts the count at.
+pub(crate) fn folios(infos: &[PageInfo]) -> Vec<u32> {
+    let mut folio = 0;
+    infos
+        .iter()
+        .map(|info| {
+            folio = info.reset.unwrap_or(folio + 1);
+            folio
+        })
+        .collect()
+}
+
 impl Paginator<'_> {
     /// Settles numbering and side once the whole flow is assembled,
     /// then paints each page's margin boxes: a folio's digits are not
@@ -37,12 +50,11 @@ impl Paginator<'_> {
     /// blank leaf is blank: a page whose only content would be a
     /// running head does not get one.
     pub(crate) fn paint(&self, pages: &mut [Page], infos: &[PageInfo]) {
-        let mut folio = 0;
-        for ((index, page), info) in pages.iter_mut().enumerate().zip(infos) {
+        let numbers = folios(infos);
+        for (((index, page), info), folio) in pages.iter_mut().enumerate().zip(infos).zip(numbers) {
             // Furniture is appended after the page's own content, so
             // dropping the tail is all a repaint has to undo.
             page.items.truncate(info.content_items);
-            folio = info.reset.unwrap_or(folio + 1);
             page.number = folio;
             page.side = Side::of_number(index as u32 + 1);
             if info.slot.blank {
@@ -78,7 +90,7 @@ impl Paginator<'_> {
         furniture: Furniture<'_>,
     ) {
         let text = match &box_style.content {
-            Content::None => return,
+            Content::None | Content::Pieces(_) => return,
             Content::Counter(counter) => counter.format(furniture.folio),
             Content::String(name) => furniture.strings.get(name).cloned().unwrap_or_default(),
             Content::Text(text) => text.clone(),

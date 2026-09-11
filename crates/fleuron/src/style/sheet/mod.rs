@@ -411,6 +411,8 @@ impl<'i> selectors::Parser<'i> for Selectors {
         match_ignore_ascii_case! { &name,
             "first-letter" => Ok(PseudoElement::FirstLetter),
             "first-line" => Ok(PseudoElement::FirstLine),
+            "before" => Ok(PseudoElement::Before),
+            "after" => Ok(PseudoElement::After),
             _ => Err(location.new_custom_error(
                 SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.clone()),
             )),

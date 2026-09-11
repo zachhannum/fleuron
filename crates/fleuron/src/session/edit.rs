@@ -151,6 +151,7 @@ impl Session<'_> {
                     // dropped rather than trusted to notice.
                     self.output = None;
                     self.lines.clear();
+                    self.settled.clear();
                     self.stale = Stale::Trace;
                 } else if self.contours.traces(index) {
                     self.stale = self.stale.max(Stale::Trace);

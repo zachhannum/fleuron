@@ -37,14 +37,14 @@ use crate::pages::Side;
 
 pub use properties::{
     Align, Band, Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule,
-    ColumnSpan, Columns, ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family,
-    FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry,
-    Position, ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign,
-    TextJustify, TextTransform, Width, WrapFlow,
+    ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges,
+    Family, FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox,
+    PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, Target,
+    TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
-use element::{ElementTree, PseudoElement};
+use element::{ElementTree, INLINE_ELEMENTS, PseudoElement};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
 /// The defaults, as a stylesheet. There are no style constants in the
@@ -89,6 +89,14 @@ pub struct NodeStyle {
     /// a rule named one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_line: Option<u32>,
+    /// Index of the style `::before` computed for this node, when it
+    /// generates text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<u32>,
+    /// Index of the style `::after` computed for this node, when it
+    /// generates text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<u32>,
 }
 
 /// The situation a page finds itself in, which is what `@page`
@@ -186,6 +194,18 @@ pub struct StyleTree {
     /// `::first-line` style index by raw node id, where there is one.
     #[serde(skip)]
     first_line_by_node: Vec<Option<u32>>,
+    /// `::before` style index by raw node id, where it generates text.
+    #[serde(skip)]
+    before_by_node: Vec<Option<u32>>,
+    /// `::after` style index by raw node id, where it generates text.
+    #[serde(skip)]
+    after_by_node: Vec<Option<u32>>,
+    /// Whether generated text prints the page an element lands on.
+    #[serde(skip)]
+    counts_pages: bool,
+    /// Whether generated text names another element at all.
+    #[serde(skip)]
+    refers: bool,
     warnings: Vec<Warning>,
 }
 
@@ -226,6 +246,32 @@ impl StyleTree {
     /// is what line layout applies to the opening line.
     pub fn opening_line(&self, id: NodeId) -> Option<FirstLine> {
         Some(self.first_line(id)?.first_line_over(self.style(id)))
+    }
+
+    /// The style `::before` computed for one inline node, when its
+    /// `content` generates text. The text is the style's `content`.
+    pub fn before(&self, id: NodeId) -> Option<&ComputedStyle> {
+        let index = (*self.before_by_node.get(id.get() as usize)?)?;
+        Some(&self.styles[index as usize])
+    }
+
+    /// The same for `::after`.
+    pub fn after(&self, id: NodeId) -> Option<&ComputedStyle> {
+        let index = (*self.after_by_node.get(id.get() as usize)?)?;
+        Some(&self.styles[index as usize])
+    }
+
+    /// Whether any generated text prints the page another element
+    /// lands on. Such a book is laid out twice: once to find the
+    /// pages, and once to print them.
+    pub fn counts_pages(&self) -> bool {
+        self.counts_pages
+    }
+
+    /// Whether any generated text names another element, for its
+    /// page or for its text.
+    pub fn refers(&self) -> bool {
+        self.refers
     }
 
     /// The style of the book itself: the root of inheritance.
@@ -578,7 +624,22 @@ fn cascade(
     let mut computed: Vec<u32> = Vec::with_capacity(elements.nodes().len());
     let mut first_letters: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
     let mut first_lines: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
+    let mut befores: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
+    let mut afters: Vec<Option<u32>> = Vec::with_capacity(elements.nodes().len());
     let mut max_id = 0u32;
+    // Most sheets name neither, and a pass that no rule can match is
+    // a pass over every rule for every element.
+    let named = |which: &PseudoElement| {
+        sheets.iter().any(|sheet| {
+            sheet.rules.iter().any(|rule| {
+                rule.selectors
+                    .slice()
+                    .iter()
+                    .any(|selector| selector.pseudo_element() == Some(which))
+            })
+        })
+    };
+    let (wants_before, wants_after) = (named(&PseudoElement::Before), named(&PseudoElement::After));
 
     for (index, node) in elements.nodes().iter().enumerate() {
         let parent = node
@@ -628,19 +689,49 @@ fn cascade(
         };
         let first_letter = pseudo_style(&PseudoElement::FirstLetter, &mut warnings);
         let first_line = pseudo_style(&PseudoElement::FirstLine, &mut warnings);
+        let before = wants_before
+            .then(|| pseudo_style(&PseudoElement::Before, &mut warnings))
+            .flatten();
+        let after = wants_after
+            .then(|| pseudo_style(&PseudoElement::After, &mut warnings))
+            .flatten();
+        // `content: none`, the initial value, generates nothing.
+        let [before, after] = [(before, "::before"), (after, "::after")].map(|(pseudo, name)| {
+            let pseudo = pseudo.filter(|pseudo| pseudo.content != Content::None)?;
+            if INLINE_ELEMENTS.contains(&node.name) {
+                return Some(pseudo);
+            }
+            let message = format!(
+                "Unsupported pseudo-element `{name}` on `{}`. Nothing is generated.",
+                node.name
+            );
+            if !warnings.iter().any(|seen| seen.message == message) {
+                warnings.push(Warning {
+                    message,
+                    origin: None,
+                });
+            }
+            None
+        });
 
         let index_of_style = intern(&mut styles, style);
         let index_of_initial = first_letter.map(|initial| intern(&mut styles, initial));
         let index_of_line = first_line.map(|line| intern(&mut styles, line));
+        let index_of_before = before.map(|before| intern(&mut styles, before));
+        let index_of_after = after.map(|after| intern(&mut styles, after));
         computed.push(index_of_style);
         first_letters.push(index_of_initial);
         first_lines.push(index_of_line);
+        befores.push(index_of_before);
+        afters.push(index_of_after);
         nodes.push(NodeStyle {
             id: node.id.get(),
             element: node.name,
             style: index_of_style,
             first_letter: index_of_initial,
             first_line: index_of_line,
+            before: index_of_before,
+            after: index_of_after,
         });
         max_id = max_id.max(node.id.get());
     }
@@ -649,18 +740,26 @@ fn cascade(
     let mut by_node = vec![root; max_id as usize + 1];
     let mut initial_by_node = vec![None; max_id as usize + 1];
     let mut first_line_by_node = vec![None; max_id as usize + 1];
-    for (((node, style), initial), line) in elements
-        .nodes()
-        .iter()
-        .zip(&computed)
-        .zip(&first_letters)
-        .zip(&first_lines)
-    {
-        by_node[node.id.get() as usize] = *style;
-        initial_by_node[node.id.get() as usize] = *initial;
-        first_line_by_node[node.id.get() as usize] = *line;
+    let mut before_by_node = vec![None; max_id as usize + 1];
+    let mut after_by_node = vec![None; max_id as usize + 1];
+    for (index, node) in elements.nodes().iter().enumerate() {
+        let id = node.id.get() as usize;
+        by_node[id] = computed[index];
+        initial_by_node[id] = first_letters[index];
+        first_line_by_node[id] = first_lines[index];
+        before_by_node[id] = befores[index];
+        after_by_node[id] = afters[index];
     }
     by_node[0] = root;
+    let generated = || {
+        befores
+            .iter()
+            .chain(&afters)
+            .flatten()
+            .map(|index| &styles[*index as usize].content)
+    };
+    let counts_pages = generated().any(Content::counts_pages);
+    let refers = generated().any(|content| matches!(content, Content::Pieces(_)));
 
     if styles.is_empty() {
         styles.push(ComputedStyle::initial());
@@ -687,6 +786,10 @@ fn cascade(
         by_node,
         initial_by_node,
         first_line_by_node,
+        before_by_node,
+        after_by_node,
+        counts_pages,
+        refers,
         warnings,
     }
 }
@@ -2104,17 +2207,217 @@ mod tests {
         let book = sample();
         let tree = compile(
             &book,
-            "p::before { content: \"x\" }\np { font-size: 15pt }\n",
+            "p::marker { content: \"x\" }\np { font-size: 15pt }\n",
         );
         assert!(
             tree.warnings()
                 .iter()
                 .any(|warning| warning.message
-                    == "Unsupported selector `:before`. The rule is ignored."),
+                    == "Unsupported selector `:marker`. The rule is ignored."),
             "{:?}",
             tree.warnings(),
         );
         assert_eq!(first(&tree, "p").font_size, 15.0);
+    }
+
+    /// A chapter heading named `the-hunter`, and a paragraph with a
+    /// link to it.
+    fn linked() -> Book {
+        let mut book = sample();
+        let blocks = &mut book.sections[0].blocks;
+        if let Block::Heading { attributes, .. } = &mut blocks[0] {
+            attributes.id = Some("the-hunter".into());
+        }
+        blocks.push(Block::Paragraph {
+            id: NodeId::UNASSIGNED,
+            inlines: vec![
+                text("See "),
+                Inline::Link {
+                    id: NodeId::UNASSIGNED,
+                    url: "#the-hunter".into(),
+                    children: vec![text("the hunter")],
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                },
+                text("."),
+            ],
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        });
+        book.assign_node_ids();
+        book
+    }
+
+    /// The id of the first element of one name.
+    fn id_of(tree: &StyleTree, element: &str) -> NodeId {
+        let node = tree
+            .nodes()
+            .iter()
+            .find(|node| node.element == element)
+            .unwrap_or_else(|| panic!("no {element}"));
+        NodeId::new(node.id)
+    }
+
+    /// `content` on a pseudo-element reads literals and references in
+    /// the order they are written. Literals side by side are one.
+    #[test]
+    fn content_reads_references_between_literals() {
+        let book = linked();
+        let after = |css: &str| {
+            let tree = compile(&book, &format!("a::after {{ content: {css} }}"));
+            assert!(tree.warnings().is_empty(), "{css}: {:?}", tree.warnings());
+            tree.after(id_of(&tree, "a"))
+                .map(|style| style.content.clone())
+        };
+        assert_eq!(
+            after("\" (page \" target-counter(attr(href url), page) \")\""),
+            Some(Content::Pieces(vec![
+                ContentPiece::Text(" (page ".into()),
+                ContentPiece::TargetCounter {
+                    target: Target::Href,
+                    style: CounterStyle::Decimal,
+                },
+                ContentPiece::Text(")".into()),
+            ])),
+        );
+        assert_eq!(
+            after("target-counter(\"#the-hunter\", page, upper-roman)"),
+            Some(Content::Pieces(vec![ContentPiece::TargetCounter {
+                target: Target::Url("#the-hunter".into()),
+                style: CounterStyle::UpperRoman,
+            }])),
+        );
+        assert_eq!(
+            after("\"see \" target-text(attr(href))"),
+            Some(Content::Pieces(vec![
+                ContentPiece::Text("see ".into()),
+                ContentPiece::TargetText {
+                    target: Target::Href,
+                },
+            ])),
+        );
+        assert_eq!(after("\"a\" \"b\""), Some(Content::Text("ab".into())));
+        assert_eq!(after("none"), None, "`none` generates nothing");
+    }
+
+    /// `page` is the only counter a reference can print, and a
+    /// function outside the subset is a diagnostic on `content`.
+    #[test]
+    fn a_reference_outside_the_subset_warns() {
+        let book = linked();
+        for css in [
+            "a::after { content: target-counter(attr(href url), chapter) }",
+            "a::after { content: target-counters(attr(href url), page, \".\") }",
+            "a::after { content: target-counter(attr(title), page) }",
+            "a::after { content: counter(page) }",
+        ] {
+            let tree = compile(&book, css);
+            assert!(
+                tree.warnings().iter().any(|warning| warning.message
+                    == "Unsupported value for `content`. The declaration is ignored."),
+                "{css}: {:?}",
+                tree.warnings(),
+            );
+            assert!(tree.after(id_of(&tree, "a")).is_none(), "{css}");
+        }
+    }
+
+    /// A pseudo-element starts from the style of the element it
+    /// belongs to, and a rule that names it outranks what it
+    /// inherited.
+    #[test]
+    fn a_pseudo_element_inherits_from_its_element() {
+        let book = linked();
+        let tree = compile(
+            &book,
+            "a { font-size: 9pt; font-family: monospace; color: #336699 }
+             a::before { content: \"[\" }
+             a::after { content: \"]\"; color: #d6075e; font-size: 7pt }",
+        );
+        let link = id_of(&tree, "a");
+        let before = tree.before(link).expect("`::before` generates text");
+        assert_eq!(before.content, Content::Text("[".into()));
+        assert_eq!(before.font_size, 9.0);
+        assert_eq!(before.color, Color::rgb(0x33, 0x66, 0x99));
+        assert_eq!(
+            before.font_id,
+            registry().generic(GenericFamily::Monospace).unwrap(),
+        );
+        let after = tree.after(link).expect("`::after` generates text");
+        assert_eq!(after.font_size, 7.0);
+        assert_eq!(after.color, Color::rgb(0xd6, 0x07, 0x5e));
+
+        // The element keeps its own style, and generates nothing
+        // itself.
+        assert_eq!(tree.style(link).content, Content::None);
+        assert_eq!(tree.style(link).font_size, 9.0);
+    }
+
+    /// `content: none` is the initial value, so a rule that names a
+    /// pseudo-element and sets no `content` generates nothing.
+    #[test]
+    fn a_pseudo_element_with_no_content_generates_nothing() {
+        let book = linked();
+        let tree = compile(
+            &book,
+            "a::after { color: red } em::before { content: none }",
+        );
+        assert!(tree.after(id_of(&tree, "a")).is_none());
+        assert!(tree.before(id_of(&tree, "em")).is_none());
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+    }
+
+    /// Text generated before or after a block is not supported yet.
+    /// A sheet that asks for it is told so once per element, and the
+    /// element is styled as though the rule were not there.
+    #[test]
+    fn a_pseudo_element_on_a_block_warns_and_generates_nothing() {
+        let book = linked();
+        let tree = compile(
+            &book,
+            "p::before { content: \"x\" }\np { font-size: 15pt }\nh1::after { content: \"y\" }",
+        );
+        let told: Vec<&str> = tree
+            .warnings()
+            .iter()
+            .map(|warning| warning.message.as_str())
+            .collect();
+        assert_eq!(
+            told,
+            [
+                "Unsupported pseudo-element `::after` on `h1`. Nothing is generated.",
+                "Unsupported pseudo-element `::before` on `p`. Nothing is generated.",
+            ],
+        );
+        assert!(tree.before(id_of(&tree, "p")).is_none());
+        assert_eq!(first(&tree, "p").font_size, 15.0);
+    }
+
+    /// Only a reference to a page asks for a second layout pass. The
+    /// text of the target is in the book before anything is laid out.
+    #[test]
+    fn only_a_page_reference_counts_pages() {
+        let book = linked();
+        for (css, counts) in [
+            ("", false),
+            ("a::after { content: \" (see below)\" }", false),
+            (
+                "a::after { content: \" \" target-text(attr(href url)) }",
+                false,
+            ),
+            (
+                "a::after { content: \" \" target-counter(attr(href url), page) }",
+                true,
+            ),
+            (
+                "p::after { content: target-counter(\"#the-hunter\", page) }",
+                false,
+            ),
+        ] {
+            assert_eq!(compile(&book, css).counts_pages(), counts, "{css}");
+        }
     }
 
     /// `::first-line` cascades over the element the way

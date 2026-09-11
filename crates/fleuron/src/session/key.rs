@@ -1,9 +1,11 @@
 //! The fingerprint of one section: everything about it that
 //! decides where its lines break.
 
+use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Inline, NodeId, Section, rows};
+use crate::layout::{Named, References};
 use crate::lines::Patterns;
 use crate::style::{
     ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry, ShapeOutside, StyleTree, Width,
@@ -17,12 +19,17 @@ use super::invalidate::Against;
 /// edit and a chapter nothing touched would then miss its own
 /// cache. So is the stretch of the source a node was read from,
 /// which moves whenever a byte above it does and changes no line.
+///
+/// A section's references reach past it, to the elements they name.
+/// The words of each, and whether an element carries the id at all,
+/// are known before anything is laid out, so they are part of it.
 pub(super) fn section_key(
     section: &Section,
     styles: &StyleTree,
     against: Against,
     assets: Option<usize>,
     hyphenation: (Patterns, Option<&str>),
+    references: &References,
 ) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
@@ -32,6 +39,24 @@ pub(super) fn section_key(
     (&section.source, &section.title, section.position).hash(h);
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);
+    if styles.refers() {
+        let named = Named::in_section(section, styles);
+        for id in named.pages.iter().chain(&named.texts) {
+            (id, references.text(id)).hash(h);
+        }
+    }
+    hasher.finish()
+}
+
+/// What one section's lines were built from on the pass that prints
+/// the pages its references name: what they were built from on the
+/// pass before, and the folio each of those references prints.
+pub(super) fn settled_key(key: u64, pages: &[String], found: &BTreeMap<String, u32>) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    for id in pages {
+        (id, found.get(id)).hash(&mut hasher);
+    }
     hasher.finish()
 }
 
@@ -177,11 +202,15 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
     }
 }
 
-/// One node's resolved styling, the initial letter and the opening
-/// line beside it.
+/// One node's resolved styling, and its pseudo-elements beside it.
 fn hash_node(id: NodeId, styles: &StyleTree, h: &mut DefaultHasher) {
     hash_layout(styles.style(id), h);
-    for pseudo in [styles.first_letter(id), styles.first_line(id)] {
+    for pseudo in [
+        styles.first_letter(id),
+        styles.first_line(id),
+        styles.before(id),
+        styles.after(id),
+    ] {
         match pseudo {
             Some(style) => {
                 1u8.hash(h);
@@ -322,6 +351,6 @@ pub(super) fn hash_edges(edges: Edges, h: &mut DefaultHasher) {
 pub(super) fn hash_nodes(styles: &StyleTree, h: &mut DefaultHasher) {
     for node in styles.nodes() {
         (node.id, node.element, node.style, node.first_letter).hash(h);
-        node.first_line.hash(h);
+        (node.first_line, node.before, node.after).hash(h);
     }
 }

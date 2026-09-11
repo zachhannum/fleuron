@@ -37,6 +37,8 @@ let bytes = session.export()?;       // the same run, as PDF
 
 `Session::stages()` reports how many times each stage has run, so a host or a test can see what an edit cost without timing it.
 
+If the references in a book print page numbers, the engine lays out the book twice. `Stages::settle` counts the second layouts. In a second layout, the engine breaks lines again only in a section whose printed page numbers changed. See [the CSS subset](../css-subset.mdx) for how a reference prints a page number.
+
 ## Editing content
 
 `set_content` replaces the book. `replace_source(name, sections)` replaces every section that came from one file. 

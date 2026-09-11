@@ -12,9 +12,9 @@ use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
 use super::color::{background_color, border_color, color};
 use super::value::{
     border_collapse, break_value, column_span, count, counter_reset, decoration_break, edges,
-    families, font_style, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
-    line_style, line_width, ornament, page_name, positioning, property, shape_outside, string_set,
-    text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
+    families, font_style, generated, hanging, hyphens, inset, keyword_or, length, letter_spacing,
+    line_height, line_style, line_width, page_name, positioning, property, shape_outside,
+    string_set, text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, warning};
@@ -368,9 +368,15 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "content",
         inherited: false,
-        syntax: "none | <string>",
-        examples: &["none", "\"\\2766\""],
-        read: |name, input| longhand(name, input, ornament, Declaration::Content),
+        syntax: "none | [ <string> | target-counter( <target> , page , <counter-style>? ) | target-text( <target> ) ]+",
+        examples: &[
+            "none",
+            "\"\\2766\"",
+            "\" (page \" target-counter(attr(href url), page) \")\"",
+            "target-counter(\"#the-hunter\", page, upper-roman)",
+            "target-text(attr(href url))",
+        ],
+        read: |name, input| longhand(name, input, generated, Declaration::Content),
     },
     Spec {
         name: "string-set",

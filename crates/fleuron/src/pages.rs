@@ -111,9 +111,10 @@ pub enum DrawItem {
         /// from and the bytes of that node's own text it stands for.
         /// The runs that name one node tile it, so a cursor in the
         /// manuscript lands on a run and a run lands back on the
-        /// manuscript. Absent on text the engine wrote itself: a
+        /// manuscript. Absent on text the engine adds to the book: a
         /// folio, a running head, a scene break's ornament, a table's
-        /// header row set again on a later page.
+        /// header row set again on a later page, and the text of
+        /// `::before` and `::after`.
         origin: Option<SourceRange>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs

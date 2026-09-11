@@ -82,7 +82,9 @@ When this inventory was read over to the emperor, he directed me, although in ve
 I had as I before observed, one private pocket, which escaped their search, wherein there was a pair of spectacles (which I sometimes use for the weakness of mine eyes,) a pocket perspective, and some other little conveniences; which, being of no consequence to the emperor, I did not think myself bound in honour to discover, and I apprehended they might be lost or spoiled if I ventured them out of my possession.
 
 
-### CHAPTER III.
+How the author came by his liberty is told in [chapter III](#chapter-iii).
+
+### CHAPTER III. {#chapter-iii}
 
 _The author diverts the emperor, and his nobility of both sexes, in a very uncommon manner.  The diversions of the court of Lilliput described.  The author has his liberty granted him upon certain conditions._
 

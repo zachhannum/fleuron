@@ -20,7 +20,7 @@ mod page;
 mod value;
 
 pub use computed::ComputedStyle;
-pub use counter::{Content, CounterStyle, StringPiece, StringSet};
+pub use counter::{Content, ContentPiece, CounterStyle, StringPiece, StringSet, Target};
 pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, Band, ColumnRule, Columns, MarginBox, PageGeometry};

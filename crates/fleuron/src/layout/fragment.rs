@@ -198,6 +198,9 @@ pub struct Marks {
     pub strings: Vec<(String, String)>,
     /// The folio of the page this fragment lands on.
     pub page_number: Option<u32>,
+    /// The ids of the elements that open on this fragment. The page
+    /// it lands on is the page a reference to one of them prints.
+    pub targets: Vec<String>,
 }
 
 /// Whether a block paints anything behind or around its content.

@@ -7,9 +7,10 @@ use crate::fonts::GenericFamily;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content, Declaration, Edge,
-    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position,
-    ShapeSource, StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
+    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content, ContentPiece,
+    CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS,
+    Length, LineHeight, Position, ShapeSource, StringPiece, StringSet, Target, TextAlign,
+    TextJustify, TextTransform, WrapFlow,
 };
 
 use super::StyleError;
@@ -307,17 +308,78 @@ pub(super) fn page_name(input: &mut Parser<'_, '_>) -> Option<Option<String>> {
     }
 }
 
-/// What an element paints in place of children: a literal, or
-/// nothing. The page counter belongs to margin boxes, not to prose.
-pub(super) fn ornament(input: &mut Parser<'_, '_>) -> Option<Content> {
-    if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
-        return Some(Content::Text(text.as_ref().to_string()));
+/// What `content` generates: nothing, or literals and references in
+/// the order they are set. Literals written side by side are one
+/// literal. The page counter belongs to margin boxes, not to prose.
+pub(super) fn generated(input: &mut Parser<'_, '_>) -> Option<Content> {
+    if input.try_parse(none_keyword).is_ok() {
+        return Some(Content::None);
     }
-    input
-        .expect_ident()
-        .ok()?
-        .eq_ignore_ascii_case("none")
-        .then_some(Content::None)
+    let mut pieces: Vec<ContentPiece> = Vec::new();
+    loop {
+        let piece = if let Ok(text) = input.try_parse(|input| input.expect_string().cloned()) {
+            ContentPiece::Text(text.as_ref().to_string())
+        } else if let Ok(piece) = input.try_parse(reference) {
+            piece
+        } else {
+            break;
+        };
+        match (pieces.last_mut(), piece) {
+            (Some(ContentPiece::Text(before)), ContentPiece::Text(text)) => before.push_str(&text),
+            (_, piece) => pieces.push(piece),
+        }
+    }
+    match pieces.as_slice() {
+        [] => None,
+        [ContentPiece::Text(text)] => Some(Content::Text(text.clone())),
+        _ => Some(Content::Pieces(pieces)),
+    }
+}
+
+/// `target-counter(<target>, page, <counter-style>?)` or
+/// `target-text(<target>)`. `page` is the only counter there is.
+fn reference<'i>(
+    input: &mut Parser<'i, '_>,
+) -> Result<ContentPiece, ParseError<'i, StyleError<'i>>> {
+    let function = input.expect_function()?.clone();
+    input.parse_nested_block(|input| {
+        let target = target(input)?;
+        let piece = if function.eq_ignore_ascii_case("target-text") {
+            ContentPiece::TargetText { target }
+        } else if function.eq_ignore_ascii_case("target-counter") {
+            input.expect_comma()?;
+            input.expect_ident_matching("page")?;
+            let style = match input.try_parse(|input| input.expect_comma()) {
+                Ok(()) => {
+                    let keyword = input.expect_ident()?.clone();
+                    CounterStyle::parse(&keyword).ok_or_else(|| {
+                        input.new_custom_error(StyleError::UnsupportedValue(keyword))
+                    })?
+                }
+                Err(_) => CounterStyle::Decimal,
+            };
+            ContentPiece::TargetCounter { target, style }
+        } else {
+            return Err(input.new_custom_error(StyleError::UnsupportedValue(function.clone())));
+        };
+        input.expect_exhausted()?;
+        Ok(piece)
+    })
+}
+
+/// The element a reference names: the link's own `href`, read with
+/// `attr(href url)`, or a url written as a string.
+fn target<'i>(input: &mut Parser<'i, '_>) -> Result<Target, ParseError<'i, StyleError<'i>>> {
+    if let Ok(url) = input.try_parse(|input| input.expect_string().cloned()) {
+        return Ok(Target::Url(url.as_ref().to_string()));
+    }
+    input.expect_function_matching("attr")?;
+    input.parse_nested_block(|input| {
+        input.expect_ident_matching("href")?;
+        let _ = input.try_parse(|input| input.expect_ident_matching("url"));
+        input.expect_exhausted()?;
+        Ok(Target::Href)
+    })
 }
 
 /// `string-set: none | <name> [content() | <string>]+ [, …]`. What a

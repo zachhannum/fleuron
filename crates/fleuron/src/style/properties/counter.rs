@@ -1,9 +1,9 @@
-//! What a margin box holds: a counter spelled out, a named string,
-//! or text the sheet wrote.
+//! What `content` holds: a counter spelled out, a named string, text
+//! the sheet wrote, or a reference to another element.
 
 use serde::Serialize;
 
-/// What a page margin box paints.
+/// What a page margin box paints, or what a pseudo-element generates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Content {
@@ -16,6 +16,68 @@ pub enum Content {
     String(String),
     /// A literal string.
     Text(String),
+    /// Literals and references, in the order they are set. Only a
+    /// value with a reference in it comes to this. Strings alone are
+    /// joined into one `Text`.
+    Pieces(Vec<ContentPiece>),
+}
+
+impl Content {
+    /// Whether this prints the page another element lands on, which
+    /// is only known once the book is paginated.
+    pub fn counts_pages(&self) -> bool {
+        match self {
+            Content::Pieces(pieces) => pieces
+                .iter()
+                .any(|piece| matches!(piece, ContentPiece::TargetCounter { .. })),
+            _ => false,
+        }
+    }
+}
+
+/// One piece of a `content` value that names another element.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentPiece {
+    /// A literal.
+    Text(String),
+    /// `target-counter()`: the folio of the page the target lands on,
+    /// spelled as the style names.
+    TargetCounter {
+        /// The element whose page is printed.
+        target: Target,
+        /// How the folio is spelled.
+        style: CounterStyle,
+    },
+    /// `target-text()`: the text of the target itself.
+    TargetText {
+        /// The element whose text is printed.
+        target: Target,
+    },
+}
+
+/// The element a reference names.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Target {
+    /// `attr(href url)`: the url of the link the pseudo-element
+    /// belongs to.
+    Href,
+    /// A url the sheet wrote.
+    Url(String),
+}
+
+impl Target {
+    /// The id this target names, read from `href` where the target is
+    /// the link's own. A url that is not `#` and an id names nothing
+    /// in the book.
+    pub fn id<'a>(&'a self, href: Option<&'a str>) -> Option<&'a str> {
+        let url = match self {
+            Target::Href => href?,
+            Target::Url(url) => url,
+        };
+        url.strip_prefix('#').filter(|id| !id.is_empty())
+    }
 }
 
 /// How a counter's value is spelled.

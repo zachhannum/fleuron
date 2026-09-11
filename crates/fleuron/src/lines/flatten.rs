@@ -47,7 +47,8 @@ pub(super) struct FlatParagraph {
 /// written in. Stretches are contiguous, so one origin runs to where
 /// the next begins.
 struct Origin {
-    node: NodeId,
+    /// `None` on text the sheet generated, which no node holds.
+    node: Option<NodeId>,
     /// Where the stretch starts in the paragraph's source.
     start: u32,
     /// Where it starts in the node's own text, which is past the
@@ -148,7 +149,7 @@ impl FlatParagraph {
 
     /// Opens a stretch of the source written in `node`, starting
     /// `node_start` bytes into that node's own text.
-    fn open(&mut self, node: NodeId, node_start: usize) {
+    fn open(&mut self, node: Option<NodeId>, node_start: usize) {
         self.origins.push(Origin {
             node,
             start: self.source_len() as u32,
@@ -160,7 +161,8 @@ impl FlatParagraph {
     /// written in: the node, where the stretch starts in that node's
     /// own text, and the source it covers.
     ///
-    /// `None` where no node was walked: page furniture, an ornament.
+    /// `None` where no node was walked: page furniture, an ornament,
+    /// text the sheet generated.
     fn origin_at(&self, byte: usize) -> Option<(NodeId, u32, Range<usize>)> {
         let at = self.source_at(byte);
         let index = self
@@ -171,7 +173,7 @@ impl FlatParagraph {
         let end = self.origins[index + 1..]
             .first()
             .map_or(self.source_len(), |next| next.start as usize);
-        Some((origin.node, origin.node_start, origin.start as usize..end))
+        Some((origin.node?, origin.node_start, origin.start as usize..end))
     }
 
     /// The node one stretch of the shaped text was written in, and
@@ -378,15 +380,40 @@ impl LineLayout<'_> {
             match inline {
                 Inline::Text { id, value, .. } => self.push_text(flat, *id, value, style, lead),
                 Inline::Code { id, value, .. } => {
-                    self.push_text(flat, *id, value, styles.style(*id, style), lead)
+                    let generated = styles.generated(inline);
+                    self.push_generated(flat, generated.before, lead);
+                    self.push_text(flat, *id, value, styles.style(*id, style), lead);
+                    self.push_generated(flat, generated.after, lead);
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
+                    let generated = styles.generated(inline);
+                    self.push_generated(flat, generated.before, lead);
                     self.walk_inlines(children, styles.style(*id, style), styles, lead, flat);
+                    self.push_generated(flat, generated.after, lead);
                 }
             }
         }
+    }
+
+    /// Appends text the sheet generated. No node holds it, so the
+    /// runs it lands in name none, and a drop cap passes over none of
+    /// it.
+    fn push_generated(
+        &self,
+        flat: &mut FlatParagraph,
+        generated: Option<(String, ParagraphStyle)>,
+        lead: Lead,
+    ) {
+        let Some((value, style)) = generated else {
+            return;
+        };
+        if value.is_empty() {
+            return;
+        }
+        flat.open(None, 0);
+        self.push_run(flat, &value, style, lead);
     }
 
     /// Appends one node's text, in the opening style as far as it
@@ -417,7 +444,13 @@ impl LineLayout<'_> {
         if value.is_empty() {
             return;
         }
-        flat.open(node, node_start);
+        flat.open(Some(node), node_start);
+        self.push_run(flat, value, style, lead);
+    }
+
+    /// Appends one stretch of text, in the opening style as far as
+    /// it reaches and in `style` after that.
+    fn push_run(&self, flat: &mut FlatParagraph, value: &str, style: ParagraphStyle, lead: Lead) {
         let (opening, extent) = match lead.style {
             Some(first) if flat.text.len() < lead.reach() => (first.over(style), lead.reach()),
             _ => {
