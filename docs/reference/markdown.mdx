@@ -90,11 +90,27 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `> …` | `blockquote`, nesting |
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
+| a table | `table`, with a row for each line and a cell for each column |
 | `{.class #id}` on a line of its own | the classes and id of the block under it |
 
 An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
 
 The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
+
+## Tables
+
+A table in markdown becomes a `table` in the tree. The row above the delimiter row is the header row, and each row under it is a body row. Each cell holds its prose as one paragraph. An image written in a cell stays in that cell.
+
+```markdown
+| Where it was found | What it was |
+|:---|---:|
+| The right fob | A watch |
+| The left fob | A purse |
+```
+
+The delimiter row gives each column an alignment: `:---` is left, `:---:` is center, and `---:` is right. Every cell of the column carries it as `align`. The engine applies it to the cell as `text-align`, and a `text-align` rule in a stylesheet takes priority over it.
+
+A row with fewer cells than the header row gets empty cells at its end. A table has no syntax for a cell that spans two columns or two rows.
 
 ## Naming a block
 
@@ -145,7 +161,7 @@ The manuscript below uses every construct in the tables above, the ones with no 
   demo="mapping"
   editors="markdown"
   warnings
-  caption="One manuscript through the frontend, read as GFM so the table is a table. Take a construct out, or put another in, and the report changes with it."
+  caption="One manuscript through the frontend, read as GFM so that strikethrough is recognized. Take a construct out, or put another in, and the report changes with it."
 />
 
 These constructs have no counterpart in the content tree. The frontend lays them out as prose and reports the file, line and column. Prose is never dropped.
@@ -153,7 +169,6 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | construct | becomes |
 |---|---|
 | a list | one paragraph per item |
-| a table | one paragraph per cell |
 | a code block | a paragraph |
 | a definition list | one paragraph per entry |
 | a footnote | prose where the definition was written |
@@ -172,11 +187,12 @@ These constructs have no counterpart in the content tree. The frontend lays them
 |---|---|
 | `frontmatter` | A leading `---` block is metadata rather than a scene break. On by default. |
 | `attributes` | An attribute line names the block under it, and a heading or an image takes the run written after it. On by default. |
-| `gfm` | Tables, strikethrough, task lists. |
+| `tables` | Tables, written as GitHub writes them. On by default. |
+| `gfm` | Strikethrough and task lists. |
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 
-`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run is prose.
+`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run and a table are prose.
 
 A switch that is off turns its syntax into prose rather than an error. `[[Another Note]]` without `wikilinks` is four brackets and a title.
 

@@ -289,14 +289,15 @@ without a name, which is [the whole of the difficulty](https://example.com).
 
 ---
 
+| Ship | Sailed | Port |
+|:---|:---|---:|
+| The *Hesper* | 3 March | Smyrna |
+| The *Ariel* | 9 March | Beirut |
+
 What the vocabulary has no room for is set as prose and reported:
 
 1. a numbered list, one paragraph per item
 2. and its second item
-
-| construct | becomes |
-|---|---|
-| a table | one paragraph per cell |
 
 \`\`\`
 a code block, one paragraph
