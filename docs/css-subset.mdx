@@ -234,6 +234,29 @@ Text fills the first column to the bottom, then the next, and only the last colu
 
 Running heads and page numbers belong to the page rather than to a column, so dividing the content box leaves them where they are. An image you put against the page belongs to the page as well. See [Images on a divided page](#images-on-a-divided-page) for how the text of each column wraps around it.
 
+### Spanning the columns
+
+A book with two columns often puts its headings and its tables across both of them. Set `column-span: all` on a block to put it across the whole content box, with columns above it and columns below it.
+
+The following example puts every chapter heading and every table across both columns:
+
+```css
+@page {
+  column-count: 2;
+  column-gap: 18pt;
+}
+
+h2, table {
+  column-span: all;
+}
+```
+
+The engine does not balance the columns above a spanning block, so they can end at different heights. The text below the block starts under it. That text fills the first column and then the next. A column rule stops above a spanning block and starts again under it.
+
+If a spanning block does not fit in the space left on the page, it moves to the next page whole. Only a spanning block that is taller than a page splits across pages. The built-in stylesheet gives every heading `break-after: avoid`. If the text under a spanning heading does not fit on the page, the heading moves to the next page with that text.
+
+`column-span` applies to the blocks of a section. It does not apply to a block inside a quotation or a table cell. On a page with one column, `column-span` has no effect.
+
 ## Selectors
 
 {/* generated: elements */}
@@ -970,9 +993,9 @@ code { font-family: monospace }
 | backgrounds | the `background` shorthand, and every background property but `background-color` |
 | borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
 | inline boxes | a border, padding, or background on an inline element, or on `@page` |
-| columns | `column-fill`, `column-rule-color`, `column-span`, the `columns` and `column-rule` shorthands, and columns on any element |
+| columns | `column-fill`, `column-rule-color`, the `columns` and `column-rule` shorthands, columns on any element, and `column-span` on a block inside a quotation or a table cell |
 
-Three of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color. Nothing can run the full width with columns above and below it.
+Two of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color.
 
 The engine reports each unsupported declaration on its own, naming the line and column it was written at, and the rest of the stylesheet still applies. See [diagnostics](library/diagnostics.mdx) for how to read a warning. These are properties the engine does not support yet, not ones it refuses.
 
