@@ -1031,6 +1031,126 @@ fn a_two_column_wrapped_page_paints_the_same_in_the_preview_and_the_pdf() {
     }
 }
 
+/// The column sheet with the chapters run together, so a chapter
+/// heading falls partway down a page, and the headings and the table
+/// set across both columns.
+const COLUMNS_SPANNING_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n\nsection { break-before: auto }\n\nh2, h3, table { column-span: all }\n";
+
+/// The fixture book with its headings and its table across both
+/// columns: structurally sound, every word of it still there, and
+/// the page count the layout settled.
+#[test]
+fn a_book_with_spanning_heads_reaches_the_pdf() {
+    let sheet = write_sheet("columns-spanning", COLUMNS_SPANNING_CSS);
+    let (pdf, stderr) = render("columns-spanning", &[&sheet]);
+    assert!(
+        !stderr.contains("warning"),
+        "the spanning sheet is in the subset: {stderr}",
+    );
+    let pages = pages_under(COLUMNS_SPANNING_CSS);
+    assert!(
+        stderr.contains(&format!("{} pages", pages.len())),
+        "the run did not report the {} pages the layout settled: {stderr}",
+        pages.len(),
+    );
+    // Reading order guesses a page's blocks from where they sit, and
+    // on a page of tiers it reads down the left side past a heading.
+    // The writer puts runs in the order the columns fill.
+    if let Some(text) = extract_content_order(&pdf) {
+        assert_eq!(pages_of(&text).len(), pages.len());
+        if let Err(difference) = holds(&fixture_book(), &strip_folios(&text), unhyphenated, true) {
+            panic!("the spanning PDF's prose is not the book's: {difference}");
+        }
+    }
+    let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
+        return;
+    };
+    assert!(
+        check.status.success(),
+        "qpdf --check: {}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+}
+
+/// Acceptance: the preview and the export agree over a page with a
+/// spanning heading on it, between a tier of columns above it and a
+/// tier below.
+///
+/// The preview paints from the display structure, so what the two
+/// have to agree about is where every run and every rule goes.
+#[test]
+fn a_page_with_a_spanning_heading_paints_the_same_in_the_preview_and_the_pdf() {
+    let pages = pages_under(COLUMNS_SPANNING_CSS);
+    let (index, heading) = pages
+        .iter()
+        .enumerate()
+        .find_map(|(index, page)| {
+            page.items.iter().find_map(|item| match item {
+                DrawItem::Text { text, y, .. } if text.starts_with("CHAPTER II") => {
+                    Some((index, *y))
+                }
+                _ => None,
+            })
+        })
+        .expect("the second chapter has a heading");
+    let page = &pages[index];
+    assert!(
+        page.items
+            .iter()
+            .any(|item| matches!(item, DrawItem::Text { y, .. } if *y < heading)),
+        "the second chapter opens its page, so nothing stands above its heading",
+    );
+    let rules: Vec<_> = fills(page, Color::BLACK)
+        .filter(|(_, _, w, h, _)| h > w)
+        .collect();
+    assert!(!rules.is_empty(), "the page paints no column rule");
+    for (_, y, _, h, _) in &rules {
+        assert!(
+            y + h < heading || *y > heading,
+            "a rule over {y}..{} runs through the heading on {heading}",
+            y + h,
+        );
+    }
+
+    // The export puts the same runs at the same points as the display
+    // structure the preview paints from, and fills the same rules.
+    let sheet = write_sheet("columns-spanning-preview", COLUMNS_SPANNING_CSS);
+    let (pdf, _) = render("columns-spanning-preview", &[&sheet]);
+    let Some(streams) = content_streams(&pdf) else {
+        return;
+    };
+    let painted: Vec<(f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+    let written = placed_runs(&streams);
+    assert_eq!(
+        painted.len(),
+        written.len(),
+        "the preview paints {} runs and the PDF writes {}",
+        painted.len(),
+        written.len(),
+    );
+    for (index, (paints, writes)) in painted.iter().zip(&written).enumerate() {
+        assert!(
+            (paints.0 - writes.0).abs() < 1e-3 && (paints.1 - writes.1).abs() < 1e-3,
+            "run {index}: the preview paints it at {paints:?} and the PDF at {writes:?}",
+        );
+    }
+    for (x, y, ..) in &rules {
+        let corner = format!("{x} {y} m");
+        assert!(
+            streams.contains(&corner),
+            "the PDF paints no rule at {corner}"
+        );
+    }
+}
+
 /// Every text run a PDF places, as `(x, baseline)` in the display
 /// structure's own coordinates, in the order the writer wrote them.
 ///
@@ -1582,6 +1702,11 @@ fn extract_text(pdf: &Path) -> Option<String> {
 /// column, then down the next.
 fn extract_reading_order(pdf: &Path) -> Option<String> {
     extract_with(pdf, &[])
+}
+
+/// The same in the order the runs were written to the page.
+fn extract_content_order(pdf: &Path) -> Option<String> {
+    extract_with(pdf, &["-raw"])
 }
 
 fn extract_with(pdf: &Path, flags: &[&str]) -> Option<String> {
