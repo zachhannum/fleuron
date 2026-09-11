@@ -794,6 +794,56 @@ check(
   `${columns[turn]?.y} against ${columns[turn - 1]?.y}`,
 );
 
+// Spanning. The chapters run together, so a chapter heading falls
+// partway down a page, and it is set across both columns with a tier
+// of columns above it and a tier below. The painter draws every glyph
+// and every rule of that page where the display structure put them,
+// which is where the PDF writer puts them too.
+const spanned = await client.preview([
+  styleOp(
+    '@page { column-count: 2; column-gap: 18pt; column-rule-style: solid; column-rule-width: 0.5pt } ' +
+      'section { break-before: auto } h2, h3, table { column-span: all }',
+  ),
+]);
+const across =
+  spanned?.pages.find((page) => {
+    const heading = page.items.find(
+      (item): item is TextItem => item.kind === 'text' && item.text.startsWith('CHAPTER II'),
+    );
+    return (
+      heading !== undefined && page.items.some((item) => item.kind === 'text' && item.y < heading.y)
+    );
+  }) ?? null;
+check(
+  'a chapter heading spans the columns partway down a page',
+  across !== null,
+  across === null ? 'no page sets the second chapter under a tier of columns' : '',
+);
+const acrossRects = (across?.items ?? []).filter((item): item is RectItem => item.kind === 'rect');
+const acrossDrawn =
+  across === null ? '' : paintPage(across, { fonts: spanned?.fonts ?? [], paper: null });
+const acrossPainted = rects(acrossDrawn);
+check(
+  'and the painter draws its rules where the display structure put them',
+  acrossRects.length > 0 &&
+    acrossPainted.length === acrossRects.length &&
+    acrossRects.every(
+      (rule, at) =>
+        near(acrossPainted[at]?.['x'], rule.x) &&
+        near(acrossPainted[at]?.['y'], rule.y) &&
+        near(acrossPainted[at]?.['width'], rule.w) &&
+        near(acrossPainted[at]?.['height'], rule.h),
+    ),
+  `${JSON.stringify(acrossPainted)} against ${JSON.stringify(acrossRects)}`,
+);
+const acrossMisplaced =
+  across === null || spanned === null ? 'no page to paint' : misplaced(across, spanned);
+check(
+  'and every glyph on it where the display structure put it',
+  acrossMisplaced === null,
+  acrossMisplaced ?? '',
+);
+
 // An anchored image. The sheet takes the map out of the text and
 // against the page. The prose of that page sets beside it, and the
 // painter draws both where the display structure put them. The PDF

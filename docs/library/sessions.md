@@ -107,7 +107,8 @@ The first is a single line width. Masters with different line widths make where 
 lands on, and that depends on everything before it. Asymmetric `@page :left` and `@page :right` margins are this 
 case, so is a named master set narrower, and so is one that divides its content box into a different number of 
 columns. Mirrored margins are not: the built-in sheet mirrors the spine margin across the spread and both sides 
-come to the same line width.
+come to the same line width. The lines of a block with `column-span: all` break to the width of the whole content 
+box. If a book has such a block, every master also needs the same content box width.
 
 The second is that no prose depends on pagination. `counter(page)` and `string()` 
 are legal only inside a margin box, so nothing in the text can depend on where the text fell. 

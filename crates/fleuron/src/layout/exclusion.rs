@@ -291,13 +291,12 @@ impl Flow<'_, '_> {
         // boundary under them is a break to do again.
         let mut narrowed = false;
         while at < set.len() {
+            if set[at].spanning != self.tier().spanning {
+                self.open_tier(set[at].spanning);
+            }
             // The profile is read against where the line sits, which
             // is where `place` is about to put it.
-            let lead = if self.column_empty() {
-                0.0
-            } else {
-                set[at].lead
-            };
+            let lead = if self.opening() { 0.0 } else { set[at].lead };
             let top = self.cursor + lead + set[at].fixed;
             let from = if at == 0 { 0 } else { ends[at - 1] };
             let profile = self.profile(top, reflow, from == 0);
@@ -353,7 +352,7 @@ impl Flow<'_, '_> {
         self.cursor = self.placed[self.column_start..]
             .last()
             .map(|placed| placed.top + placed.height)
-            .unwrap_or(0.0);
+            .unwrap_or(self.tier().top);
     }
 
     /// The images on the page being built that reach the column being
@@ -363,18 +362,23 @@ impl Flow<'_, '_> {
     /// of the page, so which images a column sets around is the
     /// overlap of the two. An image that reaches no part of this
     /// column is not one of its holes, and an image that reaches two
-    /// columns is a hole in each of them.
+    /// columns is a hole in each of them. A paragraph that spans the
+    /// columns reads the whole content box.
     fn holes(&self) -> Vec<Hole<'_>> {
         let index = self.pages.len();
         let Some(anchored) = self.anchored.by_page.get(&index) else {
             return Vec::new();
         };
         let geometry = self.paginator.master(index, &self.slot).geometry;
-        let origin = geometry.column_origin(self.column);
+        let (origin, width) = if self.tier().spanning {
+            (geometry.content_origin(), geometry.content_size().0)
+        } else {
+            (geometry.column_origin(self.column), geometry.measure())
+        };
         let column = Rect {
             x: origin.0,
             y: origin.1,
-            w: geometry.measure(),
+            w: width,
             h: self.height,
         };
         anchored

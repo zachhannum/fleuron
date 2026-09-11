@@ -300,3 +300,15 @@ pub enum BorderCollapse {
     /// `collapse`: two cells that meet draw one border between them.
     Collapse,
 }
+
+/// How many columns of a divided page a block is set across, from
+/// `column-span`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColumnSpan {
+    /// `none`: the block is set in one column.
+    None,
+    /// `all`: the block is set across the whole content box, with
+    /// columns above it and columns below it.
+    All,
+}

@@ -25,8 +25,8 @@ pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens,
-    Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
+    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
+    FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
 };
 
 pub(crate) use edges::{LINE_WIDTHS, MEDIUM};
@@ -74,4 +74,5 @@ pub enum Declaration {
     BreakBefore(Break),
     BreakAfter(Break),
     BreakInside(Break),
+    ColumnSpan(ColumnSpan),
 }

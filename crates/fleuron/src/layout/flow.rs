@@ -67,7 +67,9 @@ pub(super) struct Placed {
     section: NodeId,
     /// The column of the page it landed in.
     column: u32,
-    /// Top of its box, from its column's top.
+    /// The tier of the page it landed in.
+    tier: usize,
+    /// Top of its box, from the content box's top.
     pub(super) top: f32,
     /// Its own height.
     pub(super) height: f32,
@@ -85,6 +87,30 @@ pub(super) struct Placed {
     /// Whether it is a table's body row, which has the header rows
     /// set above it when it opens a column.
     repeats: bool,
+}
+
+/// One tier of the page being built: a row of columns, or the whole
+/// content box for the blocks that span them. A page is its tiers,
+/// top to bottom.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Tier {
+    /// Top, from the content box's top.
+    pub(super) top: f32,
+    /// Whether it holds blocks that span the columns.
+    pub(super) spanning: bool,
+    /// Where in `placed` it begins.
+    start: usize,
+}
+
+impl Tier {
+    /// The tier a page opens with.
+    fn head(spanning: bool) -> Tier {
+        Tier {
+            top: 0.0,
+            spanning,
+            start: 0,
+        }
+    }
 }
 
 /// The flow: fragments in, pages out.
@@ -108,9 +134,9 @@ pub(super) struct Flow<'a, 'p> {
     pending_slot: Option<PageSlot>,
     /// The section whose fragments are being placed.
     section: NodeId,
-    /// Bottom of what is placed, from the column's top.
+    /// Bottom of what is placed, from the content box's top.
     pub(super) cursor: f32,
-    /// Height of the column being filled, which is the content box's.
+    /// Height of the content box, where every column ends.
     pub(super) height: f32,
     /// The column being filled, counting from the leading edge.
     pub(super) column: u32,
@@ -119,6 +145,9 @@ pub(super) struct Flow<'a, 'p> {
     /// Where in `placed` the column being filled began. A break backs
     /// up to a fragment of this column, never past its head.
     pub(super) column_start: usize,
+    /// The tiers of the page being built, top first. Never empty: the
+    /// last is the one being filled.
+    tiers: Vec<Tier>,
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
     carried: Vec<Decoration>,
@@ -161,6 +190,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             column: 0,
             columns: geometry.column_count(),
             column_start: 0,
+            tiers: vec![Tier::head(false)],
             carried: Vec::new(),
             anchored,
             anchors: BTreeMap::new(),
@@ -236,6 +266,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
         if let BreakPoint::Forced(wanted) = fragment.break_before {
             match wanted {
+                // A tier that opens here opens columns of its own.
+                Break::Column if fragment.spanning != self.tier().spanning => {}
                 Break::Column => self.break_column(),
                 _ => {
                     self.close();
@@ -261,7 +293,10 @@ impl<'a, 'p> Flow<'a, 'p> {
         // the break falls here whatever the cascade wanted.
         let mut forced = false;
         loop {
-            let opening = self.column_empty();
+            if fragment.spanning != self.tier().spanning {
+                self.open_tier(fragment.spanning);
+            }
+            let opening = self.opening();
             let lead = if opening { 0.0 } else { fragment.lead };
             if opening || self.cursor + lead + fragment.fixed + fragment.height <= self.height {
                 let headed = opening && repeats(fragment) && self.head_rows();
@@ -296,6 +331,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.placed.push(Placed {
             section: self.section,
             column: self.column,
+            tier: self.tiers.len() - 1,
             top,
             height: fragment.height,
             break_before: fragment.break_before,
@@ -325,6 +361,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.placed.push(Placed {
                 section: self.section,
                 column: self.column,
+                tier: self.tiers.len() - 1,
                 top,
                 height: *height,
                 break_before: BreakPoint::Forbidden,
@@ -344,55 +381,140 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.placed.len() == self.column_start
     }
 
+    /// Whether the next fragment opens a column: nothing stands in
+    /// it, and a break led to it rather than a tier above it. Such a
+    /// fragment drops its lead, and it is placed whether it fits or
+    /// not, which is what keeps the flow moving.
+    pub(super) fn opening(&self) -> bool {
+        self.column_empty() && (self.column > 0 || self.tier().start == 0)
+    }
+
+    /// The tier being filled.
+    pub(super) fn tier(&self) -> Tier {
+        *self.tiers.last().expect("a page has a tier")
+    }
+
+    /// Closes the tier being filled and opens one under the foot of
+    /// its tallest column, for blocks that span the columns or for
+    /// blocks that do not. The columns of the tier it closes keep the
+    /// heights they filled to.
+    pub(super) fn open_tier(&mut self, spanning: bool) {
+        let tier = self.tier();
+        let top = self.placed[tier.start..]
+            .iter()
+            .map(|placed| placed.top + placed.height)
+            .fold(tier.top, f32::max);
+        // A tier with nothing in it yet becomes the one asked for.
+        if tier.start == self.placed.len() {
+            self.tiers.pop();
+        }
+        self.tiers.push(Tier {
+            top,
+            spanning,
+            start: self.placed.len(),
+        });
+        self.column = 0;
+        self.column_start = self.placed.len();
+        self.cursor = top;
+    }
+
     /// The last place above the foot of the column where a break was
     /// allowed. Never its head: a column that carries everything on
     /// it into the next one makes no progress.
+    ///
+    /// The head of a tier's first column is different where a tier
+    /// stands above it. A break there falls between the two tiers,
+    /// and where it is forbidden, the search goes on up the last
+    /// column of the tier above. A heading that spans the columns
+    /// then moves to the next page with the prose under it.
     fn back_up(&self) -> Option<usize> {
-        (self.column_start + 1..self.placed.len())
-            .rev()
-            .find(|index| self.placed[*index].break_before == BreakPoint::Allowed)
+        let allowed = |index: usize| self.placed[index].break_before == BreakPoint::Allowed;
+        let (mut head, mut end, mut tier) =
+            (self.column_start, self.placed.len(), self.tiers.len() - 1);
+        loop {
+            if let Some(index) = (head + 1..end).rev().find(|index| allowed(*index)) {
+                return Some(index);
+            }
+            if tier == 0 || head != self.tiers[tier].start {
+                return None;
+            }
+            if head < self.placed.len() && allowed(head) {
+                return Some(head);
+            }
+            tier -= 1;
+            end = head;
+            let last = self.placed[end - 1].column;
+            head = (self.tiers[tier].start..end)
+                .find(|index| self.placed[*index].column == last)
+                .unwrap_or(end - 1);
+        }
     }
 
     /// Ends the column at `cut`, carrying what was below into the
     /// next one, which is the next page's first where the column that
     /// ended was the page's last. Carried fragments move; they are
     /// never measured again.
+    ///
+    /// A cut at the head of the tier being filled, or above it, ends
+    /// the page: the columns of a tier share a top, so the next one
+    /// has no more room than this one. What came out of more than one
+    /// tier opens a tier for each on the next page, one under the
+    /// other.
     fn carry(&mut self, cut: usize) {
+        let crossing = cut <= self.tier().start;
         let mut carried = self.placed.split_off(cut);
-        let (from_x, from_y) = self.origin();
-        self.advance();
-        let (to_x, to_y) = self.origin();
+        let from: Vec<(f32, f32)> = carried
+            .iter()
+            .map(|placed| self.column_origin(placed.column))
+            .collect();
+        let tiers = self.tiers.clone();
+        if crossing {
+            let kept = self.tiers.iter().filter(|tier| tier.start < cut).count();
+            self.tiers.truncate(kept);
+            self.close();
+        } else {
+            self.advance();
+        }
         let Some(head) = carried.first().map(|placed| placed.top) else {
             return;
         };
+        let mut tier = carried[0].tier;
+        if self.tier().spanning != tiers[tier].spanning {
+            self.open_tier(tiers[tier].spanning);
+        }
         // A table's body row carried to the head of the column has the
         // header rows set above it.
         if carried[0].repeats && self.head_rows() {
             carried[0].break_before = BreakPoint::Forbidden;
         }
         // The carried group starts at the head of the fresh column,
-        // and the space that was above it there is dropped.
-        let below = self.cursor;
-        let (dx, dy) = (to_x - from_x, to_y - from_y - head + below);
-        let column = self.column;
-        for placed in &mut carried {
-            placed.top += below - head;
-            placed.column = column;
-            shift(&mut placed.items, dx, dy);
+        // and the space that was above it there is dropped. A tier
+        // under it keeps the space it had under the tier above.
+        let mut down = self.cursor - head;
+        for (mut placed, (from_x, from_y)) in carried.into_iter().zip(from) {
+            if placed.tier != tier {
+                tier = placed.tier;
+                self.open_tier(tiers[tier].spanning);
+                down = self.cursor - tiers[tier].top;
+            }
+            let (to_x, to_y) = self.origin();
+            placed.top += down;
+            placed.column = self.column;
+            placed.tier = self.tiers.len() - 1;
+            shift(&mut placed.items, to_x - from_x, to_y - from_y + down);
+            self.cursor = placed.top + placed.height;
+            self.placed.push(placed);
         }
-        self.cursor = carried
-            .last()
-            .map(|placed| placed.top + placed.height)
-            .unwrap_or(below);
-        self.placed.append(&mut carried);
     }
 
     /// Moves to the next column, or ends the page when the column
-    /// that filled was its last.
+    /// that filled was its last. A tier of blocks that span the
+    /// columns is one column.
     fn advance(&mut self) {
-        if self.column + 1 < self.columns {
+        let tier = self.tier();
+        if !tier.spanning && self.column + 1 < self.columns {
             self.column += 1;
-            self.cursor = 0.0;
+            self.cursor = tier.top;
             self.column_start = self.placed.len();
         } else {
             self.close();
@@ -401,9 +523,9 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     /// What `break-before: column` asks for: the next column, unless
     /// this one is still empty, which is already the column it asks
-    /// for.
+    /// for. A block that spans the columns has no next column.
     fn break_column(&mut self) {
-        if !self.column_empty() {
+        if !self.tier().spanning && !self.column_empty() {
             self.advance();
         }
     }
@@ -466,6 +588,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.cursor = 0.0;
         self.column = 0;
         self.column_start = 0;
+        self.tiers = vec![Tier::head(self.tier().spanning)];
         self.remaster();
     }
 
@@ -521,7 +644,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// Resolves the decorations over the page being closed into the
-    /// rects they paint there, column by column.
+    /// rects they paint there, column by column and tier by tier.
     ///
     /// A column boundary cuts a block the way a page boundary does,
     /// so each column resolves on its own and what is still open at
@@ -529,32 +652,34 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn decorate(&mut self, placed: &[Placed]) -> Vec<DrawItem> {
         let mut items = Vec::new();
         let mut start = 0;
+        let region = |placed: &Placed| (placed.tier, placed.column);
         for index in 1..=placed.len() {
-            if index < placed.len() && placed[index].column == placed[start].column {
+            if index < placed.len() && region(&placed[index]) == region(&placed[start]) {
                 continue;
             }
-            let column = placed[start].column;
-            items.extend(self.decorate_column(&placed[start..index], column));
+            let (tier, column) = region(&placed[start]);
+            let top = self.tiers[tier].top;
+            items.extend(self.decorate_column(&placed[start..index], column, top));
             start = index;
         }
         items
     }
 
-    /// The same over one column.
+    /// The same over one column of one tier, whose top is `top`.
     ///
     /// A block whose first fragment landed in this column has its top
     /// edge here, and one whose last fragment did has its bottom; the
     /// ranges are contiguous, so a block with neither covers every
     /// fragment the column holds. What is still open when the column
     /// closes carries into the next.
-    fn decorate_column(&mut self, placed: &[Placed], column: u32) -> Vec<DrawItem> {
+    fn decorate_column(&mut self, placed: &[Placed], column: u32, top: f32) -> Vec<DrawItem> {
         let mut boxes: Vec<Painted> = Vec::new();
         let mut open: Vec<usize> = Vec::new();
         for decoration in self.carried.drain(..) {
             open.push(boxes.len());
             boxes.push(Painted {
                 decoration,
-                top: 0.0,
+                top,
                 bottom: 0.0,
                 cut_above: true,
                 cut_below: true,
@@ -583,7 +708,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let last = placed
             .last()
             .map(|entry| entry.top + entry.height)
-            .unwrap_or(0.0);
+            .unwrap_or(top);
         for index in open {
             boxes[index].bottom = last;
             self.carried.push(boxes[index].decoration.clone());
@@ -592,39 +717,48 @@ impl<'a, 'p> Flow<'a, 'p> {
         boxes.iter().flat_map(|box_| box_.items(origin)).collect()
     }
 
-    /// The rules down the gutters of the page being closed: one down
-    /// each gutter the flow filled past, over the height of the
-    /// taller of the two columns it divides.
+    /// The rules down the gutters of the page being closed: in each
+    /// tier of columns, one down each gutter the flow filled past,
+    /// over the height of the taller of the two columns it divides.
     ///
-    /// A page the flow left in one column paints no rule.
+    /// A tier the flow left in one column paints no rule, and neither
+    /// does a tier of blocks that span the columns.
     fn rules(&self, placed: &[Placed]) -> Vec<DrawItem> {
         let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
         let width = geometry.columns.rule.used();
         if width <= 0.0 || self.columns < 2 {
             return Vec::new();
         }
-        let mut feet = vec![0.0f32; self.columns as usize];
-        let mut filled = vec![false; self.columns as usize];
-        for entry in placed {
-            let column = entry.column as usize;
-            feet[column] = feet[column].max(entry.top + entry.height);
-            filled[column] = true;
-        }
         let (_, top) = geometry.content_origin();
         let color = self.paginator.styles.root().color;
-        (1..self.columns as usize)
-            .filter(|column| filled[*column])
-            .map(|column| {
-                let gutter = geometry.column_origin(column as u32).0 - geometry.columns.gap;
-                DrawItem::Rect {
-                    x: gutter + (geometry.columns.gap - width) / 2.0,
-                    y: top,
-                    w: width,
-                    h: feet[column - 1].max(feet[column]),
-                    color,
-                }
-            })
-            .collect()
+        let mut items = Vec::new();
+        for (index, tier) in self.tiers.iter().enumerate() {
+            if tier.spanning {
+                continue;
+            }
+            let mut feet = vec![tier.top; self.columns as usize];
+            let mut filled = vec![false; self.columns as usize];
+            for entry in placed.iter().filter(|entry| entry.tier == index) {
+                let column = entry.column as usize;
+                feet[column] = feet[column].max(entry.top + entry.height);
+                filled[column] = true;
+            }
+            items.extend(
+                (1..self.columns as usize)
+                    .filter(|column| filled[*column])
+                    .map(|column| {
+                        let gutter = geometry.column_origin(column as u32).0 - geometry.columns.gap;
+                        DrawItem::Rect {
+                            x: gutter + (geometry.columns.gap - width) / 2.0,
+                            y: top + tier.top,
+                            w: width,
+                            h: feet[column - 1].max(feet[column]) - tier.top,
+                            color,
+                        }
+                    }),
+            );
+        }
+        items
     }
 
     pub(super) fn finish(mut self) -> Paged {
@@ -756,7 +890,7 @@ mod tests {
         Run, assert_orphans_and_widows_over, body_size, book_of, chapter, chapter_size,
         content_items, content_lines, folio_size, heading, long_prose, master, opens_a_chapter,
         page_geometry, paginate, paginate_styled, paragraph, prose, quote, rects, registry,
-        scene_break, section, styled_geometry, tagged_prose, ua,
+        right_edge, scene_break, section, styled_geometry, tagged_prose, ua,
     };
     use crate::pages::{DrawItem, Page, Side};
     use crate::style::{Color, Situation};
@@ -764,6 +898,344 @@ mod tests {
     /// A page divided in two, with a gutter wide enough to tell the
     /// columns apart by where a line starts.
     const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
+
+    /// The same page, with a heading across both columns.
+    const SPANNING: &str = "@page { column-count: 2; column-gap: 18pt } h1 { column-span: all }";
+
+    /// One content line of a page.
+    struct Laid {
+        baseline: f32,
+        /// Where its first run starts.
+        x: f32,
+        /// The column it starts in.
+        column: u32,
+        /// Whether it is set at the heading's size.
+        heading: bool,
+        /// The first word on it.
+        token: String,
+    }
+
+    /// The content lines of one page, in the order the flow placed
+    /// them.
+    fn laid(css: &str, page: &Page) -> Vec<Laid> {
+        let geometry = page_geometry(css, page);
+        content_lines(page)
+            .into_iter()
+            .map(|(baseline, runs)| {
+                let (x, size, text) = runs[0];
+                Laid {
+                    baseline,
+                    x,
+                    column: (0..geometry.column_count())
+                        .rev()
+                        .find(|column| x >= geometry.column_origin(*column).0 - 1e-3)
+                        .unwrap_or(0),
+                    heading: size == chapter_size(),
+                    token: text
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .to_string(),
+                }
+            })
+            .collect()
+    }
+
+    /// Paragraphs of one line each: `lines` lines of a column.
+    fn fillers(lines: usize) -> Vec<Block> {
+        (0..lines)
+            .map(|index| paragraph(&format!("filler {index}")))
+            .collect()
+    }
+
+    /// A tier of two columns over the heading, and prose enough under
+    /// it to fill both columns of the tier below.
+    fn between_two_tiers() -> Vec<Section> {
+        let blocks = [
+            vec![prose(), prose(), quote(vec![prose()]), heading("Across")],
+            (0..6).map(|_| prose()).collect(),
+        ]
+        .concat();
+        vec![section(blocks)]
+    }
+
+    /// Acceptance: `h1 { column-span: all }` on a two-column page sets
+    /// the heading across the whole content box, with columns above
+    /// it and columns below it.
+    #[test]
+    fn a_spanning_heading_sets_across_the_page_between_two_tiers_of_columns() {
+        let css =
+            format!("{SPANNING} h1 {{ text-align: center }} blockquote {{ break-before: column }}");
+        let pages = paginate_styled(&css, between_two_tiers());
+        let page = &pages[0];
+        let geometry = page_geometry(&css, page);
+        let lines = laid(&css, page);
+        let at = lines
+            .iter()
+            .position(|line| line.heading)
+            .expect("the heading is on the first page");
+        let heading = &lines[at];
+        // Centered in the content box, not in a column.
+        let (left, _) = geometry.content_origin();
+        let middle = (heading.x + right_edge(page, heading.baseline)) / 2.0;
+        let wanted = left + geometry.content_size().0 / 2.0;
+        assert!(
+            (middle - wanted).abs() < 0.5,
+            "the heading is centered on {middle}, not on {wanted}"
+        );
+        for column in 0..2 {
+            assert!(
+                lines[..at].iter().any(|line| line.column == column),
+                "nothing in column {column} above the heading"
+            );
+            assert!(
+                lines[at + 1..]
+                    .iter()
+                    .any(|line| line.column == column && line.baseline > heading.baseline),
+                "nothing in column {column} below the heading"
+            );
+        }
+    }
+
+    /// Acceptance: the prose under a spanning heading fills the left
+    /// column first and the right one second, and both open at the
+    /// foot of the heading.
+    #[test]
+    fn the_prose_under_a_spanning_heading_fills_the_left_column_first() {
+        let blocks = [vec![prose(), heading("Across")], tagged_prose(4)].concat();
+        let pages = paginate_styled(SPANNING, vec![section(blocks)]);
+        let lines = laid(SPANNING, &pages[0]);
+        let at = lines
+            .iter()
+            .position(|line| line.heading)
+            .expect("the heading is on the first page");
+        let under = &lines[at + 1..];
+        let turn = under
+            .iter()
+            .position(|line| line.column == 1)
+            .expect("the prose reaches the right column");
+        assert!(turn > 0, "the prose opened in the right column");
+        assert!(under[..turn].iter().all(|line| line.column == 0));
+        assert!(under[turn..].iter().all(|line| line.column == 1));
+        assert!(
+            (under[turn].baseline - under[0].baseline).abs() < 1e-3,
+            "the right column opens at {} and the left at {}",
+            under[turn].baseline,
+            under[0].baseline,
+        );
+        let tokens: Vec<&str> = under.iter().map(|line| line.token.as_str()).collect();
+        assert!(
+            tokens.windows(2).all(|pair| pair[0] <= pair[1]),
+            "the paragraphs are out of order: {tokens:?}"
+        );
+    }
+
+    /// Acceptance: a spanning heading that lands near the foot of a
+    /// page moves to the next one with the prose under it, rather than
+    /// close the page with nothing under it.
+    #[test]
+    fn a_spanning_heading_near_the_foot_moves_to_the_next_page() {
+        let mut moved = 0;
+        for filler in 24..=37 {
+            let blocks = [fillers(filler), vec![heading("Across")], tagged_prose(2)].concat();
+            let pages = paginate_styled(SPANNING, vec![section(blocks)]);
+            for page in &pages {
+                let lines = laid(SPANNING, page);
+                let Some(at) = lines.iter().position(|line| line.heading) else {
+                    continue;
+                };
+                let under = lines[at + 1..]
+                    .iter()
+                    .filter(|line| line.baseline > lines[at].baseline)
+                    .count();
+                assert!(
+                    under >= 2,
+                    "{filler} fillers: page {} sets {under} line(s) under the heading",
+                    page.number,
+                );
+                if at == 0 && page.number > 1 {
+                    moved += 1;
+                }
+            }
+        }
+        assert!(
+            moved > 1,
+            "only {moved} heading(s) reached the foot of a page"
+        );
+    }
+
+    /// The columns of a tier that a spanning heading closes keep the
+    /// heights they filled to: the heading opens under the taller one,
+    /// and the shorter one is not spaced out to meet it.
+    #[test]
+    fn the_columns_above_a_spanning_heading_keep_their_heights() {
+        let css = format!("{SPANNING} blockquote {{ break-before: column; margin: 0 }}");
+        let blocks = vec![
+            prose(),
+            prose(),
+            prose(),
+            quote(vec![prose()]),
+            heading("Across"),
+            prose(),
+        ];
+        let pages = paginate_styled(&css, vec![section(blocks)]);
+        let lines = laid(&css, &pages[0]);
+        let at = lines
+            .iter()
+            .position(|line| line.heading)
+            .expect("the heading is on the first page");
+        let baselines = |column: u32| -> Vec<f32> {
+            lines[..at]
+                .iter()
+                .filter(|line| line.column == column)
+                .map(|line| line.baseline)
+                .collect()
+        };
+        let (left, right) = (baselines(0), baselines(1));
+        let foot = |column: &[f32]| column.last().copied().unwrap_or(f32::MIN);
+        assert!(
+            foot(&left) > foot(&right) + 1.0,
+            "the left column ends at {} and the right at {}",
+            foot(&left),
+            foot(&right),
+        );
+        let leading = body_size() * ua().root().line_height;
+        assert!(
+            right
+                .windows(2)
+                .all(|pair| (pair[1] - pair[0] - leading).abs() < 0.01),
+            "the right column is spaced out: {right:?}"
+        );
+        let heading = lines[at].baseline;
+        assert!(heading > foot(&left));
+        assert!(
+            heading - foot(&left) < 2.0 * chapter_size(),
+            "the heading opens {} under the taller column",
+            heading - foot(&left),
+        );
+    }
+
+    /// A spanning block that does not fit what is left of the page
+    /// moves to the next one whole, rather than split under the
+    /// columns above it.
+    #[test]
+    fn a_spanning_block_that_does_not_fit_moves_whole() {
+        let css = format!("{SPANNING} blockquote {{ column-span: all; margin: 0 }}");
+        let mut moved = 0;
+        for filler in 24..=36 {
+            let quoted = quote(vec![paragraph(&"quoted ".repeat(60))]);
+            let blocks = [fillers(filler), vec![quoted, prose()]].concat();
+            let pages = paginate_styled(&css, vec![section(blocks)]);
+            let holding: Vec<u32> = pages
+                .iter()
+                .filter(|page| laid(&css, page).iter().any(|line| line.token == "quoted"))
+                .map(|page| page.number)
+                .collect();
+            assert_eq!(
+                holding.len(),
+                1,
+                "{filler} fillers: the quotation is set over pages {holding:?}"
+            );
+            moved += (holding[0] > 1) as usize;
+        }
+        assert!(
+            moved > 1,
+            "only {moved} quotation(s) reached the foot of a page"
+        );
+    }
+
+    /// Orphans and widows hold inside each tier's columns, the way
+    /// they hold at every column boundary of a page with no tiers.
+    #[test]
+    fn orphans_and_widows_hold_in_the_columns_of_every_tier() {
+        let mut blocks = Vec::new();
+        let mut tag = 0;
+        for part in 0..6 {
+            blocks.push(heading(&format!("Part {part}")));
+            for _ in 0..5 {
+                let token = format!("p{tag:02}");
+                blocks.push(paragraph(&vec![token; (5 + tag % 11) * 18].join(" ")));
+                tag += 1;
+            }
+        }
+        let pages = paginate_styled(SPANNING, vec![section(blocks)]);
+        let mut regions: Vec<Vec<String>> = Vec::new();
+        for page in &pages {
+            let mut tier = [Vec::new(), Vec::new()];
+            for line in laid(SPANNING, page) {
+                if line.heading {
+                    regions.extend(std::mem::take(&mut tier));
+                } else {
+                    tier[line.column as usize].push(line.token);
+                }
+            }
+            regions.extend(tier);
+        }
+        assert_orphans_and_widows_over(&regions, "column", 2, 2);
+    }
+
+    /// Acceptance: nothing crosses a gutter. Each tier of columns
+    /// paints its own rule, over its own height, and no rule runs
+    /// through the heading that spans them.
+    #[test]
+    fn a_rule_stops_at_a_spanning_heading_and_starts_again_under_it() {
+        let css = format!(
+            "{SPANNING} @page {{ column-rule-style: solid; column-rule-width: 1pt }} \
+             blockquote {{ break-before: column }}"
+        );
+        let pages = paginate_styled(&css, between_two_tiers());
+        let page = &pages[0];
+        let geometry = page_geometry(&css, page);
+        let rules = rects(page);
+        assert_eq!(
+            rules.len(),
+            2,
+            "one rule for each tier of columns: {rules:?}"
+        );
+        let heading = laid(&css, page)
+            .into_iter()
+            .find(|line| line.heading)
+            .expect("the heading is on the first page");
+        let (above, below) = (rules[0], rules[1]);
+        assert!(
+            above.1 + above.3 < heading.baseline - chapter_size() / 2.0,
+            "the rule above reaches {} and the heading sits on {}",
+            above.1 + above.3,
+            heading.baseline,
+        );
+        assert!(
+            below.1 > heading.baseline,
+            "the rule below starts at {}, over the heading at {}",
+            below.1,
+            heading.baseline,
+        );
+        let gutter = geometry.column_origin(1).0 - geometry.columns.gap / 2.0;
+        for (x, _, w, _, _) in [above, below] {
+            assert_eq!(x + w / 2.0, gutter);
+        }
+    }
+
+    /// On a page with one column, a block that spans the columns is
+    /// set where it is set anyway.
+    #[test]
+    fn column_span_changes_nothing_on_an_undivided_page() {
+        let sections = || {
+            vec![section(
+                [vec![prose(), heading("Across")], long_prose(30)].concat(),
+            )]
+        };
+        let plain = paginate(sections());
+        let spanning = paginate_styled("h1 { column-span: all }", sections());
+        assert_eq!(plain.len(), spanning.len());
+        for (plain, spanning) in plain.iter().zip(&spanning) {
+            let (plain, spanning) = (content_items(plain), content_items(spanning));
+            assert_eq!(plain.len(), spanning.len());
+            for (one, other) in plain.iter().zip(&spanning) {
+                assert_eq!(one.3, other.3);
+                assert!((one.0 - other.0).abs() < 1e-3 && (one.1 - other.1).abs() < 1e-3);
+            }
+        }
+    }
 
     /// The lines of one page grouped by the column they were set
     /// in, first column first: the tagged first word of each line,

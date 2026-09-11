@@ -7,9 +7,9 @@ use crate::fonts::GenericFamily;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Content, Declaration, Edge, Family,
-    FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position, ShapeSource,
-    StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
+    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content, Declaration, Edge,
+    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position,
+    ShapeSource, StringPiece, StringSet, TextAlign, TextJustify, TextTransform, WrapFlow,
 };
 
 use super::StyleError;
@@ -146,6 +146,15 @@ pub(super) fn decoration_break(input: &mut Parser<'_, '_>) -> Option<BoxDecorati
     match_ignore_ascii_case! { &keyword,
         "slice" => Some(BoxDecorationBreak::Slice),
         "clone" => Some(BoxDecorationBreak::Clone),
+        _ => None,
+    }
+}
+
+pub(super) fn column_span(input: &mut Parser<'_, '_>) -> Option<ColumnSpan> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(ColumnSpan::None),
+        "all" => Some(ColumnSpan::All),
         _ => None,
     }
 }

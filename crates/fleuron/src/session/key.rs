@@ -244,6 +244,8 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         break_before,
         break_after,
         break_inside,
+        // A spanning block breaks to the whole content box.
+        column_span,
     } = style;
     border_collapse.hash(h);
     match width {
@@ -257,7 +259,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
     position.hash(h);
-    (break_before, break_after, break_inside).hash(h);
+    (break_before, break_after, break_inside, column_span).hash(h);
     (background_color, box_decoration_break).hash(h);
     hash_edges(*margin, h);
     hash_edges(*padding, h);

@@ -37,10 +37,10 @@ use crate::pages::Side;
 
 pub use properties::{
     Align, Band, Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule,
-    Columns, ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family, FontStyle,
-    FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position,
-    ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign, TextJustify,
-    TextTransform, Width, WrapFlow,
+    ColumnSpan, Columns, ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family,
+    FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry,
+    Position, ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign,
+    TextJustify, TextTransform, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -1259,6 +1259,27 @@ mod tests {
         assert_eq!(first(&tree, "td").border_collapse, BorderCollapse::Collapse);
         let tree = compile(&book, "table { border-collapse: separate }");
         assert_eq!(first(&tree, "td").border_collapse, BorderCollapse::Separate);
+    }
+
+    /// `column-span` is `none` until a sheet says otherwise, and it
+    /// does not inherit: the cells of a spanning table are set in
+    /// the table, not across the page a second time.
+    #[test]
+    fn column_span_computes_and_does_not_inherit() {
+        let book = table();
+        let tree = defaults(&book, registry());
+        assert_eq!(first(&tree, "table").column_span, ColumnSpan::None);
+
+        let tree = compile(&book, "table { column-span: all }");
+        assert_eq!(first(&tree, "table").column_span, ColumnSpan::All);
+        assert_eq!(first(&tree, "td").column_span, ColumnSpan::None);
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+
+        let tree = compile(
+            &book,
+            "table { column-span: all } table { column-span: none }",
+        );
+        assert_eq!(first(&tree, "table").column_span, ColumnSpan::None);
     }
 
     /// A class names one element out of a kind of them: the image

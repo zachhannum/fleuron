@@ -94,6 +94,14 @@ fn paginate(book: &Book) -> Vec<Page> {
 /// in one column cannot be mistaken for a line in the other.
 const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
 
+/// The same page box with a rule down the gutter, and the chapter
+/// heading and the paragraph under it set across both columns. That
+/// paragraph is a size apart, so a line of it is told from a line of
+/// a column.
+const SPANNING: &str = "@page { column-count: 2; column-gap: 18pt; column-rule-style: solid; \
+                        column-rule-width: 1pt } \
+                        h1, h1 + p { column-span: all } h1 + p { font-size: 12pt }";
+
 fn paginate_styled(css: &str, book: &Book) -> Vec<Page> {
     let styles =
         fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("columns.css", css)])
@@ -462,6 +470,103 @@ proptest! {
             prop_assert!(a == b, "page {} differs between runs", a.number);
         }
     }
+
+    /// Acceptance: no line in a tier of columns runs past the column
+    /// it was set in, and no line of a block that spans the columns
+    /// runs past the content box.
+    #[test]
+    fn no_line_exceeds_the_measure_of_its_tier(book in chapters_strategy()) {
+        let pages = paginate_styled(SPANNING, &book);
+        let body = ua().root().font_size;
+        for page in &pages {
+            let geometry = column_master(Situation::Body(page.side)).geometry;
+            let (left, _) = geometry.content_origin();
+            let width = geometry.content_size().0;
+            for (size, _, x, right) in sized_glyph_edges(page) {
+                let (origin, measure) = if size == body {
+                    let column = column_of(geometry, x);
+                    (geometry.column_origin(column).0, geometry.measure())
+                } else {
+                    (left, width)
+                };
+                prop_assert!(
+                    x >= origin - 1e-3 && right <= origin + measure + 1e-3,
+                    "page {}: a {size}pt line runs {x}..{right}, outside {origin}..{}",
+                    page.number,
+                    origin + measure
+                );
+            }
+        }
+    }
+
+    /// Acceptance: nothing crosses a gutter. No glyph of a tier of
+    /// columns falls inside `column-gap`, and no rule down a gutter
+    /// runs through a block that spans it.
+    #[test]
+    fn nothing_crosses_a_gutter_between_tiers(book in chapters_strategy()) {
+        let pages = paginate_styled(SPANNING, &book);
+        let body = ua().root().font_size;
+        for page in &pages {
+            let geometry = column_master(Situation::Body(page.side)).geometry;
+            let gutter = geometry.column_origin(1).0 - geometry.columns.gap;
+            let edges = sized_glyph_edges(page);
+            for (_, baseline, x, right) in edges.iter().filter(|edge| edge.0 == body) {
+                prop_assert!(
+                    *right <= gutter + 1e-3 || *x >= gutter + geometry.columns.gap - 1e-3,
+                    "page {}: a glyph box {x}..{right} on {baseline} lies in the gutter",
+                    page.number
+                );
+            }
+            for item in &page.items {
+                let DrawItem::Rect { y, h, .. } = item else {
+                    continue;
+                };
+                for (size, baseline, ..) in edges.iter().filter(|edge| edge.0 != body) {
+                    prop_assert!(
+                        *baseline < *y || *baseline > y + h,
+                        "page {}: a rule over {y}..{} runs through a {size}pt line on {baseline}",
+                        page.number,
+                        y + h
+                    );
+                }
+            }
+        }
+    }
+
+    /// Acceptance: a book whose headings span the columns lays out
+    /// the same twice, on the same number of pages.
+    #[test]
+    fn spanning_blocks_are_deterministic(book in chapters_strategy()) {
+        let first = paginate_styled(SPANNING, &book);
+        let second = paginate_styled(SPANNING, &book);
+        prop_assert_eq!(first.len(), second.len());
+        for (a, b) in first.iter().zip(&second) {
+            prop_assert!(a == b, "page {} differs between runs", a.number);
+        }
+    }
+}
+
+/// The column a glyph box that starts at `x` was set in.
+fn column_of(geometry: fleuron::style::PageGeometry, x: f32) -> u32 {
+    (0..geometry.column_count())
+        .rev()
+        .find(|column| x >= geometry.column_origin(*column).0 - 1e-3)
+        .unwrap_or(0)
+}
+
+/// Every glyph box of one page's content, as `(size, baseline, left,
+/// right)`. The folio is furniture and belongs to no tier.
+fn sized_glyph_edges(page: &Page) -> Vec<(f32, f32, f32, f32)> {
+    page.items
+        .iter()
+        .filter(|item| !is_folio(item))
+        .filter_map(|item| match item {
+            DrawItem::Text {
+                y, size, glyphs, ..
+            } => Some((*size, *y, glyphs.first()?.x, glyphs.last()?.x)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Every glyph box of one page's content: the column it was set in,

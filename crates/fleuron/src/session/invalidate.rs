@@ -5,7 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Book, Metadata, cell_blocks};
 use crate::lines::Patterns;
-use crate::style::{ComputedStyle, Content, Position, StyleTree};
+use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree};
 
 use super::Stale;
 use super::key::{hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
@@ -21,11 +21,15 @@ use super::key::{hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape}
 /// well. The flow resolves their geometry. A section whose paragraphs
 /// can be set again beside an image keeps what it takes to set them.
 /// A book that gains its first image builds its sections again.
+///
+/// A book with a block that spans the columns carries the width of
+/// the content box, which is what that block breaks to.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Against {
     measure: f32,
     height: Option<f32>,
     exclusions: Option<u64>,
+    width: Option<f32>,
 }
 
 impl Against {
@@ -57,12 +61,14 @@ impl Against {
             measure: geometry.measure(),
             height: images.then(|| geometry.content_size().1),
             exclusions: any.then(|| anchored.finish()),
+            width: spans(styles).then(|| geometry.content_size().0),
         }
     }
 
     pub(super) fn hash_into(self, h: &mut DefaultHasher) {
         (self.measure.to_bits(), self.height.map(f32::to_bits)).hash(h);
         self.exclusions.hash(h);
+        self.width.map(f32::to_bits).hash(h);
     }
 }
 
@@ -165,13 +171,29 @@ pub(super) fn section_local(styles: &StyleTree) -> bool {
 
 /// Whether every master breaks to the same measure. One that does
 /// not makes where a line breaks depend on which page it lands on,
-/// and that on everything before it.
+/// and that on everything before it. A book with a block that spans
+/// the columns breaks to the width of the content box as well.
 fn uniform_measure(styles: &StyleTree) -> bool {
-    let measure = styles.default_page().geometry.measure().to_bits();
+    let spans = spans(styles);
+    let widths = |geometry: PageGeometry| {
+        (
+            geometry.measure().to_bits(),
+            spans.then(|| geometry.content_size().0.to_bits()),
+        )
+    };
+    let default = widths(styles.default_page().geometry);
     styles
         .masters()
         .iter()
-        .all(|master| master.style.geometry.measure().to_bits() == measure)
+        .all(|master| widths(master.style.geometry) == default)
+}
+
+/// Whether any block spans the columns of a divided page.
+fn spans(styles: &StyleTree) -> bool {
+    styles
+        .styles()
+        .iter()
+        .any(|style| style.column_span == ColumnSpan::All)
 }
 
 /// Whether any element generates text that only pagination resolves.
