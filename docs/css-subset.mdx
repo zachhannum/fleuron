@@ -236,9 +236,9 @@ Running heads and page numbers belong to the page rather than to a column, so di
 
 ### Spanning the columns
 
-A book with two columns often puts its headings and its tables across both of them. Set `column-span: all` on a block to put it across the whole content box, with columns above it and columns below it.
+In a book with two columns, the headings and the tables often go across both columns. To put a block across the whole content box, set `column-span: all` on it. The page then has columns above the block and columns below it.
 
-The following example puts every chapter heading and every table across both columns:
+The following example puts every `h2` heading and every table across both columns:
 
 ```css
 @page {
@@ -251,11 +251,11 @@ h2, table {
 }
 ```
 
-The engine does not balance the columns above a spanning block, so they can end at different heights. The text below the block starts under it. That text fills the first column and then the next. A column rule stops above a spanning block and starts again under it.
+A spanning block is a block with `column-span: all`. The engine does not balance the columns above a spanning block. They can end at different heights. The text after the block starts directly below it. That text fills the first column and then the next. A column rule stops above a spanning block and starts again below it.
 
-If a spanning block does not fit in the space left on the page, it moves to the next page whole. Only a spanning block that is taller than a page splits across pages. The built-in stylesheet gives every heading `break-after: avoid`. If the text under a spanning heading does not fit on the page, the heading moves to the next page with that text.
+If a spanning block does not fit in the space left on the page, it moves to the next page whole. Only a spanning block that is taller than a page splits across pages. The built-in stylesheet gives every heading `break-after: avoid`. If the text after a spanning heading cannot start on the same page, the heading moves to the next page with that text.
 
-`column-span` applies to the blocks of a section. It does not apply to a block inside a quotation or a table cell. On a page with one column, `column-span` has no effect.
+`column-span` applies to the blocks of a section. It does not apply to a block inside another block, such as a paragraph in a quotation or a table cell. On a page with one column, `column-span` has no effect.
 
 ## Selectors
 
