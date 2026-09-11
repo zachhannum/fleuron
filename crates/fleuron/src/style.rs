@@ -28,19 +28,19 @@ use serde::Serialize;
 
 use crate::Warning;
 use crate::content::{
-    Attributes, Block, Book, Inline, NodeId, block_attributes, block_position, inline_attributes,
-    inline_position, origin,
+    Alignment, Attributes, Block, Book, Inline, NodeId, block_attributes, block_position,
+    inline_attributes, inline_position, origin, rows,
 };
 use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Band, Border, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, Columns,
-    ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps,
-    Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position, ShapeOutside,
-    ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign, TextJustify, TextTransform,
-    WrapFlow,
+    Align, Band, Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule,
+    Columns, ComputedStyle, Content, Coord, CounterStyle, Edge, Edges, Family, FontStyle,
+    FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position,
+    ShapeOutside, ShapePoint, ShapeSource, StringPiece, StringSet, TextAlign, TextJustify,
+    TextTransform, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -590,7 +590,15 @@ fn cascade(
         let matched = applicable(sheets, &elements, index, &mut caches, None);
         let root_size = styles.first().map(|style| style.font_size);
         let parent_size = parent.font_size;
-        apply_all(&mut style, sheets, &matched, parent_size, root_size);
+        let hint = node.align.map(align_hint);
+        apply_all(
+            &mut style,
+            sheets,
+            &matched,
+            hint.as_ref(),
+            parent_size,
+            root_size,
+        );
         let (font_id, warning) = resolve_face(&style, registry);
         style.font_id = font_id;
         report(&mut warnings, warning);
@@ -603,7 +611,14 @@ fn cascade(
             let matched = applicable(sheets, &elements, index, &mut caches, Some(which));
             (!matched.is_empty()).then(|| {
                 let mut pseudo = style.inherit();
-                apply_all(&mut pseudo, sheets, &matched, style.font_size, root_size);
+                apply_all(
+                    &mut pseudo,
+                    sheets,
+                    &matched,
+                    None,
+                    style.font_size,
+                    root_size,
+                );
                 let (font_id, warning) = resolve_face(&pseudo, registry);
                 pseudo.font_id = font_id;
                 report(warnings, warning);
@@ -709,6 +724,25 @@ fn named_blocks<'a>(
                 named_inlines(inlines, source, first, warnings)
             }
             Block::Blockquote { blocks, .. } => named_blocks(blocks, source, first, warnings),
+            Block::Table { head, body, .. } => {
+                for row in rows(head, body) {
+                    claim(
+                        &row.attributes,
+                        origin(source, row.position),
+                        first,
+                        warnings,
+                    );
+                    for cell in &row.cells {
+                        claim(
+                            &cell.attributes,
+                            origin(source, cell.position),
+                            first,
+                            warnings,
+                        );
+                        named_blocks(&cell.blocks, source, first, warnings);
+                    }
+                }
+            }
             Block::ThematicBreak { .. } | Block::Image { .. } => {}
         }
     }
@@ -816,17 +850,41 @@ fn applicable(
 }
 
 /// Applies matched declarations in cascade order.
+///
+/// `hint` is what the source wrote on the element itself, as HTML's
+/// `align` is written on a cell. It goes in after the built-in sheet
+/// and before every rule of the author's, whatever its specificity.
 fn apply_all(
     style: &mut ComputedStyle,
     sheets: &[Sheet],
     applicable: &[Applicable],
+    hint: Option<&properties::Declaration>,
     parent_size: f32,
     root_size: Option<f32>,
 ) {
-    for (_, _, sheet_index, rule_index, order) in applicable {
+    let root_size = root_size.unwrap_or(parent_size);
+    let mut hint = hint;
+    for (level, _, sheet_index, rule_index, order) in applicable {
+        if *level > 0
+            && let Some(declaration) = hint.take()
+        {
+            style.apply(declaration, parent_size, root_size);
+        }
         let (declaration, _) = &sheets[*sheet_index].rules[*rule_index].declarations[*order];
-        style.apply(declaration, parent_size, root_size.unwrap_or(parent_size));
+        style.apply(declaration, parent_size, root_size);
     }
+    if let Some(declaration) = hint {
+        style.apply(declaration, parent_size, root_size);
+    }
+}
+
+/// The `text-align` a table's delimiter row wrote on a cell's column.
+fn align_hint(align: Alignment) -> properties::Declaration {
+    properties::Declaration::TextAlign(match align {
+        Alignment::Left => TextAlign::Left,
+        Alignment::Center => TextAlign::Center,
+        Alignment::Right => TextAlign::Right,
+    })
 }
 
 /// Where one declaration sits in the cascade, before specificity is
@@ -1088,6 +1146,119 @@ mod tests {
         };
         book.assign_node_ids();
         book
+    }
+
+    /// A table of a header row and three body rows, its second column
+    /// written centered.
+    fn table() -> Book {
+        use crate::content::{Alignment, Cell, Row};
+        let cell = |value: &str, align: Option<Alignment>| Cell {
+            blocks: vec![Block::Paragraph {
+                id: NodeId::UNASSIGNED,
+                inlines: vec![text(value)],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            }],
+            align,
+            ..Cell::default()
+        };
+        let row = |left: &str, right: &str| Row {
+            cells: vec![cell(left, None), cell(right, Some(Alignment::Center))],
+            ..Row::default()
+        };
+        let mut book = Book {
+            metadata: Metadata::default(),
+            sections: vec![Section {
+                id: NodeId::UNASSIGNED,
+                source: Some("chapter-01.md".into()),
+                title: None,
+                blocks: vec![Block::Table {
+                    id: NodeId::UNASSIGNED,
+                    head: vec![row("Pocket", "Found")],
+                    body: vec![
+                        row("Right", "A handkerchief"),
+                        row("Left", "A snuff-box"),
+                        row("Fob", "A watch"),
+                    ],
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                }],
+                position: None,
+                span: None,
+            }],
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// Acceptance: `tbody tr:nth-child(odd)` counts the rows of the
+    /// body, so it reaches the first and the third of them and not
+    /// the header row.
+    #[test]
+    fn a_body_row_counts_among_the_rows_of_the_body() {
+        let tint = Some(Color::rgb(0xe3, 0xe3, 0xe3));
+        let tree = compile(
+            &table(),
+            "tbody tr:nth-child(odd) { background-color: #e3e3e3 }",
+        );
+        let rows: Vec<Option<Color>> = (0..4)
+            .map(|index| nth(&tree, "tr", index).background_color)
+            .collect();
+        assert_eq!(rows, [None, tint, None, tint]);
+        assert_eq!(first(&tree, "thead").background_color, None);
+    }
+
+    /// Acceptance: the alignment the delimiter row wrote beats the
+    /// built-in sheet and reaches the prose in the cell. Any rule of
+    /// the author's beats it, even one with no specificity.
+    #[test]
+    fn the_alignment_a_table_wrote_sits_under_every_author_rule() {
+        let book = table();
+        let tree = defaults(&book, registry());
+        assert_eq!(nth(&tree, "td", 0).text_align, TextAlign::Left);
+        assert_eq!(nth(&tree, "td", 1).text_align, TextAlign::Center);
+        assert_eq!(nth(&tree, "th", 1).text_align, TextAlign::Center);
+        // The header row holds the first two paragraphs, so the first
+        // body row's second cell holds the fourth.
+        assert_eq!(nth(&tree, "p", 3).text_align, TextAlign::Center);
+
+        let tree = compile(&book, "td { text-align: right }");
+        assert_eq!(nth(&tree, "td", 1).text_align, TextAlign::Right);
+        assert_eq!(nth(&tree, "th", 1).text_align, TextAlign::Center);
+
+        let tree = compile(&book, "* { text-align: justify }");
+        assert_eq!(nth(&tree, "td", 1).text_align, TextAlign::Justify);
+    }
+
+    /// `width` computes to points, or stays a percentage of a table
+    /// the cascade has not sized. `border-collapse` inherits, so the
+    /// cells of a collapsed table are collapsed too.
+    #[test]
+    fn width_and_border_collapse_compute() {
+        let book = table();
+        let tree = compile(&book, "th:first-of-type { width: 8em }");
+        let header = first(&tree, "th");
+        assert_eq!(header.width, Width::Points(8.0 * header.font_size));
+        assert_eq!(nth(&tree, "th", 1).width, Width::Auto);
+        assert_eq!(
+            first(&tree, "td").width,
+            Width::Auto,
+            "width does not inherit"
+        );
+
+        let tree = compile(&book, "th { width: 25% }");
+        assert_eq!(first(&tree, "th").width, Width::Percent(25.0));
+
+        let tree = defaults(&book, registry());
+        assert_eq!(
+            first(&tree, "table").border_collapse,
+            BorderCollapse::Collapse
+        );
+        assert_eq!(first(&tree, "td").border_collapse, BorderCollapse::Collapse);
+        let tree = compile(&book, "table { border-collapse: separate }");
+        assert_eq!(first(&tree, "td").border_collapse, BorderCollapse::Separate);
     }
 
     /// A class names one element out of a kind of them: the image

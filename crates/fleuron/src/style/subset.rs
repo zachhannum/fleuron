@@ -493,6 +493,8 @@ mod tests {
             Declaration::BorderColor(edge, _) => border_of(*edge, "color"),
             Declaration::BackgroundColor(_) => "background-color",
             Declaration::BoxDecorationBreak(_) => "box-decoration-break",
+            Declaration::Width(_) => "width",
+            Declaration::BorderCollapse(_) => "border-collapse",
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",
             Declaration::BreakInside(_) => "break-inside",
@@ -521,7 +523,10 @@ mod tests {
                 {{"type": "paragraph", "inlines": {inlines}}},
                 {{"type": "blockquote", "blocks": [{{"type": "paragraph", "inlines": {inlines}}}]}},
                 {{"type": "thematic_break"}},
-                {{"type": "image", "url": "image.png", "alt": "alt"}}
+                {{"type": "image", "url": "image.png", "alt": "alt"}},
+                {{"type": "table",
+                  "head": [{{"cells": [{{"blocks": []}}]}}],
+                  "body": [{{"cells": [{{"blocks": []}}]}}]}}
             ]}}]}}"#,
             headings.join(",\n")
         );

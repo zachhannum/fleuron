@@ -25,8 +25,8 @@ pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
-    BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens, Length,
-    LineHeight, TextAlign, TextJustify, TextTransform,
+    BorderCollapse, BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens,
+    Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
 };
 
 pub(crate) use edges::{LINE_WIDTHS, MEDIUM};
@@ -69,6 +69,8 @@ pub enum Declaration {
     BorderColor(Edge, Option<Color>),
     BackgroundColor(Option<Color>),
     BoxDecorationBreak(BoxDecorationBreak),
+    Width(Option<Length>),
+    BorderCollapse(BorderCollapse),
     BreakBefore(Break),
     BreakAfter(Break),
     BreakInside(Break),

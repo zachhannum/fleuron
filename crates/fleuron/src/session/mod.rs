@@ -166,6 +166,18 @@ impl Cached {
             if let Piece::Anchor(node) = &mut fragment.piece {
                 *node = node.shifted(step);
             }
+            if let Piece::Row(row) = &mut fragment.piece {
+                for item in &mut row.items {
+                    if let crate::pages::DrawItem::Text {
+                        origin: Some(origin),
+                        ..
+                    } = item
+                    {
+                        origin.node = origin.node.shifted(step);
+                    }
+                }
+                continue;
+            }
             let Piece::Line { line, cap } = &mut fragment.piece else {
                 continue;
             };

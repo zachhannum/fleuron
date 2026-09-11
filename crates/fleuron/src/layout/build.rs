@@ -22,16 +22,7 @@ impl Paginator<'_> {
     /// everything measurement decides, and nothing pagination does.
     pub fn section_fragments(&self, section: &Section) -> Vec<Fragment> {
         let measure = self.styles.default_page().geometry.measure();
-        let mut builder = Builder {
-            paginator: self,
-            source: section.source.as_deref(),
-            fragments: Vec::new(),
-            pending: BreakPoint::Allowed,
-            margin: 0.0,
-            fixed: 0.0,
-            pending_marks: None,
-            open: Vec::new(),
-        };
+        let mut builder = Builder::new(self, section.source.as_deref());
         let style = self.styles.style(section.id).clone();
         let start = builder.open(&style, &[], 0.0, measure);
         let (x, narrowed) = style.content_box(0.0, measure);
@@ -43,24 +34,41 @@ impl Paginator<'_> {
 
 /// Builds one section's fragments: blocks in, everything the flow
 /// needs to place them out.
-struct Builder<'a, 'p> {
-    paginator: &'p Paginator<'a>,
+pub(super) struct Builder<'a, 'p> {
+    pub(super) paginator: &'p Paginator<'a>,
     /// The file the section was read from, for diagnostics.
-    source: Option<&'p str>,
-    fragments: Vec<Fragment>,
+    pub(super) source: Option<&'p str>,
+    pub(super) fragments: Vec<Fragment>,
     /// What the cascade has asked for above the next fragment.
-    pending: BreakPoint,
+    pub(super) pending: BreakPoint,
     /// The collapsible margin standing above the next fragment,
     /// which is the larger of the margins that met there.
-    margin: f32,
+    pub(super) margin: f32,
     /// Space above the next fragment that no margin collapses
     /// through: the borders and padding the blocks around it set.
-    fixed: f32,
+    pub(super) fixed: f32,
     /// What the blocks opened so far have set, waiting for a fragment
     /// to attach it to a page.
-    pending_marks: Option<Box<Marks>>,
+    pub(super) pending_marks: Option<Box<Marks>>,
     /// The decorated blocks still open, outermost first.
     open: Vec<Pending>,
+}
+
+impl<'a, 'p> Builder<'a, 'p> {
+    /// A builder with nothing built yet, over blocks read from
+    /// `source`.
+    pub(super) fn new(paginator: &'p Paginator<'a>, source: Option<&'p str>) -> Builder<'a, 'p> {
+        Builder {
+            paginator,
+            source,
+            fragments: Vec::new(),
+            pending: BreakPoint::Allowed,
+            margin: 0.0,
+            fixed: 0.0,
+            pending_marks: None,
+            open: Vec::new(),
+        }
+    }
 }
 
 /// A decorated block while its fragments are still being built.
@@ -87,7 +95,7 @@ impl Builder<'_, '_> {
     /// asked above the next fragment. A forced break outranks an
     /// avoided one, and either outranks `auto`. A page break outranks
     /// a column break, being the same break carried further.
-    fn ask(&mut self, wanted: Break) {
+    pub(super) fn ask(&mut self, wanted: Break) {
         self.pending = match (self.pending, wanted) {
             (BreakPoint::Forced(Break::Column), Break::Page | Break::Side(_)) => {
                 BreakPoint::Forced(wanted)
@@ -108,7 +116,13 @@ impl Builder<'_, '_> {
     /// Adjacent margins collapse to the larger. A top border or
     /// padding is not a margin: it takes height of its own, and the
     /// margins on either side of it no longer meet.
-    fn open(&mut self, style: &ComputedStyle, inlines: &[Inline], x: f32, measure: f32) -> usize {
+    pub(super) fn open(
+        &mut self,
+        style: &ComputedStyle,
+        inlines: &[Inline],
+        x: f32,
+        measure: f32,
+    ) -> usize {
         self.ask(style.break_before);
         self.mark(style, inlines);
         self.margin = self.margin.max(style.margin.top);
@@ -178,7 +192,7 @@ impl Builder<'_, '_> {
     /// Closes a block: `break-inside: avoid` glues everything it
     /// emitted, its bottom border and padding take height of their
     /// own, and its bottom margin becomes the next block's lead.
-    fn close(&mut self, style: &ComputedStyle, start: usize) {
+    pub(super) fn close(&mut self, style: &ComputedStyle, start: usize) {
         if style.break_inside == Break::Avoid {
             for fragment in self.fragments.iter_mut().skip(start + 1) {
                 fragment.break_before = BreakPoint::Forbidden;
@@ -238,7 +252,7 @@ impl Builder<'_, '_> {
     /// cascade asked for above it and the space its margins left; the
     /// rest keep what they arrived with, which is what the block says
     /// about splitting itself.
-    fn emit(&mut self, first: &mut bool, mut fragment: Fragment) {
+    pub(super) fn emit(&mut self, first: &mut bool, mut fragment: Fragment) {
         // This fragment settles how far the border box of every
         // block opening on it sits above it.
         let (index, fixed) = (self.fragments.len(), self.fixed);
@@ -261,14 +275,14 @@ impl Builder<'_, '_> {
     /// written. The fragment takes no space. The page the flow
     /// reaches when it passes here is the page that carries the
     /// image.
-    fn anchor(&mut self, id: NodeId) {
+    pub(super) fn anchor(&mut self, id: NodeId) {
         self.fragments
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }
 
     /// Every block of one nesting level, at `x` from the content
     /// box's leading edge and breaking to `measure`.
-    fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
+    pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
         for block in blocks {
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
@@ -302,6 +316,13 @@ impl Builder<'_, '_> {
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
                 }
+                Block::Table {
+                    id,
+                    head,
+                    body,
+                    position,
+                    ..
+                } => self.table(*id, head, body, *position, x, measure),
             }
         }
     }

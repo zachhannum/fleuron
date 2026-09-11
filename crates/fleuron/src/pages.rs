@@ -81,7 +81,7 @@ pub struct Folios {
 }
 
 /// A single paint operation. Deliberately tiny: text, rules, images.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DrawItem {
     /// A run of shaped glyphs sharing a font, size, and baseline.
     Text {
@@ -112,7 +112,8 @@ pub enum DrawItem {
         /// The runs that name one node tile it, so a cursor in the
         /// manuscript lands on a run and a run lands back on the
         /// manuscript. Absent on text the engine wrote itself: a
-        /// folio, a running head, a scene break's ornament.
+        /// folio, a running head, a scene break's ornament, a table's
+        /// header row set again on a later page.
         origin: Option<SourceRange>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs
@@ -154,7 +155,7 @@ pub enum DrawItem {
 /// One glyph: an id in its font and an absolute x. Kerning and
 /// justification mean no two glyphs are uniformly spaced — the glyph is
 /// the atom of layout, so positions are per-glyph.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Glyph {
     /// Glyph id in the run's font.
     pub id: u32,

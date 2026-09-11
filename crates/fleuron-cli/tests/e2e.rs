@@ -1592,6 +1592,11 @@ fn append_blocks(blocks: &[Block], text: &mut String) {
             Block::Blockquote { blocks, .. } => append_blocks(blocks, text),
             Block::ThematicBreak { .. } => text.push_str(ORNAMENT),
             Block::Image { .. } => {}
+            Block::Table { head, body, .. } => {
+                for blocks in fleuron::content::cell_blocks(head, body) {
+                    append_blocks(blocks, text);
+                }
+            }
         }
     }
 }

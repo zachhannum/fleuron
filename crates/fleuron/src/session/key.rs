@@ -3,10 +3,10 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use crate::content::{Block, Inline, NodeId, Section};
+use crate::content::{Block, Inline, NodeId, Section, rows};
 use crate::lines::Patterns;
 use crate::style::{
-    ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry, ShapeOutside, StyleTree,
+    ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry, ShapeOutside, StyleTree, Width,
 };
 
 use super::invalidate::Against;
@@ -91,6 +91,26 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
             } => {
                 (4u8, url, alt, position).hash(h);
                 hash_node(*id, styles, h);
+            }
+            Block::Table {
+                id,
+                head,
+                body,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (5u8, position, head.len()).hash(h);
+                hash_node(*id, styles, h);
+                for row in rows(head, body) {
+                    (row.position, row.cells.len()).hash(h);
+                    hash_node(row.id, styles, h);
+                    for cell in &row.cells {
+                        (cell.position, cell.align).hash(h);
+                        hash_node(cell.id, styles, h);
+                        hash_blocks(&cell.blocks, styles, h);
+                    }
+                }
             }
         }
     }
@@ -219,10 +239,18 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         border,
         background_color,
         box_decoration_break,
+        width,
+        border_collapse,
         break_before,
         break_after,
         break_inside,
     } = style;
+    border_collapse.hash(h);
+    match width {
+        Width::Auto => 0u8.hash(h),
+        Width::Points(points) => (1u8, points.to_bits()).hash(h),
+        Width::Percent(percent) => (2u8, percent.to_bits()).hash(h),
+    }
     (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);

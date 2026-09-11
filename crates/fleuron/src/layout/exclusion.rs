@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, NodeId, origin};
+use crate::content::{Block, Book, NodeId, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::DrawItem;
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
@@ -31,6 +31,11 @@ impl Paginator<'_> {
             for block in blocks {
                 match block {
                     Block::Blockquote { blocks, .. } => walk(paginator, blocks, source, anchored),
+                    Block::Table { head, body, .. } => {
+                        for blocks in cell_blocks(head, body) {
+                            walk(paginator, blocks, source, anchored);
+                        }
+                    }
                     Block::Image {
                         id, url, position, ..
                     } => {

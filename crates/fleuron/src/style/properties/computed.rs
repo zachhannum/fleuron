@@ -11,8 +11,8 @@ use super::counter::{Content, StringSet};
 use super::edges::{Border, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
-    BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens,
-    NORMAL_LINE_HEIGHT, TextAlign, TextJustify, TextTransform,
+    BorderCollapse, BoxDecorationBreak, Break, Color, Family, FontStyle, FontVariantCaps, Hyphens,
+    Length, NORMAL_LINE_HEIGHT, TextAlign, TextJustify, TextTransform, Width,
 };
 
 /// One node's resolved style: what every downstream pass reads.
@@ -103,6 +103,14 @@ pub struct ComputedStyle {
     /// What the decoration does where a page break splits the block.
     #[serde(skip_serializing_if = "sliced")]
     pub box_decoration_break: BoxDecorationBreak,
+    /// The width the box is asked to take, from `width`. A table reads
+    /// it off the cells of its first row to size its columns.
+    #[serde(skip_serializing_if = "auto_width")]
+    pub width: Width,
+    /// Whether a table's cells share their borders, from
+    /// `border-collapse`.
+    #[serde(skip_serializing_if = "separate")]
+    pub border_collapse: BorderCollapse,
     /// Where a page break falls before this element.
     pub break_before: Break,
     /// Where one falls after it.
@@ -148,6 +156,8 @@ impl ComputedStyle {
             border: Edges::all(Border::NONE),
             background_color: None,
             box_decoration_break: BoxDecorationBreak::Slice,
+            width: Width::Auto,
+            border_collapse: BorderCollapse::Separate,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -163,6 +173,7 @@ impl ComputedStyle {
             border: Edges::all(Border::NONE),
             background_color: None,
             box_decoration_break: BoxDecorationBreak::Slice,
+            width: Width::Auto,
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
@@ -252,6 +263,16 @@ impl ComputedStyle {
             Declaration::BorderColor(edge, color) => self.border.edge(*edge).color = *color,
             Declaration::BackgroundColor(color) => self.background_color = *color,
             Declaration::BoxDecorationBreak(value) => self.box_decoration_break = *value,
+            Declaration::Width(width) => {
+                self.width = match width {
+                    None => Width::Auto,
+                    Some(Length::Percent(percent)) => Width::Percent(percent.max(0.0)),
+                    Some(length) => {
+                        Width::Points(length.to_points(self.font_size, root_size).max(0.0))
+                    }
+                }
+            }
+            Declaration::BorderCollapse(value) => self.border_collapse = *value,
             Declaration::BreakBefore(value) => self.break_before = *value,
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
@@ -350,6 +371,14 @@ fn no_border(border: &Edges<Border>) -> bool {
 
 fn sliced(value: &BoxDecorationBreak) -> bool {
     *value == BoxDecorationBreak::Slice
+}
+
+fn auto_width(width: &Width) -> bool {
+    *width == Width::Auto
+}
+
+fn separate(collapse: &BorderCollapse) -> bool {
+    *collapse == BorderCollapse::Separate
 }
 
 fn no_shape_margin(margin: &f32) -> bool {

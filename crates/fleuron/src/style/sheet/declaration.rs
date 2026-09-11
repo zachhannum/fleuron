@@ -11,10 +11,10 @@ use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
 
 use super::color::{background_color, border_color, color};
 use super::value::{
-    break_value, count, counter_reset, decoration_break, edges, families, font_style, hanging,
-    hyphens, inset, keyword_or, length, letter_spacing, line_height, line_style, line_width,
-    ornament, page_name, positioning, property, shape_outside, string_set, text_align,
-    text_justify, text_transform, variant_caps, weight, wrap_flow,
+    border_collapse, break_value, count, counter_reset, decoration_break, edges, families,
+    font_style, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
+    line_style, line_width, ornament, page_name, positioning, property, shape_outside, string_set,
+    text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, warning};
@@ -359,6 +359,13 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         read: |name, input| longhand(name, input, page_name, Declaration::Page),
     },
     Spec {
+        name: "border-collapse",
+        inherited: true,
+        syntax: "separate | collapse",
+        examples: &["collapse", "separate"],
+        read: |name, input| longhand(name, input, border_collapse, Declaration::BorderCollapse),
+    },
+    Spec {
         name: "content",
         inherited: false,
         syntax: "none | <string>",
@@ -461,6 +468,13 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "<length> | <percentage>",
         examples: &["6pt"],
         read: |name, input| longhand(name, input, length, Declaration::ShapeMargin),
+    },
+    Spec {
+        name: "width",
+        inherited: false,
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "8em", "25%"],
+        read: |name, input| longhand(name, input, width, Declaration::Width),
     },
     Spec {
         name: "margin",
