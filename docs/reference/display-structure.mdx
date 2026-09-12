@@ -45,7 +45,7 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 
 `items` is in paint order: by layer, and inside one layer in the order the text flows. A painter walks the list from the start and paints each item over the ones before it. A painter does not sort.
 
-Every item names its own layer. A layer comes from `z-index` on a block, which [layers](../css-subset.mdx#layers) describes. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the art behind a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers, as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
+Every item names its own layer. A layer comes from `z-index` on a block, which [the CSS subset](../css-subset.mdx) describes under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the art behind a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers, as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
 
 ## `DrawItem`
 
