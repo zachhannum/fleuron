@@ -4,69 +4,58 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, NodeId, cell_blocks, origin};
+use crate::content::{Block, Book, NodeId, block_id, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::DrawItem;
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
 
 use super::Paginator;
-use super::build::{Reflow, carry_over, set_lines};
+use super::build::{Builder, Reflow, carry_over, set_lines};
 use super::cap::Cap;
-use super::flow::Flow;
+use super::flow::{Flow, shift};
 use super::fragment::Fragment;
 
 impl Paginator<'_> {
-    /// The images the sheet anchored to the page, in document order.
+    /// The images and blocks the sheet anchored to the page, in
+    /// document order.
     ///
-    /// Each is sized as CSS 2.1 sizes a replaced element with no
-    /// width or height of its own: its intrinsic size, scaled down
-    /// where that does not fit the page area.
-    pub(super) fn anchored_images(&self, book: &Book) -> Vec<AnchoredImage> {
+    /// A box inside a block that is anchored as well lands on the page
+    /// that block lands on.
+    pub(super) fn anchored_boxes(&self, book: &Book) -> Vec<Anchored> {
         fn walk(
             paginator: &Paginator,
             blocks: &[Block],
             source: Option<&str>,
-            anchored: &mut Vec<AnchoredImage>,
+            host: Option<NodeId>,
+            anchored: &mut Vec<Anchored>,
         ) {
             for block in blocks {
+                let id = block_id(block);
+                let style = paginator.styles.style(id);
+                let host = match style.position {
+                    Position::Absolute => {
+                        let node = host.unwrap_or(id);
+                        anchored.extend(match block {
+                            Block::Image { url, position, .. } => paginator.anchored_image(
+                                node,
+                                style,
+                                url,
+                                origin(source, *position),
+                            ),
+                            _ => Some(paginator.anchored_block(node, block, style, source)),
+                        });
+                        Some(node)
+                    }
+                    _ => host,
+                };
                 match block {
-                    Block::Blockquote { blocks, .. } => walk(paginator, blocks, source, anchored),
+                    Block::Blockquote { blocks, .. } => {
+                        walk(paginator, blocks, source, host, anchored)
+                    }
                     Block::Table { head, body, .. } => {
                         for blocks in cell_blocks(head, body) {
-                            walk(paginator, blocks, source, anchored);
+                            walk(paginator, blocks, source, host, anchored);
                         }
-                    }
-                    Block::Image {
-                        id, url, position, ..
-                    } => {
-                        let style = paginator.styles.style(*id);
-                        if style.position != Position::Absolute {
-                            continue;
-                        }
-                        let origin = origin(source, *position);
-                        let Some((asset, intrinsic)) = paginator.assets.lookup(url) else {
-                            paginator.missing(url, origin);
-                            continue;
-                        };
-                        let (available, height) =
-                            paginator.styles.default_page().geometry.content_size();
-                        let margin = style.margin;
-                        let (width, height) = fit(
-                            intrinsic.size(),
-                            (available - margin.inline()).max(0.0),
-                            (height - margin.top - margin.bottom).max(0.0),
-                        );
-                        anchored.push(AnchoredImage {
-                            node: *id,
-                            asset,
-                            width,
-                            height,
-                            inset: style.inset,
-                            margin,
-                            wrap: style.wrap_flow,
-                            shape: paginator.shape(style, asset, (width, height)),
-                            layer: style.z_index,
-                        });
                     }
                     _ => {}
                 }
@@ -78,20 +67,110 @@ impl Paginator<'_> {
                 self,
                 &section.blocks,
                 section.source.as_deref(),
+                None,
                 &mut anchored,
             );
         }
         anchored
     }
 
-    /// The contour one anchored image's prose keeps clear of, in the
-    /// coordinates of the box its insets place.
+    /// One image anchored to the page, which lands on the page `node`
+    /// lands on.
+    ///
+    /// It is sized as CSS 2.1 sizes a replaced element with no width
+    /// or height of its own: its intrinsic size, scaled down where
+    /// that does not fit the page area.
+    fn anchored_image(
+        &self,
+        node: NodeId,
+        style: &ComputedStyle,
+        url: &str,
+        origin: String,
+    ) -> Option<Anchored> {
+        let Some((asset, intrinsic)) = self.assets.lookup(url) else {
+            self.missing(url, origin);
+            return None;
+        };
+        let (available, room) = self.styles.default_page().geometry.content_size();
+        let margin = style.margin;
+        let (width, height) = fit(
+            intrinsic.size(),
+            (available - margin.inline()).max(0.0),
+            (room - margin.top - margin.bottom).max(0.0),
+        );
+        Some(Anchored {
+            node,
+            width: width + margin.inline(),
+            height: height + margin.top + margin.bottom,
+            inset: style.inset,
+            wrap: style.wrap_flow,
+            shape: self.shape(style, Some(asset), (width, height)),
+            layer: style.z_index,
+            paint: Paint::Image {
+                asset,
+                x: margin.left,
+                y: margin.top,
+                width,
+                height,
+            },
+        })
+    }
+
+    /// One block anchored to the page, which lands on the page `node`
+    /// lands on, laid out on its own.
+    ///
+    /// Its lines break to the width its insets leave of the page area:
+    /// between the two where both are set, and from the one that is
+    /// set to the far edge. With neither set, the block breaks to the
+    /// measure.
+    fn anchored_block(
+        &self,
+        node: NodeId,
+        block: &Block,
+        style: &ComputedStyle,
+        source: Option<&str>,
+    ) -> Anchored {
+        let geometry = self.styles.default_page().geometry;
+        let (area, _) = geometry.content_size();
+        let (left, right) = (
+            style.inset.left.resolve(area),
+            style.inset.right.resolve(area),
+        );
+        let width = match (left, right) {
+            (None, None) => geometry.measure(),
+            _ => (area - left.unwrap_or(0.0) - right.unwrap_or(0.0)).max(0.0),
+        };
+        let mut builder = Builder::new(self, source);
+        builder.lifted = Some(block_id(block));
+        builder.blocks(std::slice::from_ref(block), 0.0, width);
+        let stacked = builder.stack();
+        let margin = style.margin;
+        let inner = (
+            (width - margin.inline()).max(0.0),
+            (stacked.height - margin.top - margin.bottom).max(0.0),
+        );
+        Anchored {
+            node,
+            width,
+            height: stacked.height,
+            inset: style.inset,
+            wrap: style.wrap_flow,
+            shape: self.shape(style, None, inner),
+            layer: style.z_index,
+            paint: Paint::Block(stacked.items),
+        }
+    }
+
+    /// The contour one anchored box's prose keeps clear of, in the
+    /// coordinates of the box its insets place. `size` is the box
+    /// inside its margins.
     ///
     /// `auto` is what the trace stage left, laid over the image
     /// inside its margins. An image the tracer had no alpha for
-    /// contributes its box. A polygon is read against the whole box,
-    /// margins and all, which is what a percentage in it measures.
-    fn shape(&self, style: &ComputedStyle, asset: u32, size: (f32, f32)) -> Option<Shape> {
+    /// contributes its box, and so does a block. A polygon is read
+    /// against the whole box, margins and all, which is what a
+    /// percentage in it measures.
+    fn shape(&self, style: &ComputedStyle, asset: Option<u32>, size: (f32, f32)) -> Option<Shape> {
         // The one predicate the trace stage keys on as well, so that
         // what is traced and what is read cannot drift apart.
         if !style.excludes() {
@@ -103,7 +182,7 @@ impl Paginator<'_> {
             ShapeOutside::None => return None,
             ShapeOutside::Auto => self
                 .contours
-                .get(asset)?
+                .get(asset?)?
                 .rings
                 .iter()
                 .map(|ring| {
@@ -129,30 +208,51 @@ impl Paginator<'_> {
     }
 }
 
-/// One image the sheet lifted out of the flow: what it paints, how
-/// far its insets put it from the page area, and which side the prose
-/// sets on.
+/// One image or block the sheet lifted out of the flow: what it
+/// paints, how far its insets put it from the page area, and which
+/// side the prose sets on.
 #[derive(Debug, Clone)]
-pub(super) struct AnchoredImage {
-    /// The node it was written at, which is what decides its page.
+pub(super) struct Anchored {
+    /// The node whose place in the flow decides its page: its own, or
+    /// the anchored block it sits inside.
     node: NodeId,
-    /// Index into the asset table.
-    asset: u32,
-    /// Width in points, after any scaling.
+    /// Width in points, margins included.
     width: f32,
-    /// Height in points, after any scaling.
+    /// Height in points, margins included.
     height: f32,
     /// What the insets say about where it sits.
     inset: Edges<Inset>,
-    /// What it keeps clear of prose around itself.
-    margin: Edges,
     /// Which side of it the prose sets on.
     wrap: WrapFlow,
     /// The contour the prose keeps clear of in place of the box,
     /// from `shape-outside`.
     shape: Option<Shape>,
-    /// The layer it paints in, from its own `z-index`.
+    /// The layer an image paints in, from its own `z-index`. The
+    /// items of a block carry the layers of the blocks they came out
+    /// of.
     layer: i32,
+    /// What it paints, from the top left corner of its margin box.
+    paint: Paint,
+}
+
+/// What one anchored box paints.
+#[derive(Debug, Clone)]
+enum Paint {
+    /// An image, inside the margins it keeps.
+    Image {
+        /// Index into the asset table.
+        asset: u32,
+        /// Leading edge, from the margin box's own.
+        x: f32,
+        /// Top, from the margin box's own.
+        y: f32,
+        /// Width in points, after any scaling.
+        width: f32,
+        /// Height in points, after any scaling.
+        height: f32,
+    },
+    /// What a block was laid out as.
+    Block(Vec<DrawItem>),
 }
 
 /// A contour in the coordinates of the box the insets place: `(0, 0)`
@@ -165,20 +265,20 @@ struct Shape {
     margin: f32,
 }
 
-impl AnchoredImage {
-    /// What it keeps to itself on a page of this geometry: the image
-    /// and the margins around it.
+impl Anchored {
+    /// What it keeps to itself on a page of this geometry: its margin
+    /// box.
     ///
     /// An inset measures from the page area, the box the margins
-    /// leave, and a negative inset reaches into the margin. Where
-    /// both insets of an axis are lengths, the leading one places the
-    /// box. Where neither is a length, the box sits at the edge of
-    /// the page area.
+    /// leave, and a negative inset reaches into the margin. A
+    /// percentage measures the page area's width or height. Where
+    /// both insets of an axis are set, the leading one places the
+    /// box. Where neither is set, the box sits at the edge of the
+    /// page area.
     fn rect(&self, geometry: PageGeometry) -> Rect {
         let (left, top) = geometry.content_origin();
         let (width, height) = geometry.content_size();
-        let w = self.width + self.margin.inline();
-        let h = self.height + self.margin.top + self.margin.bottom;
+        let (w, h) = (self.width, self.height);
         let place =
             |start: Option<f32>, end: Option<f32>, origin: f32, available: f32, size: f32| match (
                 start, end,
@@ -207,45 +307,59 @@ impl AnchoredImage {
         }
     }
 
-    /// The image itself, inside the margins it keeps.
-    pub(super) fn item(&self, geometry: PageGeometry) -> DrawItem {
+    /// What it paints on a page of this geometry.
+    pub(super) fn items(&self, geometry: PageGeometry) -> Vec<DrawItem> {
         let rect = self.rect(geometry);
-        DrawItem::Image {
-            x: rect.x + self.margin.left,
-            y: rect.y + self.margin.top,
-            w: self.width,
-            h: self.height,
-            asset: self.asset,
-            layer: self.layer,
+        match &self.paint {
+            Paint::Image {
+                asset,
+                x,
+                y,
+                width,
+                height,
+            } => vec![DrawItem::Image {
+                x: rect.x + x,
+                y: rect.y + y,
+                w: *width,
+                h: *height,
+                asset: *asset,
+                layer: self.layer,
+            }],
+            Paint::Block(items) => {
+                let mut items = items.clone();
+                shift(&mut items, rect.x, rect.y);
+                items
+            }
         }
     }
 }
 
-/// The images one book anchors, and the page each one landed on.
+/// The images and blocks one book anchors, and the page each one
+/// landed on.
 ///
-/// Which page an image falls on comes from the flow. Where it sits on
+/// Which page a box falls on comes from the flow. Where it sits on
 /// that page comes from the sheet. The flow runs once with nothing in
 /// the way to answer the first question, and it then holds the
-/// answer. An image narrows the page it was given, and the flow never
+/// answer. A box narrows the page it was given, and the flow never
 /// asks that page again.
 #[derive(Debug, Default)]
-pub(crate) struct AnchoredImages {
-    pub(super) all: Vec<AnchoredImage>,
-    /// Which images a page carries, by page index.
+pub(crate) struct AnchoredBoxes {
+    pub(super) all: Vec<Anchored>,
+    /// Which boxes a page carries, by page index.
     pub(super) by_page: BTreeMap<usize, Vec<usize>>,
 }
 
-impl AnchoredImages {
-    /// The images of a book, on the pages the anchor pass gave them.
-    pub(super) fn on(all: Vec<AnchoredImage>, anchors: &BTreeMap<NodeId, usize>) -> AnchoredImages {
+impl AnchoredBoxes {
+    /// The boxes of a book, on the pages the anchor pass gave them.
+    pub(super) fn on(all: Vec<Anchored>, anchors: &BTreeMap<NodeId, usize>) -> AnchoredBoxes {
         let mut by_page: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for (index, image) in all.iter().enumerate() {
-            let Some(page) = anchors.get(&image.node) else {
+        for (index, anchored) in all.iter().enumerate() {
+            let Some(page) = anchors.get(&anchored.node) else {
                 continue;
             };
             by_page.entry(*page).or_default().push(index);
         }
-        AnchoredImages { all, by_page }
+        AnchoredBoxes { all, by_page }
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -721,16 +835,271 @@ mod tests {
     use crate::LayoutOutput;
     use crate::content::{Attributes, Block, NodeId};
     use crate::layout::testing::{
-        Run, body_size, book_of, content_items, content_lines, folio_size, heading, image,
-        image_of, long_prose, master, page_geometry, paginate_styled, painted, paragraph, png,
-        registry, right_edge, section, styled, styled_geometry, tagged_lines, tagged_prose,
-        with_image, with_images,
+        ContentLine, Run, body_size, book_of, content_items, content_lines, folio_size, heading,
+        image, image_of, long_prose, master, page_geometry, paginate_styled, painted, paragraph,
+        png, quote, rects, registry, right_edge, section, styled, styled_geometry, tagged_lines,
+        tagged_prose, with_image, with_images,
     };
     use crate::pages::{DrawItem, Page, Side};
     use crate::style::Situation;
 
     /// The image the tests anchor is 144pt square.
     const IMAGE: f32 = 144.0;
+
+    /// The quotation the tests of anchored blocks lift out of the
+    /// flow. Every word of it is one the prose never uses.
+    fn lifted_quote() -> Block {
+        quote(vec![paragraph(&"lilliputian ".repeat(40))])
+    }
+
+    /// The content lines of a page that the lifted quotation paints.
+    fn quoted_lines(page: &Page) -> Vec<ContentLine<'_>> {
+        content_lines(page)
+            .into_iter()
+            .filter(|(_, runs)| runs.iter().any(|run| run.2.contains("lilliputian")))
+            .collect()
+    }
+
+    /// Acceptance: a block with `position: absolute; bottom: 1in;
+    /// left: 0.5in` sits at that place on the page its anchor landed
+    /// on, and takes no height in the flow.
+    #[test]
+    fn an_absolute_block_sits_at_its_insets_on_the_page_its_anchor_landed_on() {
+        // A lifted block is still the sibling of the paragraph after
+        // it, so `p + p` no longer matches that paragraph. The indent
+        // is off in both books, which leaves the flow as the one
+        // thing that differs.
+        let css = "blockquote { position: absolute; bottom: 1in; left: 0.5in; margin: 0; \
+                   background-color: #eeeeee } p { text-indent: 0 }";
+        // Which paragraph opens the second page with no quotation in
+        // the book: the quotation goes above that one.
+        let bare = paginate_styled(css, vec![section(tagged_prose(30))]);
+        assert!(bare.len() > 1, "one page proves nothing here");
+        let above = tagged_lines(&bare[0]);
+        let opening = tagged_lines(&bare[1])
+            .into_iter()
+            .find(|tag| !above.contains(tag))
+            .expect("a paragraph opens on the second page");
+        let nth: usize = opening
+            .trim_start_matches('p')
+            .parse()
+            .expect("the tag counts the paragraph");
+        let mut blocks = tagged_prose(30);
+        blocks.insert(nth, lifted_quote());
+        let lifted = paginate_styled(css, vec![section(blocks)]);
+
+        assert_eq!(lifted.len(), bare.len(), "the page count moved");
+        // A book with an anchored box places a paragraph at a time,
+        // which adds the same heights in another order, so a baseline
+        // can differ in its last bit.
+        let same = |one: &[ContentLine<'_>], other: &[ContentLine<'_>]| {
+            one.len() == other.len()
+                && one.iter().zip(other).all(|((a, runs), (b, others))| {
+                    (a - b).abs() < 1e-3
+                        && runs.len() == others.len()
+                        && runs
+                            .iter()
+                            .zip(others)
+                            .all(|(run, other)| (run.0 - other.0).abs() < 1e-3 && run.2 == other.2)
+                })
+        };
+        for (page, plain) in lifted.iter().zip(&bare) {
+            let prose: Vec<ContentLine<'_>> = content_lines(page)
+                .into_iter()
+                .filter(|(_, runs)| !runs.iter().any(|run| run.2.contains("lilliputian")))
+                .collect();
+            assert!(
+                same(&prose, &content_lines(plain)),
+                "page {}: the block took room in the flow",
+                page.number,
+            );
+        }
+        assert!(
+            quoted_lines(&lifted[0]).is_empty(),
+            "the block did not wait for its page"
+        );
+        let page = &lifted[1];
+        let lines = quoted_lines(page);
+        assert!(!lines.is_empty(), "the block is not on its anchor's page");
+
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let foot = top + geometry.content_size().1;
+        let boxes = rects(page);
+        let [(x, y, _, h, _)] = boxes.as_slice() else {
+            panic!("the block paints one box: {boxes:?}");
+        };
+        assert!(
+            (x - (left + 36.0)).abs() < 1e-3,
+            "the box starts {} in",
+            x - left
+        );
+        assert!(
+            (y + h - (foot - 72.0)).abs() < 1e-3,
+            "the box ends {} above the foot",
+            foot - y - h,
+        );
+        for (baseline, runs) in &lines {
+            assert!(*baseline > *y && *baseline < y + h, "a line at {baseline}");
+            assert!(runs[0].0 >= left + 36.0 - 1e-3, "a line at {baseline}");
+        }
+    }
+
+    /// Acceptance: the text of an absolute block breaks to the width
+    /// its insets leave. With both set, that is the width between
+    /// them. With one set, it is the width from that one to the far
+    /// edge.
+    #[test]
+    fn an_absolute_blocks_text_breaks_to_the_width_its_insets_leave() {
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let (left, width) = (geometry.content_origin().0, geometry.content_size().0);
+        for (insets, from, to) in [
+            ("left: 72pt; right: 72pt", left + 72.0, left + width - 72.0),
+            ("left: 50%", left + width / 2.0, left + width),
+            ("right: 25%", left, left + width * 0.75),
+        ] {
+            let css = format!("blockquote {{ position: absolute; top: 50%; {insets}; margin: 0 }}");
+            let pages = paginate_styled(
+                &css,
+                vec![section(vec![lifted_quote(), paragraph("after")])],
+            );
+            let page = &pages[0];
+            let lines = quoted_lines(page);
+            assert!(lines.len() > 2, "{insets}: {} lines", lines.len());
+            let mut widest = f32::MIN;
+            for (baseline, runs) in &lines {
+                let end = right_edge(page, *baseline);
+                assert!(
+                    runs[0].0 >= from - 1e-3,
+                    "{insets}: a line starts at {}",
+                    runs[0].0
+                );
+                assert!(
+                    end <= to + 1e-3,
+                    "{insets}: a line ends at {end}, past {to}"
+                );
+                widest = widest.max(end);
+            }
+            assert!(
+                widest > to - 72.0,
+                "{insets}: the lines stop at {widest}, well short of {to}",
+            );
+        }
+    }
+
+    /// Part: a percentage on an inset measures the page area: its
+    /// width for `left` and `right`, and its height for `top` and
+    /// `bottom`. It does so for a block and for an image.
+    #[test]
+    fn a_percentage_inset_measures_the_page_area() {
+        let geometry = master(Situation::First(Side::Recto)).geometry;
+        let (left, top) = geometry.content_origin();
+        let (width, height) = geometry.content_size();
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-2;
+
+        let css = "blockquote { position: absolute; top: 25%; left: 10%; right: 40%; \
+                   margin: 0; background-color: #eeeeee }";
+        let pages = paginate_styled(css, vec![section(vec![lifted_quote(), paragraph("after")])]);
+        let boxes = rects(&pages[0]);
+        let [(x, y, w, _, _)] = boxes.as_slice() else {
+            panic!("the block paints one box: {boxes:?}");
+        };
+        assert!(near(*x, left + width * 0.1), "the box starts at {x}");
+        assert!(near(*y, top + height * 0.25), "the box opens at {y}");
+        assert!(near(*w, width * 0.5), "the box is {w} wide");
+
+        let output = with_image(
+            "img { position: absolute; bottom: 10%; right: 50% }",
+            vec![section(
+                std::iter::once(image()).chain(long_prose(2)).collect(),
+            )],
+        );
+        let [(x, y, _, _)] = painted(&output.pages[0])[..] else {
+            panic!("one image is painted");
+        };
+        assert!(
+            near(x, left + width * 0.5 - IMAGE),
+            "the image starts at {x}"
+        );
+        assert!(
+            near(y, top + height * 0.9 - IMAGE),
+            "the image opens at {y}"
+        );
+    }
+
+    /// An absolute block with a `wrap-flow` other than `auto` is an
+    /// exclusion the way an image is: the prose of its page sets
+    /// beside it.
+    #[test]
+    fn prose_sets_beside_an_absolute_block_that_asks_for_it() {
+        let css = "blockquote { position: absolute; top: 0; left: 0; right: 50%; margin: 0; \
+                   wrap-flow: end; background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(
+                std::iter::once(lifted_quote())
+                    .chain(long_prose(8))
+                    .collect(),
+            )],
+        );
+        let page = &pages[0];
+        let boxes = rects(page);
+        let [(x, y, w, h, _)] = boxes.as_slice() else {
+            panic!("the block paints one box: {boxes:?}");
+        };
+        let left = master(Situation::First(Side::Recto))
+            .geometry
+            .content_origin()
+            .0;
+        let prose: Vec<ContentLine<'_>> = content_lines(page)
+            .into_iter()
+            .filter(|(_, runs)| !runs.iter().any(|run| run.2.contains("lilliputian")))
+            .collect();
+        let beside: Vec<&ContentLine<'_>> = prose
+            .iter()
+            .filter(|(baseline, _)| *baseline > *y && *baseline < y + h)
+            .collect();
+        assert!(!beside.is_empty(), "no line is set beside the block");
+        for (baseline, runs) in beside {
+            assert!(
+                runs[0].0 >= x + w - 1e-3,
+                "the line at {baseline} starts at {}, over the block",
+                runs[0].0,
+            );
+        }
+        assert!(
+            prose
+                .iter()
+                .any(|(_, runs)| (runs[0].0 - left).abs() < 1e-3),
+            "no line under the block runs the full measure",
+        );
+    }
+
+    /// An image anchored inside an absolute block lands on the page
+    /// that block lands on.
+    #[test]
+    fn an_image_anchored_inside_an_absolute_block_lands_with_it() {
+        let mut blocks = tagged_prose(30);
+        blocks.insert(20, quote(vec![paragraph("lilliputian words"), image()]));
+        let output = with_image(
+            "blockquote, img { position: absolute; top: 0; left: 0 }",
+            vec![section(blocks)],
+        );
+        let at = output
+            .pages
+            .iter()
+            .position(|page| !quoted_lines(page).is_empty())
+            .expect("the block is painted");
+        assert!(at > 0, "the anchor landed on the first page");
+        let images: Vec<usize> = output
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, page)| !painted(page).is_empty())
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(images, vec![at], "the image did not land with its block");
+    }
 
     /// An RGBA PNG two inches square at 96dpi, opaque where
     /// `covered` says so.

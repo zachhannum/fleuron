@@ -1063,6 +1063,81 @@ mod tests {
         );
     }
 
+    /// Acceptance: the preview and the export of a page with a
+    /// relative block and an absolute block on it agree.
+    ///
+    /// Both painters read the same display structure. The question is
+    /// whether the export puts the lines of both blocks where that
+    /// structure says: at the x and the baseline their own items
+    /// carry.
+    #[test]
+    fn a_page_of_positioned_blocks_exports_where_the_display_structure_put_them() {
+        let text = |value: &str| Inline::Text {
+            id: Default::default(),
+            value: value.into(),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let mut book = book(
+            "My father had a small estate in Nottinghamshire, and I was the third of \
+             five sons. He sent me to Emanuel College in Cambridge at fourteen years old.",
+        );
+        let blocks = &mut book.sections[0].blocks;
+        blocks.insert(
+            0,
+            Block::Heading {
+                id: Default::default(),
+                level: HeadingLevel::H1,
+                inlines: vec![text("Raised")],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+        );
+        blocks.push(Block::Blockquote {
+            id: Default::default(),
+            blocks: vec![Block::Paragraph {
+                id: Default::default(),
+                inlines: vec![text("Lifted against the page")],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            }],
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        });
+        book.assign_node_ids();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "positioned.css",
+            "h1 { position: relative; top: -12pt } \
+             blockquote { position: absolute; bottom: 1in; left: 0.5in; margin: 0 }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let page = &output.pages[0];
+
+        let pdf = content(&readable(&output, &Metadata::default()));
+        for word in ["Raised", "Lifted"] {
+            let (x, baseline) = page
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { x, y, text, .. } if text.contains(word) => Some((*x, *y)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("no run of {word} on the page"));
+            // krilla writes text under a flip, so the line sits at the
+            // x and the baseline the item carries.
+            let placed = format!("1 0 0 -1 {x} {baseline} Tm");
+            assert!(
+                pdf.contains(&placed),
+                "{word} is not set at {placed}:\n{pdf}",
+            );
+        }
+    }
+
     /// An image nothing supplied is no draw item, and one warning
     /// names the url.
     #[test]

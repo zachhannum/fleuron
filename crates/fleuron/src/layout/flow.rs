@@ -10,7 +10,7 @@ use crate::style::{Break, PageQuery, Situation};
 
 use super::Paginator;
 use super::build::Reflow;
-use super::exclusion::AnchoredImages;
+use super::exclusion::AnchoredBoxes;
 use super::fragment::{BreakPoint, Decoration, Decorations, Fragment, Marks, Piece};
 use super::furniture::Strings;
 
@@ -156,7 +156,7 @@ pub(super) struct Flow<'a, 'p> {
     carried: Vec<Decoration>,
     /// The images to place, and the page each one landed on. Empty
     /// on the pass that answers where they land.
-    pub(super) anchored: &'p AnchoredImages,
+    pub(super) anchored: &'p AnchoredBoxes,
     /// Where each anchor landed, filled in as pages close.
     anchors: BTreeMap<NodeId, usize>,
     /// Anchors waiting for the fragment whose page they take.
@@ -174,7 +174,7 @@ pub(super) struct Flow<'a, 'p> {
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
-    pub(super) fn new(paginator: &'p Paginator<'a>, anchored: &'p AnchoredImages) -> Flow<'a, 'p> {
+    pub(super) fn new(paginator: &'p Paginator<'a>, anchored: &'p AnchoredBoxes) -> Flow<'a, 'p> {
         let slot = PageSlot {
             name: None,
             first: true,
@@ -207,7 +207,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// A flow that answers where the anchors land and nothing else.
-    pub(super) fn settling(paginator: &'p Paginator<'a>, bare: &'p AnchoredImages) -> Flow<'a, 'p> {
+    pub(super) fn settling(paginator: &'p Paginator<'a>, bare: &'p AnchoredBoxes) -> Flow<'a, 'p> {
         Flow {
             paints: false,
             ..Flow::new(paginator, bare)
@@ -674,7 +674,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         )
     }
 
-    /// The images the page being built carries, as paint ops.
+    /// The images and blocks the page being built carries, as paint
+    /// ops.
     fn anchored_items(&self) -> Vec<DrawItem> {
         let index = self.pages.len();
         let Some(anchored) = self.anchored.by_page.get(&index) else {
@@ -683,7 +684,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let geometry = self.paginator.master(index, &self.slot).geometry;
         anchored
             .iter()
-            .map(|at| self.anchored.all[*at].item(geometry))
+            .flat_map(|at| self.anchored.all[*at].items(geometry))
             .collect()
     }
 

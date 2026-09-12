@@ -20,8 +20,9 @@
 //! The stages have a file each: `fragment` is what the flow moves,
 //! `build` turns blocks into fragments, `cap` sets the initial letter
 //! beside them, `table` sets a table a row at a time, `flow` stacks
-//! fragments into pages, `exclusion` sets prose around an image the
-//! sheet anchored, `background` puts art behind a box, `furniture`
+//! fragments into pages, `exclusion` places the images and blocks the
+//! sheet anchored and sets prose around them, `background` puts art
+//! behind a box, `furniture`
 //! paints the margin boxes, and `text` turns a shaped line into paint
 //! ops.
 
@@ -47,7 +48,7 @@ pub use furniture::margin_band;
 
 use background::Backdrop;
 
-pub(crate) use exclusion::AnchoredImages;
+pub(crate) use exclusion::AnchoredBoxes;
 pub(crate) use flow::{PageInfo, Paged};
 pub(crate) use reference::{Named, References, landed, moved};
 
@@ -321,11 +322,11 @@ impl Paginator<'_> {
 
     /// One pass over the whole book, stopping short of the furniture.
     fn pass(&self, book: &Book) -> Paged {
-        let anchored = self.anchored_images(book);
+        let anchored = self.anchored_boxes(book);
         // The pass that answers where the anchors land keeps no
         // fragments either. It builds a section, flows it, and drops
         // it, the same way the pass that keeps the pages does.
-        let bare = AnchoredImages::default();
+        let bare = AnchoredBoxes::default();
         let anchors = if anchored.is_empty() {
             BTreeMap::new()
         } else {
@@ -336,7 +337,7 @@ impl Paginator<'_> {
             }
             flow.finish().anchors
         };
-        let anchored = AnchoredImages::on(anchored, &anchors);
+        let anchored = AnchoredBoxes::on(anchored, &anchors);
         let mut flow = Flow::new(self, &anchored);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
@@ -362,16 +363,16 @@ impl Paginator<'_> {
         sections: impl IntoIterator<Item = &'f [Fragment]>,
     ) -> Paged {
         let sections: Vec<&[Fragment]> = sections.into_iter().collect();
-        let anchored = self.anchored_images(book);
-        let bare = AnchoredImages::default();
+        let anchored = self.anchored_boxes(book);
+        let bare = AnchoredBoxes::default();
         let anchored = if anchored.is_empty() {
-            AnchoredImages::default()
+            AnchoredBoxes::default()
         } else {
             let mut flow = Flow::settling(self, &bare);
             for (section, fragments) in book.sections.iter().zip(&sections) {
                 flow.section(section, fragments);
             }
-            AnchoredImages::on(anchored, &flow.finish().anchors)
+            AnchoredBoxes::on(anchored, &flow.finish().anchors)
         };
         let mut flow = Flow::new(self, &anchored);
         for (section, fragments) in book.sections.iter().zip(&sections) {

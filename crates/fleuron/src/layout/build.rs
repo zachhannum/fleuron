@@ -9,6 +9,7 @@ use crate::content::{
     origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
+use crate::pages::DrawItem;
 use crate::style::{
     Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
     TextAlign, TextJustify,
@@ -16,6 +17,7 @@ use crate::style::{
 
 use super::Paginator;
 use super::cap::Cap;
+use super::flow::Painted;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decorated, decoration,
 };
@@ -90,6 +92,9 @@ pub(super) struct Builder<'a, 'p> {
     /// What `offset` stood at before each relative block still open
     /// moved it, innermost last.
     moved: Vec<(f32, f32)>,
+    /// The block this builder lays out on its own, against the page.
+    /// Its own `position: absolute` does not anchor it a second time.
+    pub(super) lifted: Option<NodeId>,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -109,6 +114,7 @@ impl<'a, 'p> Builder<'a, 'p> {
             layer: 0,
             offset: (0.0, 0.0),
             moved: Vec::new(),
+            lifted: None,
         }
     }
 }
@@ -365,11 +371,53 @@ impl Builder<'_, '_> {
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }
 
+    /// Everything built so far, stacked from the top of a box no page
+    /// break splits: what it paints, from that top and the leading
+    /// edge the blocks were laid out against, and how tall it stands.
+    ///
+    /// A table cell is one of these, and so is a block anchored to
+    /// the page.
+    pub(super) fn stack(mut self) -> Stacked {
+        let mut marks = None;
+        let mut anchors = Vec::new();
+        let mut placed = Vec::new();
+        let mut cursor = 0.0f32;
+        for fragment in &self.fragments {
+            if let Piece::Anchor(node) = fragment.piece {
+                anchors.push(node);
+                continue;
+            }
+            gather(&mut marks, fragment.marks.clone());
+            let top = cursor + fragment.lead + fragment.fixed;
+            placed.push((top, fragment));
+            cursor = top + fragment.height;
+        }
+        gather(&mut marks, self.pending_marks.take());
+        let mut items = decorate(&placed);
+        for (top, fragment) in &placed {
+            items.append(&mut self.paginator.fragment_items(fragment, 0.0, *top));
+        }
+        Stacked {
+            items,
+            height: cursor + self.margin + self.fixed,
+            anchors,
+            marks,
+        }
+    }
+
     /// Every block of one nesting level, at `x` from the content
     /// box's leading edge and breaking to `measure`.
     pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
         for block in blocks {
             self.name(block_attributes(block));
+            // A box against the page is not in the flow: it takes no
+            // space here, and the margins that met around it still
+            // meet.
+            let id = block_id(block);
+            if self.lifted != Some(id) && self.styles().style(id).position == Position::Absolute {
+                self.anchor(id);
+                continue;
+            }
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
                     self.name_inlines(inlines);
@@ -392,13 +440,6 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
-                    // An image against the page is not in the flow:
-                    // it takes no space here, and the margins that
-                    // met around it still meet.
-                    if style.position == Position::Absolute {
-                        self.anchor(*id);
-                        continue;
-                    }
                     let start = self.open(&style, &[], x, measure);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
@@ -731,6 +772,60 @@ pub struct Reflow {
     /// Where each line ended, so the rest of the paragraph can be set
     /// from any of them.
     pub(super) ends: Vec<usize>,
+}
+
+/// What a stack of blocks comes to.
+pub(super) struct Stacked {
+    /// What they paint, from the top of the box they stand in.
+    pub(super) items: Vec<DrawItem>,
+    /// How tall they stand, their margins included.
+    pub(super) height: f32,
+    /// The boxes the sheet lifted out of the flow from inside them.
+    pub(super) anchors: Vec<NodeId>,
+    /// What the blocks set for the page furniture.
+    pub(super) marks: Option<Box<Marks>>,
+}
+
+/// The decorated blocks inside one stack, as the rects they paint. A
+/// stack is never split, so no box inside it is cut.
+fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
+    let mut boxes: Vec<Painted> = Vec::new();
+    let mut open: Vec<usize> = Vec::new();
+    for (top, fragment) in placed {
+        let Some(decorations) = &fragment.decorations else {
+            continue;
+        };
+        for decoration in &decorations.opens {
+            open.push(boxes.len());
+            boxes.push(Painted {
+                top: top - decoration.above,
+                decoration: decoration.clone(),
+                bottom: 0.0,
+                cut_above: false,
+                cut_below: false,
+            });
+        }
+        for _ in 0..decorations.closes {
+            let Some(index) = open.pop() else { continue };
+            boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
+        }
+    }
+    boxes
+        .iter()
+        .flat_map(|box_| box_.items((0.0, 0.0)))
+        .collect()
+}
+
+/// Adds what one fragment set for the page furniture to what is
+/// gathered already.
+pub(super) fn gather(into: &mut Option<Box<Marks>>, from: Option<Box<Marks>>) {
+    let Some(from) = from else {
+        return;
+    };
+    let marks = into.get_or_insert_with(Box::default);
+    marks.strings.extend(from.strings);
+    marks.page_number = from.page_number.or(marks.page_number);
+    marks.targets.extend(from.targets);
 }
 
 /// Where a line of `width` starts inside a measure of `available`.
