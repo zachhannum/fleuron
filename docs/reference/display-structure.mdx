@@ -20,7 +20,7 @@ pub struct LayoutOutput {
 
 `fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry names the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
 
-`assets` is the table `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read.
+`assets` is the table that `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read.
 
 `warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
@@ -157,11 +157,11 @@ Background {
 
 An image painted behind a box: the page's own box, or a block's border box. `asset` indexes `LayoutOutput::assets`, the same table `Image` indexes.
 
-`x`, `y`, `w`, and `h` are the box. The image is clipped to it, and nothing outside it is painted.
+`x`, `y`, `w`, and `h` are the box. A painter clips the image to it and paints nothing outside it.
 
-`tile_x`, `tile_y`, `tile_w`, and `tile_h` are where one copy of the image goes, which can reach outside the box. Layout has already resolved `background-size` and `background-position` into them.
+`tile_x`, `tile_y`, `tile_w`, and `tile_h` are where one copy of the image goes, which can reach outside the box. Layout resolved `background-size` and `background-position` into them.
 
-`repeat` says whether that copy tiles. A painter steps the tile by `tile_w` across and `tile_h` down, in both directions, until the box is covered.
+Where `repeat` is true, that copy tiles. A painter steps the tile by `tile_w` across and `tile_h` down, in both directions, until the box is covered.
 
 ## Writing a painter
 
@@ -173,6 +173,6 @@ A painter that cannot place glyphs by id, and draws characters instead, draws `t
 
 For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
 
-For a background, resolve `asset` the same way, clip to the box, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. A url nothing can supply paints nothing: a background sits behind the text, so a placeholder there reads as part of the page.
+For a background, resolve `asset` the same way, clip to the box, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. For a url nothing can supply, paint nothing. A placeholder behind the text reads as part of the page.
 
 The SVG painter in `fleuron` is a worked example. See [the preview](../wasm/preview.mdx).

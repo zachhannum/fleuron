@@ -133,9 +133,9 @@ section.front { page: front }
 
 Page rules cascade like any other rule: origin first, then specificity, then source order. A page name outranks `:first` and `:blank`, which outrank `:left` and `:right`.
 
-### Art behind the page
+### Page backgrounds
 
-A page carries a background: a color, an image, or a color with an image over it. The engine paints it over the whole page box, margins included, before anything else on the page. The text, the rules, and the page numbers are set over it.
+A page carries a background: a color, an image, or a color with an image over it. The engine paints it over the whole page box, margins included, before anything else on the page.
 
 The following example puts one scan behind every left-hand page and another behind every right-hand page:
 
@@ -153,9 +153,9 @@ The following example puts one scan behind every left-hand page and another behi
 }
 ```
 
-The four background properties are described under [backgrounds](#backgrounds). They mean the same thing on a page as on a block. The box they measure against is the page box rather than the border box.
+The five background properties are described under [backgrounds](#backgrounds). They mean the same thing on a page as on a block. The box they measure against is the page box rather than the border box.
 
-The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes, the same way `@font-face` resolves a face. A url nothing resolves warns at the line and column it was written at, and the page is set without the image.
+The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes, the same way `@font-face` resolves a face. A url nothing resolves warns at the line and column it was written at, and the engine skips the image.
 
 ### Running heads
 
@@ -632,7 +632,7 @@ Where two edges of different colors meet, the corner takes the color of the hori
 
 ### Backgrounds
 
-A background is a color, an image, or a color with an image over it. The engine paints it over the block's border box, and the border draws over it. A block broken across a page turn paints its background on each page, over the part of the block that page holds.
+A background is a color, an image, or a color with an image over it. The engine paints it over the block's border box, and the border draws over it. Where a block breaks across a page turn, the engine paints the background on each page, behind the part the page holds.
 
 The following example tints a block quote and tiles an ornament over the tint:
 
@@ -654,11 +654,13 @@ blockquote {
 | `background-size` | `auto`, `cover`, `contain`, or one or two lengths |
 | `background-position` | one or two of a keyword, a length, or a percentage |
 
-`background-size: cover` is the smallest size that covers the box, so the box crops what runs past it. `contain` is the largest size that fits inside the box, so the box keeps the remainder. One length sizes the image across the box, and the image's own proportions size it down the box. A percentage measures against the box.
+`background-size: cover` is the smallest size that covers the box. The box crops what runs past it. `contain` is the largest size that fits inside the box. The box keeps the remainder.
+
+One length sizes the image across the box. The image's own proportions then size it down the box. A percentage measures against the box.
 
 `background-position` places the image in the box. `left`, `center`, and `right` place it across the box. `top`, `center`, and `bottom` place it down the box. A single value centers the image on the other axis. A percentage aligns that fraction of the image with the same fraction of the box, which is why `50%` centers it. A length is an offset from the box's top left corner.
 
-The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes. A url nothing resolves warns at the line and column it was written at, and the block is set without the image.
+The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes. A url nothing resolves warns at the line and column it was written at, and the engine skips the image.
 
 ### Breaking across pages
 

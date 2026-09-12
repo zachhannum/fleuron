@@ -60,8 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sheets.load_fonts(&mut registry, &files);
     let styles = sheets.compile(&book, &registry);
 
-    // Every image the book places, and every image its sheet puts
-    // behind a box.
+    // Every image the book places, and every background image the
+    // stylesheet names.
     let assets = Assets::probe(&book, &styles, &files);
 
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
