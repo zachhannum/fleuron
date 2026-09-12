@@ -15,7 +15,7 @@ use super::value::{
     break_value, column_span, count, counter_reset, decoration_break, edges, families, font_style,
     generated, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
     line_style, line_width, page_name, positioning, property, shape_outside, string_set,
-    text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
+    text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, position, warning};
@@ -472,6 +472,13 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
                 Declaration::Inset(Edge::Left, inset)
             })
         },
+    },
+    Spec {
+        name: "z-index",
+        inherited: false,
+        syntax: "auto | <integer>",
+        examples: &["auto", "10", "-1"],
+        read: |name, input| longhand(name, input, z_index, Declaration::ZIndex),
     },
     Spec {
         name: "wrap-flow",
