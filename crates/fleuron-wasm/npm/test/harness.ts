@@ -954,6 +954,33 @@ check(
   `${clear.length} lines painted beside the image, ${beside.length} on the page`,
 );
 
+// Positioned blocks. The sheet raises every chapter title where it is
+// drawn and lifts the part title against the page. The painter draws
+// every glyph of the page that carries both where the display
+// structure put it. The PDF writer places the same items, so this is
+// the preview half of that agreement.
+const positioned = await client.preview([
+  styleOp(
+    'h3 { position: relative; top: -12pt } ' +
+      'h2 { position: absolute; bottom: 1in; left: 0.5in; right: 0.5in }',
+  ),
+]);
+const positionedPage =
+  positioned?.pages.find(
+    (page) =>
+      page.items.some((item) => item.kind === 'text' && item.text.includes('PART')) &&
+      page.items.some((item) => item.kind === 'text' && item.text.includes('CHAPTER')),
+  ) ?? null;
+const positionedMisplaced =
+  positioned === null || positionedPage === null
+    ? 'no page carries the part title and a chapter title'
+    : misplaced(positionedPage, positioned);
+check(
+  'a page with a relative block and an absolute block paints every glyph where the display structure put it',
+  positionedMisplaced === null,
+  positionedMisplaced ?? '',
+);
+
 // A contour. The same sheet wraps the prose to the shape the
 // ornament's own alpha channel traces rather than to its box. The
 // lines beside it start inside the box, which nothing but a traced

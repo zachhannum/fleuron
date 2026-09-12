@@ -757,11 +757,57 @@ A table breaks across pages between two rows, and never inside a row. The header
 
 The engine applies the alignment that the delimiter row gives a column as `text-align`. A `text-align` rule in a stylesheet takes priority over it.
 
+## Moving a block
+
+You can move a block away from its place among the paragraphs. Use `position` to choose how.
+
+| value | what happens |
+|---|---|
+| `static` | The block stays in its place. |
+| `relative` | The engine draws the block moved by its insets. Nothing around it moves. |
+| `absolute` | The engine takes the block out of the text and puts it against the page. |
+
+`top`, `right`, `bottom`, and `left` are the insets. Each one takes a length or a percentage. A percentage on `left` or `right` is a percentage of the width of the content box. A percentage on `top` or `bottom` is a percentage of its height.
+
+### Moving a block from its place
+
+With `position: relative`, the engine moves the block up for a negative `top` and down for a positive `top`. It moves the block right for a positive `left`. Where both insets of an axis are set, the engine uses `top` or `left` and ignores the other one.
+
+The block keeps the room it had among the paragraphs. The text around it stays where it was, and the pages break where they broke before.
+
+The following example raises every chapter heading by 12 points and leaves the text under it in place:
+
+```css
+h1 {
+  position: relative;
+  top: -12pt;
+}
+```
+
+### Putting a block against the page
+
+`position: absolute` puts a block against the page the same way it puts [an image](#images-against-the-page) there. The place where you write the block decides the page. The insets decide the place on that page. The block takes up no room among the paragraphs.
+
+The insets also decide the width of the block. If both `left` and `right` are set, the block fills the space between them. If only one is set, the block fills the space from that inset to the far edge of the content box. If neither is set, the block is as wide as a line of text. The lines of the block break to that width.
+
+`wrap-flow` and `shape-outside` work on a block as they work on an image. A block has no alpha channel, so `shape-outside: auto` wraps the text around the box of the block.
+
+The following example puts a quotation 1 inch above the bottom of the content box, and half an inch in from each side:
+
+```css
+blockquote.epigraph {
+  position: absolute;
+  bottom: 1in;
+  left: 0.5in;
+  right: 0.5in;
+}
+```
+
 ## Images against the page
 
 You can put an image against the page rather than among the paragraphs. The text then wraps around it.
 
-`position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
+`position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A percentage measures the width or the height of the content box. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
 
 The image keeps the size its own file gives it. If that size does not fit the content box, the engine makes the image smaller. Margins on the image add space between it and the text.
 
@@ -1125,7 +1171,7 @@ code { font-family: monospace }
 | layout | floats, grid, flexbox, transforms |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
-| positioning | `position: relative` and `position: fixed`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
+| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
