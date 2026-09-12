@@ -25,6 +25,8 @@ import {
   decodeDisplayList,
   faceFamily,
   initWasm,
+  PAGE_BACKGROUND,
+  PAGE_FURNITURE,
   paintPage,
   styleOp,
   wireVersion,
@@ -644,6 +646,50 @@ check(
 check(
   'and the pages it re-fragmented are the ones that came back',
   warm !== null && warm.pages.length > 0,
+);
+
+// The layer crosses the wire as well as the geometry does: a sheet
+// that raises the prose comes back with the runs in the layer it
+// named, and the runs of a sheet that names none come back in layer
+// 0.
+/** The layers of a page that came from the blocks of the book. */
+const blockLayers = (page: Page): number[] =>
+  page.items
+    .map((item) => item.layer)
+    .filter((layer) => layer !== PAGE_BACKGROUND && layer !== PAGE_FURNITURE);
+const raised = await client.preview([styleOp('p { z-index: 10 }')]);
+check(
+  'a layer the sheet named crosses the wire',
+  raised !== null &&
+    raised.pages.some((page) => blockLayers(page).includes(10)) &&
+    raised.pages.every((page) => blockLayers(page).every((layer) => layer === 0 || layer === 10)),
+);
+const grounded = await client.preview([styleOp('')]);
+check(
+  'and a book that names no layer comes back in layer 0',
+  grounded !== null && grounded.pages.every((page) => blockLayers(page).every((layer) => layer === 0)),
+);
+
+// The painter walks the list the layers sorted, so a tint the sheet
+// raises is painted after the prose it covers, and one it leaves
+// alone is painted before it. This is what the PDF export does with
+// the same list, which is what makes the two agree.
+const tinted = 'section { background-color: #eeeeee }';
+const order = async (css: string): Promise<[number, number] | null> => {
+  const output = await client.preview([styleOp(css)]);
+  const page = output?.pages[0];
+  if (output === null || page === undefined) {
+    return null;
+  }
+  const svg = paintPage(page, { fonts: output.fonts });
+  return [svg.indexOf('#eeeeee'), svg.indexOf('<text')];
+};
+const flowed = await order(tinted);
+const over = await order(`${tinted} section { z-index: 10 }`);
+check(
+  'the preview paints a raised tint after the prose it covers',
+  flowed !== null && over !== null && flowed[0] < flowed[1] && over[0] > over[1],
+  `flowed ${flowed?.join(' ')}, raised ${over?.join(' ')}`,
 );
 
 // Latest wins: a render another overtakes before it starts is
