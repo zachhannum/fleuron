@@ -122,7 +122,9 @@ fn described(pages: &[Page]) -> Vec<Vec<String>> {
             rects(page)
                 .iter()
                 .map(|item| match item {
-                    DrawItem::Rect { x, y, w, h, color } => {
+                    DrawItem::Rect {
+                        x, y, w, h, color, ..
+                    } => {
                         format!("rect {x:?} {y:?} {w:?} {h:?} {}", color.to_hex())
                     }
                     _ => unreachable!("only rects were kept"),

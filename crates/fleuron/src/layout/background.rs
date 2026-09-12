@@ -64,18 +64,25 @@ impl Backdrop {
         self.color.is_some() || self.image.is_some()
     }
 
-    /// What the backdrop paints over the box at `(x, y)`, tint first
-    /// and image over it.
-    pub(super) fn items(&self, x: f32, y: f32, w: f32, h: f32) -> Vec<DrawItem> {
+    /// What the backdrop paints over the box at `(x, y)`, in `layer`,
+    /// tint first and image over it.
+    pub(super) fn items(&self, x: f32, y: f32, w: f32, h: f32, layer: i32) -> Vec<DrawItem> {
         let mut items = Vec::new();
         if w <= 0.0 || h <= 0.0 {
             return items;
         }
         if let Some(color) = self.color {
-            items.push(DrawItem::Rect { x, y, w, h, color });
+            items.push(DrawItem::Rect {
+                x,
+                y,
+                w,
+                h,
+                color,
+                layer,
+            });
         }
         if let Some(tile) = &self.image {
-            items.extend(tile.item(x, y, w, h));
+            items.extend(tile.item(x, y, w, h, layer));
         }
         items
     }
@@ -84,7 +91,7 @@ impl Backdrop {
 impl Tile {
     /// The one item this image paints over a box, or `None` where it
     /// is drawn at no size at all.
-    fn item(&self, x: f32, y: f32, w: f32, h: f32) -> Option<DrawItem> {
+    fn item(&self, x: f32, y: f32, w: f32, h: f32, layer: i32) -> Option<DrawItem> {
         let (tile_w, tile_h) = self.drawn(w, h);
         if tile_w <= 0.0 || tile_h <= 0.0 {
             return None;
@@ -100,6 +107,7 @@ impl Tile {
             tile_h,
             repeat: self.repeat == BackgroundRepeat::Repeat,
             asset: self.asset,
+            layer,
         })
     }
 
@@ -182,7 +190,7 @@ mod tests {
     /// The tile one backdrop draws over a box 200 by 100 points at the
     /// page's own corner: `(left, top, width, height)`.
     fn tile(backdrop: &Backdrop) -> (f32, f32, f32, f32) {
-        match backdrop.items(0.0, 0.0, 200.0, 100.0).pop() {
+        match backdrop.items(0.0, 0.0, 200.0, 100.0, 0).pop() {
             Some(DrawItem::Background {
                 tile_x,
                 tile_y,
@@ -221,7 +229,7 @@ mod tests {
             w,
             h,
             ..
-        }) = backdrop.items(0.0, 0.0, 200.0, 200.0).pop()
+        }) = backdrop.items(0.0, 0.0, 200.0, 200.0, 0).pop()
         else {
             panic!("the backdrop painted nothing");
         };
@@ -238,7 +246,7 @@ mod tests {
         assert_eq!((width, height), (200.0, 100.0));
 
         let Some(DrawItem::Background { tile_w, tile_h, .. }) =
-            backdrop.items(0.0, 0.0, 200.0, 200.0).pop()
+            backdrop.items(0.0, 0.0, 200.0, 200.0, 0).pop()
         else {
             panic!("the backdrop painted nothing");
         };
@@ -322,7 +330,7 @@ mod tests {
             },
             Some((0, intrinsic())),
         );
-        let items = backdrop.items(0.0, 0.0, 200.0, 100.0);
+        let items = backdrop.items(0.0, 0.0, 200.0, 100.0, 0);
         assert!(
             matches!(items[0], DrawItem::Rect { .. }),
             "the tint is not painted first: {items:?}",
@@ -342,7 +350,7 @@ mod tests {
             },
             None,
         );
-        let items = backdrop.items(0.0, 0.0, 200.0, 100.0);
+        let items = backdrop.items(0.0, 0.0, 200.0, 100.0, 0);
         assert_eq!(items.len(), 1);
         assert!(matches!(items[0], DrawItem::Rect { .. }));
     }

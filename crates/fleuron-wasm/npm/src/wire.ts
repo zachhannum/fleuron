@@ -9,7 +9,20 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 11;
+export const WIRE_VERSION = 12;
+
+/**
+ * The layer the art behind a page paints in: under every layer a
+ * stylesheet can name, so the text of a page covers it with nothing
+ * in the sheet saying so.
+ */
+export const PAGE_BACKGROUND = -2147483648;
+
+/**
+ * The layer a page number and a running head paint in: over every
+ * layer a stylesheet can name.
+ */
+export const PAGE_FURNITURE = 2147483647;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -90,6 +103,8 @@ export interface TextItem {
   color: string;
   /** The glyphs, in visual order. */
   glyphs: Glyph[];
+  /** Which layer the run paints in. */
+  layer: number;
 }
 
 /** A filled rectangle: rules, borders, backgrounds. */
@@ -105,6 +120,8 @@ export interface RectItem {
   h: number;
   /** The `#rrggbb` the rectangle is filled with. */
   color: string;
+  /** Which layer the rectangle paints in. */
+  layer: number;
 }
 
 /** An image's own idea of its size, from its header. */
@@ -146,6 +163,8 @@ export interface ImageItem {
   h: number;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /** Which layer the image paints in. */
+  layer: number;
 }
 
 /**
@@ -179,6 +198,8 @@ export interface BackgroundItem {
   repeat: boolean;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /** Which layer the image paints in. */
+  layer: number;
 }
 
 /** A single paint operation. */
@@ -201,7 +222,10 @@ export interface Page {
    * page names both. A blank leaf names none.
    */
   sections: number[];
-  /** What to paint, in paint order. */
+  /**
+   * What to paint, in paint order: by layer, and inside one layer in
+   * the order the flow produced it.
+   */
   items: DrawItem[];
 }
 
@@ -312,6 +336,12 @@ class Reader {
     }
   }
 
+  /** A signed varint: zigzag encoded, so the sign is the low bit. */
+  signed(): number {
+    const value = this.varint();
+    return value % 2 === 0 ? value / 2 : -(value + 1) / 2;
+  }
+
   bool(): boolean {
     return this.varint() !== 0;
   }
@@ -398,6 +428,7 @@ function item(r: Reader): DrawItem {
         features: { smallCaps: r.bool() },
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),
+        layer: r.signed(),
       };
     case 1:
       return {
@@ -407,6 +438,7 @@ function item(r: Reader): DrawItem {
         w: r.f32(),
         h: r.f32(),
         color: r.color(),
+        layer: r.signed(),
       };
     case 2:
       return {
@@ -416,6 +448,7 @@ function item(r: Reader): DrawItem {
         w: r.f32(),
         h: r.f32(),
         asset: r.varint(),
+        layer: r.signed(),
       };
     case 3:
       return {
@@ -430,6 +463,7 @@ function item(r: Reader): DrawItem {
         tileH: r.f32(),
         repeat: r.bool(),
         asset: r.varint(),
+        layer: r.signed(),
       };
     default:
       throw new WireError(`draw item ${variant} is not one this reader reads`);
