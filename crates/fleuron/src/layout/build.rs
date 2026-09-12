@@ -84,6 +84,12 @@ pub(super) struct Builder<'a, 'p> {
     /// before it emits anything, so opening one is where this is
     /// settled.
     pub(super) layer: i32,
+    /// How far the relative blocks open around the block being built
+    /// move what it paints, added together.
+    offset: (f32, f32),
+    /// What `offset` stood at before each relative block still open
+    /// moved it, innermost last.
+    moved: Vec<(f32, f32)>,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -101,6 +107,8 @@ impl<'a, 'p> Builder<'a, 'p> {
             open: Vec::new(),
             spanning: false,
             layer: 0,
+            offset: (0.0, 0.0),
+            moved: Vec::new(),
         }
     }
 }
@@ -160,11 +168,19 @@ impl Builder<'_, '_> {
         self.ask(style.break_before);
         self.mark(style, inlines);
         self.layer = style.z_index;
+        if style.position == Position::Relative {
+            // A percentage measures the page area the section's lines
+            // break against.
+            let area = self.styles().default_page().geometry.content_size();
+            let (dx, dy) = style.inset.offset(area);
+            self.moved.push(self.offset);
+            self.offset = (self.offset.0 + dx, self.offset.1 + dy);
+        }
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
         let backdrop = self.paginator.backdrop(&style.background);
-        if let Some(decoration) = decoration(style, x, measure, backdrop) {
+        if let Some(decoration) = decoration(style, x, measure, backdrop, self.offset) {
             self.open.push(Pending {
                 start,
                 open_fixed: self.fixed,
@@ -269,6 +285,11 @@ impl Builder<'_, '_> {
             let pending = self.open.pop().expect("the block opened a decoration");
             self.seal(pending);
         }
+        if style.position == Position::Relative
+            && let Some(offset) = self.moved.pop()
+        {
+            self.offset = offset;
+        }
         self.margin = self.margin.max(style.margin.bottom);
         // A block that emitted nothing settles nothing: what was
         // asked above it is still asked above whatever comes next.
@@ -331,6 +352,7 @@ impl Builder<'_, '_> {
         }
         fragment.spanning = self.spanning;
         fragment.layer = self.layer;
+        fragment.offset = self.offset;
         self.fragments.push(fragment);
     }
 
@@ -626,6 +648,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
     for fragment in fresh.iter_mut() {
         fragment.spanning = head.spanning;
         fragment.layer = head.layer;
+        fragment.offset = head.offset;
     }
     let opens = head
         .decorations
@@ -775,6 +798,89 @@ mod tests {
                 .iter()
                 .all(|fragment| fragment.break_before == BreakPoint::Forbidden)
         );
+    }
+
+    /// Acceptance: `h1 { position: relative; top: -12pt }` raises the
+    /// heading and leaves the prose under it where it was.
+    #[test]
+    fn a_relative_heading_is_raised_and_the_prose_under_it_stays() {
+        use crate::layout::testing::content_items;
+        let sections = || vec![section([vec![heading("Raised")], long_prose(3)].concat())];
+        let plain = paginate(sections());
+        let raised = paginate_styled("h1 { position: relative; top: -12pt }", sections());
+        assert_eq!(plain.len(), raised.len(), "the page count moved");
+        let (plain, raised) = (content_items(&plain[0]), content_items(&raised[0]));
+        assert_eq!(plain.len(), raised.len());
+        let mut headings = 0;
+        for (before, after) in plain.iter().zip(&raised) {
+            assert_eq!(before.3, after.3, "the runs are painted in another order");
+            assert_eq!(before.0, after.0, "{:?} moved across", after.3);
+            if before.2 == chapter_size() {
+                headings += 1;
+                assert!(
+                    (after.1 - (before.1 - 12.0)).abs() < 1e-3,
+                    "the heading sits at {} rather than 12pt above {}",
+                    after.1,
+                    before.1,
+                );
+            } else {
+                assert_eq!(before.1, after.1, "the prose {:?} moved", after.3);
+            }
+        }
+        assert!(headings > 0, "no heading on the first page");
+    }
+
+    /// Part: a relative block is moved when it is painted, its box
+    /// with it, on every page it runs over. A percentage measures the
+    /// page area. Nothing around the block moves, so the pages break
+    /// where they broke.
+    #[test]
+    fn a_relative_block_moves_its_box_and_its_lines_on_every_page() {
+        use crate::layout::testing::{content_items, rects};
+        let sections = || {
+            vec![section(
+                [
+                    long_prose(1),
+                    vec![quote(vec![paragraph(&"lilliputian ".repeat(500))])],
+                    long_prose(1),
+                ]
+                .concat(),
+            )]
+        };
+        let base = "blockquote { background-color: #eeeeee; box-decoration-break: clone }";
+        let plain = paginate_styled(base, sections());
+        let moved = paginate_styled(
+            &format!("{base} blockquote {{ position: relative; left: 10%; bottom: 6pt }}"),
+            sections(),
+        );
+        let (dx, dy) = (ua().default_page().geometry.content_size().0 * 0.1, -6.0);
+        assert!(plain.len() > 1, "the quotation fits on one page");
+        assert_eq!(plain.len(), moved.len(), "the page count moved");
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let (mut boxes, mut quoted) = (0, 0);
+        for (before, after) in plain.iter().zip(&moved) {
+            let (was, now) = (rects(before), rects(after));
+            assert_eq!(was.len(), now.len());
+            for (was, now) in was.iter().zip(&now) {
+                assert!(
+                    near(now.0, was.0 + dx) && near(now.1, was.1 + dy),
+                    "page {}: the box at {was:?} is painted at {now:?}",
+                    after.number,
+                );
+                assert!(near(now.2, was.2) && near(now.3, was.3));
+                boxes += 1;
+            }
+            for (was, now) in content_items(before).iter().zip(content_items(after)) {
+                if was.3.contains("lilliputian") {
+                    assert!(near(now.0, was.0 + dx) && near(now.1, was.1 + dy));
+                    quoted += 1;
+                } else {
+                    assert_eq!((was.0, was.1), (now.0, now.1), "{:?} moved", now.3);
+                }
+            }
+        }
+        assert!(boxes > 1, "the box is painted on {boxes} page(s)");
+        assert!(quoted > 0);
     }
 
     /// Acceptance: no single line of a paragraph is stranded at a

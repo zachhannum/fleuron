@@ -11,6 +11,7 @@ impl Paginator<'_> {
     /// One fragment as paint ops. `x` is the leading edge its own `x`
     /// is measured from, and `top` is where the top of its box falls.
     pub(super) fn fragment_items(&self, fragment: &Fragment, x: f32, top: f32) -> Vec<DrawItem> {
+        let (x, top) = (x + fragment.offset.0, top + fragment.offset.1);
         match &fragment.piece {
             Piece::Line { line, cap } => {
                 let baseline = top + line.box_.baseline;

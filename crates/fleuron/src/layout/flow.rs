@@ -267,6 +267,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                         *origin = None;
                     }
                 }
+                shift(&mut items, fragment.offset.0, fragment.offset.1);
                 self.header.push((fragment.height, items));
             }
         }
@@ -840,7 +841,8 @@ impl Painted {
     /// The rects this box paints, background first: `origin` is the
     /// page's content box.
     pub(super) fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
-        let (x, y) = (origin.0 + self.decoration.x, origin.1 + self.top);
+        let (dx, dy) = self.decoration.offset;
+        let (x, y) = (origin.0 + self.decoration.x + dx, origin.1 + self.top + dy);
         let (w, h) = (self.decoration.width, self.bottom - self.top);
         if w <= 0.0 || h <= 0.0 {
             return Vec::new();

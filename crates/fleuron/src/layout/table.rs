@@ -132,6 +132,7 @@ impl<'a> Builder<'a, '_> {
                 backdrop: self.paginator.backdrop(&cell_style.background),
                 cloned: false,
                 layer: cell_style.z_index,
+                offset: (0.0, 0.0),
             };
             items.extend(
                 Painted {
