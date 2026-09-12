@@ -67,6 +67,7 @@ pub enum Declaration {
     InitialLetter(u16),
     Position(Position),
     Inset(Edge, Option<Length>),
+    ZIndex(i32),
     WrapFlow(WrapFlow),
     ShapeOutside(ShapeSource),
     ShapeMargin(Length),

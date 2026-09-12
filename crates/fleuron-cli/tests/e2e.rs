@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "5439d996b5c63e8454a6a3b14c895e55e35e54bf264d467136243e51137e3986";
+    "4de23d21bb47c372b7ffbd87689a25526ff53e06aa7091fdef4d9840cb34d047";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -657,7 +657,9 @@ fn content_streams(pdf: &Path) -> Option<String> {
 /// Every filled rect of one colour on a page, in paint order.
 fn fills(page: &Page, wanted: Color) -> impl Iterator<Item = (f32, f32, f32, f32, Color)> {
     page.items.iter().filter_map(move |item| match item {
-        DrawItem::Rect { x, y, w, h, color } if *color == wanted => Some((*x, *y, *w, *h, *color)),
+        DrawItem::Rect {
+            x, y, w, h, color, ..
+        } if *color == wanted => Some((*x, *y, *w, *h, *color)),
         _ => None,
     })
 }

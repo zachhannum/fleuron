@@ -1314,6 +1314,24 @@ mod tests {
         book
     }
 
+    /// Acceptance: `z-index` is the layer a block paints in. It is a
+    /// block's own: a child of a raised block is not raised with it,
+    /// and `auto` is layer 0.
+    #[test]
+    fn a_block_takes_the_layer_it_names_and_a_child_takes_none_of_it() {
+        let tree = compile(
+            &sample(),
+            "blockquote { z-index: 10 }
+             h1 { z-index: -1 }
+             p { z-index: auto }",
+        );
+        assert_eq!(first(&tree, "blockquote").z_index, 10);
+        assert_eq!(first(&tree, "h1").z_index, -1);
+        // The paragraph inside the blockquote is the last of them.
+        assert_eq!(nth(&tree, "p", 2).z_index, 0);
+        assert_eq!(first(&tree, "section").z_index, 0);
+    }
+
     /// Acceptance: `tbody tr:nth-child(odd)` counts the rows of the
     /// body, so it reaches the first and the third of them and not
     /// the header row.

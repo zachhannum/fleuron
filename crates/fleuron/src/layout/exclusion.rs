@@ -65,6 +65,7 @@ impl Paginator<'_> {
                             margin,
                             wrap: style.wrap_flow,
                             shape: paginator.shape(style, asset, (width, height)),
+                            layer: style.z_index,
                         });
                     }
                     _ => {}
@@ -150,6 +151,8 @@ pub(super) struct AnchoredImage {
     /// The contour the prose keeps clear of in place of the box,
     /// from `shape-outside`.
     shape: Option<Shape>,
+    /// The layer it paints in, from its own `z-index`.
+    layer: i32,
 }
 
 /// A contour in the coordinates of the box the insets place: `(0, 0)`
@@ -213,6 +216,7 @@ impl AnchoredImage {
             w: self.width,
             h: self.height,
             asset: self.asset,
+            layer: self.layer,
         }
     }
 }

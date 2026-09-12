@@ -50,8 +50,17 @@ pub struct Page {
     /// there by the next one opening, so the page names both. A blank
     /// leaf names none.
     pub sections: Vec<NodeId>,
-    /// What to paint, in paint order.
+    /// What to paint, in paint order: by layer, and inside one layer
+    /// in the order the blocks are written.
     pub items: Vec<DrawItem>,
+}
+
+impl Page {
+    /// Puts the page's items in paint order. The sort is stable, so
+    /// one layer keeps the order the flow produced it in.
+    pub(crate) fn sort_by_layer(&mut self) {
+        self.items.sort_by_key(DrawItem::layer);
+    }
 }
 
 /// Where one node's content is set: the folios it runs between, and
@@ -124,6 +133,8 @@ pub enum DrawItem {
         color: Color,
         /// The glyphs, in visual order.
         glyphs: Vec<Glyph>,
+        /// Which layer the run paints in.
+        layer: i32,
     },
     /// Filled rectangle: rules, borders, backgrounds.
     Rect {
@@ -137,6 +148,8 @@ pub enum DrawItem {
         h: f32,
         /// What the rectangle is filled with.
         color: Color,
+        /// Which layer the rectangle paints in.
+        layer: i32,
     },
     /// Placed image; `asset` indexes the asset table.
     Image {
@@ -150,6 +163,8 @@ pub enum DrawItem {
         h: f32,
         /// Index into the asset table.
         asset: u32,
+        /// Which layer the image paints in.
+        layer: i32,
     },
     /// An image painted behind a box: the page's own, or a block's
     /// border box.
@@ -179,7 +194,35 @@ pub enum DrawItem {
         repeat: bool,
         /// Index into the asset table.
         asset: u32,
+        /// Which layer the image paints in.
+        layer: i32,
     },
+}
+
+impl DrawItem {
+    /// The layer a page's own background paints in: under every layer
+    /// a stylesheet can name. Where a stylesheet names no `z-index`,
+    /// the text of a page still covers the background. A stylesheet
+    /// that names this number paints over the background as well. The
+    /// page puts its own background in first, and one layer keeps the
+    /// order it arrived in.
+    pub const PAGE_BACKGROUND: i32 = i32::MIN;
+
+    /// The layer a page's margin boxes paint in: over every layer a
+    /// stylesheet can name. A page number and a running head stay
+    /// visible whatever layer the blocks of the book are raised to.
+    pub const PAGE_FURNITURE: i32 = i32::MAX;
+
+    /// Which layer this item paints in. Higher paints later, over
+    /// what a lower layer put down.
+    pub fn layer(&self) -> i32 {
+        match self {
+            DrawItem::Text { layer, .. }
+            | DrawItem::Rect { layer, .. }
+            | DrawItem::Image { layer, .. }
+            | DrawItem::Background { layer, .. } => *layer,
+        }
+    }
 }
 
 /// One glyph: an id in its font and an absolute x. Kerning and

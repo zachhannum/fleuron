@@ -10,6 +10,6 @@ expression: description(&pages)
     "text 179.60594 55.199497 font 5 at 11.0pt \"harbour\" source \"\" [] written node 7 0..8 small-caps false glyphs 490@179.60594:0..1 446@184.97394:1..2 537@190.15494:2..3 460@194.32394:3..4 521@199.26294:4..5 550@203.44293:5..6 537@208.87694:6..7",
     "text 24.0 70.5995 font 5 at 11.0pt \"lights\" source \"\" [] written node 7 8..14 small-caps false glyphs 509@24.0:0..1 493@27.146:1..2 484@30.38:2..3 490@34.67:3..4 547@40.038:4..5 540@43.25:5..6",
     "text 46.286 70.5995 font 0 at 11.0pt \" went out.\" source \"\" [] written node 8 0..10 small-caps false glyphs 2426@46.286:0..1 894@48.486:1..2 440@55.746002:2..3 484@60.036003:3..4 516@65.844:4..5 2426@69.298004:5..6 490@71.498:6..7 519@76.943:7..8 516@82.74:8..9 2456@86.194:9..10",
-    "text 118.08 170.836 font 0 at 8.0pt \"1\" source \"\" [] written nothing small-caps false glyphs 2254@118.08:0..1"
+    "text 118.08 170.836 font 0 at 8.0pt \"1\" source \"\" [] written nothing small-caps false glyphs 2254@118.08:0..1 layer 2147483647"
   ]
 ]
