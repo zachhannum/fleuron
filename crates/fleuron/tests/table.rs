@@ -124,7 +124,9 @@ fn rects(page: &Page) -> Vec<(f32, f32, f32, f32, Color)> {
     page.items
         .iter()
         .filter_map(|item| match item {
-            DrawItem::Rect { x, y, w, h, color } => Some((*x, *y, *w, *h, *color)),
+            DrawItem::Rect {
+                x, y, w, h, color, ..
+            } => Some((*x, *y, *w, *h, *color)),
             _ => None,
         })
         .collect()
@@ -505,7 +507,9 @@ fn described(output: &LayoutOutput) -> Vec<Vec<String>> {
                     DrawItem::Text {
                         x, y, size, text, ..
                     } => Some(format!("text {x:.2} {y:.2} {size} {text:?}")),
-                    DrawItem::Rect { x, y, w, h, color } => Some(format!(
+                    DrawItem::Rect {
+                        x, y, w, h, color, ..
+                    } => Some(format!(
                         "rect {x:.2} {y:.2} {w:.2} {h:.2} {}",
                         color.to_hex()
                     )),

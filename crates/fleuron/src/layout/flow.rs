@@ -550,8 +550,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut reset = None;
         let placed = std::mem::take(&mut self.placed);
         // Backgrounds, borders, column rules and images go in front
-        // of the page's text: `DrawItem` order is paint order, and
-        // the display structure has no layers.
+        // of the page's text, which is where the flow puts them. What
+        // the sheet asked to paint elsewhere is sorted into place
+        // once the page is assembled.
         let mut items = Vec::new();
         if self.paints {
             items = self.page_background(self.pages.len(), &self.slot);
@@ -583,6 +584,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         page.side = Side::of_number(self.pages.len() as u32 + 1);
         page.sections = sections;
         page.items = items;
+        page.sort_by_layer();
         let content_items = page.items.len();
         self.pages.push(page);
         self.infos.push(PageInfo {
@@ -649,6 +651,9 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// the whole page box, margins included, so a scan reaches the
     /// trim and the margin boxes sit over it.
     ///
+    /// It paints in the lowest layer there is, so the text of the
+    /// page sits over it whatever the sheet says about the blocks.
+    ///
     /// A blank leaf paints it too. A page inserted to square the
     /// sheet is still a page of the book, and `@page :blank` is
     /// where a sheet says otherwise.
@@ -659,7 +664,13 @@ impl<'a, 'p> Flow<'a, 'p> {
             return Vec::new();
         }
         let geometry = master.geometry;
-        backdrop.items(0.0, 0.0, geometry.width, geometry.height)
+        backdrop.items(
+            0.0,
+            0.0,
+            geometry.width,
+            geometry.height,
+            DrawItem::PAGE_BACKGROUND,
+        )
     }
 
     /// The images the page being built carries, as paint ops.
@@ -786,6 +797,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                             w: width,
                             h: feet[column - 1].max(feet[column]) - tier.top,
                             color,
+                            layer: 0,
                         }
                     }),
             );
@@ -833,7 +845,8 @@ impl Painted {
         if w <= 0.0 || h <= 0.0 {
             return Vec::new();
         }
-        let mut items = self.decoration.backdrop.items(x, y, w, h);
+        let layer = self.decoration.layer;
+        let mut items = self.decoration.backdrop.items(x, y, w, h, layer);
         // `slice` leaves the two edges the break made open; `clone`
         // closes them.
         let closed = self.decoration.cloned;
@@ -853,7 +866,14 @@ impl Painted {
         let colors = self.decoration.colors;
         let mut rect = |x: f32, y: f32, w: f32, h: f32, color| {
             if w > 0.0 && h > 0.0 {
-                items.push(DrawItem::Rect { x, y, w, h, color });
+                items.push(DrawItem::Rect {
+                    x,
+                    y,
+                    w,
+                    h,
+                    color,
+                    layer,
+                });
             }
         };
         rect(x, y, w, top, colors.top);

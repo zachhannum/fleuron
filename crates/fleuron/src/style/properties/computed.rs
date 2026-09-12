@@ -83,6 +83,10 @@ pub struct ComputedStyle {
     /// What the insets say, for an element that is against the page.
     #[serde(skip_serializing_if = "unplaced")]
     pub inset: Edges<Inset>,
+    /// Which layer the block paints in, from `z-index`. Higher paints
+    /// later, and `auto` is layer 0.
+    #[serde(skip_serializing_if = "ground_layer")]
+    pub z_index: i32,
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
@@ -157,6 +161,7 @@ impl ComputedStyle {
             initial_letter: 0,
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
+            z_index: 0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -190,6 +195,7 @@ impl ComputedStyle {
             initial_letter: 0,
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
+            z_index: 0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -242,6 +248,7 @@ impl ComputedStyle {
                     Some(length) => Inset::Points(length.to_points(self.font_size, root_size)),
                 }
             }
+            Declaration::ZIndex(layer) => self.z_index = *layer,
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
             Declaration::ShapeOutside(shape) => {
                 self.shape_outside = match shape {
@@ -395,6 +402,10 @@ fn in_flow(position: &Position) -> bool {
 
 fn unplaced(inset: &Edges<Inset>) -> bool {
     *inset == Edges::all(Inset::Auto)
+}
+
+fn ground_layer(layer: &i32) -> bool {
+    *layer == 0
 }
 
 fn wraps_nothing(wrap: &WrapFlow) -> bool {

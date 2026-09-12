@@ -14,9 +14,14 @@ impl Paginator<'_> {
         match &fragment.piece {
             Piece::Line { line, cap } => {
                 let baseline = top + line.box_.baseline;
-                let mut items = self.text_items(line, x + fragment.x, baseline);
+                let mut items = self.text_items(line, x + fragment.x, baseline, fragment.layer);
                 if let Some(cap) = cap {
-                    items.append(&mut self.text_items(&cap.line, x + cap.x, baseline + cap.drop));
+                    items.append(&mut self.text_items(
+                        &cap.line,
+                        x + cap.x,
+                        baseline + cap.drop,
+                        fragment.layer,
+                    ));
                 }
                 items
             }
@@ -30,7 +35,10 @@ impl Paginator<'_> {
                 w: *width,
                 h: *height,
                 asset: *asset,
+                layer: fragment.layer,
             }],
+            // A row's items were painted with the layers of the
+            // table they belong to.
             Piece::Row(row) => {
                 let mut items = row.items.clone();
                 shift(&mut items, x + fragment.x, top);
@@ -89,10 +97,17 @@ impl Paginator<'_> {
         ink - overhang - protrusion
     }
 
-    /// One line as paint ops: every run a `DrawItem::Text` at the
-    /// baseline, glyphs placed at their accumulated advances, and
-    /// each span of the line opened at its own origin.
-    pub(super) fn text_items(&self, line: &Line, x: f32, baseline: f32) -> Vec<DrawItem> {
+    /// One line as paint ops in `layer`: every run a
+    /// `DrawItem::Text` at the baseline, glyphs placed at their
+    /// accumulated advances, and each span of the line opened at its
+    /// own origin.
+    pub(super) fn text_items(
+        &self,
+        line: &Line,
+        x: f32,
+        baseline: f32,
+        layer: i32,
+    ) -> Vec<DrawItem> {
         let mut items = Vec::new();
         for span in line.spans.iter() {
             let mut x_cursor = x + span.offset;
@@ -120,6 +135,7 @@ impl Paginator<'_> {
                     features: run.features,
                     color: run.color,
                     glyphs,
+                    layer,
                 });
                 x_cursor = glyph_x;
             }

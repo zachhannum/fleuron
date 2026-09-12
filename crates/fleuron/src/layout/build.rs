@@ -80,6 +80,10 @@ pub(super) struct Builder<'a, 'p> {
     open: Vec<Pending>,
     /// Whether the block being built spans every column.
     spanning: bool,
+    /// The layer the block being built paints in. Every block opens
+    /// before it emits anything, so opening one is where this is
+    /// settled.
+    pub(super) layer: i32,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -96,6 +100,7 @@ impl<'a, 'p> Builder<'a, 'p> {
             pending_marks: None,
             open: Vec::new(),
             spanning: false,
+            layer: 0,
         }
     }
 }
@@ -154,6 +159,7 @@ impl Builder<'_, '_> {
     ) -> usize {
         self.ask(style.break_before);
         self.mark(style, inlines);
+        self.layer = style.z_index;
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
@@ -324,6 +330,7 @@ impl Builder<'_, '_> {
             fragment.marks = self.pending_marks.take();
         }
         fragment.spanning = self.spanning;
+        fragment.layer = self.layer;
         self.fragments.push(fragment);
     }
 
@@ -618,6 +625,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
     };
     for fragment in fresh.iter_mut() {
         fragment.spanning = head.spanning;
+        fragment.layer = head.layer;
     }
     let opens = head
         .decorations

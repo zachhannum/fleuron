@@ -48,6 +48,12 @@ fn origin() -> impl Strategy<Value = Option<SourceRange>> {
     )
 }
 
+/// A layer a page can carry: one a sheet named, and the one a page's
+/// own background paints in.
+fn layer() -> impl Strategy<Value = i32> {
+    prop_oneof![-64i32..64, Just(DrawItem::PAGE_BACKGROUND)]
+}
+
 fn text_item() -> impl Strategy<Value = DrawItem> {
     (
         coordinate(),
@@ -58,9 +64,10 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         proptest::collection::vec(glyph(), 0..12),
         color(),
         origin(),
+        layer(),
     )
         .prop_map(
-            |(x, y, font_id, size, text, glyphs, color, origin)| DrawItem::Text {
+            |(x, y, font_id, size, text, glyphs, color, origin, layer)| DrawItem::Text {
                 x,
                 y,
                 font_id,
@@ -74,6 +81,7 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
                 color,
                 text,
                 glyphs,
+                layer,
             },
         )
 }
@@ -86,17 +94,33 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             coordinate(),
             coordinate(),
-            color()
+            color(),
+            layer()
         )
-            .prop_map(|(x, y, w, h, color)| DrawItem::Rect { x, y, w, h, color }),
+            .prop_map(|(x, y, w, h, color, layer)| DrawItem::Rect {
+                x,
+                y,
+                w,
+                h,
+                color,
+                layer
+            }),
         (
             coordinate(),
             coordinate(),
             coordinate(),
             coordinate(),
-            any::<u32>()
+            any::<u32>(),
+            layer()
         )
-            .prop_map(|(x, y, w, h, asset)| DrawItem::Image { x, y, w, h, asset }),
+            .prop_map(|(x, y, w, h, asset, layer)| DrawItem::Image {
+                x,
+                y,
+                w,
+                h,
+                asset,
+                layer
+            }),
     ]
 }
 

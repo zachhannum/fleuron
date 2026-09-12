@@ -116,10 +116,11 @@ impl<'a> Builder<'a, '_> {
             cells.push((column, cell_style, top, content));
         }
 
+        let layer = style.z_index;
         let mut items = self
             .paginator
             .backdrop(&style.background)
-            .items(grid.left, above, grid.width, height);
+            .items(grid.left, above, grid.width, height, layer);
         for (column, cell_style, _, _) in &cells {
             let decoration = Decoration {
                 x: grid.x[*column],
@@ -130,6 +131,7 @@ impl<'a> Builder<'a, '_> {
                 colors: inks(cell_style),
                 backdrop: self.paginator.backdrop(&cell_style.background),
                 cloned: false,
+                layer: cell_style.z_index,
             };
             items.extend(
                 Painted {
@@ -144,13 +146,21 @@ impl<'a> Builder<'a, '_> {
         }
         if table.collapse {
             if index == 0 {
-                table.across(grid, 0, 0.0, &mut items);
+                table.across(grid, 0, 0.0, layer, &mut items);
             }
-            table.across(grid, index + 1, above + height, &mut items);
+            table.across(grid, index + 1, above + height, layer, &mut items);
             for (column, stroke) in table.down[index].iter().enumerate() {
                 if let Some(stroke) = stroke {
                     let (x, _) = grid.rules[column];
-                    rect(&mut items, x, above, stroke.width, height, stroke.color);
+                    rect(
+                        &mut items,
+                        x,
+                        above,
+                        stroke.width,
+                        height,
+                        stroke.color,
+                        layer,
+                    );
                 }
             }
         }
@@ -319,9 +329,16 @@ fn inks(style: &ComputedStyle) -> Edges<Color> {
 }
 
 /// A filled rect, where it has an area to fill.
-fn rect(items: &mut Vec<DrawItem>, x: f32, y: f32, w: f32, h: f32, color: Color) {
+fn rect(items: &mut Vec<DrawItem>, x: f32, y: f32, w: f32, h: f32, color: Color, layer: i32) {
     if w > 0.0 && h > 0.0 {
-        items.push(DrawItem::Rect { x, y, w, h, color });
+        items.push(DrawItem::Rect {
+            x,
+            y,
+            w,
+            h,
+            color,
+            layer,
+        });
     }
 }
 
@@ -504,7 +521,7 @@ impl<'s> Table<'s> {
     /// `y`. Each stretch runs over its column and the rule down the
     /// left of it, and the last over the rule down the right side as
     /// well, so the corners fall to the rule across.
-    fn across(&self, grid: &Grid, rule: usize, y: f32, items: &mut Vec<DrawItem>) {
+    fn across(&self, grid: &Grid, rule: usize, y: f32, layer: i32, items: &mut Vec<DrawItem>) {
         for (column, stroke) in self.across[rule].iter().enumerate() {
             let Some(stroke) = stroke else { continue };
             let (from, _) = grid.rules[column];
@@ -513,7 +530,7 @@ impl<'s> Table<'s> {
                 Some((x, _)) => *x,
                 None => from,
             };
-            rect(items, from, y, to - from, stroke.width, stroke.color);
+            rect(items, from, y, to - from, stroke.width, stroke.color, layer);
         }
     }
 

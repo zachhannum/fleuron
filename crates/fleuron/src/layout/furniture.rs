@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::lines::ParagraphStyle;
-use crate::pages::{Page, Side};
+use crate::pages::{DrawItem, Page, Side};
 use crate::style::{Align, Band, Content, MarginBox, MarginBoxStyle, PageStyle};
 
 use super::Paginator;
@@ -113,7 +113,8 @@ impl Paginator<'_> {
             Align::Start => master.geometry.margin.left,
             Align::End => master.geometry.width - master.geometry.margin.right - text_width,
         };
-        page.items.append(&mut self.text_items(&line, x, baseline));
+        page.items
+            .append(&mut self.text_items(&line, x, baseline, DrawItem::PAGE_FURNITURE));
     }
 }
 
@@ -137,7 +138,6 @@ mod tests {
     use crate::layout::testing::{
         chapter, folio, master, opens_a_chapter, paginate, run_width_pt, ua,
     };
-    use crate::pages::{DrawItem, Side};
     use crate::style::{MarginBox, Situation};
 
     /// Folios are correct and sequential — every page that shows a

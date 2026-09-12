@@ -261,6 +261,8 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // sits, and which side the prose sets on, belong to the flow.
         position,
         inset: _,
+        // The layer travels on the fragments a block emits.
+        z_index,
         wrap_flow: _,
         shape_outside: _,
         shape_margin: _,
@@ -288,7 +290,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
-    position.hash(h);
+    (position, z_index).hash(h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);
     box_decoration_break.hash(h);

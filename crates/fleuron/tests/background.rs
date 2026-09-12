@@ -166,6 +166,7 @@ fn backgrounds(page: &Page) -> Vec<Painted> {
                 tile_h,
                 repeat,
                 asset,
+                ..
             } => Some((
                 (*x, *y, *w, *h),
                 (*tile_x, *tile_y, *tile_w, *tile_h),

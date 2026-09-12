@@ -240,6 +240,19 @@ pub(super) fn positioning(input: &mut Parser<'_, '_>) -> Option<Position> {
     }
 }
 
+/// `z-index: auto | <integer>`: which layer the block paints in.
+/// `auto` is layer 0, there being no stacking context here for an
+/// element to take its layer from.
+pub(super) fn z_index(input: &mut Parser<'_, '_>) -> Option<i32> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(0);
+    }
+    input.expect_integer().ok()
+}
+
 /// One inset: `auto`, or a length from the page area's edge.
 pub(super) fn inset(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
     if input

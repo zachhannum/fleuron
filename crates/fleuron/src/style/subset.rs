@@ -483,6 +483,7 @@ mod tests {
                 Edge::Bottom => "bottom",
                 Edge::Left => "left",
             },
+            Declaration::ZIndex(_) => "z-index",
             Declaration::WrapFlow(_) => "wrap-flow",
             Declaration::ShapeOutside(_) => "shape-outside",
             Declaration::ShapeMargin(_) => "shape-margin",

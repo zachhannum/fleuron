@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 11;
+pub const VERSION: u16 = 12;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -171,6 +171,7 @@ mod tests {
                             x: 72.0,
                             range: 0..2,
                         }],
+                        layer: 10,
                     },
                     DrawItem::Rect {
                         x: 0.0,
@@ -178,6 +179,7 @@ mod tests {
                         w: 396.0,
                         h: 0.5,
                         color: Color::BLACK,
+                        layer: DrawItem::PAGE_BACKGROUND,
                     },
                     DrawItem::Image {
                         x: 1.0,
@@ -185,6 +187,7 @@ mod tests {
                         w: 3.0,
                         h: 4.0,
                         asset: 7,
+                        layer: -1,
                     },
                 ],
             }],

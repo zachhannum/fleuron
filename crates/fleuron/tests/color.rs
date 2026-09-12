@@ -145,6 +145,17 @@ fn pages(book: &Book, styles: &StyleTree) -> Vec<Page> {
     Paginator::new(registry(), styles).paginate(book)
 }
 
+/// The layer an item paints in, and nothing at all for layer 0: a
+/// book whose sheet names no `z-index` describes itself the way it
+/// did before there were layers.
+fn layered(layer: i32) -> String {
+    if layer == 0 {
+        String::new()
+    } else {
+        format!(" layer {layer}")
+    }
+}
+
 /// One draw item, every field of it, on one line. The match names
 /// each field rather than eliding it, so a field added to the display
 /// structure has to be answered for here.
@@ -164,6 +175,7 @@ fn described(item: &DrawItem) -> String {
             // checks everything else.
             color: _,
             glyphs,
+            layer,
         } => {
             let placed: Vec<String> = glyphs
                 .iter()
@@ -185,9 +197,10 @@ fn described(item: &DrawItem) -> String {
             };
             format!(
                 "text {x:?} {y:?} font {font_id} at {size:?}pt {text:?} source {source:?} {source_map:?} \
-                 written {written} small-caps {} glyphs {}",
+                 written {written} small-caps {} glyphs {}{}",
                 features.small_caps,
-                placed.join(" ")
+                placed.join(" "),
+                layered(*layer)
             )
         }
         DrawItem::Rect {
@@ -196,9 +209,20 @@ fn described(item: &DrawItem) -> String {
             w,
             h,
             color: _,
-        } => format!("rect {x:?} {y:?} {w:?} {h:?}"),
-        DrawItem::Image { x, y, w, h, asset } => {
-            format!("image {x:?} {y:?} {w:?} {h:?} asset {asset}")
+            layer,
+        } => format!("rect {x:?} {y:?} {w:?} {h:?}{}", layered(*layer)),
+        DrawItem::Image {
+            x,
+            y,
+            w,
+            h,
+            asset,
+            layer,
+        } => {
+            format!(
+                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}",
+                layered(*layer)
+            )
         }
         DrawItem::Background {
             x,
@@ -211,9 +235,11 @@ fn described(item: &DrawItem) -> String {
             tile_h,
             repeat,
             asset,
+            layer,
         } => format!(
             "background {x:?} {y:?} {w:?} {h:?} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
-             repeat {repeat} asset {asset}"
+             repeat {repeat} asset {asset}{}",
+            layered(*layer)
         ),
     }
 }

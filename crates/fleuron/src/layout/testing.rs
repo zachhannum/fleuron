@@ -163,7 +163,9 @@ pub(super) fn rects(page: &Page) -> Vec<(f32, f32, f32, f32, Color)> {
     page.items
         .iter()
         .filter_map(|item| match item {
-            DrawItem::Rect { x, y, w, h, color } => Some((*x, *y, *w, *h, *color)),
+            DrawItem::Rect {
+                x, y, w, h, color, ..
+            } => Some((*x, *y, *w, *h, *color)),
             _ => None,
         })
         .collect()

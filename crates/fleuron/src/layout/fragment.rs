@@ -124,6 +124,11 @@ pub struct Fragment {
     /// `column-span: all`. Its leading edge and its measure are then
     /// the whole content box's rather than one column's.
     pub spanning: bool,
+    /// The layer the fragment's own items paint in, from the
+    /// `z-index` of the block it came out of. A row carries the
+    /// layers of the table it is part of on its items, so this is not
+    /// read for one.
+    pub layer: i32,
 }
 
 impl Fragment {
@@ -141,6 +146,7 @@ impl Fragment {
             decorations: None,
             reflow: None,
             spanning: false,
+            layer: 0,
         }
     }
 }
@@ -186,6 +192,9 @@ pub struct Decoration {
     /// Whether `box-decoration-break: clone` closes the two edges a
     /// page break cuts.
     pub cloned: bool,
+    /// The layer the border box paints in, from the block's
+    /// `z-index`.
+    pub layer: i32,
 }
 
 /// What a fragment tells the page it lands on: the running strings
@@ -241,5 +250,6 @@ pub(super) fn decoration(
         },
         backdrop,
         cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
+        layer: style.z_index,
     })
 }

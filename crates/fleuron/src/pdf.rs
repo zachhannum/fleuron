@@ -247,6 +247,9 @@ fn paint(
             // page of a PDF does not move.
             features: _,
             origin: _,
+            // The page's items arrived in paint order, so the layer
+            // that put them in it is spent.
+            layer: _,
             color,
             glyphs,
         } => {
@@ -268,7 +271,14 @@ fn paint(
                 false,
             );
         }
-        DrawItem::Rect { x, y, w, h, color } => {
+        DrawItem::Rect {
+            x,
+            y,
+            w,
+            h,
+            color,
+            layer: _,
+        } => {
             ink(surface, *color);
             let rect = Rect::from_xywh(*x, *y, *w, *h).ok_or(PdfError::Geometry {
                 number: page.number,
@@ -286,7 +296,14 @@ fn paint(
         // image krilla draws into a unit square is translated to the
         // corner layout put it at and scaled to the box layout sized
         // for it.
-        DrawItem::Image { x, y, w, h, asset } => {
+        DrawItem::Image {
+            x,
+            y,
+            w,
+            h,
+            asset,
+            layer: _,
+        } => {
             let image = images
                 .get(*asset as usize)
                 .ok_or_else(|| PdfError::Image(asset.to_string()))?;
@@ -312,6 +329,7 @@ fn paint(
             tile_h,
             repeat,
             asset,
+            layer: _,
         } => {
             let image = images
                 .get(*asset as usize)
@@ -700,6 +718,7 @@ mod tests {
             origin: None,
             features: Features::NONE,
             color: Color::BLACK,
+            layer: 0,
             glyphs: vec![
                 Glyph {
                     id: d,
@@ -723,6 +742,51 @@ mod tests {
         );
     }
 
+    /// Acceptance: the writer paints a layered page in the order the
+    /// list is in, which is the order the layers put it in. The
+    /// preview painter walks the same list the same way, so the two
+    /// agree on what covers what.
+    #[test]
+    fn a_layered_page_paints_in_the_order_the_list_is_in() {
+        let under = Color::rgb(0, 51, 102);
+        let over = Color::rgb(180, 30, 30);
+        // What a lowered block and a raised one come out as: the
+        // sort put the lower one first, and the writer keeps it
+        // there.
+        let items = vec![
+            DrawItem::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 100.0,
+                color: under,
+                layer: -1,
+            },
+            DrawItem::Rect {
+                x: 20.0,
+                y: 20.0,
+                w: 60.0,
+                h: 60.0,
+                color: over,
+                layer: 10,
+            },
+        ];
+        let painted = content(&readable(
+            &page_of(items, 200.0, 200.0),
+            &Metadata::default(),
+        ));
+        let lower = painted
+            .find("0 0.2 0.4 rg")
+            .expect("the lowered block filled with its own colour");
+        let raised = painted
+            .find("0.7058824 0.11764706 0.11764706 rg")
+            .expect("the raised block filled with its own colour");
+        assert!(
+            lower < raised,
+            "the writer painted the raised block first:\n{painted}"
+        );
+    }
+
     /// Rules paint as filled paths at the coordinates layout gave them.
     #[test]
     fn rect_items_paint_as_filled_paths() {
@@ -732,6 +796,7 @@ mod tests {
             w: 324.0,
             h: 0.5,
             color: Color::BLACK,
+            layer: 0,
         }];
         let pdf = readable(&page_of(items, 432.0, 648.0), &Metadata::default());
         assert!(
@@ -782,6 +847,7 @@ mod tests {
                 w: 100.0,
                 h: 0.5,
                 color: Color::rgb(0, 51, 102),
+                layer: 0,
             }],
             200.0,
             200.0,
@@ -831,6 +897,7 @@ mod tests {
             w: 115.2,
             h: 76.8,
             asset: 0,
+            layer: 0,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
         let bytes = bytes_of(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -855,6 +922,7 @@ mod tests {
                     w: 432.0,
                     h: 648.0,
                     color: Color::BLACK,
+                    layer: 0,
                 },
                 DrawItem::Image {
                     x: 200.0,
@@ -862,6 +930,7 @@ mod tests {
                     w: 30.72,
                     h: 30.72,
                     asset: 0,
+                    layer: 0,
                 },
             ];
             let table = assets(&[(url, bytes)]);
@@ -892,6 +961,7 @@ mod tests {
             w: 72.0,
             h: 48.0,
             asset: 0,
+            layer: 0,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
         let (width, height) = table
