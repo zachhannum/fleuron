@@ -43,7 +43,9 @@ pub struct Page {
 
 Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this. `Session::folios` answers the same question for a handful of nodes without handing back a page, and answers it in both numbers: see [sessions](../library/sessions.md).
 
-`items` is in paint order.
+`items` is in paint order: by layer, and inside one layer in the order the text flows. A painter walks the list from the start and paints each item over the ones before it. A painter does not sort.
+
+Every item names its own layer. A layer comes from `z-index` on a block, which [layers](../css-subset.mdx#layers) describes. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the art behind a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers, as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
 
 ## `DrawItem`
 
@@ -64,6 +66,7 @@ Text {
     features: Features,
     color: Color,
     glyphs: Vec<Glyph>,
+    layer: i32,
 }
 ```
 
@@ -123,7 +126,7 @@ A node id is the engine's own name for a place in the book, and a host that hand
 ### `Rect`
 
 ```rust
-Rect { x: f32, y: f32, w: f32, h: f32, color: Color }
+Rect { x: f32, y: f32, w: f32, h: f32, color: Color, layer: i32 }
 ```
 
 A filled rectangle: rules, borders, backgrounds. `color` is the fill.
@@ -131,7 +134,7 @@ A filled rectangle: rules, borders, backgrounds. `color` is the fill.
 ### `Image`
 
 ```rust
-Image { x: f32, y: f32, w: f32, h: f32, asset: u32 }
+Image { x: f32, y: f32, w: f32, h: f32, asset: u32, layer: i32 }
 ```
 
 A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter decodes the file.
@@ -152,6 +155,7 @@ Background {
     tile_h: f32,
     repeat: bool,
     asset: u32,
+    layer: i32,
 }
 ```
 
@@ -165,7 +169,7 @@ Where `repeat` is true, that copy tiles. A painter steps the tile by `tile_w` ac
 
 ## Writing a painter
 
-For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order.
+For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order. The list is already in paint order. Paint each item over the ones before it, and do not sort by `layer`.
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, fill with the run's `color`, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
 

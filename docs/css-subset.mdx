@@ -534,6 +534,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `initial-letter` | `initial-letter: 3` |
 | `position` | `position: absolute` |
 | `top`, `right`, `bottom`, `left` | `top: 0` |
+| `z-index` | `z-index: 10` |
 | `wrap-flow` | `wrap-flow: end` |
 | `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
 | `shape-margin` | `shape-margin: 6pt` |
@@ -565,6 +566,7 @@ top:                  auto | <length>;
 right:                auto | <length>;
 bottom:               auto | <length>;
 left:                 auto | <length>;
+z-index:              auto | <integer>;
 wrap-flow:            auto | both | start | end;
 shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
 shape-margin:         <length> | <percentage>;
@@ -661,6 +663,33 @@ One length sizes the image across the box. The image's own proportions then size
 `background-position` places the image in the box. `left`, `center`, and `right` place it across the box. `top`, `center`, and `bottom` place it down the box. A single value centers the image on the other axis. A percentage aligns that fraction of the image with the same fraction of the box, which is why `50%` centers it. A length is an offset from the box's top left corner.
 
 The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes. A url nothing resolves warns at the line and column it was written at, and the engine skips the image.
+
+### Layers
+
+The engine paints every block in a layer. It paints a higher layer over a lower one. `z-index` names the layer of a block. Inside one layer the engine paints the blocks in the order they are written in.
+
+`z-index: auto` is layer 0. The engine paints a block that names no layer there.
+
+The following example puts a border against the page and draws the text of the chapter over it:
+
+```css
+img.border {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+h1, p, blockquote {
+  z-index: 2;
+}
+```
+
+A block does not take the layer of the block around it. The example names the paragraphs as well as the quotations, because a quotation at layer 2 leaves the paragraphs inside it at layer 0.
+
+Two layers are the engine's own. A block reaches neither. The engine paints the art behind a page under every layer a stylesheet can name. The text of a page covers that art with no `z-index` in the stylesheet. The engine paints a page number and a running head over every layer, so a border against the page never covers them.
+
+`z-index` here is one number in one order over the whole page. In CSS, `z-index` on a positioned block also starts a stacking context, which is a paint order of its own. The layers of the blocks inside that block then count against it rather than against the page. A book is flat, so the engine reads the number and starts no context. `position`, a background image, and a page break leave the order alone.
 
 ### Breaking across pages
 
