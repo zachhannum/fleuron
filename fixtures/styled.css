@@ -44,6 +44,21 @@ h2 {
   text-align: center;
 }
 
+/* The part title comes out of the text and sits in the tall top
+   margin of the page it opens. A chapter title is raised where it is
+   drawn, and nothing around it moves. */
+h2 {
+  position: absolute;
+  top: -1.25in;
+  left: 0;
+  right: 0;
+}
+
+h3 {
+  position: relative;
+  top: -4pt;
+}
+
 blockquote p {
   font-size: 10pt;
 }
