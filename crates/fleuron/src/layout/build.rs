@@ -157,7 +157,8 @@ impl Builder<'_, '_> {
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
-        if let Some(decoration) = decoration(style, x, measure) {
+        let backdrop = self.paginator.backdrop(&style.background);
+        if let Some(decoration) = decoration(style, x, measure, backdrop) {
             self.open.push(Pending {
                 start,
                 open_fixed: self.fixed,
@@ -1230,7 +1231,7 @@ mod tests {
             span: None,
         }])]);
         let styles = crate::style::defaults(&book, registry());
-        let assets = crate::images::Assets::probe(&book, &Tall);
+        let assets = crate::images::Assets::probe(&book, &styles, &Tall);
         let output = layout_book(&book, &styles, registry(), &assets);
 
         let warning = output
@@ -1274,7 +1275,7 @@ mod tests {
             image("small.png"),
         ])]);
         let styles = crate::style::defaults(&book, registry());
-        let assets = crate::images::Assets::probe(&book, &Png);
+        let assets = crate::images::Assets::probe(&book, &styles, &Png);
         let output = layout_book(&book, &styles, registry(), &assets);
 
         let placed: Vec<(f32, f32, u32)> = output

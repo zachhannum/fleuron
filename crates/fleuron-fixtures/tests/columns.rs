@@ -224,7 +224,7 @@ fn a_novel_with_spanning_heads_keeps_every_line_to_its_tier() {
 fn a_two_column_novel_of_images_holds_the_column_and_the_exclusion() {
     let book = anchored_images::illustrated(&Corpus::GATE.book());
     let styles = styles_on(&book, Division::TwoColumn, Illustration::Anchored);
-    let assets = anchored_images::assets(&book);
+    let assets = anchored_images::assets(&book, &styles);
     let output = layout_book(&book, &styles, registry(), &assets);
     assert!(output.warnings.is_empty(), "{:?}", output.warnings);
 

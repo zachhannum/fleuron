@@ -317,6 +317,80 @@ fn the_display_typography_book_extracts_as_it_was_written() {
     }
 }
 
+/// Art behind the page and behind a block, through the fixture book:
+/// `fixtures/styled.css` puts a scan behind every chapter opening at
+/// `background-size: cover`, and tiles the ornament behind the
+/// quotation over its tint.
+///
+/// The scan covers the whole page box, margins included, and nothing
+/// on the page is painted under it. The two painters then have to
+/// agree about where it goes: the PDF names each image once, with a
+/// matrix before it, read back in the display structure's own
+/// coordinates.
+#[test]
+fn the_page_scan_covers_the_chapter_opening_in_the_preview_and_the_pdf() {
+    let pages = styled_pages();
+    let (index, page) = pages
+        .iter()
+        .enumerate()
+        .find(|(_, page)| {
+            page.items
+                .iter()
+                .any(|item| matches!(item, DrawItem::Background { w, .. } if *w == page.width))
+        })
+        .expect("a chapter opening carries the scan");
+    let Some(DrawItem::Background {
+        x,
+        y,
+        w,
+        h,
+        tile_x,
+        tile_y,
+        tile_w,
+        tile_h,
+        repeat,
+        ..
+    }) = page.items.first()
+    else {
+        panic!("page {}: something is painted under the scan", index + 1);
+    };
+    assert_eq!(
+        (*x, *y, *w, *h),
+        (0.0, 0.0, page.width, page.height),
+        "the scan is not the whole page box",
+    );
+    assert!(!repeat, "a covering scan does not tile");
+    assert!(
+        *tile_w >= *w - 1e-3 && *tile_h >= *h - 1e-3,
+        "cover left the page uncovered: {tile_w}x{tile_h} over {w}x{h}",
+    );
+
+    // The quotation's ornament tiles over its tint, so the same page
+    // model carries both a single copy and many.
+    let tiled = pages.iter().any(|page| {
+        page.items
+            .iter()
+            .any(|item| matches!(item, DrawItem::Background { repeat, .. } if *repeat))
+    });
+    assert!(tiled, "the quotation's ornament does not tile");
+
+    let (pdf, _) = render("styled-background", &[&styled_sheet()]);
+    let Some(streams) = content_streams(&pdf) else {
+        return;
+    };
+    let written = placed_images(&streams, page.height);
+    let scan = (*tile_x, *tile_y, *tile_w, *tile_h);
+    assert!(
+        written.iter().any(|placed| {
+            (placed.0 - scan.0).abs() < 1e-3
+                && (placed.1 - scan.1).abs() < 1e-3
+                && (placed.2 - scan.2).abs() < 1e-3
+                && (placed.3 - scan.3).abs() < 1e-3
+        }),
+        "the preview paints the scan at {scan:?} and the PDF writes none there",
+    );
+}
+
 /// The box model through the fixture book: `fixtures/styled.css`
 /// puts the excerpt's inventory of the man-mountain's pockets in a
 /// bordered, padded, tinted box, and a rule under every chapter
@@ -610,7 +684,7 @@ fn styled_pages_with(extra: &str) -> Vec<Page> {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1239,7 +1313,7 @@ fn wrapped_column_pages() -> (Vec<Page>, fleuron::style::StyleTree) {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     let pages = fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages;
     (pages, styles)
 }
@@ -1272,7 +1346,7 @@ fn column_pages() -> Vec<Page> {
         "the sheet is in the subset: {:?}",
         styles.warnings(),
     );
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1324,7 +1398,7 @@ fn pages_under(css: &str) -> Vec<Page> {
         fleuron::style::Stylesheets::parse(&[fleuron::style::Source::author("table.css", css)])
             .compile(&book, &registry);
     assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages
 }
 
@@ -1663,7 +1737,7 @@ fn fixture_display_list() -> Vec<u8> {
     let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
     let book = fixture_book();
     let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
-    let assets = Assets::probe(&book, &Beside);
+    let assets = Assets::probe(&book, &styles, &Beside);
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     postcard::to_stdvec(&output).expect("a display structure encodes")
 }

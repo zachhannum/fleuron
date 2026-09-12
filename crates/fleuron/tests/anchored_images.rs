@@ -161,7 +161,7 @@ fn styles(book: &Book, css: &str) -> StyleTree {
 /// set a paragraph again.
 fn paginate(book: &Book, css: &str, size: (u32, u32)) -> (Vec<Page>, u32) {
     let styles = styles(book, css);
-    let assets = Assets::probe(book, &Png(size.0, size.1));
+    let assets = Assets::probe(book, &styles, &Png(size.0, size.1));
     let paginator = Paginator::with_assets(registry(), &styles, &assets);
     let pages = paginator.paginate(book);
     (pages, paginator.rebreaks())
@@ -170,7 +170,7 @@ fn paginate(book: &Book, css: &str, size: (u32, u32)) -> (Vec<Page>, u32) {
 /// The same over an image whose contour is traced from its alpha.
 fn paginate_traced(book: &Book, css: &str, side: u32) -> (Vec<Page>, u32) {
     let styles = styles(book, css);
-    let assets = Assets::probe(book, &HalfAlpha(side));
+    let assets = Assets::probe(book, &styles, &HalfAlpha(side));
     let mut contours = Contours::none();
     contours.update(book, &styles, &assets);
     let paginator = Paginator::with_contours(registry(), &styles, &assets, &contours);

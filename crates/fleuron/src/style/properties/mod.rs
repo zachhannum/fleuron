@@ -6,12 +6,14 @@
 //! font size whatever it was written as.
 //!
 //! The vocabulary is split by kind: `value` holds the simple values,
-//! `edges` the four edges of a box, `page` the page box, `counter`
-//! what a margin box holds, `exclusion` a block placed against the
-//! page, and `computed` what one node comes to.
+//! `edges` the four edges of a box, `background` what is painted
+//! behind one, `page` the page box, `counter` what a margin box
+//! holds, `exclusion` a block placed against the page, and
+//! `computed` what one node comes to.
 
 use crate::lines::HangingPunctuation;
 
+mod background;
 mod computed;
 mod counter;
 mod edges;
@@ -19,7 +21,12 @@ mod exclusion;
 mod page;
 mod value;
 
+pub use background::{
+    Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, SizeSource, Url,
+};
 pub use computed::ComputedStyle;
+
+pub(crate) use computed::computed_size;
 pub use counter::{Content, ContentPiece, CounterStyle, StringPiece, StringSet, Target};
 pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
@@ -29,6 +36,7 @@ pub use value::{
     FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
 };
 
+pub(crate) use background::no_background;
 pub(crate) use edges::{LINE_WIDTHS, MEDIUM};
 
 /// One declaration the engine understood. The cascade applies these
@@ -68,6 +76,11 @@ pub enum Declaration {
     BorderWidth(Edge, Length),
     BorderColor(Edge, Option<Color>),
     BackgroundColor(Option<Color>),
+    BackgroundImage(Option<Url>),
+    BackgroundRepeat(BackgroundRepeat),
+    BackgroundSize(SizeSource),
+    /// Across the box, then down it.
+    BackgroundPosition(Length, Length),
     BoxDecorationBreak(BoxDecorationBreak),
     Width(Option<Length>),
     BorderCollapse(BorderCollapse),

@@ -49,8 +49,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sheets.load_fonts(&mut registry, &files);
     let styles = sheets.compile(&book, &registry);
 
-    // Every image the book content references.
-    let assets = Assets::probe(&book, &files);
+    // Every image the book places, and every background image the
+    // stylesheet names.
+    let assets = Assets::probe(&book, &styles, &files);
 
     let output = fleuron::layout::layout_book(&book, &styles, &registry, &assets);
     for warning in complaints.iter().chain(&output.warnings) {

@@ -10,9 +10,11 @@ use crate::Warning;
 use crate::pages::Side;
 use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox};
 
-use super::declaration::{Spec, at, longhand, sides};
+use super::color::background_color;
+use super::declaration::{Spec, at, longhand, sides, written_at};
 use super::value::{
-    column_count, column_gap, column_width, length, line_style, line_width, property,
+    background_image, background_position, background_repeat, background_size, column_count,
+    column_gap, column_width, length, line_style, line_width, property,
 };
 use super::{MarginDeclaration, PageDeclaration, PageRule, StyleError, warning};
 
@@ -110,6 +112,74 @@ pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
         },
     },
     Spec {
+        name: "background-color",
+        inherited: false,
+        syntax: "<color> | transparent",
+        examples: &["#f4f1ea", "transparent"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                background_color,
+                PageDeclaration::BackgroundColor,
+            )
+        },
+    },
+    Spec {
+        name: "background-image",
+        inherited: false,
+        syntax: "none | <url>",
+        examples: &["none", "url(\"verso.webp\")", "url(art/plate.png)"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                background_image,
+                PageDeclaration::BackgroundImage,
+            )
+        },
+    },
+    Spec {
+        name: "background-repeat",
+        inherited: false,
+        syntax: "repeat | no-repeat",
+        examples: &["repeat", "no-repeat"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                background_repeat,
+                PageDeclaration::BackgroundRepeat,
+            )
+        },
+    },
+    Spec {
+        name: "background-size",
+        inherited: false,
+        syntax: "auto | cover | contain | [ <length> | <percentage> | auto ]{1,2}",
+        examples: &["auto", "cover", "contain", "120pt", "100% auto"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                background_size,
+                PageDeclaration::BackgroundSize,
+            )
+        },
+    },
+    Spec {
+        name: "background-position",
+        inherited: false,
+        syntax: "[ left | center | right | <length> | <percentage> ] \
+                 [ top | center | bottom | <length> | <percentage> ]?",
+        examples: &["center", "right bottom", "50% 50%", "12pt 18pt", "top left"],
+        read: |name, input| {
+            longhand(name, input, background_position, |(x, y)| {
+                PageDeclaration::BackgroundPosition(x, y)
+            })
+        },
+    },
+    Spec {
         name: "column-count",
         inherited: false,
         syntax: "auto | <integer>",
@@ -199,8 +269,9 @@ impl<'i> DeclarationParser<'i> for PageBody {
             let Some(spec) = Spec::find(PAGE_PROPERTIES, &name) else {
                 return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone())));
             };
-            let items = spec.read(&name, input)?;
+            let mut items = spec.read(&name, input)?;
             input.expect_exhausted()?;
+            page_written_at(&mut items, &self.name, start);
             Ok(items.into_iter().map(PageItem::Declaration).collect())
         })(input)
     }
@@ -226,7 +297,9 @@ impl<'i> AtRuleParser<'i> for PageBody {
         _start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
-        let mut body = MarginBoxBody;
+        let mut body = MarginBoxBody {
+            sheet: self.name.clone(),
+        };
         let collected: Vec<_> = RuleBodyParser::new(input, &mut body)
             .map(|result| result.map_err(|(error, _)| error))
             .collect();
@@ -259,7 +332,20 @@ impl<'i> RuleBodyItemParser<'i, Vec<PageItem>, StyleError<'i>> for PageBody {
 
 /// The body of one page margin box: what it paints, and the style it
 /// paints with.
-struct MarginBoxBody;
+struct MarginBoxBody {
+    /// What diagnostics call the sheet this box was written in.
+    sheet: String,
+}
+
+/// The `@page` twin of `written_at`: a url in a page body carries
+/// where it was written the same way one in a style rule does.
+fn page_written_at(declarations: &mut [PageDeclaration], sheet: &str, start: &ParserState) {
+    for declaration in declarations {
+        if let PageDeclaration::BackgroundImage(Some(url)) = declaration {
+            url.origin = Some(super::position(sheet, start.source_location()));
+        }
+    }
+}
 
 impl<'i> DeclarationParser<'i> for MarginBoxBody {
     type Declaration = Vec<MarginDeclaration>;
@@ -274,10 +360,11 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
         at(start, |input| {
             let declarations = match Spec::find(MARGIN_BOX_PROPERTIES, &name) {
                 Some(spec) => spec.read(&name, input)?,
-                None => property(&name, input)?
-                    .into_iter()
-                    .map(MarginDeclaration::Style)
-                    .collect(),
+                None => {
+                    let mut style = property(&name, input)?;
+                    written_at(&mut style, &self.sheet, start);
+                    style.into_iter().map(MarginDeclaration::Style).collect()
+                }
             };
             input.expect_exhausted()?;
             Ok(declarations)

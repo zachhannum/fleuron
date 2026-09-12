@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 10;
+export const WIRE_VERSION = 11;
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -148,8 +148,41 @@ export interface ImageItem {
   asset: number;
 }
 
+/**
+ * An image painted behind a box: the page's own, or a block's border
+ * box.
+ *
+ * The box is what the image is clipped to, and the tile is where one
+ * copy of it is drawn, which may reach outside the box. A painter
+ * clips to the box, draws the tile, and repeats the tile across and
+ * down the box where {@link BackgroundItem.repeat} asks for it.
+ */
+export interface BackgroundItem {
+  kind: 'background';
+  /** Left edge of the box the image is painted behind. */
+  x: number;
+  /** Its top edge. */
+  y: number;
+  /** Its width in points. */
+  w: number;
+  /** Its height in points. */
+  h: number;
+  /** Left edge of the first tile. */
+  tileX: number;
+  /** Its top edge. */
+  tileY: number;
+  /** The width one copy of the image is drawn at. */
+  tileW: number;
+  /** The height one copy is drawn at. */
+  tileH: number;
+  /** Whether the tile repeats to cover the box. */
+  repeat: boolean;
+  /** Index into {@link LayoutOutput.assets}. */
+  asset: number;
+}
+
 /** A single paint operation. */
-export type DrawItem = TextItem | RectItem | ImageItem;
+export type DrawItem = TextItem | RectItem | ImageItem | BackgroundItem;
 
 /** One typeset page, and what to paint on it. */
 export interface Page {
@@ -382,6 +415,20 @@ function item(r: Reader): DrawItem {
         y: r.f32(),
         w: r.f32(),
         h: r.f32(),
+        asset: r.varint(),
+      };
+    case 3:
+      return {
+        kind: 'background',
+        x: r.f32(),
+        y: r.f32(),
+        w: r.f32(),
+        h: r.f32(),
+        tileX: r.f32(),
+        tileY: r.f32(),
+        tileW: r.f32(),
+        tileH: r.f32(),
+        repeat: r.bool(),
         asset: r.varint(),
       };
     default:

@@ -8,7 +8,7 @@ use crate::lines::Patterns;
 use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree};
 
 use super::Stale;
-use super::key::{hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
+use super::key::{hash_background, hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
 
 /// The page a section's lines were broken against: the measure
 /// always, and the content height only for a book with an image in
@@ -124,6 +124,7 @@ impl Prints {
         for master in styles.masters() {
             (&master.page, master.situation).hash(&mut flow);
             hash_geometry(master.style.geometry, &mut flow);
+            hash_background(&master.style.background, &mut flow);
         }
         for style in styles.styles() {
             style.page.hash(&mut flow);
@@ -134,6 +135,7 @@ impl Prints {
         for master in styles.masters() {
             (&master.page, master.situation).hash(&mut paint);
             hash_geometry(master.style.geometry, &mut paint);
+            hash_background(&master.style.background, &mut paint);
             for box_ in &master.style.boxes {
                 (box_.which, &box_.content).hash(&mut paint);
                 hash_layout(&box_.style, &mut paint);
@@ -251,6 +253,35 @@ mod tests {
             broke + 3,
             "a section kept lines broken against a measure it may not land on"
         );
+    }
+
+    /// A page background is what the flow paints when a page closes,
+    /// so a sheet that changes one flows the book again and leaves
+    /// every line where it was. Nothing is traced for it either: an
+    /// image behind a box is never decoded.
+    #[test]
+    fn a_page_background_flows_the_book_and_breaks_no_lines() {
+        let mut session =
+            crate::session::Session::owning(crate::fonts::bundled_registry().unwrap());
+        session.set_content(crate::session::testing::book(vec![
+            section("one.md", prose("alpha", 8)),
+            section("two.md", prose("beta", 8)),
+        ]));
+        session
+            .add_image("scan.png", crate::session::testing::gif(640, 960, 0))
+            .expect("an owning session registers");
+        session.preview();
+        let before = session.stages();
+
+        session.set_style(sheets("@page { background-image: url(scan.png) }"));
+        session.preview();
+        let after = session.stages();
+        assert_eq!(
+            after.lines, before.lines,
+            "a page background re-broke lines"
+        );
+        assert_eq!(after.trace, before.trace, "a background was traced");
+        assert!(after.flow > before.flow, "the page was not flowed again");
     }
 
     /// Inline text that depended on pagination would make breaking

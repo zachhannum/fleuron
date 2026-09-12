@@ -151,6 +151,35 @@ pub enum DrawItem {
         /// Index into the asset table.
         asset: u32,
     },
+    /// An image painted behind a box: the page's own, or a block's
+    /// border box.
+    ///
+    /// The box is what the image is clipped to, and the tile is
+    /// where one copy of it is drawn, which may reach outside the
+    /// box. A painter clips to the box, draws the tile, and repeats
+    /// the tile across and down the box where `repeat` asks for it.
+    Background {
+        /// Left edge of the box the image is painted behind.
+        x: f32,
+        /// Its top edge.
+        y: f32,
+        /// Its width in points.
+        w: f32,
+        /// Its height in points.
+        h: f32,
+        /// Left edge of the first tile.
+        tile_x: f32,
+        /// Its top edge.
+        tile_y: f32,
+        /// The width one copy of the image is drawn at.
+        tile_w: f32,
+        /// The height one copy is drawn at.
+        tile_h: f32,
+        /// Whether the tile repeats to cover the box.
+        repeat: bool,
+        /// Index into the asset table.
+        asset: u32,
+    },
 }
 
 /// One glyph: an id in its font and an absolute x. Kerning and

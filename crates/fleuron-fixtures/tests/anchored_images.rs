@@ -15,7 +15,7 @@ use fleuron_fixtures::{Corpus, anchored_images, image_boxes, registry, run_boxes
 fn a_novel_of_images_sets_every_page_clear_of_them() {
     let book = anchored_images::illustrated(&Corpus::GATE.book());
     let styles = styles_on(&book, Division::Undivided, Illustration::Anchored);
-    let assets = anchored_images::assets(&book);
+    let assets = anchored_images::assets(&book, &styles);
     let output = layout_book(&book, &styles, registry(), &assets);
 
     let mut painted = 0;
@@ -50,7 +50,7 @@ fn a_novel_of_images_sets_every_page_clear_of_them() {
 fn a_novel_of_images_lays_out_the_same_way_twice() {
     let book = anchored_images::illustrated(&Corpus::GATE.book());
     let styles = styles_on(&book, Division::Undivided, Illustration::Anchored);
-    let assets = anchored_images::assets(&book);
+    let assets = anchored_images::assets(&book, &styles);
     let once = layout_book(&book, &styles, registry(), &assets);
     let twice = layout_book(&book, &styles, registry(), &assets);
     assert_eq!(once.pages.len(), twice.pages.len());

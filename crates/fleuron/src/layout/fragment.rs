@@ -8,6 +8,8 @@ use crate::lines::Line;
 use crate::pages::DrawItem;
 use crate::style::{BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
 
+use super::background::Backdrop;
+
 use super::build::Reflow;
 
 /// Whether a page may end above a fragment.
@@ -178,8 +180,9 @@ pub struct Decoration {
     pub border: Edges,
     /// What each edge is painted in, `currentColor` resolved.
     pub colors: Edges<Color>,
-    /// What is painted behind the whole border box.
-    pub background: Option<Color>,
+    /// What is painted behind the whole border box: the tint, and
+    /// the image over it.
+    pub(super) backdrop: Backdrop,
     /// Whether `box-decoration-break: clone` closes the two edges a
     /// page break cuts.
     pub cloned: bool,
@@ -205,13 +208,19 @@ pub struct Marks {
 
 /// Whether a block paints anything behind or around its content.
 pub(super) fn decorated(style: &ComputedStyle) -> bool {
-    style.background_color.is_some() || style.border.paints()
+    style.background.paints() || style.border.paints()
 }
 
 /// The decoration one block paints, or `None` where it paints
 /// nothing. `x` and `measure` are what the block was laid out
-/// against; the border box takes its margins off them.
-pub(super) fn decoration(style: &ComputedStyle, x: f32, measure: f32) -> Option<Decoration> {
+/// against; the border box takes its margins off them. `backdrop` is
+/// what the cascade put behind it, resolved against the asset table.
+pub(super) fn decoration(
+    style: &ComputedStyle,
+    x: f32,
+    measure: f32,
+    backdrop: Backdrop,
+) -> Option<Decoration> {
     if !decorated(style) {
         return None;
     }
@@ -230,7 +239,7 @@ pub(super) fn decoration(style: &ComputedStyle, x: f32, measure: f32) -> Option<
             bottom: ink(style.border.bottom),
             left: ink(style.border.left),
         },
-        background: style.background_color,
+        backdrop,
         cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
     })
 }

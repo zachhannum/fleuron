@@ -21,9 +21,11 @@
 //! `build` turns blocks into fragments, `cap` sets the initial letter
 //! beside them, `table` sets a table a row at a time, `flow` stacks
 //! fragments into pages, `exclusion` sets prose around an image the
-//! sheet anchored, `furniture` paints the margin boxes, and `text`
-//! turns a shaped line into paint ops.
+//! sheet anchored, `background` puts art behind a box, `furniture`
+//! paints the margin boxes, and `text` turns a shaped line into paint
+//! ops.
 
+mod background;
 mod build;
 mod cap;
 mod exclusion;
@@ -43,6 +45,8 @@ pub use fragment::{
 };
 pub use furniture::margin_band;
 
+use background::Backdrop;
+
 pub(crate) use exclusion::AnchoredImages;
 pub(crate) use flow::{PageInfo, Paged};
 pub(crate) use reference::{Named, References, landed, moved};
@@ -56,7 +60,7 @@ use crate::images::{Assets, Contours};
 use crate::lines::{LineLayout, Patterns};
 use crate::pages::{Page, Side};
 use crate::session::Session;
-use crate::style::{PageStyle, Position, StyleTree};
+use crate::style::{Background, PageStyle, Position, StyleTree};
 use crate::{LayoutOutput, Warning};
 
 use flow::{Flow, PageSlot};
@@ -260,6 +264,19 @@ impl Paginator<'_> {
     /// Says so where the host supplied no image for a url. The table
     /// complains about a url it probed and refused. A url the table
     /// was never offered means the host supplied nothing at all.
+    /// What one box paints behind its content, complaining where the
+    /// sheet named an image nothing answers for.
+    fn backdrop(&self, background: &Background) -> Backdrop {
+        let found = background.image.as_ref().and_then(|url| {
+            let found = self.assets.lookup(&url.value);
+            if found.is_none() {
+                self.missing(&url.value, url.origin.clone().unwrap_or_default());
+            }
+            found
+        });
+        Backdrop::of(background, found)
+    }
+
     fn missing(&self, url: &str, origin: String) {
         if !self.assets.probed(url) {
             self.warn(

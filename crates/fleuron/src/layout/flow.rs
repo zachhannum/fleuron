@@ -554,7 +554,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         // the display structure has no layers.
         let mut items = Vec::new();
         if self.paints {
-            items = self.decorate(&placed);
+            items = self.page_background(self.pages.len(), &self.slot);
+            items.append(&mut self.decorate(&placed));
             items.append(&mut self.rules(&placed));
             items.append(&mut self.anchored_items());
         }
@@ -609,12 +610,17 @@ impl<'a, 'p> Flow<'a, 'p> {
                 first: false,
                 blank: true,
             };
-            self.pages.push(self.paginator.blank_page(&blank));
+            let mut page = self.paginator.blank_page(&blank);
+            if self.paints {
+                page.items = self.page_background(self.pages.len(), &self.slot);
+            }
+            let content_items = page.items.len();
+            self.pages.push(page);
             self.infos.push(PageInfo {
                 slot: blank,
                 strings: self.strings.clone(),
                 reset: None,
-                content_items: 0,
+                content_items,
             });
         }
         self.remaster();
@@ -637,6 +643,23 @@ impl<'a, 'p> Flow<'a, 'p> {
             .master(self.pages.len(), &self.slot)
             .geometry
             .column_origin(column)
+    }
+
+    /// What the page at `index` paints behind everything else on it:
+    /// the whole page box, margins included, so a scan reaches the
+    /// trim and the margin boxes sit over it.
+    ///
+    /// A blank leaf paints it too. A page inserted to square the
+    /// sheet is still a page of the book, and `@page :blank` is
+    /// where a sheet says otherwise.
+    fn page_background(&self, index: usize, slot: &PageSlot) -> Vec<DrawItem> {
+        let master = self.paginator.master(index, slot);
+        let backdrop = self.paginator.backdrop(&master.background);
+        if !backdrop.paints() {
+            return Vec::new();
+        }
+        let geometry = master.geometry;
+        backdrop.items(0.0, 0.0, geometry.width, geometry.height)
     }
 
     /// The images the page being built carries, as paint ops.
@@ -810,10 +833,7 @@ impl Painted {
         if w <= 0.0 || h <= 0.0 {
             return Vec::new();
         }
-        let mut items = Vec::new();
-        if let Some(color) = self.decoration.background {
-            items.push(DrawItem::Rect { x, y, w, h, color });
-        }
+        let mut items = self.decoration.backdrop.items(x, y, w, h);
         // `slice` leaves the two edges the break made open; `clone`
         // closes them.
         let closed = self.decoration.cloned;
@@ -887,6 +907,18 @@ pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
             DrawItem::Rect { x, y, .. } | DrawItem::Image { x, y, .. } => {
                 *x += dx;
                 *y += dy;
+            }
+            DrawItem::Background {
+                x,
+                y,
+                tile_x,
+                tile_y,
+                ..
+            } => {
+                *x += dx;
+                *y += dy;
+                *tile_x += dx;
+                *tile_y += dy;
             }
         }
     }

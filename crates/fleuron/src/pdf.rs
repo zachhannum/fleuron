@@ -15,7 +15,7 @@ use krilla::geom::{PathBuilder, Point, Rect, Size, Transform};
 use krilla::image::Image;
 use krilla::metadata::{DateTime, Metadata as PdfMetadata};
 use krilla::page::PageSettings;
-use krilla::paint::Fill;
+use krilla::paint::{Fill, FillRule};
 use krilla::surface::Surface;
 use krilla::text::{Font, GlyphId, KrillaGlyph, Tag};
 use krilla::{Document, SerializeSettings};
@@ -298,8 +298,91 @@ fn paint(
             surface.draw_image(image.clone(), size);
             surface.pop();
         }
+        // The box clips and the tile is drawn inside it, once or as
+        // many times as it takes to cover the box. Layout placed the
+        // first tile; the rest are that tile stepped by its own size.
+        DrawItem::Background {
+            x,
+            y,
+            w,
+            h,
+            tile_x,
+            tile_y,
+            tile_w,
+            tile_h,
+            repeat,
+            asset,
+        } => {
+            let image = images
+                .get(*asset as usize)
+                .ok_or_else(|| PdfError::Image(asset.to_string()))?;
+            let size = Size::from_wh(*tile_w, *tile_h).ok_or(PdfError::Geometry {
+                number: page.number,
+                kind: "a background image",
+            })?;
+            let clip = Rect::from_xywh(*x, *y, *w, *h).ok_or(PdfError::Geometry {
+                number: page.number,
+                kind: "a background box",
+            })?;
+            let mut builder = PathBuilder::new();
+            builder.push_rect(clip);
+            let path = builder.finish().ok_or(PdfError::Geometry {
+                number: page.number,
+                kind: "a background box",
+            })?;
+            surface.push_clip_path(&path, &FillRule::NonZero);
+            for (left, top) in tiles(
+                [*x, *y, *w, *h],
+                [*tile_x, *tile_y, *tile_w, *tile_h],
+                *repeat,
+            ) {
+                surface.push_transform(&Transform::from_translate(left, top));
+                surface.draw_image(image.clone(), size);
+                surface.pop();
+            }
+            surface.pop();
+        }
     }
     Ok(())
+}
+
+/// How many tiles one background is drawn as, whatever the arithmetic
+/// asks for. A tile a fraction of a point wide over a whole page
+/// would otherwise be drawn a million times, and nobody sees past the
+/// first few thousand.
+const TILES: usize = 4096;
+
+/// Where each copy of a repeated image is drawn, in paint order. One
+/// copy where the sheet asked for no repeat. Both boxes are
+/// `[left, top, width, height]`.
+fn tiles(box_: [f32; 4], tile: [f32; 4], repeat: bool) -> Vec<(f32, f32)> {
+    let [x, y, w, h] = box_;
+    let [tile_x, tile_y, tile_w, tile_h] = tile;
+    if !repeat {
+        return vec![(tile_x, tile_y)];
+    }
+    // How far back the tiling starts, and how many copies it takes to
+    // reach the far edge from there.
+    let steps = |start: f32, edge: f32, extent: f32, step: f32| {
+        let before = ((start - edge) / step).ceil().max(0.0) as usize;
+        let after = ((edge + extent - start) / step).ceil().max(1.0) as usize;
+        (start - before as f32 * step, (before + after).min(TILES))
+    };
+    let (first_x, across) = steps(tile_x, x, w, tile_w);
+    let (first_y, down) = steps(tile_y, y, h, tile_h);
+    let mut placed = Vec::with_capacity((across * down).min(TILES));
+    for row in 0..down {
+        for column in 0..across {
+            if placed.len() == TILES {
+                return placed;
+            }
+            placed.push((
+                first_x + column as f32 * tile_w,
+                first_y + row as f32 * tile_h,
+            ));
+        }
+    }
+    placed
 }
 
 /// What the next item is filled with. A page starts out filling in

@@ -7,6 +7,9 @@ use crate::fonts::GenericFamily;
 use crate::lines::HangingPunctuation;
 
 use super::Declaration;
+use super::background::{
+    Background, BackgroundPosition, BackgroundSize, SizeSource, no_background,
+};
 use super::counter::{Content, StringSet};
 use super::edges::{Border, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
@@ -98,9 +101,10 @@ pub struct ComputedStyle {
     /// The four border edges.
     #[serde(skip_serializing_if = "no_border")]
     pub border: Edges<Border>,
-    /// What is painted behind the block, from `background-color`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub background_color: Option<Color>,
+    /// What is painted behind the block: a tint, and an image over
+    /// it.
+    #[serde(skip_serializing_if = "no_background")]
+    pub background: Background,
     /// What the decoration does where a page break splits the block.
     #[serde(skip_serializing_if = "sliced")]
     pub box_decoration_break: BoxDecorationBreak,
@@ -159,7 +163,7 @@ impl ComputedStyle {
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
-            background_color: None,
+            background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
             border_collapse: BorderCollapse::Separate,
@@ -177,7 +181,7 @@ impl ComputedStyle {
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
-            background_color: None,
+            background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
             content: Content::None,
@@ -268,7 +272,18 @@ impl ComputedStyle {
                 self.border.edge(*edge).width = length.to_points(self.font_size, root_size).max(0.0)
             }
             Declaration::BorderColor(edge, color) => self.border.edge(*edge).color = *color,
-            Declaration::BackgroundColor(color) => self.background_color = *color,
+            Declaration::BackgroundColor(color) => self.background.color = *color,
+            Declaration::BackgroundImage(url) => self.background.image = url.clone(),
+            Declaration::BackgroundRepeat(repeat) => self.background.repeat = *repeat,
+            Declaration::BackgroundSize(size) => {
+                self.background.size = computed_size(*size, self.font_size, root_size)
+            }
+            Declaration::BackgroundPosition(x, y) => {
+                self.background.position = BackgroundPosition {
+                    x: Coord::of(*x, self.font_size, root_size),
+                    y: Coord::of(*y, self.font_size, root_size),
+                }
+            }
             Declaration::BoxDecorationBreak(value) => self.box_decoration_break = *value,
             Declaration::Width(width) => {
                 self.width = match width {
@@ -354,6 +369,23 @@ impl ComputedStyle {
             caps: self.font_variant_caps,
             transform: self.text_transform,
         }
+    }
+}
+
+/// What the cascade makes of a written `background-size`: `em` and
+/// `rem` against the font size in force, a percentage kept as one,
+/// because the box it measures against is sized in the layout pass.
+pub(crate) fn computed_size(size: SizeSource, font_size: f32, root_size: f32) -> BackgroundSize {
+    let axis =
+        |length: Option<Length>| length.map(|length| Coord::of(length, font_size, root_size));
+    match size {
+        SizeSource::Auto => BackgroundSize::Auto,
+        SizeSource::Cover => BackgroundSize::Cover,
+        SizeSource::Contain => BackgroundSize::Contain,
+        SizeSource::Fixed(width, height) => BackgroundSize::Fixed {
+            width: axis(width),
+            height: axis(height),
+        },
     }
 }
 

@@ -381,7 +381,7 @@ pub fn measure_on(
     let styles = crate::styles_on(&book, division, illustration);
     let assets = match illustration {
         Illustration::Bare => Assets::none(),
-        Illustration::Anchored => crate::anchored_images::assets(&book),
+        Illustration::Anchored => crate::anchored_images::assets(&book, &styles),
     };
     let paginator = Paginator::with_assets(registry, &styles, &assets);
 
