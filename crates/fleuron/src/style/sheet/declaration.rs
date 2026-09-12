@@ -425,15 +425,15 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "position",
         inherited: false,
-        syntax: "static | absolute",
-        examples: &["absolute"],
+        syntax: "static | relative | absolute",
+        examples: &["relative", "absolute"],
         read: |name, input| longhand(name, input, positioning, Declaration::Position),
     },
     Spec {
         name: "top",
         inherited: false,
-        syntax: "auto | <length>",
-        examples: &["auto", "0", "54pt"],
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "0", "-12pt", "10%"],
         read: |name, input| {
             longhand(name, input, inset, |inset| {
                 Declaration::Inset(Edge::Top, inset)
@@ -443,8 +443,8 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "right",
         inherited: false,
-        syntax: "auto | <length>",
-        examples: &["auto", "0", "54pt"],
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "0", "-12pt", "10%"],
         read: |name, input| {
             longhand(name, input, inset, |inset| {
                 Declaration::Inset(Edge::Right, inset)
@@ -454,8 +454,8 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "bottom",
         inherited: false,
-        syntax: "auto | <length>",
-        examples: &["auto", "0", "54pt"],
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "0", "-12pt", "10%"],
         read: |name, input| {
             longhand(name, input, inset, |inset| {
                 Declaration::Inset(Edge::Bottom, inset)
@@ -465,8 +465,8 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "left",
         inherited: false,
-        syntax: "auto | <length>",
-        examples: &["auto", "0", "54pt"],
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "0", "-12pt", "10%"],
         read: |name, input| {
             longhand(name, input, inset, |inset| {
                 Declaration::Inset(Edge::Left, inset)

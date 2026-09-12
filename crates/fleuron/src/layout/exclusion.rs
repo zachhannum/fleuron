@@ -189,15 +189,15 @@ impl AnchoredImage {
             };
         Rect {
             x: place(
-                self.inset.left.points(),
-                self.inset.right.points(),
+                self.inset.left.resolve(width),
+                self.inset.right.resolve(width),
                 left,
                 width,
                 w,
             ),
             y: place(
-                self.inset.top.points(),
-                self.inset.bottom.points(),
+                self.inset.top.resolve(height),
+                self.inset.bottom.resolve(height),
                 top,
                 height,
                 h,

@@ -8,8 +8,8 @@ use crate::content::{Block, Inline, NodeId, Section, rows};
 use crate::layout::{Named, References};
 use crate::lines::Patterns;
 use crate::style::{
-    Background, BackgroundSize, ColumnRule, Columns, ComputedStyle, Coord, Edges, PageGeometry,
-    ShapeOutside, StyleTree, Width,
+    Background, BackgroundSize, ColumnRule, Columns, ComputedStyle, Coord, Edges, Inset,
+    PageGeometry, ShapeOutside, StyleTree, Width,
 };
 
 use super::invalidate::Against;
@@ -256,11 +256,11 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         string_set,
         counter_reset,
         initial_letter,
-        // Whether an image is in the flow decides whether the section
-        // holds a fragment for it or an anchor. Where the image then
-        // sits, and which side the prose sets on, belong to the flow.
+        // Whether a block is in the flow decides whether the section
+        // holds fragments for it or an anchor. A relative block's
+        // fragments carry the offset its insets give them.
         position,
-        inset: _,
+        inset,
         // The layer travels on the fragments a block emits.
         z_index,
         wrap_flow: _,
@@ -291,6 +291,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
     (position, z_index).hash(h);
+    hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);
     box_decoration_break.hash(h);
@@ -388,6 +389,16 @@ pub(super) fn hash_edges(edges: Edges, h: &mut DefaultHasher) {
         left,
     } = edges;
     [top, right, bottom, left].map(f32::to_bits).hash(h);
+}
+
+pub(super) fn hash_insets(insets: Edges<Inset>, h: &mut DefaultHasher) {
+    for inset in [insets.top, insets.right, insets.bottom, insets.left] {
+        match inset {
+            Inset::Auto => 0u8.hash(h),
+            Inset::Points(points) => (1u8, points.to_bits()).hash(h),
+            Inset::Percent(percent) => (2u8, percent.to_bits()).hash(h),
+        }
+    }
 }
 
 pub(super) fn hash_nodes(styles: &StyleTree, h: &mut DefaultHasher) {

@@ -245,6 +245,7 @@ impl ComputedStyle {
             Declaration::Inset(edge, length) => {
                 *self.inset.edge(*edge) = match length {
                     None => Inset::Auto,
+                    Some(Length::Percent(percent)) => Inset::Percent(*percent),
                     Some(length) => Inset::Points(length.to_points(self.font_size, root_size)),
                 }
             }
@@ -501,5 +502,37 @@ mod tests {
 
         style.apply(&Declaration::ShapeMargin(Length::Em(1.5)), 10.0, 16.0);
         assert_eq!(style.shape_margin, 15.0);
+    }
+
+    /// Part: `position: relative` computes, and an inset written as a
+    /// percentage stays one until the page area it measures is known.
+    /// `left` outranks `right` and `top` outranks `bottom`.
+    #[test]
+    fn insets_keep_their_percentages_and_offset_a_relative_box() {
+        use crate::style::properties::{Edge, Inset, Position};
+        let mut style = ComputedStyle::initial();
+        style.font_size = 10.0;
+        style.apply(&Declaration::Position(Position::Relative), 10.0, 16.0);
+        style.apply(
+            &Declaration::Inset(Edge::Top, Some(Length::Em(-1.2))),
+            10.0,
+            16.0,
+        );
+        style.apply(
+            &Declaration::Inset(Edge::Bottom, Some(Length::Points(40.0))),
+            10.0,
+            16.0,
+        );
+        style.apply(
+            &Declaration::Inset(Edge::Right, Some(Length::Percent(10.0))),
+            10.0,
+            16.0,
+        );
+        assert_eq!(style.position, Position::Relative);
+        assert_eq!(style.inset.top, Inset::Points(-12.0));
+        assert_eq!(style.inset.right, Inset::Percent(10.0));
+        assert_eq!(style.inset.right.resolve(300.0), Some(30.0));
+        assert_eq!(style.inset.left.resolve(300.0), None);
+        assert_eq!(style.inset.offset((300.0, 500.0)), (-30.0, -12.0));
     }
 }

@@ -532,7 +532,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `string-set` | `string-set: chapter content()` |
 | `counter-reset` | `counter-reset: page` |
 | `initial-letter` | `initial-letter: 3` |
-| `position` | `position: absolute` |
+| `position` | `position: relative` |
 | `top`, `right`, `bottom`, `left` | `top: 0` |
 | `z-index` | `z-index: 10` |
 | `wrap-flow` | `wrap-flow: end` |
@@ -561,11 +561,11 @@ content:              none | [ <string> | target-counter( <target> , page , <cou
 string-set:           none | [ <name> [ content() | <string> ]+ ]#;
 counter-reset:        none | page <integer>?;
 initial-letter:       <integer>;
-position:             static | absolute;
-top:                  auto | <length>;
-right:                auto | <length>;
-bottom:               auto | <length>;
-left:                 auto | <length>;
+position:             static | relative | absolute;
+top:                  auto | <length> | <percentage>;
+right:                auto | <length> | <percentage>;
+bottom:               auto | <length> | <percentage>;
+left:                 auto | <length> | <percentage>;
 z-index:              auto | <integer>;
 wrap-flow:            auto | both | start | end;
 shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );

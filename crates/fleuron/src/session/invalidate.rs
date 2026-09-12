@@ -8,7 +8,9 @@ use crate::lines::Patterns;
 use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree};
 
 use super::Stale;
-use super::key::{hash_background, hash_edges, hash_geometry, hash_layout, hash_nodes, hash_shape};
+use super::key::{
+    hash_background, hash_edges, hash_geometry, hash_insets, hash_layout, hash_nodes, hash_shape,
+};
 
 /// The page a section's lines were broken against: the measure
 /// always, and the content height only for a book with an image in
@@ -47,14 +49,7 @@ impl Against {
             style.wrap_flow.hash(&mut anchored);
             hash_shape(&style.shape_outside, &mut anchored);
             style.shape_margin.to_bits().hash(&mut anchored);
-            for inset in [
-                style.inset.top,
-                style.inset.right,
-                style.inset.bottom,
-                style.inset.left,
-            ] {
-                inset.points().map(f32::to_bits).hash(&mut anchored);
-            }
+            hash_insets(style.inset, &mut anchored);
             hash_edges(style.margin, &mut anchored);
         }
         Against {
