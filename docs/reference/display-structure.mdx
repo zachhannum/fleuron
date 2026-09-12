@@ -43,9 +43,9 @@ pub struct Page {
 
 Layout decides which page a chapter starts on, so a host builds a contents page or a page range beside a chapter out of this. `Session::folios` answers the same question for a handful of nodes without handing back a page, and answers it in both numbers: see [sessions](../library/sessions.md).
 
-`items` is in paint order: by layer, and inside one layer in the order the text flows. A painter walks the list from the start and paints each item over the ones before it. A painter does not sort.
+`items` is in paint order: by layer, and inside one layer in the order the blocks are written. A painter walks the list from the start and paints each item over the ones before it. A painter does not sort.
 
-Every item names its own layer. A layer comes from `z-index` on a block, which [the CSS subset](../css-subset.mdx) describes under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the art behind a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers, as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
+Every item names its own layer. `z-index` on a block sets that layer, and [the CSS subset](../css-subset.mdx) describes it under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the background of a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
 
 ## `DrawItem`
 
@@ -169,7 +169,7 @@ Where `repeat` is true, that copy tiles. A painter steps the tile by `tile_w` ac
 
 ## Writing a painter
 
-For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order. The list is already in paint order. Paint each item over the ones before it, and do not sort by `layer`.
+For each page, set up a coordinate system in points with the origin top-left, then walk `items` in order. The list is already in paint order. Do not sort by `layer`.
 
 For text, resolve `font_id` through `LayoutOutput::fonts`, pin the entry's `variations`, set the size, fill with the run's `color`, and place each glyph by id at its absolute `x` on the run's baseline `y`. Do not shape or kern. The engine has done both, and a painter that re-shapes will disagree with the export.
 

@@ -666,7 +666,7 @@ The engine opens no files of its own. Whatever string `url()` holds is the name 
 
 ### Layers
 
-The engine paints every block in a layer. It paints a higher layer over a lower one. `z-index` names the layer of a block. Inside one layer the engine paints the blocks in the order they are written in.
+The engine paints every block in a layer. It paints a higher layer over a lower one. `z-index` names the layer of a block. Inside one layer, the engine paints the blocks in the order they are written.
 
 `z-index: auto` is layer 0. The engine paints a block that names no layer there.
 
@@ -687,9 +687,9 @@ h1, p, blockquote {
 
 A block does not take the layer of the block around it. The example names the paragraphs as well as the quotations, because a quotation at layer 2 leaves the paragraphs inside it at layer 0.
 
-Two layers are the engine's own. A block reaches neither. The engine paints the art behind a page under every layer a stylesheet can name. The text of a page covers that art with no `z-index` in the stylesheet. The engine paints a page number and a running head over every layer, so a border against the page never covers them.
+Two layers are the engine's own. A stylesheet cannot name either one. The engine paints the background of a page under every layer a stylesheet can name. Where a stylesheet names no `z-index`, the text of a page still covers that background. The engine paints a page number and a running head over every layer, so a border against the page never covers them.
 
-`z-index` here is one number in one order over the whole page. In CSS, `z-index` on a positioned block also starts a stacking context, which is a paint order of its own. The layers of the blocks inside that block then count against it rather than against the page. A book is flat, so the engine reads the number and starts no context. `position`, a background image, and a page break leave the order alone.
+`z-index` here is one number in one order over the whole page. In CSS, `z-index` on a positioned block also starts a stacking context, which is a paint order of its own. The layers of the blocks inside that block then count against it rather than against the page. The engine reads the number and starts no stacking context. `position`, a background image, and a page break do not change the order.
 
 ### Breaking across pages
 

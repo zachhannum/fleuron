@@ -51,7 +51,7 @@ pub struct Page {
     /// leaf names none.
     pub sections: Vec<NodeId>,
     /// What to paint, in paint order: by layer, and inside one layer
-    /// in the order the flow produced it.
+    /// in the order the blocks are written.
     pub items: Vec<DrawItem>,
 }
 
@@ -201,16 +201,16 @@ pub enum DrawItem {
 
 impl DrawItem {
     /// The layer a page's own background paints in: under every layer
-    /// a sheet can name, so the text of a page sits over the art
-    /// behind it with no rule in the sheet. A sheet that names this
-    /// number still paints over the background, because the page
-    /// paints its own first and one layer keeps the order it arrived
-    /// in.
+    /// a stylesheet can name. Where a stylesheet names no `z-index`,
+    /// the text of a page still covers the background. A stylesheet
+    /// that names this number paints over the background as well. The
+    /// page puts its own background in first, and one layer keeps the
+    /// order it arrived in.
     pub const PAGE_BACKGROUND: i32 = i32::MIN;
 
     /// The layer a page's margin boxes paint in: over every layer a
-    /// sheet can name, so a folio is on the page whatever the blocks
-    /// of the book are raised over.
+    /// stylesheet can name. A page number and a running head stay
+    /// visible whatever layer the blocks of the book are raised to.
     pub const PAGE_FURNITURE: i32 = i32::MAX;
 
     /// Which layer this item paints in. Higher paints later, over

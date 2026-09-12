@@ -670,10 +670,8 @@ check(
   grounded !== null && grounded.pages.every((page) => blockLayers(page).every((layer) => layer === 0)),
 );
 
-// The painter walks the list the layers sorted, so a tint the sheet
-// raises is painted after the prose it covers, and one it leaves
-// alone is painted before it. This is what the PDF export does with
-// the same list, which is what makes the two agree.
+// The preview painter and the PDF export walk the same sorted list,
+// so a tint a sheet raises covers the prose in both.
 const tinted = 'section { background-color: #eeeeee }';
 const order = async (css: string): Promise<[number, number] | null> => {
   const output = await client.preview([styleOp(css)]);

@@ -12,9 +12,9 @@
 export const WIRE_VERSION = 12;
 
 /**
- * The layer the art behind a page paints in: under every layer a
- * stylesheet can name, so the text of a page covers it with nothing
- * in the sheet saying so.
+ * The layer the background of a page paints in: under every layer a
+ * stylesheet can name. Where a stylesheet names no `z-index`, the
+ * text of a page still covers the background.
  */
 export const PAGE_BACKGROUND = -2147483648;
 
@@ -224,7 +224,7 @@ export interface Page {
   sections: number[];
   /**
    * What to paint, in paint order: by layer, and inside one layer in
-   * the order the flow produced it.
+   * the order the blocks are written.
    */
   items: DrawItem[];
 }
