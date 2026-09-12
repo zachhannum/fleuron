@@ -331,7 +331,11 @@ fn paint(
                 kind: "a background box",
             })?;
             surface.push_clip_path(&path, &FillRule::NonZero);
-            for (left, top) in tiles(*x, *y, *w, *h, *tile_x, *tile_y, *tile_w, *tile_h, *repeat) {
+            for (left, top) in tiles(
+                [*x, *y, *w, *h],
+                [*tile_x, *tile_y, *tile_w, *tile_h],
+                *repeat,
+            ) {
                 surface.push_transform(&Transform::from_translate(left, top));
                 surface.draw_image(image.clone(), size);
                 surface.pop();
@@ -349,27 +353,20 @@ fn paint(
 const TILES: usize = 4096;
 
 /// Where each copy of a repeated image is drawn, in paint order. One
-/// copy where the sheet asked for no repeat.
-#[allow(clippy::too_many_arguments)]
-fn tiles(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    tile_x: f32,
-    tile_y: f32,
-    tile_w: f32,
-    tile_h: f32,
-    repeat: bool,
-) -> Vec<(f32, f32)> {
+/// copy where the sheet asked for no repeat. Both boxes are
+/// `[left, top, width, height]`.
+fn tiles(box_: [f32; 4], tile: [f32; 4], repeat: bool) -> Vec<(f32, f32)> {
+    let [x, y, w, h] = box_;
+    let [tile_x, tile_y, tile_w, tile_h] = tile;
     if !repeat {
         return vec![(tile_x, tile_y)];
     }
+    // How far back the tiling starts, and how many copies it takes to
+    // reach the far edge from there.
     let steps = |start: f32, edge: f32, extent: f32, step: f32| {
         let before = ((start - edge) / step).ceil().max(0.0) as usize;
         let after = ((edge + extent - start) / step).ceil().max(1.0) as usize;
-        let first = start - before as f32 * step;
-        (first, (before + after).min(TILES))
+        (start - before as f32 * step, (before + after).min(TILES))
     };
     let (first_x, across) = steps(tile_x, x, w, tile_w);
     let (first_y, down) = steps(tile_y, y, h, tile_h);
