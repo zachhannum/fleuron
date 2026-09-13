@@ -451,13 +451,13 @@ fn resolve_page(
                 PageDeclaration::AlignContent(align) => geometry.align_content = *align,
             }
         }
-        for (which, declarations) in &rule.boxes {
-            let entry = boxes.entry(*which).or_insert_with(|| MarginBoxStyle {
-                which: *which,
+        for margin in &rule.boxes {
+            let entry = boxes.entry(margin.which).or_insert_with(|| MarginBoxStyle {
+                which: margin.which,
                 content: Content::None,
                 style: root.inherit(),
             });
-            for declaration in declarations {
+            for declaration in &margin.declarations {
                 match declaration {
                     MarginDeclaration::Content(content) => entry.content = content.clone(),
                     MarginDeclaration::Style(style) => {

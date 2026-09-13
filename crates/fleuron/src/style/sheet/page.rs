@@ -11,12 +11,14 @@ use crate::pages::Side;
 use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox};
 
 use super::color::background_color;
-use super::declaration::{Spec, at, longhand, sides, written_at};
+use super::declaration::{Parsed, Spec, at, longhand, sides, written_at};
 use super::value::{
     align_content, background_image, background_position, background_repeat, background_size,
     column_count, column_gap, column_width, length, line_style, line_width, property,
 };
-use super::{MarginDeclaration, PageDeclaration, PageRule, StyleError, warning};
+use super::{
+    Importance, MarginDeclaration, MarginRule, PageDeclaration, PageRule, StyleError, warning,
+};
 
 /// `@page` prelude: an optional page name, then any of `:first`,
 /// `:blank`, `:left`, `:right`.
@@ -259,7 +261,7 @@ pub(super) struct PageBody {
 /// One item of a `@page` body.
 pub(super) enum PageItem {
     Declaration(PageDeclaration),
-    Box(MarginBox, Vec<MarginDeclaration>),
+    Box(MarginRule),
 }
 
 impl<'i> DeclarationParser<'i> for PageBody {
@@ -311,13 +313,21 @@ impl<'i> AtRuleParser<'i> for PageBody {
             .map(|result| result.map_err(|(error, _)| error))
             .collect();
         let mut declarations = Vec::new();
+        let mut written = Vec::new();
         for result in collected {
             match result {
-                Ok(mut parsed) => declarations.append(&mut parsed),
+                Ok(mut parsed) => {
+                    written.push(parsed.written(declarations.len()));
+                    declarations.append(&mut parsed.declarations);
+                }
                 Err(error) => self.warnings.push(warning(&self.name, &error)),
             }
         }
-        Ok(vec![PageItem::Box(which, declarations)])
+        Ok(vec![PageItem::Box(MarginRule {
+            which,
+            declarations,
+            written,
+        })])
     }
 }
 
@@ -355,7 +365,7 @@ fn page_written_at(declarations: &mut [PageDeclaration], sheet: &str, start: &Pa
 }
 
 impl<'i> DeclarationParser<'i> for MarginBoxBody {
-    type Declaration = Vec<MarginDeclaration>;
+    type Declaration = Parsed<MarginDeclaration>;
     type Error = StyleError<'i>;
 
     fn parse_value<'t>(
@@ -365,6 +375,7 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
+            let from = input.position();
             let declarations = match Spec::find(MARGIN_BOX_PROPERTIES, &name) {
                 Some(spec) => spec.read(&name, input)?,
                 None => {
@@ -373,25 +384,31 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
                     style.into_iter().map(MarginDeclaration::Style).collect()
                 }
             };
+            let value = input.slice_from(from).trim().to_string();
             input.expect_exhausted()?;
-            Ok(declarations)
+            Ok(Parsed {
+                declarations,
+                importance: Importance::Normal,
+                property: name.to_ascii_lowercase(),
+                value,
+            })
         })(input)
     }
 }
 
 impl<'i> AtRuleParser<'i> for MarginBoxBody {
     type Prelude = ();
-    type AtRule = Vec<MarginDeclaration>;
+    type AtRule = Parsed<MarginDeclaration>;
     type Error = StyleError<'i>;
 }
 
 impl<'i> QualifiedRuleParser<'i> for MarginBoxBody {
     type Prelude = ();
-    type QualifiedRule = Vec<MarginDeclaration>;
+    type QualifiedRule = Parsed<MarginDeclaration>;
     type Error = StyleError<'i>;
 }
 
-impl<'i> RuleBodyItemParser<'i, Vec<MarginDeclaration>, StyleError<'i>> for MarginBoxBody {
+impl<'i> RuleBodyItemParser<'i, Parsed<MarginDeclaration>, StyleError<'i>> for MarginBoxBody {
     fn parse_declarations(&self) -> bool {
         true
     }
