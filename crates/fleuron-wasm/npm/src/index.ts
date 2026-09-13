@@ -18,6 +18,7 @@ export {
   isRendered,
   styleOp,
   type Applied,
+  type Attributes,
   type Failed,
   type Folios,
   type Metadata,
