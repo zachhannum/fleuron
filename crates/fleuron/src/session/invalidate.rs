@@ -5,7 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Book, Metadata, cell_blocks};
 use crate::lines::Patterns;
-use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree};
+use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree, Width};
 
 use super::Stale;
 use super::key::{
@@ -13,11 +13,11 @@ use super::key::{
 };
 
 /// The page a section's lines were broken against: the measure
-/// always, and the content height only for a book with an image in
-/// it. An image is the one thing fragment building sizes against the
-/// page's own height, so a book without one never reads that height,
-/// and a page that grows taller leaves its prose broken where it
-/// was.
+/// always, and the content height only for a book with an image or a
+/// percentage height in it. Those are the two things fragment building
+/// sizes against the page's own height, so a book without either never
+/// reads that height, and a page that grows taller leaves its prose
+/// broken where it was.
 ///
 /// A book that anchors an image to the page carries the exclusions as
 /// well. The flow resolves their geometry. A section whose paragraphs
@@ -54,7 +54,7 @@ impl Against {
         }
         Against {
             measure: geometry.measure(),
-            height: images.then(|| geometry.content_size().1),
+            height: (images || percent_heights(styles)).then(|| geometry.content_size().1),
             exclusions: any.then(|| anchored.finish()),
             width: spans(styles).then(|| geometry.content_size().0),
         }
@@ -65,6 +65,13 @@ impl Against {
         self.exclusions.hash(h);
         self.width.map(f32::to_bits).hash(h);
     }
+}
+
+/// Whether any block asks for a height as a percentage of the page.
+fn percent_heights(styles: &StyleTree) -> bool {
+    styles.styles().iter().any(|style| {
+        matches!(style.height, Width::Percent(_)) || matches!(style.min_height, Width::Percent(_))
+    })
 }
 
 /// Whether any section of the book places an image.

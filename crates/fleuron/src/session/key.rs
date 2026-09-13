@@ -272,6 +272,9 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         background,
         box_decoration_break,
         width,
+        // A block taller than its content emits the space below it.
+        height,
+        min_height,
         border_collapse,
         break_before,
         break_after,
@@ -280,10 +283,12 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         column_span,
     } = style;
     border_collapse.hash(h);
-    match width {
-        Width::Auto => 0u8.hash(h),
-        Width::Points(points) => (1u8, points.to_bits()).hash(h),
-        Width::Percent(percent) => (2u8, percent.to_bits()).hash(h),
+    for size in [width, height, min_height] {
+        match size {
+            Width::Auto => 0u8.hash(h),
+            Width::Points(points) => (1u8, points.to_bits()).hash(h),
+            Width::Percent(percent) => (2u8, percent.to_bits()).hash(h),
+        }
     }
     (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);

@@ -504,6 +504,8 @@ mod tests {
             Declaration::BackgroundPosition(..) => "background-position",
             Declaration::BoxDecorationBreak(_) => "box-decoration-break",
             Declaration::Width(_) => "width",
+            Declaration::Height(_) => "height",
+            Declaration::MinHeight(_) => "min-height",
             Declaration::BorderCollapse(_) => "border-collapse",
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",

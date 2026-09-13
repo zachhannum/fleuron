@@ -185,7 +185,7 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("counter-increment", "page"),
         ("font-variant", "small-caps"),
         ("font", "italic 11pt serif"),
-        ("height", "10em"),
+        ("max-height", "10em"),
         ("border-spacing", "2pt"),
         ("inset", "0"),
         ("clip-path", "circle()"),

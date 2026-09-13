@@ -84,6 +84,8 @@ pub enum Declaration {
     BackgroundPosition(Length, Length),
     BoxDecorationBreak(BoxDecorationBreak),
     Width(Option<Length>),
+    Height(Option<Length>),
+    MinHeight(Option<Length>),
     BorderCollapse(BorderCollapse),
     BreakBefore(Break),
     BreakAfter(Break),

@@ -509,6 +509,20 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         read: |name, input| longhand(name, input, width, Declaration::Width),
     },
     Spec {
+        name: "height",
+        inherited: false,
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "3in", "50%"],
+        read: |name, input| longhand(name, input, width, Declaration::Height),
+    },
+    Spec {
+        name: "min-height",
+        inherited: false,
+        syntax: "auto | <length> | <percentage>",
+        examples: &["auto", "2in", "25%"],
+        read: |name, input| longhand(name, input, width, Declaration::MinHeight),
+    },
+    Spec {
         name: "margin",
         inherited: false,
         syntax: "[ <length> | <percentage> ]{1,4}",

@@ -95,6 +95,11 @@ pub(super) struct Builder<'a, 'p> {
     /// The block this builder lays out on its own, against the page.
     /// Its own `position: absolute` does not anchor it a second time.
     pub(super) lifted: Option<NodeId>,
+    /// How far down the fragments emitted so far reach, space above
+    /// each one included.
+    depth: f32,
+    /// The blocks still open that ask for a height, innermost last.
+    tall: Vec<Tall>,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -115,8 +120,22 @@ impl<'a, 'p> Builder<'a, 'p> {
             offset: (0.0, 0.0),
             moved: Vec::new(),
             lifted: None,
+            depth: 0.0,
+            tall: Vec::new(),
         }
     }
+}
+
+/// A block that asks for a height, while its fragments are still being
+/// built.
+struct Tall {
+    /// Where its content box starts, as `depth` counts.
+    top: f32,
+    /// The height `height` gives its content box, which is what a
+    /// percentage inside it measures against. `None` for `auto`.
+    definite: Option<f32>,
+    /// The least height its content box takes.
+    least: f32,
 }
 
 /// A decorated block while its fragments are still being built.
@@ -199,6 +218,25 @@ impl Builder<'_, '_> {
             self.commit(margin);
             self.fixed += border.top + style.padding.top;
         }
+        if style.sized() {
+            let within = self
+                .tall
+                .iter()
+                .rev()
+                .find_map(|tall| tall.definite)
+                .unwrap_or_else(|| self.styles().default_page().geometry.content_size().1);
+            let definite = style.height.resolve(within);
+            let least = style
+                .min_height
+                .resolve(within)
+                .unwrap_or(0.0)
+                .max(definite.unwrap_or(0.0));
+            self.tall.push(Tall {
+                top: self.depth + self.fixed + self.margin,
+                definite,
+                least,
+            });
+        }
         start
     }
 
@@ -276,6 +314,13 @@ impl Builder<'_, '_> {
     /// emitted, its bottom border and padding take height of their
     /// own, and its bottom margin becomes the next block's lead.
     pub(super) fn close(&mut self, style: &ComputedStyle, start: usize) {
+        if style.sized() {
+            let tall = self.tall.pop().expect("the block opened a height");
+            let rest = tall.least - (self.depth + self.fixed + self.margin - tall.top);
+            if rest > 0.0 {
+                self.remainder(rest, start);
+            }
+        }
         if style.break_inside == Break::Avoid {
             for fragment in self.fragments.iter_mut().skip(start + 1) {
                 fragment.break_before = BreakPoint::Forbidden;
@@ -303,6 +348,23 @@ impl Builder<'_, '_> {
             self.pending = BreakPoint::Allowed;
         }
         self.ask(style.break_after);
+    }
+
+    /// The space a block taller than its content leaves below that
+    /// content, as a fragment of the block. A page does not end
+    /// between the content and the space. A block that emitted nothing
+    /// else takes what was asked above it here.
+    fn remainder(&mut self, rest: f32, start: usize) {
+        let mut blank = Fragment::plain(0.0, rest, Piece::Blank);
+        let mut first = self.fragments[start..]
+            .iter()
+            .all(|fragment| matches!(fragment.piece, Piece::Anchor(_)));
+        if !first {
+            blank.break_before = BreakPoint::Forbidden;
+            blank.lead = std::mem::take(&mut self.margin);
+            blank.fixed = std::mem::take(&mut self.fixed);
+        }
+        self.emit(&mut first, blank);
     }
 
     /// Hands one block's decoration to the fragments at the ends of
@@ -359,6 +421,7 @@ impl Builder<'_, '_> {
         fragment.spanning = self.spanning;
         fragment.layer = self.layer;
         fragment.offset = self.offset;
+        self.depth += fragment.lead + fragment.fixed + fragment.height;
         self.fragments.push(fragment);
     }
 
@@ -847,8 +910,111 @@ mod tests {
         ua, under_h3,
     };
     use crate::layout::{BreakPoint, Fragment, Paginator, Piece, layout_book};
-    use crate::pages::{DrawItem, Side};
+    use crate::pages::{DrawItem, Page, Side};
     use crate::style::Situation;
+
+    /// The baseline of the first line of the first page that opens
+    /// with `token`.
+    fn baseline_of(pages: &[Page], token: &str) -> f32 {
+        content_lines(&pages[0])
+            .into_iter()
+            .find(|(_, runs)| runs[0].2.starts_with(token))
+            .map(|(baseline, _)| baseline)
+            .unwrap_or_else(|| panic!("no line opens with {token}"))
+    }
+
+    /// Acceptance: `h1 { height: 3in }` leaves three inches before the
+    /// block under it, whatever the heading's own height.
+    #[test]
+    fn a_heading_with_a_height_leaves_that_height_before_the_block_under_it() {
+        let alone = paginate(vec![section(vec![paragraph("under the heading")])]);
+        let wanted = baseline_of(&alone, "under") + 216.0;
+        for css in [
+            "h1 { height: 3in }",
+            "h1 { height: 3in; font-size: 40pt }",
+            "h1 { height: 3in; font-size: 9pt }",
+        ] {
+            let pages = paginate_styled(
+                css,
+                vec![section(vec![
+                    heading("Tall"),
+                    paragraph("under the heading"),
+                ])],
+            );
+            let under = baseline_of(&pages, "under");
+            assert!(
+                (under - wanted).abs() < 1e-3,
+                "{css}: the paragraph sits on {under}, not {wanted}"
+            );
+        }
+    }
+
+    /// Acceptance: a percentage height resolves against the content box
+    /// the block is in. For a block of the section that is the page's,
+    /// and for a paragraph inside a quotation with a height it is the
+    /// quotation's.
+    #[test]
+    fn a_percentage_height_resolves_against_the_content_box_the_block_is_in() {
+        let (_, area) = ua().default_page().geometry.content_size();
+        let alone = paginate(vec![section(vec![paragraph("after")])]);
+        let top = baseline_of(&alone, "after");
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+
+        let half = paginate_styled(
+            "h1 { height: 50% }",
+            vec![section(vec![heading("Half"), paragraph("after")])],
+        );
+        assert!(near(baseline_of(&half, "after"), top + area / 2.0));
+
+        let nested = paginate_styled(
+            "blockquote { height: 4in; margin: 0 } blockquote p { height: 50% }",
+            vec![section(vec![
+                quote(vec![paragraph("first"), paragraph("second")]),
+                paragraph("after"),
+            ])],
+        );
+        assert!(near(baseline_of(&nested, "first"), top));
+        assert!(near(baseline_of(&nested, "second"), top + 144.0));
+        assert!(near(baseline_of(&nested, "after"), top + 288.0));
+    }
+
+    /// Part: a block taller than its content leaves the remainder below
+    /// the content, inside its own box. `min-height` does the same for
+    /// a block whose content is shorter. A block whose content is
+    /// taller than its height grows to hold it.
+    #[test]
+    fn a_block_taller_than_its_content_leaves_the_remainder_below_it() {
+        use crate::layout::testing::rects;
+        let sections = || {
+            vec![section(vec![
+                quote(vec![paragraph("quoted")]),
+                paragraph("after"),
+            ])]
+        };
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let plain = paginate_styled("blockquote { margin: 0 }", sections());
+        let quoted = baseline_of(&plain, "quoted");
+
+        let tall = paginate_styled(
+            "blockquote { margin: 0; height: 2in; background-color: #eeeeee }",
+            sections(),
+        );
+        assert!(near(baseline_of(&tall, "quoted"), quoted));
+        assert!(near(baseline_of(&tall, "after"), quoted + 144.0));
+        let tint = rects(&tall[0]);
+        assert_eq!(tint.len(), 1, "one box, one tint: {tint:?}");
+        assert!(near(tint[0].3, 144.0), "the box is {} tall", tint[0].3);
+
+        let least = paginate_styled("blockquote { margin: 0; min-height: 2in }", sections());
+        assert!(near(baseline_of(&least, "after"), quoted + 144.0));
+
+        let short = paginate_styled("blockquote { margin: 0; height: 1pt }", sections());
+        assert_eq!(
+            baseline_of(&short, "after"),
+            baseline_of(&plain, "after"),
+            "a block shorter than its content cut into it"
+        );
+    }
 
     /// A block that spans the columns breaks to the whole content
     /// box, and the prose around it breaks to one column. Past its
