@@ -93,6 +93,9 @@ pub(super) struct Placed {
     /// Whether it is a table's body row, which has the header rows
     /// set above it when it opens a column.
     repeats: bool,
+    /// The border boxes inside it, already positioned on this page: a
+    /// table row's own, its cells', and their blocks'.
+    boxes: Vec<(NodeId, PageBox)>,
 }
 
 /// Why the page being built ends.
@@ -349,6 +352,15 @@ impl<'a, 'p> Flow<'a, 'p> {
         } else {
             Vec::new()
         };
+        let boxes = match &fragment.piece {
+            Piece::Row(row) if self.paints => {
+                let mut boxes = row.boxes.clone();
+                let (dx, dy) = fragment.offset;
+                shift_boxes(&mut boxes, x + dx + fragment.x, y + top + dy);
+                boxes
+            }
+            _ => Vec::new(),
+        };
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
             section: self.section,
@@ -362,6 +374,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             decorations: fragment.decorations.clone(),
             anchors: std::mem::take(&mut self.pending_anchors),
             repeats: repeats(fragment),
+            boxes,
         });
     }
 
@@ -392,6 +405,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 decorations: None,
                 anchors: Vec::new(),
                 repeats: false,
+                boxes: Vec::new(),
             });
             self.cursor = top + height;
         }
@@ -524,6 +538,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             placed.column = self.column;
             placed.tier = self.tiers.len() - 1;
             shift(&mut placed.items, to_x - from_x, to_y - from_y + down);
+            shift_boxes(&mut placed.boxes, to_x - from_x, to_y - from_y + down);
             self.cursor = placed.top + placed.height;
             self.placed.push(placed);
         }
@@ -578,6 +593,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             items.append(&mut self.decorate(&placed));
             items.append(&mut self.rules(&placed));
             items.append(&mut self.anchored_items());
+            let page = self.pages.len() as u32;
+            for (node, area) in self.anchored_areas() {
+                self.boxes.push((node, PageBox { page, ..area }));
+            }
         }
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
@@ -587,6 +606,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             for node in placed.anchors {
                 self.anchors.insert(node, index);
+            }
+            for (node, area) in placed.boxes {
+                let page = index as u32;
+                self.boxes.push((node, PageBox { page, ..area }));
             }
             if let Some(marks) = placed.marks {
                 for (name, value) in marks.strings {
@@ -652,6 +675,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         for placed in placed.iter_mut() {
             placed.top += down;
             shift(&mut placed.items, 0.0, down);
+            shift_boxes(&mut placed.boxes, 0.0, down);
         }
         for tier in &mut self.tiers {
             tier.top += down;
@@ -738,6 +762,20 @@ impl<'a, 'p> Flow<'a, 'p> {
         anchored
             .iter()
             .flat_map(|at| self.anchored.all[*at].items(geometry))
+            .collect()
+    }
+
+    /// The border boxes of the images and blocks the page being built
+    /// carries.
+    fn anchored_areas(&self) -> Vec<(NodeId, PageBox)> {
+        let index = self.pages.len();
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
+            return Vec::new();
+        };
+        let geometry = self.paginator.master(index, &self.slot).geometry;
+        anchored
+            .iter()
+            .flat_map(|at| self.anchored.all[*at].boxes(geometry))
             .collect()
     }
 
@@ -995,6 +1033,15 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
 /// set above it when it opens a column.
 fn repeats(fragment: &Fragment) -> bool {
     matches!(&fragment.piece, Piece::Row(row) if row.repeats)
+}
+
+/// Moves boxes that are already positioned, the way `shift` moves the
+/// items painted with them.
+pub(super) fn shift_boxes(boxes: &mut [(NodeId, PageBox)], dx: f32, dy: f32) {
+    for (_, area) in boxes {
+        area.x += dx;
+        area.y += dy;
+    }
 }
 
 /// Moves already-painted items: what moving a fragment to the next

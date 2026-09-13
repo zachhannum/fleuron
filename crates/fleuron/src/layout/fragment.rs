@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::content::NodeId;
 use crate::lines::Line;
-use crate::pages::DrawItem;
+use crate::pages::{DrawItem, PageBox};
 use crate::style::{BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
 
 use super::background::Backdrop;
@@ -66,6 +66,10 @@ pub struct TableRow {
     /// What the row paints, from the top of the row and the leading
     /// edge of the content box.
     pub items: Vec<DrawItem>,
+    /// The border boxes of the row, its cells, and the blocks inside
+    /// them, from the top of the row and the leading edge of the
+    /// content box.
+    pub boxes: Vec<(NodeId, PageBox)>,
     /// Whether this is the first row of its table.
     pub opens: bool,
     /// Whether this is a header row, which is set again at the top of

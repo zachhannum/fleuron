@@ -9,7 +9,7 @@ use crate::content::{
     origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
-use crate::pages::DrawItem;
+use crate::pages::{DrawItem, PageBox};
 use crate::style::{
     Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
     TextAlign, TextJustify,
@@ -453,12 +453,13 @@ impl Builder<'_, '_> {
             cursor = top + fragment.height;
         }
         gather(&mut marks, self.pending_marks.take());
-        let mut items = decorate(&placed);
+        let (mut items, boxes) = decorate(&placed);
         for (top, fragment) in &placed {
             items.append(&mut self.paginator.fragment_items(fragment, 0.0, *top));
         }
         Stacked {
             items,
+            boxes,
             height: cursor + self.margin + self.fixed,
             anchors,
             marks,
@@ -840,6 +841,8 @@ pub struct Reflow {
 pub(super) struct Stacked {
     /// What they paint, from the top of their box.
     pub(super) items: Vec<DrawItem>,
+    /// The border boxes of the blocks, from the top of their box.
+    pub(super) boxes: Vec<(NodeId, PageBox)>,
     /// Their height, margins included.
     pub(super) height: f32,
     /// The boxes the sheet lifted out of the flow from inside them.
@@ -851,7 +854,7 @@ pub(super) struct Stacked {
 
 /// The decorated blocks inside one stack, as the rects they paint. A
 /// stack is never split, so no box inside it is cut.
-fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
+fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(NodeId, PageBox)>) {
     let mut boxes: Vec<Painted> = Vec::new();
     let mut open: Vec<usize> = Vec::new();
     for (top, fragment) in placed {
@@ -873,10 +876,23 @@ fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
             boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
         }
     }
-    boxes
-        .iter()
-        .flat_map(|box_| box_.items((0.0, 0.0)))
-        .collect()
+    let mut items = Vec::new();
+    let mut areas = Vec::new();
+    for painted in &boxes {
+        let (x, y, width, height) = painted.border_box((0.0, 0.0));
+        if painted.decoration.node != NodeId::UNASSIGNED && height > 0.0 {
+            let area = PageBox {
+                page: 0,
+                x,
+                y,
+                width,
+                height,
+            };
+            areas.push((painted.decoration.node, area));
+        }
+        items.extend(painted.items((0.0, 0.0)));
+    }
+    (items, areas)
 }
 
 /// Adds the marks of one fragment to the marks gathered so far.

@@ -17,7 +17,7 @@ use crate::pages::DrawItem;
 use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
 use super::build::{Builder, Stacked, gather};
-use super::flow::{Painted, shift};
+use super::flow::{Painted, shift, shift_boxes};
 use super::fragment::{BreakPoint, Decoration, Fragment, Marks, Piece, TableRow};
 
 impl<'a> Builder<'a, '_> {
@@ -114,7 +114,7 @@ impl<'a> Builder<'a, '_> {
             gather(&mut marks, content.marks.take());
             let top = border.top + padding.top;
             height = height.max(top + content.height + padding.bottom + border.bottom);
-            cells.push((column, cell_style, top, content));
+            cells.push((column, cell.id, cell_style, top, content));
         }
 
         let layer = style.z_index;
@@ -122,7 +122,7 @@ impl<'a> Builder<'a, '_> {
             .paginator
             .backdrop(&style.background)
             .items(grid.left, above, grid.width, height, layer);
-        for (column, cell_style, _, _) in &cells {
+        for (column, _, cell_style, _, _) in &cells {
             let decoration = Decoration {
                 node: crate::content::NodeId::UNASSIGNED,
                 paints: true,
@@ -168,9 +168,20 @@ impl<'a> Builder<'a, '_> {
                 }
             }
         }
-        for (_, _, top, mut content) in cells {
+        let area = |x: f32, width: f32| crate::pages::PageBox {
+            page: 0,
+            x,
+            y: above,
+            width,
+            height,
+        };
+        let mut boxes = vec![(row.id, area(grid.left, grid.width))];
+        for (column, cell, _, top, mut content) in cells {
+            boxes.push((cell, area(grid.x[column], grid.widths[column])));
             shift(&mut content.items, 0.0, above + top);
+            shift_boxes(&mut content.boxes, 0.0, above + top);
             items.append(&mut content.items);
+            boxes.append(&mut content.boxes);
         }
 
         let height = above + height + below;
@@ -194,6 +205,7 @@ impl<'a> Builder<'a, '_> {
             height,
             Piece::Row(Box::new(TableRow {
                 items,
+                boxes,
                 opens: index == 0,
                 head,
                 repeats: headers > 0 && !head,

@@ -50,7 +50,8 @@ impl Session<'_> {
     /// The innermost element at a point on the page at `index`, in
     /// points from its top-left corner: the element that holds the
     /// text there, or else the innermost block whose border box holds
-    /// the point, padding and empty space included.
+    /// the point, padding and empty space included. Where two such
+    /// things overlap, the one painted later answers.
     ///
     /// Nothing outside every box, and nothing for a page the book does
     /// not have.
@@ -61,15 +62,30 @@ impl Session<'_> {
             .items
             .iter()
             .filter_map(|item| self.run_box(index, item))
-            .find(|(_, area)| area.contains(x, y));
+            .filter(|(_, area)| area.contains(x, y))
+            .last();
         if let Some((node, _)) = text {
             return element_of(&self.book, node);
         }
-        self.boxes
+        let under: Vec<NodeId> = self
+            .boxes
             .iter()
             .filter(|(_, area)| area.page as usize == index && area.contains(x, y))
             .map(|(node, _)| *node)
-            .max()
+            .collect();
+        // A box that holds another box under the point is not the
+        // innermost one. A block against the page is recorded after the
+        // blocks it covers.
+        under
+            .iter()
+            .filter(|node| {
+                let held = self.book.subtree(**node).unwrap_or_default();
+                !under
+                    .iter()
+                    .any(|other| other != *node && held.contains(&other.get()))
+            })
+            .next_back()
+            .copied()
     }
 
     /// Where one element is on the pages: the border box of a block on
@@ -386,6 +402,111 @@ mod tests {
         let mut session = chapter(PADDED, emphatic());
         assert_eq!(session.hit(0, 1.0, 1.0), None, "the corner of the page");
         assert_eq!(session.hit(9999, 100.0, 100.0), None, "no such page");
+    }
+
+    /// A session over a book read from JSON, under `css`.
+    fn from_json(blocks: &str, css: &str) -> Session<'static> {
+        let json = format!(r#"{{"metadata": {{}}, "sections": [{{"blocks": [{blocks}]}}]}}"#);
+        let book: crate::content::Book = serde_json::from_str(&json).expect("the book reads");
+        let mut session = Session::new(registry());
+        session.set_content(book);
+        session.set_style(sheets(css));
+        session
+    }
+
+    fn holds(outer: &PageBox, inner: &PageBox) -> bool {
+        let slack = 0.01;
+        outer.page == inner.page
+            && inner.x >= outer.x - slack
+            && inner.y >= outer.y - slack
+            && inner.x + inner.width <= outer.x + outer.width + slack
+            && inner.y + inner.height <= outer.y + outer.height + slack
+    }
+
+    #[test]
+    fn a_table_row_its_cells_and_their_blocks_answer_with_their_boxes() {
+        let cell = |text: &str| {
+            format!(
+                r#"{{"cells": [{{"blocks": [{{"type": "paragraph",
+                    "inlines": [{{"type": "text", "value": "{text}"}}]}}]}}]}}"#
+            )
+        };
+        let table = format!(
+            r#"{{"type": "table", "head": [{}], "body": [{}]}}"#,
+            cell("Name"),
+            cell("Gulliver")
+        );
+        let mut session = from_json(&table, "td p { background-color: #eeddcc; padding: 6pt }");
+        let Block::Table { body, .. } = &session.book().sections[0].blocks[0] else {
+            panic!("a table");
+        };
+        let (row, data) = (body[0].id, body[0].cells[0].id);
+        let paragraph = block_id(&body[0].cells[0].blocks[0]);
+        let painted = tinted(&mut session);
+
+        let inner = session.inspect(paragraph).expect("the paragraph").boxes;
+        assert_eq!(inner.len(), 1);
+        assert!(
+            close(&inner[0], &painted[0]),
+            "{:?} against {:?}",
+            inner[0],
+            painted[0]
+        );
+        let cell_box = session.inspect(data).expect("the cell").boxes;
+        assert_eq!(cell_box.len(), 1);
+        assert!(
+            holds(&cell_box[0], &inner[0]),
+            "the cell holds its paragraph"
+        );
+        let row_box = session.inspect(row).expect("the row").boxes;
+        assert_eq!(row_box.len(), 1);
+        assert!(holds(&row_box[0], &cell_box[0]), "the row holds its cell");
+
+        assert_eq!(
+            session.hit(0, inner[0].x + 2.0, inner[0].y + 2.0),
+            Some(paragraph),
+            "the padding of a paragraph in a cell is the paragraph's"
+        );
+    }
+
+    #[test]
+    fn a_block_against_the_page_answers_with_its_box_and_wins_a_point_it_covers() {
+        let quote = r#"{"type": "blockquote", "blocks": [{"type": "paragraph",
+            "inlines": [{"type": "text", "value": "Motto"}]}]}"#;
+        let prose: Vec<String> = (0..3)
+            .map(|_| {
+                format!(
+                    r#"{{"type": "paragraph", "inlines": [{{"type": "text", "value": "{}"}}]}}"#,
+                    "alpha ".repeat(80)
+                )
+            })
+            .collect();
+        let blocks = format!("{quote}, {}", prose.join(", "));
+        let css = "blockquote { position: absolute; top: 0; left: 0; right: 150pt; \
+                   wrap-flow: both; background-color: #eeddcc; padding: 12pt }";
+        let mut session = from_json(&blocks, css);
+        let quote = block_id(&session.book().sections[0].blocks[0]);
+        let painted = tinted(&mut session);
+
+        let area = session.inspect(quote).expect("the quote").boxes;
+        assert_eq!(area.len(), 1);
+        assert_eq!(painted.len(), 1);
+        assert!(
+            close(&area[0], &painted[0]),
+            "{:?} against {:?}",
+            area[0],
+            painted[0]
+        );
+        let motto = NodeId::new(quote.get() + 1);
+        let inner = session.inspect(motto).expect("the motto").boxes;
+        assert_eq!(inner.len(), 1);
+        assert!(holds(&area[0], &inner[0]), "the quote holds its paragraph");
+
+        assert_eq!(
+            session.hit(0, area[0].x + 3.0, area[0].y + 3.0),
+            Some(quote),
+            "the padding of the quote is the quote's, over the chapter under it"
+        );
     }
 
     #[test]

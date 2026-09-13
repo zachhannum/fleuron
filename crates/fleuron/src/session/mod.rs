@@ -192,6 +192,9 @@ impl Cached {
                 *node = node.shifted(step);
             }
             if let Piece::Row(row) = &mut fragment.piece {
+                for (node, _) in &mut row.boxes {
+                    *node = node.shifted(step);
+                }
                 for item in &mut row.items {
                     if let crate::pages::DrawItem::Text {
                         origin: Some(origin),
