@@ -644,15 +644,15 @@ fn push_text(inlines: &[Inline], out: &mut String) {
 impl Book {
     /// Assign ids to every node, in document order (pre-order: a node
     /// before its children, sections in reading order), starting at 1.
-    /// Runs once, after deserialization; running it again renumbers.
+    /// Runs once, after deserialization. Running it again renumbers.
     ///
     /// It also gives a default id to every heading whose source wrote
-    /// none. The heading's text, markup discarded, is lowercased, each
-    /// run of characters that are not letters or digits becomes one
-    /// hyphen, and a hyphen at either end is removed. An id that an
-    /// element before it or any written id already has takes `-2`,
-    /// then `-3`, in document order. Text with no letter or digit
-    /// gives no id.
+    /// none. The default id is the heading's text without markup, in
+    /// lowercase. Each run of characters that are not letters or digits
+    /// becomes one hyphen, and the id has no hyphen at either end. If an
+    /// earlier heading or a written id anywhere in the book has that id,
+    /// it takes `-2`, then `-3`, until the id is free. Text with no
+    /// letter or digit gives no id.
     pub fn assign_node_ids(&mut self) {
         let mut next = 1u32;
         for section in &mut self.sections {

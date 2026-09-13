@@ -148,7 +148,7 @@ Specificity counts them in buckets of their own: `.map` outranks `img`, and `#fr
 
 The frontend reads them from an [attribute line](markdown.mdx). A host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 
-When `Book::assign_node_ids` numbers the tree, a heading with no id gets a default id from its text. The [markdown mapping](markdown.mdx) gives the rule. A serialized tree leaves a default id out, because numbering gives it again.
+When `Book::assign_node_ids` numbers the tree, a heading with no id gets a default id from its text. The [markdown mapping](markdown.mdx) describes the rule. The engine leaves a default id out of a serialized tree, because numbering the tree gives the id again.
 
 A text run has the field like every other node, and a sheet reaches nothing through it.
 
