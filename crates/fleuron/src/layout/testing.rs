@@ -410,7 +410,11 @@ pub(super) fn image_of(url: &str, classes: Vec<String>) -> Block {
         id: NodeId::UNASSIGNED,
         url: url.into(),
         alt: "a map of Lilliput".into(),
-        attributes: Attributes { id: None, classes },
+        attributes: Attributes {
+            id: None,
+            classes,
+            default_id: false,
+        },
         position: Some(SourcePos { line: 3, column: 1 }),
         span: None,
     }

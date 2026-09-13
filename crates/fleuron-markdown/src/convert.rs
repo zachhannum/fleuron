@@ -219,6 +219,7 @@ impl<'a> Converter<'a> {
                 let named = Attributes {
                     id: id.map(|id| id.into_string()),
                     classes: classes.into_iter().map(|c| c.into_string()).collect(),
+                    default_id: false,
                 };
                 self.push_inlines(InlineFor::Heading(heading_level(level), named), read)
             }

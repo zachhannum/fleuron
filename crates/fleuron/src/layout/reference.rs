@@ -392,6 +392,7 @@ mod tests {
             attributes: Attributes {
                 id: None,
                 classes: classes.iter().map(|class| class.to_string()).collect(),
+                default_id: false,
             },
             position: Some(SourcePos { line, column: 5 }),
             span: None,
@@ -402,6 +403,7 @@ mod tests {
         Attributes {
             id: Some(id.into()),
             classes: Vec::new(),
+            default_id: false,
         }
     }
 

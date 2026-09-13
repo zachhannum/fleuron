@@ -709,6 +709,7 @@ mod tests {
                 attributes: Attributes {
                     id: Some(id.into()),
                     classes: Vec::new(),
+                    default_id: false,
                 },
                 position: None,
                 span: None,

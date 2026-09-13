@@ -38,6 +38,7 @@ fn book() -> Book {
                 attributes: Attributes {
                     id: Some("colophon".into()),
                     classes: vec!["opening".into()],
+                    default_id: false,
                 },
                 position: None,
                 span: None,

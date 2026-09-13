@@ -54,7 +54,7 @@
 //! written in. A tree built rather than parsed has neither, and both
 //! questions answer with nothing.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
@@ -146,15 +146,19 @@ impl SourceSpan {
 /// Every block and inline carries one, empty unless something set
 /// it. The names are as they are written in CSS, without the `.` or
 /// the `#`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Deserialize)]
 pub struct Attributes {
     /// The id, which the sheet reaches with `#name`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub id: Option<String>,
     /// The classes, in the order they were written, which the sheet
     /// reaches with `.name`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub classes: Vec<String>,
+    /// Whether `id` is the default id the engine gave a heading, rather
+    /// than one the source wrote. [`Book::assign_node_ids`] sets it.
+    #[serde(skip)]
+    pub default_id: bool,
 }
 
 impl Attributes {
@@ -162,6 +166,37 @@ impl Attributes {
     /// something sets one.
     pub fn is_empty(&self) -> bool {
         self.id.is_none() && self.classes.is_empty()
+    }
+
+    /// The id the source wrote, if it wrote one.
+    fn written_id(&self) -> Option<&String> {
+        self.id.as_ref().filter(|_| !self.default_id)
+    }
+
+    /// Whether it names nothing the source wrote. A default id is
+    /// given again whenever the tree is numbered, so it is left out of
+    /// a serialized tree.
+    fn is_unwritten(&self) -> bool {
+        self.written_id().is_none() && self.classes.is_empty()
+    }
+}
+
+impl Serialize for Attributes {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let id = self.written_id();
+        let fields = usize::from(id.is_some()) + usize::from(!self.classes.is_empty());
+        let mut out = serializer.serialize_struct("Attributes", fields)?;
+        match id {
+            Some(id) => out.serialize_field("id", id)?,
+            None => out.skip_field("id")?,
+        }
+        if self.classes.is_empty() {
+            out.skip_field("classes")?;
+        } else {
+            out.serialize_field("classes", &self.classes)?;
+        }
+        out.end()
     }
 }
 
@@ -268,7 +303,7 @@ pub enum Block {
         /// The heading's text, in reading order.
         inlines: Vec<Inline>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -285,7 +320,7 @@ pub enum Block {
         /// The paragraph's text, in reading order.
         inlines: Vec<Inline>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -303,7 +338,7 @@ pub enum Block {
         /// The quoted blocks, in reading order.
         blocks: Vec<Block>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -318,7 +353,7 @@ pub enum Block {
         #[serde(skip)]
         id: NodeId,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -338,7 +373,7 @@ pub enum Block {
         /// contract.
         alt: String,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -359,7 +394,7 @@ pub enum Block {
         #[serde(default)]
         body: Vec<Row>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -433,7 +468,7 @@ pub struct Row {
     #[serde(default)]
     pub cells: Vec<Cell>,
     /// What a sheet names it by.
-    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
     pub attributes: Attributes,
     /// Where the frontend read this from.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -457,7 +492,7 @@ pub struct Cell {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align: Option<Alignment>,
     /// What a sheet names it by.
-    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
     pub attributes: Attributes,
     /// Where the frontend read this from.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -503,7 +538,7 @@ pub enum Inline {
         /// The characters themselves, entities already decoded.
         value: String,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -520,7 +555,7 @@ pub enum Inline {
         /// The emphasised inlines.
         children: Vec<Inline>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -537,7 +572,7 @@ pub enum Inline {
         /// The strengthened inlines.
         children: Vec<Inline>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -554,7 +589,7 @@ pub enum Inline {
         /// The literal code text; no markup inside.
         value: String,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -574,7 +609,7 @@ pub enum Inline {
         /// The linked inlines.
         children: Vec<Inline>,
         /// What a sheet names it by.
-        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        #[serde(default, skip_serializing_if = "Attributes::is_unwritten")]
         attributes: Attributes,
         /// Where the frontend read this from.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -609,6 +644,14 @@ impl Book {
     /// Assign ids to every node, in document order (pre-order: a node
     /// before its children, sections in reading order), starting at 1.
     /// Runs once, after deserialization; running it again renumbers.
+    ///
+    /// It also gives a default id to every heading whose source wrote
+    /// none. The heading's text, markup discarded, is lowercased, each
+    /// run of characters that are not letters or digits becomes one
+    /// hyphen, and a hyphen at either end is removed. An id that an
+    /// element before it or any written id already has takes `-2`,
+    /// then `-3`, in document order. Text with no letter or digit
+    /// gives no id.
     pub fn assign_node_ids(&mut self) {
         let mut next = 1u32;
         for section in &mut self.sections {
@@ -616,6 +659,40 @@ impl Book {
             for block in &mut section.blocks {
                 assign_block(block, &mut next);
             }
+        }
+        self.assign_default_ids();
+    }
+
+    fn assign_default_ids(&mut self) {
+        let mut taken = BTreeSet::new();
+        for section in &mut self.sections {
+            each_attributes(&mut section.blocks, &mut |attributes| {
+                if attributes.default_id {
+                    attributes.id = None;
+                    attributes.default_id = false;
+                } else if let Some(id) = &attributes.id {
+                    taken.insert(id.clone());
+                }
+            });
+        }
+        for section in &mut self.sections {
+            each_heading(&mut section.blocks, &mut |inlines, attributes| {
+                if attributes.id.is_some() {
+                    return;
+                }
+                let Some(base) = default_id(&text(inlines)) else {
+                    return;
+                };
+                let mut id = base.clone();
+                let mut count = 2;
+                while taken.contains(&id) {
+                    id = format!("{base}-{count}");
+                    count += 1;
+                }
+                taken.insert(id.clone());
+                attributes.id = Some(id);
+                attributes.default_id = true;
+            });
         }
     }
 
@@ -1038,6 +1115,111 @@ pub fn inline_span(inline: &Inline) -> Option<SourceSpan> {
         | Inline::Emphasis { span, .. }
         | Inline::Strong { span, .. }
         | Inline::Link { span, .. } => *span,
+    }
+}
+
+/// The id a heading with this text takes when its source writes none.
+fn default_id(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    (!words.is_empty()).then(|| words.join("-"))
+}
+
+/// Calls `visit` on what every node in these blocks is named by, in
+/// document order.
+fn each_attributes(blocks: &mut [Block], visit: &mut impl FnMut(&mut Attributes)) {
+    for block in blocks {
+        match block {
+            Block::Heading {
+                inlines,
+                attributes,
+                ..
+            }
+            | Block::Paragraph {
+                inlines,
+                attributes,
+                ..
+            } => {
+                visit(attributes);
+                each_inline_attributes(inlines, visit);
+            }
+            Block::Blockquote {
+                blocks, attributes, ..
+            } => {
+                visit(attributes);
+                each_attributes(blocks, visit);
+            }
+            Block::ThematicBreak { attributes, .. } | Block::Image { attributes, .. } => {
+                visit(attributes)
+            }
+            Block::Table {
+                head,
+                body,
+                attributes,
+                ..
+            } => {
+                visit(attributes);
+                for row in head.iter_mut().chain(body.iter_mut()) {
+                    visit(&mut row.attributes);
+                    for cell in &mut row.cells {
+                        visit(&mut cell.attributes);
+                        each_attributes(&mut cell.blocks, visit);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn each_inline_attributes(inlines: &mut [Inline], visit: &mut impl FnMut(&mut Attributes)) {
+    for inline in inlines {
+        match inline {
+            Inline::Text { attributes, .. } | Inline::Code { attributes, .. } => visit(attributes),
+            Inline::Emphasis {
+                children,
+                attributes,
+                ..
+            }
+            | Inline::Strong {
+                children,
+                attributes,
+                ..
+            }
+            | Inline::Link {
+                children,
+                attributes,
+                ..
+            } => {
+                visit(attributes);
+                each_inline_attributes(children, visit);
+            }
+        }
+    }
+}
+
+/// Calls `visit` on the text and the names of every heading in these
+/// blocks, in document order.
+fn each_heading(blocks: &mut [Block], visit: &mut impl FnMut(&[Inline], &mut Attributes)) {
+    for block in blocks {
+        match block {
+            Block::Heading {
+                inlines,
+                attributes,
+                ..
+            } => visit(inlines, attributes),
+            Block::Blockquote { blocks, .. } => each_heading(blocks, visit),
+            Block::Table { head, body, .. } => {
+                for row in head.iter_mut().chain(body.iter_mut()) {
+                    for cell in &mut row.cells {
+                        each_heading(&mut cell.blocks, visit);
+                    }
+                }
+            }
+            Block::Paragraph { .. } | Block::ThematicBreak { .. } | Block::Image { .. } => {}
+        }
     }
 }
 
