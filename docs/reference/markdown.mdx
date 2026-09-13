@@ -141,34 +141,92 @@ An id names one element. A book that writes one twice lays out with both matchin
 
 `Dialect::attributes` is the switch. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
 
-## A heading with no id
+## Links to a heading
 
-A heading that does not write an id gets a default id from its text. A link can then name a chapter even when its source names nothing. The engine makes the id in four steps:
+A link can name a heading in its own source or in another source. `target-counter()` and `target-text()` then print the page and the words of that heading. The same link works in Obsidian, with no change to the source.
+
+A link has two parts, divided by `#`. The part before `#` names a source, and the part after `#` names a heading in that source. The following links in `Chapter 1.md` all name the heading `# The Hunter` in `Chapter 3.md`:
+
+```markdown
+[the hunter](Chapter%203.md#the-hunter)
+[the hunter](Chapter%203.md#The%20Hunter)
+[[Chapter 3#The Hunter]]
+[[Chapter 3#The Hunter|the hunter]]
+```
+
+The last two links are wikilinks, which need the `wikilinks` switch.
+
+### The source part
+
+The engine compares the source part with the name that the host gives to `to_sections`. It compares them the way Obsidian finds a note:
+
+- The engine ignores case, and `.md` is optional.
+- The engine decodes percent escapes, so `%20` is a space.
+- A path that starts with `./` or `../` is relative to the folder of the source that holds the link.
+- Any other path matches the end of a source name. If two sources match, a source in the folder of the link comes first.
+
+A host that reads a vault names each source by its path from the root of the vault. A link with no source part, such as `#notes`, names the source that holds the link. A link with no `#` part, such as `[[Chapter 3]]`, names the start of the source.
+
+### The heading part
+
+The heading part takes one of three forms:
+
+| form | example |
+|---|---|
+| an id that the source writes | `#hunt` |
+| the slug of the heading | `#the-hunter` |
+| the text of the heading | `#The Hunter` |
+
+A slug is the text of a heading in lowercase, with hyphens between the words. The engine makes it in four steps:
 
 1. It lowercases the text of the heading, without the markup.
 2. It changes each run of characters that are not letters or digits to one hyphen.
 3. It removes a hyphen at either end.
-4. If the id is taken, it adds `-2`, then `-3`, and so on, until the id is free.
+4. If an earlier heading in the same source has the slug, or the source writes it as an id, the engine adds `-2`, then `-3`, and so on.
 
-An id is taken when an earlier heading has it, or when a source writes it anywhere in the book. The engine never changes an id that a source writes. The numbers run over the whole book in reading order, not source by source. A heading with no letter or digit in its text gets no default id. The engine does not warn about two headings with the same text.
+A heading that writes an id has no slug. A heading with no letter or digit in its text has no slug either.
+
+The text form matches the way Obsidian matches a heading. It ignores case, and it ignores the characters below in the link and in the heading:
+
+```
+! " # $ % & ( ) * + , . : ; < = > ? @ ^ ` { | } ~ / [ ] \ _
+```
+
+If two headings in a source have the same text, the text form names the first. `[[Notes#Part Two#Sources]]` names the first heading `Sources` that comes after the heading `Part Two` and is at a deeper level.
+
+A link with no source part names an id that another source writes, if its own source has no heading that matches.
 
 The following example is a book of two sources. The first source is `one.md`:
 
 ```markdown
 # Chapter One
 
-# The Chase {#hunt}
+See [the notes](#notes).
+
+# Notes
+
+# Notes
 ```
 
 The second source is `two.md`:
 
 ```markdown
-# Chapter One
+# Chapter Two
 
-# Hunt
+See [the notes](#notes) and [[one#Notes]].
+
+# Notes
 ```
 
-The four headings get the ids `chapter-one`, `hunt`, `chapter-one-2` and `hunt-2`, in that order. A link to `#chapter-one-2` names the second chapter, and `target-counter(attr(href url), page)` prints the page that chapter starts on.
+The headings in `one.md` have the slugs `chapter-one`, `notes` and `notes-2`. The headings in `two.md` have the slugs `chapter-two` and `notes`. The link in `one.md` names the first `Notes` in `one.md`. The first link in `two.md` names the `Notes` in `two.md`. `[[one#Notes]]` names the first `Notes` in `one.md`.
+
+### A slug is not an id
+
+A slug and the text of a heading are not CSS ids. A stylesheet cannot select a heading by its slug, so `#notes` in a stylesheet matches no heading in the example above. An id that a source writes, such as `{#hunt}`, is a CSS id, and a link can also name it.
+
+### A link that names nothing in the book
+
+A link to a web address, such as `https://example.com`, names nothing in the book. `target-counter()` and `target-text()` print nothing for it, and the engine does not warn. A link to a source or a heading that the book does not have also prints nothing. For that link, the engine warns with the line and column where the link is.
 
 ## Inlines
 

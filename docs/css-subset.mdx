@@ -963,10 +963,10 @@ Which words fall on that line depends on the style applied to it. Every property
 
 A rulebook, a table of contents, and an index all refer the reader to other pages. You can print the page number of the element that a link goes to, or the text of that element. That element is the target of the link. A reference is a `target-counter()` or a `target-text()` in `content`.
 
-The target must have an id. In markdown, you write the id of a heading in braces after its text. You write the id in a link after a `#`. See [the markdown mapping](reference/markdown.mdx) for the other ways to give an element an id.
+The target is a heading, or an element with an id. In markdown, a link names a heading after a `#`, by its slug or by its text. A link can also name a heading in another source. See [the markdown mapping](reference/markdown.mdx) for the rules.
 
 ```markdown
-## The Hunter {#the-hunter}
+## The Hunter
 
 For the rules on tracking game, see [the hunter](#the-hunter).
 ```
@@ -995,7 +995,7 @@ a.see::after {
 }
 ```
 
-A reference prints only in `::before` and `::after` on an inline element. If no element has the id that a reference names, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for a url that is not an id, such as `https://example.com`. It also does the same for `attr(href url)` on an element that is not a link.
+A reference prints only in `::before` and `::after` on an inline element. If a reference names a source, a heading, or an id that the book does not have, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for `attr(href url)` on an element that is not a link. A link to a web address, such as `https://example.com`, prints nothing, and the engine does not warn.
 
 ### Two layouts
 
