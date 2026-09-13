@@ -74,6 +74,7 @@ impl Session<'_> {
     /// reaches, which is usually far short of everything.
     pub fn set_style(&mut self, sheets: Stylesheets) {
         self.sheets = Some(sheets);
+        self.load_faces();
         self.recompile();
     }
 
@@ -101,17 +102,13 @@ impl Session<'_> {
     /// Only a session that owns its registry has one to add to; one
     /// that borrowed it says so instead.
     pub fn add_font(&mut self, source: FontSource) -> Result<Vec<u16>, AddFontError> {
-        let ids = self
-            .registry
-            .get_mut()
-            .ok_or(AddFontError::Borrowed)?
-            .add(source)?;
+        let added = self.register_font(source);
         // The table is built with the output and never patched, so
         // the output goes rather than outlive the ids it indexes.
         self.output = None;
         self.stale = Stale::Break;
         self.recompile();
-        Ok(ids)
+        added
     }
 
     /// Registers one image, and the index `DrawItem::Image.asset`

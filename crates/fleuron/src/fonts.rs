@@ -321,6 +321,17 @@ impl FontRegistry {
         Ok(ids)
     }
 
+    /// Drops every face from id `len` on, and every family and
+    /// generic that named one.
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.faces.truncate(len);
+        for ids in self.by_family.values_mut() {
+            ids.retain(|id| usize::from(*id) < len);
+        }
+        self.by_family.retain(|_, ids| !ids.is_empty());
+        self.generics.retain(|_, id| usize::from(*id) < len);
+    }
+
     /// Number of registered faces. Ids are `0..len`.
     pub fn len(&self) -> usize {
         self.faces.len()

@@ -512,7 +512,10 @@ fn selects(rule: &PageRule, query: PageQuery<'_>) -> bool {
 #[derive(Debug)]
 pub struct Stylesheets {
     sheets: Vec<Sheet>,
+    /// What parsing said, then what font loading said.
     warnings: Vec<Warning>,
+    /// How many of `warnings` parsing raised.
+    parsed: usize,
 }
 
 impl Stylesheets {
@@ -526,7 +529,12 @@ impl Stylesheets {
             warnings.append(&mut sheet_warnings);
             sheets.push(sheet);
         }
-        Stylesheets { sheets, warnings }
+        let parsed = warnings.len();
+        Stylesheets {
+            sheets,
+            warnings,
+            parsed,
+        }
     }
 
     /// Registers every `@font-face` the loader resolves, under the
@@ -534,11 +542,48 @@ impl Stylesheets {
     /// a stylesheet's name for a face is the one its selectors use.
     ///
     /// Run this before compiling — a face the registry does not have
-    /// is a face no computed style can resolve to.
+    /// is a face no computed style can resolve to. Running it again
+    /// replaces what the last run warned about.
     pub fn load_fonts(&mut self, registry: &mut FontRegistry, loader: &dyn FontLoader) {
-        for sheet in &self.sheets {
-            for face in &sheet.faces {
-                self.warnings.extend(register_face(face, registry, loader));
+        let warnings = self
+            .sheets
+            .iter()
+            .flat_map(|sheet| &sheet.faces)
+            .flat_map(|face| register_face(face, registry, loader))
+            .collect();
+        self.set_font_warnings(warnings);
+    }
+
+    /// What the last font loading warned about.
+    pub(crate) fn font_warnings(&self) -> &[Warning] {
+        &self.warnings[self.parsed..]
+    }
+
+    /// Replaces what font loading warned about, for sheets whose faces
+    /// a session already registered from an earlier copy of them.
+    pub(crate) fn set_font_warnings(&mut self, warnings: Vec<Warning>) {
+        self.warnings.truncate(self.parsed);
+        self.warnings.extend(warnings);
+    }
+
+    /// Hashes every `@font-face` the sheets declare, and what `file`
+    /// says about the bytes behind each url: two sheets that hash the
+    /// same register the same faces.
+    pub(crate) fn hash_faces(
+        &self,
+        h: &mut impl std::hash::Hasher,
+        file: impl Fn(&str) -> Option<u64>,
+    ) {
+        use std::hash::Hash;
+        for face in self.sheets.iter().flat_map(|sheet| &sheet.faces) {
+            face.family.hash(h);
+            face.style.hash(h);
+            face.weight.hash(h);
+            for src in &face.src {
+                match src {
+                    Src::Url(url) => (url, file(url)).hash(h),
+                    Src::Local(name) => name.hash(h),
+                }
             }
         }
     }

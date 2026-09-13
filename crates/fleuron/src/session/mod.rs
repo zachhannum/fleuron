@@ -52,6 +52,7 @@ use crate::style::{StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
 
 mod edit;
+mod faces;
 mod invalidate;
 mod key;
 mod output;
@@ -221,13 +222,16 @@ impl Cached {
 /// let pages = &session.preview().pages;
 /// ```
 ///
-/// The registry is fixed for the session's life. A computed style
-/// can only resolve to a face already in the registry, so a sheet
-/// that brings its own `@font-face` needs the host to register that
-/// face before the sheet is set.
+/// A computed style can only resolve to a face already in the
+/// registry. A session over a borrowed registry leaves it as the
+/// host made it, so a sheet that brings its own `@font-face` needs
+/// the host to load that face before the sheet is set. A session
+/// that owns its registry registers the faces the sheet declares from
+/// the files [`add_font_file`](Session::add_font_file) hands over.
 pub struct Session<'a> {
     registry: Table<'a, FontRegistry>,
     assets: Table<'a, Assets>,
+    fonts: faces::FontFiles,
     /// What the trace stage made of the assets the sheet wraps prose
     /// around. Empty for a sheet that names no contour.
     contours: Contours,
@@ -286,9 +290,11 @@ impl<'a> Session<'a> {
         let book = Book::default();
         let sheets = Stylesheets::parse(&[]);
         let styles = sheets.compile(&book, registry.get());
-        Session {
+        let fonts = faces::FontFiles::over(registry.get().len());
+        let mut session = Session {
             registry,
             assets,
+            fonts,
             contours: Contours::none(),
             book: Cow::Owned(book),
             sheets: Some(sheets),
@@ -310,7 +316,9 @@ impl<'a> Session<'a> {
                 style: 1,
                 ..Stages::default()
             },
-        }
+        };
+        session.load_faces();
+        session
     }
 
     /// A session that owns the faces it lays out against, and takes
@@ -338,6 +346,7 @@ impl<'a> Session<'a> {
         Session {
             registry: Table::Borrowed(registry),
             assets: Table::Borrowed(assets),
+            fonts: faces::FontFiles::over(registry.len()),
             contours: Contours::none(),
             book: Cow::Borrowed(book),
             sheets: None,
