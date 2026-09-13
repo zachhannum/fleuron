@@ -14,6 +14,7 @@
 //! an id by the time layout sees it.
 
 mod element;
+mod inspect;
 mod properties;
 mod sheet;
 pub mod subset;
@@ -35,6 +36,7 @@ use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
+pub use inspect::{Ancestor, InspectedDeclaration, Inspection, MatchedRule};
 pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan,
