@@ -31,13 +31,23 @@ pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Wa
     }
     let (mut sections, warnings) = converter.finish();
     // A source read whole is one chapter, so its frontmatter is that
-    // chapter's and `title:` names it. A source cut at headings is
-    // many, and the headings name them.
+    // chapter's: `title:` names it, and `class:` and `id:` are what a
+    // sheet reaches it by. A source cut at headings is many, and the
+    // headings name them.
     if options.sections == Sections::Whole
         && options.dialect.frontmatter
         && let [section] = sections.as_mut_slice()
     {
-        section.title = crate::frontmatter(text).title;
+        let front = crate::frontmatter(text);
+        section.title = front.title;
+        section.attributes = Attributes {
+            id: front.extra.get("id").cloned(),
+            classes: front
+                .extra
+                .get("class")
+                .map(|names| names.split_whitespace().map(String::from).collect())
+                .unwrap_or_default(),
+        };
     }
     (sections, warnings)
 }
@@ -753,6 +763,7 @@ impl<'a> Converter<'a> {
             id: Default::default(),
             source: Some(self.source.to_string()),
             title: None,
+            attributes: Attributes::default(),
             blocks: Vec::new(),
             position: Some(at),
             span: None,
@@ -772,6 +783,7 @@ impl<'a> Converter<'a> {
                 id: Default::default(),
                 source: Some(self.source.to_string()),
                 title: None,
+                attributes: Attributes::default(),
                 blocks: Vec::new(),
                 position,
                 span: None,
@@ -976,6 +988,24 @@ mod tests {
         // Cut at headings, the headings do the naming instead.
         let (sections, _) = to_sections(markdown, "ch01.md", &Options::default());
         assert_eq!(sections[0].title, None);
+    }
+
+    /// A chapter file's frontmatter names the section a sheet reaches
+    /// with `section.front` and `section#preface`.
+    #[test]
+    fn a_whole_source_takes_its_class_and_id_from_its_frontmatter() {
+        let markdown = "---\nclass: front roman\nid: preface\n---\n\nTo the reader.\n";
+        let (sections, _) = to_sections(markdown, "preface.md", &whole());
+        assert_eq!(
+            sections[0].attributes,
+            Attributes {
+                id: Some("preface".into()),
+                classes: vec!["front".into(), "roman".into()],
+            }
+        );
+
+        let (sections, _) = to_sections(markdown, "preface.md", &Options::default());
+        assert!(sections[0].attributes.is_empty());
     }
 
     fn whole() -> Options {
