@@ -321,9 +321,14 @@ mod tests {
         );
 
         let byte = markdown.find("Hunter").expect("the source holds it") as u32;
-        let node = book.node_at("one.md", byte).expect("the heading was read there");
+        let node = book
+            .node_at("one.md", byte)
+            .expect("the heading was read there");
         let (_, span) = book.source_of(node).expect("and it says where");
-        assert_eq!(&markdown[span.start as usize..span.end as usize], "The Hunter");
+        assert_eq!(
+            &markdown[span.start as usize..span.end as usize],
+            "The Hunter"
+        );
     }
 
     /// Acceptance: assembled twice, a book gives the same default ids.

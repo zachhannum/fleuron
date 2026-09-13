@@ -139,6 +139,34 @@ A line that names nothing becomes plain prose, and warns. This happens when the 
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 
+## A heading with no id
+
+A heading that does not write an id gets a default id from its text. A link can then name a chapter even when its source names nothing. The engine makes the id in three steps:
+
+1. It lowercases the text of the heading, without the markup.
+2. It changes each run of characters that are not letters or digits to one hyphen, and removes a hyphen at either end.
+3. If the id is taken, it adds `-2`, then `-3`, and so on, until the id is free.
+
+An id is taken when a heading before it has the id, or when a source writes the id anywhere in the book. So an id that a source writes always wins. The count runs over the whole book in reading order, not over one source. A heading with no letter or digit in its text gets no default id. The engine does not warn about two headings with the same text.
+
+The following example is a book of two sources. The first source is `one.md`:
+
+```markdown
+# Chapter One
+
+# The Chase {#hunt}
+```
+
+The second source is `two.md`:
+
+```markdown
+# Chapter One
+
+# Hunt
+```
+
+The four headings get the ids `chapter-one`, `hunt`, `chapter-one-2` and `hunt-2`, in that order. A link to `#chapter-one-2` names the second chapter, and `target-counter(attr(href url), page)` prints the page that chapter starts on.
+
 `Dialect::attributes` is the switch. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
 
 ## Inlines

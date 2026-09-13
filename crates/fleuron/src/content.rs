@@ -27,7 +27,8 @@
 //! classes and at most one id, which is what a sheet reaches one
 //! element by. They are empty unless something set them, and a
 //! frontend is not the only thing that can: a host with a structured
-//! source of its own sets them on the tree it builds.
+//! source of its own sets them on the tree it builds. A heading with
+//! no id gets a default id from its text when the tree is numbered.
 //!
 //! # Node identity
 //!
