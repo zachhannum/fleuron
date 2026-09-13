@@ -954,11 +954,10 @@ check(
   `${clear.length} lines painted beside the image, ${beside.length} on the page`,
 );
 
-// Positioned blocks. The sheet raises every chapter title where it is
-// drawn and lifts the part title against the page. The painter draws
-// every glyph of the page that carries both where the display
-// structure put it. The PDF writer places the same items, so this is
-// the preview half of that agreement.
+// Positioned blocks. The sheet raises every chapter title and lifts
+// the part title against the page. On the page that carries both, the
+// painter must draw every glyph where the display structure puts it.
+// A test in `pdf.rs` makes sure that the export does the same.
 const positioned = await client.preview([
   styleOp(
     'h3 { position: relative; top: -12pt } ' +

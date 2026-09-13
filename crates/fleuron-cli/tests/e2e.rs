@@ -573,10 +573,9 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
 }
 
 /// The sheet lifts the part title out of the text and into the top
-/// margin of the page it opens, and raises every chapter title where
-/// it is drawn. The title sits where its insets put it, and a chapter
-/// title is 4pt above where it is drawn with no `position` at all,
-/// with every other run where it was.
+/// margin of the page it opens. The part title sits at its insets.
+/// Every chapter title sits 4pt above its place with no `position`,
+/// and every other run stays where it was.
 #[test]
 fn the_part_title_is_lifted_and_the_chapter_titles_are_raised() {
     // The top margin `@page chapter:first` gives a chapter opening,

@@ -1066,10 +1066,9 @@ mod tests {
     /// Acceptance: the preview and the export of a page with a
     /// relative block and an absolute block on it agree.
     ///
-    /// Both painters read the same display structure. The question is
-    /// whether the export puts the lines of both blocks where that
-    /// structure says: at the x and the baseline their own items
-    /// carry.
+    /// Both painters read the same display structure. The export must
+    /// put the lines of both blocks at the x and the baseline that
+    /// their items carry.
     #[test]
     fn a_page_of_positioned_blocks_exports_where_the_display_structure_put_them() {
         let text = |value: &str| Inline::Text {

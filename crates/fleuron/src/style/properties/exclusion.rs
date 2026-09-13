@@ -12,8 +12,8 @@ use super::value::Length;
 pub enum Position {
     /// `static`: the element sits where the flow puts it.
     Static,
-    /// `relative`: the element sits where the flow puts it, and is
-    /// painted moved by its insets. Nothing around it moves.
+    /// `relative`: the element keeps its place in the flow, and the
+    /// engine draws it moved by its insets. Nothing around it moves.
     Relative,
     /// `absolute`: the element comes out of the flow and sits against
     /// the page area, at the insets it declares.
@@ -32,8 +32,8 @@ pub enum Inset {
     /// margin.
     Points(f32),
     /// A percentage of the page area's width, for `left` and `right`,
-    /// or of its height, for `top` and `bottom`. It stays one until
-    /// layout knows the page.
+    /// or of its height, for `top` and `bottom`. It stays a percentage
+    /// until layout resolves it against the page area.
     Percent(f32),
 }
 

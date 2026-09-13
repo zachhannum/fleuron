@@ -130,8 +130,8 @@ pub struct Fragment {
     /// read for one.
     pub layer: i32,
     /// How far `position: relative` moves what the fragment paints,
-    /// across and down, from the blocks it came out of. Nothing is
-    /// placed around the move.
+    /// across and down, from the blocks it came out of. Nothing around
+    /// the fragment moves with it.
     pub offset: (f32, f32),
 }
 
@@ -232,8 +232,8 @@ pub(super) fn decorated(style: &ComputedStyle) -> bool {
 /// nothing. `x` and `measure` are what the block was laid out
 /// against; the border box takes its margins off them. `backdrop` is
 /// what the cascade put behind it, resolved against the asset table.
-/// `offset` is how far the relative blocks around it, itself included,
-/// move it.
+/// `offset` is the sum of the moves of the relative blocks around it,
+/// itself included.
 pub(super) fn decoration(
     style: &ComputedStyle,
     x: f32,

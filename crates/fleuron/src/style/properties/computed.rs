@@ -505,7 +505,8 @@ mod tests {
     }
 
     /// Part: `position: relative` computes, and an inset written as a
-    /// percentage stays one until the page area it measures is known.
+    /// percentage stays a percentage until layout resolves it against
+    /// the page area.
     /// `left` outranks `right` and `top` outranks `bottom`.
     #[test]
     fn insets_keep_their_percentages_and_offset_a_relative_box() {

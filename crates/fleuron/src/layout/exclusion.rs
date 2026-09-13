@@ -77,7 +77,7 @@ impl Paginator<'_> {
     /// One image anchored to the page, which lands on the page `node`
     /// lands on.
     ///
-    /// It is sized as CSS 2.1 sizes a replaced element with no width
+    /// Its size follows CSS 2.1 for a replaced element with no width
     /// or height of its own: its intrinsic size, scaled down where
     /// that does not fit the page area.
     fn anchored_image(
@@ -119,10 +119,10 @@ impl Paginator<'_> {
     /// One block anchored to the page, which lands on the page `node`
     /// lands on, laid out on its own.
     ///
-    /// Its lines break to the width its insets leave of the page area:
-    /// between the two where both are set, and from the one that is
-    /// set to the far edge. With neither set, the block breaks to the
-    /// measure.
+    /// Its lines break to the width that its insets leave of the page
+    /// area. With both insets set, that is the width between them. With
+    /// one set, it runs from that inset to the far edge. With neither
+    /// set, it is `geometry.measure()`.
     fn anchored_block(
         &self,
         node: NodeId,
@@ -166,10 +166,9 @@ impl Paginator<'_> {
     /// inside its margins.
     ///
     /// `auto` is what the trace stage left, laid over the image
-    /// inside its margins. An image the tracer had no alpha for
-    /// contributes its box, and so does a block. A polygon is read
-    /// against the whole box, margins and all, which is what a
-    /// percentage in it measures.
+    /// inside its margins. A block, and an image with no alpha from the
+    /// tracer, give their box. The percentages of a polygon are
+    /// percentages of the whole box, margins included.
     fn shape(&self, style: &ComputedStyle, asset: Option<u32>, size: (f32, f32)) -> Option<Shape> {
         // The one predicate the trace stage keys on as well, so that
         // what is traced and what is read cannot drift apart.
@@ -210,7 +209,7 @@ impl Paginator<'_> {
 
 /// One image or block the sheet lifted out of the flow: what it
 /// paints, how far its insets put it from the page area, and which
-/// side the prose sets on.
+/// side the prose wraps on.
 #[derive(Debug, Clone)]
 pub(super) struct Anchored {
     /// The node whose place in the flow decides its page: its own, or
@@ -222,7 +221,7 @@ pub(super) struct Anchored {
     height: f32,
     /// What the insets say about where it sits.
     inset: Edges<Inset>,
-    /// Which side of it the prose sets on.
+    /// Which side of it the prose wraps on.
     wrap: WrapFlow,
     /// The contour the prose keeps clear of in place of the box,
     /// from `shape-outside`.
@@ -269,11 +268,11 @@ impl Anchored {
     /// What it keeps to itself on a page of this geometry: its margin
     /// box.
     ///
-    /// An inset measures from the page area, the box the margins
-    /// leave, and a negative inset reaches into the margin. A
-    /// percentage measures the page area's width or height. Where
-    /// both insets of an axis are set, the leading one places the
-    /// box. Where neither is set, the box sits at the edge of the
+    /// An inset is a distance from the page area, the box inside the
+    /// margins. A negative inset reaches into the margin. A percentage
+    /// is a percentage of the width or the height of the page area.
+    /// Where both insets of an axis are set, the leading inset places
+    /// the box. Where neither is set, the box sits at the edge of the
     /// page area.
     fn rect(&self, geometry: PageGeometry) -> Rect {
         let (left, top) = geometry.content_origin();
@@ -337,11 +336,10 @@ impl Anchored {
 /// The images and blocks one book anchors, and the page each one
 /// landed on.
 ///
-/// Which page a box falls on comes from the flow. Where it sits on
-/// that page comes from the sheet. The flow runs once with nothing in
-/// the way to answer the first question, and it then holds the
-/// answer. A box narrows the page it was given, and the flow never
-/// asks that page again.
+/// The flow gives the page that a box falls on. The sheet gives the
+/// place of the box on that page. The engine runs the flow once with
+/// no box in the way, and keeps the page it gives each box. A box then
+/// narrows the lines of that page, but its page does not change.
 #[derive(Debug, Default)]
 pub(crate) struct AnchoredBoxes {
     pub(super) all: Vec<Anchored>,
@@ -866,9 +864,8 @@ mod tests {
     #[test]
     fn an_absolute_block_sits_at_its_insets_on_the_page_its_anchor_landed_on() {
         // A lifted block is still the sibling of the paragraph after
-        // it, so `p + p` no longer matches that paragraph. The indent
-        // is off in both books, which leaves the flow as the one
-        // thing that differs.
+        // it, so `p + p` no longer matches that paragraph. Both books
+        // turn the indent off, so the flow is the only difference.
         let css = "blockquote { position: absolute; bottom: 1in; left: 0.5in; margin: 0; \
                    background-color: #eeeeee } p { text-indent: 0 }";
         // Which paragraph opens the second page with no quotation in
@@ -889,9 +886,9 @@ mod tests {
         let lifted = paginate_styled(css, vec![section(blocks)]);
 
         assert_eq!(lifted.len(), bare.len(), "the page count moved");
-        // A book with an anchored box places a paragraph at a time,
-        // which adds the same heights in another order, so a baseline
-        // can differ in its last bit.
+        // The engine places a book with an anchored box one paragraph
+        // at a time. It adds the same heights in another order, so a
+        // baseline can differ in its last bit.
         let same = |one: &[ContentLine<'_>], other: &[ContentLine<'_>]| {
             one.len() == other.len()
                 && one.iter().zip(other).all(|((a, runs), (b, others))| {
@@ -987,9 +984,9 @@ mod tests {
         }
     }
 
-    /// Part: a percentage on an inset measures the page area: its
-    /// width for `left` and `right`, and its height for `top` and
-    /// `bottom`. It does so for a block and for an image.
+    /// Part: a percentage on an inset is a percentage of the page area.
+    /// It uses the width for `left` and `right`, and the height for
+    /// `top` and `bottom`. This is true for a block and for an image.
     #[test]
     fn a_percentage_inset_measures_the_page_area() {
         let geometry = master(Situation::First(Side::Recto)).geometry;
@@ -1028,7 +1025,7 @@ mod tests {
     }
 
     /// An absolute block with a `wrap-flow` other than `auto` is an
-    /// exclusion the way an image is: the prose of its page sets
+    /// exclusion the way an image is: the prose of its page wraps
     /// beside it.
     #[test]
     fn prose_sets_beside_an_absolute_block_that_asks_for_it() {

@@ -86,11 +86,11 @@ pub(super) struct Builder<'a, 'p> {
     /// before it emits anything, so opening one is where this is
     /// settled.
     pub(super) layer: i32,
-    /// How far the relative blocks open around the block being built
-    /// move what it paints, added together.
+    /// The sum of the moves of every relative block still open around
+    /// the block being built.
     offset: (f32, f32),
-    /// What `offset` stood at before each relative block still open
-    /// moved it, innermost last.
+    /// The value of `offset` before each open relative block added its
+    /// move, innermost last.
     moved: Vec<(f32, f32)>,
     /// The block this builder lays out on its own, against the page.
     /// Its own `position: absolute` does not anchor it a second time.
@@ -175,8 +175,8 @@ impl Builder<'_, '_> {
         self.mark(style, inlines);
         self.layer = style.z_index;
         if style.position == Position::Relative {
-            // A percentage measures the page area the section's lines
-            // break against.
+            // A percentage is a percentage of the page area that the
+            // lines of the section break to.
             let area = self.styles().default_page().geometry.content_size();
             let (dx, dy) = style.inset.offset(area);
             self.moved.push(self.offset);
@@ -371,9 +371,9 @@ impl Builder<'_, '_> {
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }
 
-    /// Everything built so far, stacked from the top of a box no page
-    /// break splits: what it paints, from that top and the leading
-    /// edge the blocks were laid out against, and how tall it stands.
+    /// Everything built so far, stacked in a box that no page break
+    /// splits. The result holds what the blocks paint, from the top
+    /// and the leading edge of that box, and the height of the box.
     ///
     /// A table cell is one of these, and so is a block anchored to
     /// the page.
@@ -776,13 +776,14 @@ pub struct Reflow {
 
 /// What a stack of blocks comes to.
 pub(super) struct Stacked {
-    /// What they paint, from the top of the box they stand in.
+    /// What they paint, from the top of their box.
     pub(super) items: Vec<DrawItem>,
-    /// How tall they stand, their margins included.
+    /// Their height, margins included.
     pub(super) height: f32,
     /// The boxes the sheet lifted out of the flow from inside them.
     pub(super) anchors: Vec<NodeId>,
-    /// What the blocks set for the page furniture.
+    /// The strings, folios, and targets the blocks give the page
+    /// furniture.
     pub(super) marks: Option<Box<Marks>>,
 }
 
@@ -816,8 +817,7 @@ fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
         .collect()
 }
 
-/// Adds what one fragment set for the page furniture to what is
-/// gathered already.
+/// Adds the marks of one fragment to the marks gathered so far.
 pub(super) fn gather(into: &mut Option<Box<Marks>>, from: Option<Box<Marks>>) {
     let Some(from) = from else {
         return;
@@ -925,10 +925,10 @@ mod tests {
         assert!(headings > 0, "no heading on the first page");
     }
 
-    /// Part: a relative block is moved when it is painted, its box
-    /// with it, on every page it runs over. A percentage measures the
-    /// page area. Nothing around the block moves, so the pages break
-    /// where they broke.
+    /// Part: the engine moves a relative block and its box on every
+    /// page the block runs over. A percentage is a percentage of the
+    /// page area. Nothing around the block moves, and the page breaks
+    /// do not change.
     #[test]
     fn a_relative_block_moves_its_box_and_its_lines_on_every_page() {
         use crate::layout::testing::{content_items, rects};

@@ -229,9 +229,9 @@ pub(super) fn hyphens(input: &mut Parser<'_, '_>) -> Option<Hyphens> {
     }
 }
 
-/// `position: static | relative | absolute`. A relative box is painted
-/// moved from where the flow put it. An absolute box comes out of the
-/// flow and sits against the page area.
+/// `position: static | relative | absolute`. The engine draws a
+/// relative box moved from its place in the flow. An absolute box comes
+/// out of the flow and sits against the page area.
 pub(super) fn positioning(input: &mut Parser<'_, '_>) -> Option<Position> {
     let keyword = input.expect_ident().ok()?.clone();
     match_ignore_ascii_case! { &keyword,

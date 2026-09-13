@@ -1,9 +1,9 @@
 //! A whole novel with positioned blocks in every chapter.
 //!
-//! Every chapter heading is moved up where it is painted, and the
-//! paragraph each chapter opens with is lifted against the page with
-//! the prose of that page set beside it. A book-scale run is where a
-//! layout that depends on anything but its input shows.
+//! The sheet moves every chapter heading up, and lifts the paragraph
+//! that opens each chapter against the page. The prose of that page
+//! wraps beside the paragraph. A run at book scale exposes a layout
+//! that depends on anything but its input.
 
 use fleuron::layout::layout_book;
 use fleuron::style::{Source, Stylesheets};

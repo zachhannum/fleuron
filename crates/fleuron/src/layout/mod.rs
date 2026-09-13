@@ -21,10 +21,9 @@
 //! `build` turns blocks into fragments, `cap` sets the initial letter
 //! beside them, `table` sets a table a row at a time, `flow` stacks
 //! fragments into pages, `exclusion` places the images and blocks the
-//! sheet anchored and sets prose around them, `background` puts art
-//! behind a box, `furniture`
-//! paints the margin boxes, and `text` turns a shaped line into paint
-//! ops.
+//! sheet anchored and wraps prose around them, `background` puts art
+//! behind a box, `furniture` paints the margin boxes, and `text` turns
+//! a shaped line into paint ops.
 
 mod background;
 mod build;
