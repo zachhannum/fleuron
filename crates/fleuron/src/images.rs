@@ -1212,6 +1212,7 @@ mod tests {
         let mut book = Book {
             metadata: Default::default(),
             sections: vec![crate::content::Section {
+                attributes: Default::default(),
                 blocks: vec![
                     image("a.png"),
                     Block::Blockquote {
@@ -1248,6 +1249,7 @@ mod tests {
         let mut book = Book {
             metadata: Default::default(),
             sections: vec![crate::content::Section {
+                attributes: Default::default(),
                 blocks: vec![Block::Paragraph {
                     id: crate::content::NodeId::UNASSIGNED,
                     inlines: vec![crate::content::Inline::Text {
@@ -1374,6 +1376,7 @@ mod tests {
         let mut book = Book {
             metadata: Default::default(),
             sections: vec![crate::content::Section {
+                attributes: Default::default(),
                 blocks: vec![image("a.png")],
                 ..Default::default()
             }],

@@ -82,6 +82,7 @@ fn paragraph(sentences: usize) -> Block {
 
 fn chapter(title: &str, paragraphs: usize, sentences: usize) -> Section {
     Section {
+        attributes: Default::default(),
         id: NodeId::UNASSIGNED,
         source: None,
         title: None,

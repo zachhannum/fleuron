@@ -51,6 +51,7 @@ fn paragraph(value: &str) -> Block {
 /// lines and, in quantity, over pages.
 fn section(source: &str, tag: &str, paragraphs: usize) -> Section {
     Section {
+        attributes: Default::default(),
         id: NodeId::UNASSIGNED,
         source: Some(source.into()),
         title: None,

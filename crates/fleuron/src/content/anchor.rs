@@ -458,6 +458,7 @@ mod tests {
 
     fn source(name: Option<&str>, blocks: Vec<Block>) -> Section {
         Section {
+            attributes: Default::default(),
             source: name.map(Into::into),
             blocks,
             ..Section::default()

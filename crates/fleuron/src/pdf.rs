@@ -541,6 +541,7 @@ mod tests {
                     .collect(),
             },
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![Block::Paragraph {
                     id: Default::default(),
                     inlines: vec![Inline::Text {
@@ -566,6 +567,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![
                     Block::Heading {
                         id: Default::default(),
@@ -1143,6 +1145,7 @@ mod tests {
     fn an_image_no_host_supplied_is_reported_and_skipped() {
         let mut book = Book {
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![Block::Image {
                     id: Default::default(),
                     url: "missing.png".into(),

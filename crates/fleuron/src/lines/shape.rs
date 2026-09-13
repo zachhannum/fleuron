@@ -256,6 +256,7 @@ mod tests {
         let mut book = crate::content::Book {
             metadata: Default::default(),
             sections: vec![crate::content::Section {
+                attributes: Default::default(),
                 blocks: vec![crate::content::Block::Paragraph {
                     id: NodeId::UNASSIGNED,
                     inlines: vec![

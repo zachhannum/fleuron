@@ -121,6 +121,7 @@ fn book_of(paragraphs: Vec<String>, at: Vec<usize>) -> Book {
     let mut book = Book {
         metadata: Default::default(),
         sections: vec![Section {
+            attributes: Default::default(),
             id: NodeId::UNASSIGNED,
             source: None,
             title: None,

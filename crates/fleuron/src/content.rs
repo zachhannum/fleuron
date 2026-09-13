@@ -23,7 +23,7 @@
 //!
 //! # Naming a node
 //!
-//! Every block and inline carries [`Attributes`]: any number of
+//! Every section, block and inline carries [`Attributes`]: any number of
 //! classes and at most one id, which is what a sheet reaches one
 //! element by. They are empty unless something set them, and a
 //! frontend is not the only thing that can: a host with a structured
@@ -147,8 +147,8 @@ impl SourceSpan {
 /// What a sheet names one node by: any number of classes, at most
 /// one id.
 ///
-/// Every block and inline carries one, empty unless something set
-/// it. The names are as they are written in CSS, without the `.` or
+/// Every section, block and inline carries one, empty unless
+/// something set it. The names are as they are written in CSS, without the `.` or
 /// the `#`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Attributes {
@@ -248,6 +248,11 @@ pub struct Section {
     /// `title:`); implies heading level 1.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The classes and id a sheet names the section by: from a chapter
+    /// file's frontmatter, or set by a host beside the source, where no
+    /// byte of the source moves.
+    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    pub attributes: Attributes,
     /// The section's blocks, in reading order.
     pub blocks: Vec<Block>,
     /// Where the frontend read this from.
@@ -1270,6 +1275,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                     .collect(),
             },
             sections: vec![Section {
+                attributes: Default::default(),
                 id: NodeId::UNASSIGNED,
                 source: Some("chapter-01.md".into()),
                 title: Some("Chapter One".into()),
@@ -1643,6 +1649,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 source: Some("chapter-01.md".into()),
                 blocks: vec![Block::Paragraph {
                     id: NodeId::UNASSIGNED,

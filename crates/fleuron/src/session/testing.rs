@@ -34,6 +34,7 @@ pub(super) fn gif(width: u16, height: u16, tag: u8) -> Vec<u8> {
 pub(super) fn book_with_image(url: &str) -> Book {
     let mut book = Book {
         sections: vec![Section {
+            attributes: Default::default(),
             blocks: vec![Block::Image {
                 id: NodeId::UNASSIGNED,
                 url: url.into(),
@@ -132,6 +133,7 @@ pub(super) fn prose(tag: &str, paragraphs: usize) -> Vec<Block> {
 
 pub(super) fn section(source: &str, blocks: Vec<Block>) -> Section {
     Section {
+        attributes: Default::default(),
         id: NodeId::UNASSIGNED,
         source: Some(source.into()),
         title: None,
