@@ -37,8 +37,14 @@ export interface Metadata {
 
 /** One input reaching the engine. */
 export type Op =
-  /** Font bytes, registered once and kept for the session's life. */
-  | { op: 'font'; bytes: Uint8Array }
+  /**
+   * Font bytes, kept for the session's life. Without a url, the face
+   * registers under the family name in the file. With one, it
+   * registers under the family, weight and style of the `@font-face`
+   * rule whose `src` names that url, whichever of the two arrives
+   * first.
+   */
+  | { op: 'font'; bytes: Uint8Array; url?: string }
   /**
    * One image, by the url the manuscript names it by, kept for the
    * session's life. The engine opens nothing, so the host fetches

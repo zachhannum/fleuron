@@ -142,7 +142,11 @@ export class Engine {
   private apply(op: Op): void {
     switch (op.op) {
       case 'font':
-        this.session.addFont(op.bytes);
+        if (op.url === undefined) {
+          this.session.addFont(op.bytes);
+        } else {
+          this.session.addFontFile(op.url, op.bytes);
+        }
         break;
       case 'image':
         this.session.addImage(op.url, op.bytes);

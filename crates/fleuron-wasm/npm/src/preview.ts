@@ -83,6 +83,12 @@ export interface PreviewOptions {
    */
   images?: Record<string, Uint8Array>;
   /**
+   * Font files, by the url a stylesheet's `@font-face` names them by.
+   * The rule decides the family, weight and style each face registers
+   * under, and a rule whose url has no bytes here is a warning.
+   */
+  fonts?: Record<string, Uint8Array>;
+  /**
    * Where an image's pixels come from, for a host that would rather
    * name its own urls than hand over bytes. This outranks whatever
    * {@link PreviewOptions.images} supplied.
@@ -202,6 +208,9 @@ export class Preview {
     for (const [url, bytes] of Object.entries(options.images ?? {})) {
       setup.push(preview.keepImage(url, bytes));
     }
+    for (const [url, bytes] of Object.entries(options.fonts ?? {})) {
+      setup.push({ op: 'font', url, bytes });
+    }
     if (setup.length > 0) {
       await preview.client.apply(setup);
     }
@@ -262,9 +271,21 @@ export class Preview {
     await this.render([styleOp(css)]);
   }
 
-  /** Registers a face for the session's life. */
-  async addFont(bytes: Uint8Array): Promise<void> {
-    await this.render([{ op: 'font', bytes }]);
+  /**
+   * Hands over a font file for the session's life. Without a url,
+   * the face registers under the family name in the file. With one,
+   * it registers under the `@font-face` rule whose `src` names that
+   * url, whether the sheet arrived before the file or arrives after.
+   */
+  async addFont(bytes: Uint8Array, url?: string): Promise<void> {
+    if (url === undefined) {
+      await this.render([{ op: 'font', bytes }]);
+      return;
+    }
+    // New bytes at a url can register under the same id and the same
+    // name as the file they replace.
+    this.forgetFaces(() => true);
+    await this.render([{ op: 'font', url, bytes }]);
   }
 
   /**
@@ -520,6 +541,9 @@ export class Preview {
       this.pending.clear();
       this.heldGeneration = generation;
     }
+    // The faces a sheet declares register again when the sheet or
+    // their files change, and an id can then name a different face.
+    this.forgetFaces((id) => JSON.stringify(reply.fonts[id]) !== JSON.stringify(this.fonts[id]));
     this.fonts = reply.fonts;
     this.assets = reply.assets;
     this.bookWarnings = reply.warnings;
@@ -696,6 +720,16 @@ export class Preview {
     }
     const wanted = [...used].filter((id) => !this.faces.has(id));
     await Promise.all(wanted.map((id) => this.face(id)));
+  }
+
+  /** Takes the faces `stale` picks out of the document, so the next load fetches them again. */
+  private forgetFaces(stale: (id: number) => boolean): void {
+    for (const [id, face] of this.faces) {
+      if (stale(id)) {
+        this.element.ownerDocument.fonts.delete(face);
+        this.faces.delete(id);
+      }
+    }
   }
 
   private async face(id: number): Promise<void> {

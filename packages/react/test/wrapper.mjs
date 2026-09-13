@@ -40,6 +40,11 @@ check(
   fromBindings.map(({ names }) => names).join(', '),
 );
 
+check(
+  'it hands each font file to the preview under the url a sheet names it by',
+  /\.addFont\(\s*bytes,\s*url\s*\)/.test(built) && /\bfonts\b/.test(built),
+);
+
 const engine = ['postcard', 'decodeDisplayList', 'Worker', 'Client', 'paintPage', 'wire'];
 const found = engine.filter((word) => built.includes(word));
 check('and names none of the words the engine is built out of', found.length === 0, found.join(', '));

@@ -30,6 +30,12 @@ export interface PreviewProps extends PreviewOptions {
    * arrives, and the pages are laid out again around it.
    */
   images?: Record<string, Uint8Array>;
+  /**
+   * Font files, by the url a stylesheet's `@font-face` names them by.
+   * One that arrives after the stylesheet does is registered when it
+   * arrives.
+   */
+  fonts?: Record<string, Uint8Array>;
   /** Passed to the element the preview mounts into. */
   className?: string;
   /** The same. */
@@ -44,7 +50,8 @@ export interface PreviewProps extends PreviewOptions {
  * that changed.
  */
 export function Preview(props: PreviewProps): React.ReactElement {
-  const { markdown, css, name, page, zoom, images, className, style, onMount, ...options } = props;
+  const { markdown, css, name, page, zoom, images, fonts, className, style, onMount, ...options } =
+    props;
   const element = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<Mounted | null>(null);
 
@@ -102,6 +109,14 @@ export function Preview(props: PreviewProps): React.ReactElement {
       }
     }
   }, [preview, images]);
+
+  useEffect(() => {
+    if (preview !== null && fonts !== undefined) {
+      for (const [url, bytes] of Object.entries(fonts)) {
+        void preview.addFont(bytes, url);
+      }
+    }
+  }, [preview, fonts]);
 
   return <div ref={element} className={className} style={style} />;
 }
