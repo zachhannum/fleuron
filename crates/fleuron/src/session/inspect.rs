@@ -62,8 +62,7 @@ impl Session<'_> {
             .items
             .iter()
             .filter_map(|item| self.run_box(index, item))
-            .filter(|(_, area)| area.contains(x, y))
-            .last();
+            .rfind(|(_, area)| area.contains(x, y));
         if let Some((node, _)) = text {
             return element_of(&self.book, node);
         }
@@ -78,13 +77,12 @@ impl Session<'_> {
         // blocks it covers.
         under
             .iter()
-            .filter(|node| {
+            .rfind(|node| {
                 let held = self.book.subtree(**node).unwrap_or_default();
                 !under
                     .iter()
                     .any(|other| other != *node && held.contains(&other.get()))
             })
-            .next_back()
             .copied()
     }
 
