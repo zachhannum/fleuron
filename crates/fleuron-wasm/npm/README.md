@@ -90,6 +90,42 @@ leaves every other section's lines alone. Font bytes cross once and
 stay registered. `client.stages` reports how many times each stage has
 run, which shows when a cache served.
 
+## Faces from a stylesheet
+
+A `@font-face` rule gives a face a family name, a weight and a style.
+The following example loads a face through a rule:
+
+```js
+const face = await fetch('/fonts/Junicode-Cond.otf');
+
+const preview = await Preview.mount(document.querySelector('#book'), {
+  fonts: { 'Junicode-Cond.otf': new Uint8Array(await face.arrayBuffer()) },
+});
+await preview.setStyle(`
+  @font-face {
+    font-family: "Junicode Cond";
+    src: url("Junicode-Cond.otf");
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  book { font-family: "Junicode Cond", serif; }
+`);
+```
+
+The key in `fonts` is the string that `url()` holds. It does not have
+to be a real URL. The engine registers the face under the family, the
+weight and the style that the rule declares, not under the name in the
+file.
+
+The file and the sheet can arrive in either order.
+`preview.addFont(bytes, url)` sends a file after the preview is
+mounted. In a worker of your own, the op is `{ op: 'font', url, bytes }`.
+`fleuron-react` takes the same record as its `fonts` prop.
+
+A rule whose url has no bytes gives a warning, and the text uses the
+next family in its `font-family` list.
+
 ## Batch
 
 ```js

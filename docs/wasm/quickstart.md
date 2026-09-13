@@ -106,7 +106,7 @@ A sheet that only moves the page box re-fragments over lines already broken. A k
 | `metadata` | title, author and a frontend's own fields |
 | `content` | a content tree as JSON, for a host with a structured source of its own |
 | `style` | the author's stylesheets, named, in cascade order |
-| `font` | font bytes, registered for the session's life |
+| `font` | font bytes, kept for the session's life. With a `url`, the `@font-face` rule that names that url gives the family, weight and style |
 | `image` | one image's bytes, by the url the manuscript names it by |
 | `dialect` | `fleuron`, `commonmark`, `gfm` or `obsidian`. `fleuron` is the default: CommonMark, a frontmatter block and attribute lines |
 | `split` | the heading level a section begins at, or `0` for one section per file |
@@ -173,7 +173,7 @@ cd crates/fleuron-wasm/npm && npm ci && npm run build
 
 ## What the host owns
 
-The engine reads no paths, so the host fetches the font files, caches them, and sends the bytes once. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine, since it has no URL to fetch from.
+The engine reads no paths, so the host fetches the font files, caches them, and sends the bytes once. For a `@font-face` rule, the host sends the bytes with the `font` op under the string that `url()` holds. Going the other way, `fontBytes` hands a file back, which is the only way to reach the face built into the engine, since it has no URL to fetch from.
 
 The host fetches each image file and sends the bytes with the `image` op. The engine reads the header to size the box and never decodes the pixels. The painter decodes them, and `Preview` does it from the same bytes.
 

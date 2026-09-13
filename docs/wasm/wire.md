@@ -51,7 +51,7 @@ The `style` op takes the author's sheets in cascade order, each under a name. A 
 
 Request and response are paired by `id`, and each request has a generation the worker echoes back untouched.
 
-Some requests are questions rather than renders, and none overtakes a render or is overtaken by one. `want: 'font'` is one: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. A face keeps its id for the session's life, so the answer cannot go stale.
+Some requests are questions rather than renders, and none overtakes a render or is overtaken by one. `want: 'font'` is one: the file a `font_id` was registered from, for a painter that has to draw with the bytes the engine shaped with. A face that the host registers without a url keeps its id for the session's life. A face that a `@font-face` rule declares can take a new id when the sheet or its file changes, so a painter asks with an id from the latest font table.
 
 A `want: 'preview'` naming `first` and `count` with no `ops` of its own is another: it asks what a page of the book already is rather than what an edit produced. An edit that also names a range, fetching the one page it changed rather than the whole book, is still a render for supersession's sake, since it does say what that edit produced.
 
@@ -82,7 +82,7 @@ A warning is different. A book that laid out anyway reports through the display 
 
 ## Host duties
 
-The host fetches the fonts, caches them, and decides when a face has changed. The engine registers what it is handed and warns about what it is not.
+The host fetches the fonts, caches them, and decides when a face has changed. The engine registers what it is handed and warns about what it is not. A `@font-face` url is a name, and the host sends the bytes under that name.
 
 The host fetches each image file and hands the bytes over. The engine reads the header for the intrinsic size and decodes nothing, so the painter decodes the pixels.
 

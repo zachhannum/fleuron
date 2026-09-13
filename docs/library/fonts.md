@@ -50,7 +50,9 @@ sheets.load_fonts(&mut registry, &NoFonts);
 ```
 
 Load fonts before compiling. A computed style can only resolve to a font face the registry has 
-already loaded. A [session](sessions.md) borrows the registry for its whole life.
+already loaded. A [session](sessions.md) made with `Session::new` borrows the registry for its whole life. 
+A session made with `Session::owning` registers the `@font-face` faces itself, from the files that 
+`add_font_file` hands over.
 
 A face registers under the family the _sheet_ declared, not the name inside the file, so a 
 sheet's selectors always match the name the sheet wrote.

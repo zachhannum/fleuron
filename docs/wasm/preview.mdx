@@ -46,6 +46,33 @@ The module reads the header for the intrinsic size, which is how much room the i
 
 An image the engine has never been handed is a warning and a gap where it would have gone. Pass `asset` instead of `images` to supply the urls directly, and the preview hands the display structure's asset to it rather than resolving a blob of its own.
 
+## Faces from a stylesheet
+
+A `@font-face` rule gives a face a family name, a weight and a style. The host fetches the font file and hands over the bytes under the string that `url()` holds, the same way as an image. The following example loads one width of Junicode as a family of its own:
+
+```js
+const preview = await Preview.mount(element, {
+  fonts: { 'Junicode-Cond.otf': await load('fonts/Junicode-Cond.otf') },
+});
+
+await preview.setStyle(`
+  @font-face {
+    font-family: "Junicode Cond";
+    src: url("Junicode-Cond.otf");
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  book { font-family: "Junicode Cond", serif; }
+`);
+```
+
+The engine registers the face under the family, the weight and the style that the rule declares. The engine does not use the name in the file. A family whose files all give the same name can show each width as a separate family.
+
+The file and the sheet can arrive in either order. `addFont(bytes, url)` hands over a file after the preview is mounted. A rule whose url has no bytes gives a warning, and the text uses the next family in its `font-family` list.
+
+When a new sheet changes or removes a `@font-face` rule, the next render uses the faces that the new sheet declares. `addFont(bytes)` with no url registers a face under the family name in the file.
+
 <Playground
   caption="A mounted Preview: setStyle and edit on one side, the page it painted on the other."
 />
@@ -60,7 +87,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `remove(name)` | one source dropped |
 | `setMetadata({ title, author, extra })` | what names the book |
 | `setStyle(css)` | the author's styling: one string, or named sheets in cascade order |
-| `addFont(bytes)` | a face, registered for the session's life |
+| `addFont(bytes, url?)` | a font file, under the `@font-face` url that names it, or under the family name in the file when there is no url |
 | `addImage(url, bytes)` | one image, by the url the manuscript names it by |
 | `render(ops?)` | lay out again, or apply anything the methods above do not reach |
 
@@ -136,7 +163,7 @@ import { Preview } from 'fleuron-react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `onMount` hands back the underlying preview, for the page count and the PDF export.
+The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `fonts` is a prop in the same way, keyed by the `@font-face` url. `onMount` hands back the underlying preview, for the page count and the PDF export.
 
 React is not a dependency of `fleuron`. The wrapper contains no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
