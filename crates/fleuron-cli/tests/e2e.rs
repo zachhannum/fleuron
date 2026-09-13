@@ -572,6 +572,75 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
     );
 }
 
+/// The sheet lifts the part title out of the text and into the top
+/// margin of the page it opens. The part title sits at its insets.
+/// Every chapter title sits 4pt above its place with no `position`,
+/// and every other run stays where it was.
+#[test]
+fn the_part_title_is_lifted_and_the_chapter_titles_are_raised() {
+    // The top margin `@page chapter:first` gives a chapter opening,
+    // and the inset the sheet puts the part title at.
+    const OPENING_MARGIN: f32 = 144.0;
+    const INSET: f32 = 90.0;
+
+    let pages = styled_pages();
+    let still = styled_pages_with("h3 { position: static }");
+    assert_eq!(pages.len(), still.len(), "the page count moved");
+
+    let runs = |page: &Page| -> Vec<(f32, f32, String)> {
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Text { x, y, text, .. } => Some((*x, *y, text.clone())),
+                _ => None,
+            })
+            .collect()
+    };
+    let (title_page, title) = pages
+        .iter()
+        .enumerate()
+        .find_map(|(index, page)| {
+            runs(page)
+                .into_iter()
+                .find(|(_, _, text)| text.contains("PART"))
+                .map(|run| (index, run))
+        })
+        .expect("the part title is drawn");
+    assert_eq!(title_page, 0, "the part title left the page it opens");
+    let (_, baseline, _) = title;
+    assert!(
+        baseline > OPENING_MARGIN - INSET && baseline < OPENING_MARGIN,
+        "the part title sits on {baseline}, outside the top margin",
+    );
+
+    let mut raised = 0;
+    for (page, plain) in pages.iter().zip(&still) {
+        let (now, was) = (runs(page), runs(plain));
+        assert_eq!(
+            now.len(),
+            was.len(),
+            "page {}: runs came or went",
+            page.number
+        );
+        for ((x, y, text), (was_x, was_y, _)) in now.iter().zip(&was) {
+            assert!((x - was_x).abs() < 1e-3, "{text:?} moved across");
+            if text.contains("CHAPTER") {
+                raised += 1;
+                assert!(
+                    (y - (was_y - 4.0)).abs() < 1e-3,
+                    "{text:?} sits on {y}, not 4pt above {was_y}",
+                );
+            } else {
+                assert!(
+                    (y - was_y).abs() < 1e-3,
+                    "{text:?} moved from {was_y} to {y}"
+                );
+            }
+        }
+    }
+    assert!(raised > 0, "no chapter title is drawn");
+}
+
 /// The prose beside the ornament wraps to the shape the ornament's
 /// own alpha channel traces, rather than to its box.
 ///

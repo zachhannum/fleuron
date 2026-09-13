@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 
+use super::edges::Edges;
 use super::value::Length;
 
 /// Whether an element sits in the flow or against the page.
@@ -11,6 +12,9 @@ use super::value::Length;
 pub enum Position {
     /// `static`: the element sits where the flow puts it.
     Static,
+    /// `relative`: the element keeps its place in the flow, and the
+    /// engine draws it moved by its insets. Nothing around it moves.
+    Relative,
     /// `absolute`: the element comes out of the flow and sits against
     /// the page area, at the insets it declares.
     Absolute,
@@ -27,15 +31,41 @@ pub enum Inset {
     /// A length in points, negative where the box reaches into the
     /// margin.
     Points(f32),
+    /// A percentage of the page area's width, for `left` and `right`,
+    /// or of its height, for `top` and `bottom`. It stays a percentage
+    /// until layout resolves it against the page area.
+    Percent(f32),
 }
 
 impl Inset {
-    /// The length in points, or `None` where the inset is `auto`.
-    pub fn points(self) -> Option<f32> {
+    /// The inset in points across a page area `extent` wide or tall,
+    /// or `None` where it is `auto`.
+    pub fn resolve(self, extent: f32) -> Option<f32> {
         match self {
             Inset::Auto => None,
             Inset::Points(points) => Some(points),
+            Inset::Percent(percent) => Some(percent / 100.0 * extent),
         }
+    }
+}
+
+impl Edges<Inset> {
+    /// How far `position: relative` moves a box across and down a page
+    /// area of `size`. `left` outranks `right` and `top` outranks
+    /// `bottom`, as in CSS.
+    pub fn offset(self, (width, height): (f32, f32)) -> (f32, f32) {
+        let axis = |start: Inset, end: Inset, extent: f32| match (
+            start.resolve(extent),
+            end.resolve(extent),
+        ) {
+            (Some(start), _) => start,
+            (None, Some(end)) => -end,
+            (None, None) => 0.0,
+        };
+        (
+            axis(self.left, self.right, width),
+            axis(self.top, self.bottom, height),
+        )
     }
 }
 

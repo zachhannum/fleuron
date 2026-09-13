@@ -9,6 +9,7 @@ use crate::content::{
     origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
+use crate::pages::DrawItem;
 use crate::style::{
     Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
     TextAlign, TextJustify,
@@ -16,6 +17,7 @@ use crate::style::{
 
 use super::Paginator;
 use super::cap::Cap;
+use super::flow::Painted;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decorated, decoration,
 };
@@ -84,6 +86,15 @@ pub(super) struct Builder<'a, 'p> {
     /// before it emits anything, so opening one is where this is
     /// settled.
     pub(super) layer: i32,
+    /// The sum of the moves of every relative block still open around
+    /// the block being built.
+    offset: (f32, f32),
+    /// The value of `offset` before each open relative block added its
+    /// move, innermost last.
+    moved: Vec<(f32, f32)>,
+    /// The block this builder lays out on its own, against the page.
+    /// Its own `position: absolute` does not anchor it a second time.
+    pub(super) lifted: Option<NodeId>,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -101,6 +112,9 @@ impl<'a, 'p> Builder<'a, 'p> {
             open: Vec::new(),
             spanning: false,
             layer: 0,
+            offset: (0.0, 0.0),
+            moved: Vec::new(),
+            lifted: None,
         }
     }
 }
@@ -160,11 +174,19 @@ impl Builder<'_, '_> {
         self.ask(style.break_before);
         self.mark(style, inlines);
         self.layer = style.z_index;
+        if style.position == Position::Relative {
+            // A percentage is a percentage of the page area that the
+            // lines of the section break to.
+            let area = self.styles().default_page().geometry.content_size();
+            let (dx, dy) = style.inset.offset(area);
+            self.moved.push(self.offset);
+            self.offset = (self.offset.0 + dx, self.offset.1 + dy);
+        }
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
         let backdrop = self.paginator.backdrop(&style.background);
-        if let Some(decoration) = decoration(style, x, measure, backdrop) {
+        if let Some(decoration) = decoration(style, x, measure, backdrop, self.offset) {
             self.open.push(Pending {
                 start,
                 open_fixed: self.fixed,
@@ -269,6 +291,11 @@ impl Builder<'_, '_> {
             let pending = self.open.pop().expect("the block opened a decoration");
             self.seal(pending);
         }
+        if style.position == Position::Relative
+            && let Some(offset) = self.moved.pop()
+        {
+            self.offset = offset;
+        }
         self.margin = self.margin.max(style.margin.bottom);
         // A block that emitted nothing settles nothing: what was
         // asked above it is still asked above whatever comes next.
@@ -331,6 +358,7 @@ impl Builder<'_, '_> {
         }
         fragment.spanning = self.spanning;
         fragment.layer = self.layer;
+        fragment.offset = self.offset;
         self.fragments.push(fragment);
     }
 
@@ -343,11 +371,53 @@ impl Builder<'_, '_> {
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }
 
+    /// Everything built so far, stacked in a box that no page break
+    /// splits. The result holds what the blocks paint, from the top
+    /// and the leading edge of that box, and the height of the box.
+    ///
+    /// A table cell is one of these, and so is a block anchored to
+    /// the page.
+    pub(super) fn stack(mut self) -> Stacked {
+        let mut marks = None;
+        let mut anchors = Vec::new();
+        let mut placed = Vec::new();
+        let mut cursor = 0.0f32;
+        for fragment in &self.fragments {
+            if let Piece::Anchor(node) = fragment.piece {
+                anchors.push(node);
+                continue;
+            }
+            gather(&mut marks, fragment.marks.clone());
+            let top = cursor + fragment.lead + fragment.fixed;
+            placed.push((top, fragment));
+            cursor = top + fragment.height;
+        }
+        gather(&mut marks, self.pending_marks.take());
+        let mut items = decorate(&placed);
+        for (top, fragment) in &placed {
+            items.append(&mut self.paginator.fragment_items(fragment, 0.0, *top));
+        }
+        Stacked {
+            items,
+            height: cursor + self.margin + self.fixed,
+            anchors,
+            marks,
+        }
+    }
+
     /// Every block of one nesting level, at `x` from the content
     /// box's leading edge and breaking to `measure`.
     pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
         for block in blocks {
             self.name(block_attributes(block));
+            // A box against the page is not in the flow: it takes no
+            // space here, and the margins that met around it still
+            // meet.
+            let id = block_id(block);
+            if self.lifted != Some(id) && self.styles().style(id).position == Position::Absolute {
+                self.anchor(id);
+                continue;
+            }
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
                     self.name_inlines(inlines);
@@ -370,13 +440,6 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
-                    // An image against the page is not in the flow:
-                    // it takes no space here, and the margins that
-                    // met around it still meet.
-                    if style.position == Position::Absolute {
-                        self.anchor(*id);
-                        continue;
-                    }
                     let start = self.open(&style, &[], x, measure);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
@@ -626,6 +689,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
     for fragment in fresh.iter_mut() {
         fragment.spanning = head.spanning;
         fragment.layer = head.layer;
+        fragment.offset = head.offset;
     }
     let opens = head
         .decorations
@@ -710,6 +774,60 @@ pub struct Reflow {
     pub(super) ends: Vec<usize>,
 }
 
+/// What a stack of blocks comes to.
+pub(super) struct Stacked {
+    /// What they paint, from the top of their box.
+    pub(super) items: Vec<DrawItem>,
+    /// Their height, margins included.
+    pub(super) height: f32,
+    /// The boxes the sheet lifted out of the flow from inside them.
+    pub(super) anchors: Vec<NodeId>,
+    /// The strings, folios, and targets the blocks give the page
+    /// furniture.
+    pub(super) marks: Option<Box<Marks>>,
+}
+
+/// The decorated blocks inside one stack, as the rects they paint. A
+/// stack is never split, so no box inside it is cut.
+fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
+    let mut boxes: Vec<Painted> = Vec::new();
+    let mut open: Vec<usize> = Vec::new();
+    for (top, fragment) in placed {
+        let Some(decorations) = &fragment.decorations else {
+            continue;
+        };
+        for decoration in &decorations.opens {
+            open.push(boxes.len());
+            boxes.push(Painted {
+                top: top - decoration.above,
+                decoration: decoration.clone(),
+                bottom: 0.0,
+                cut_above: false,
+                cut_below: false,
+            });
+        }
+        for _ in 0..decorations.closes {
+            let Some(index) = open.pop() else { continue };
+            boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
+        }
+    }
+    boxes
+        .iter()
+        .flat_map(|box_| box_.items((0.0, 0.0)))
+        .collect()
+}
+
+/// Adds the marks of one fragment to the marks gathered so far.
+pub(super) fn gather(into: &mut Option<Box<Marks>>, from: Option<Box<Marks>>) {
+    let Some(from) = from else {
+        return;
+    };
+    let marks = into.get_or_insert_with(Box::default);
+    marks.strings.extend(from.strings);
+    marks.page_number = from.page_number.or(marks.page_number);
+    marks.targets.extend(from.targets);
+}
+
 /// Where a line of `width` starts inside a measure of `available`.
 fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
     match align {
@@ -775,6 +893,89 @@ mod tests {
                 .iter()
                 .all(|fragment| fragment.break_before == BreakPoint::Forbidden)
         );
+    }
+
+    /// Acceptance: `h1 { position: relative; top: -12pt }` raises the
+    /// heading and leaves the prose under it where it was.
+    #[test]
+    fn a_relative_heading_is_raised_and_the_prose_under_it_stays() {
+        use crate::layout::testing::content_items;
+        let sections = || vec![section([vec![heading("Raised")], long_prose(3)].concat())];
+        let plain = paginate(sections());
+        let raised = paginate_styled("h1 { position: relative; top: -12pt }", sections());
+        assert_eq!(plain.len(), raised.len(), "the page count moved");
+        let (plain, raised) = (content_items(&plain[0]), content_items(&raised[0]));
+        assert_eq!(plain.len(), raised.len());
+        let mut headings = 0;
+        for (before, after) in plain.iter().zip(&raised) {
+            assert_eq!(before.3, after.3, "the runs are painted in another order");
+            assert_eq!(before.0, after.0, "{:?} moved across", after.3);
+            if before.2 == chapter_size() {
+                headings += 1;
+                assert!(
+                    (after.1 - (before.1 - 12.0)).abs() < 1e-3,
+                    "the heading sits at {} rather than 12pt above {}",
+                    after.1,
+                    before.1,
+                );
+            } else {
+                assert_eq!(before.1, after.1, "the prose {:?} moved", after.3);
+            }
+        }
+        assert!(headings > 0, "no heading on the first page");
+    }
+
+    /// Part: the engine moves a relative block and its box on every
+    /// page the block runs over. A percentage is a percentage of the
+    /// page area. Nothing around the block moves, and the page breaks
+    /// do not change.
+    #[test]
+    fn a_relative_block_moves_its_box_and_its_lines_on_every_page() {
+        use crate::layout::testing::{content_items, rects};
+        let sections = || {
+            vec![section(
+                [
+                    long_prose(1),
+                    vec![quote(vec![paragraph(&"lilliputian ".repeat(500))])],
+                    long_prose(1),
+                ]
+                .concat(),
+            )]
+        };
+        let base = "blockquote { background-color: #eeeeee; box-decoration-break: clone }";
+        let plain = paginate_styled(base, sections());
+        let moved = paginate_styled(
+            &format!("{base} blockquote {{ position: relative; left: 10%; bottom: 6pt }}"),
+            sections(),
+        );
+        let (dx, dy) = (ua().default_page().geometry.content_size().0 * 0.1, -6.0);
+        assert!(plain.len() > 1, "the quotation fits on one page");
+        assert_eq!(plain.len(), moved.len(), "the page count moved");
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let (mut boxes, mut quoted) = (0, 0);
+        for (before, after) in plain.iter().zip(&moved) {
+            let (was, now) = (rects(before), rects(after));
+            assert_eq!(was.len(), now.len());
+            for (was, now) in was.iter().zip(&now) {
+                assert!(
+                    near(now.0, was.0 + dx) && near(now.1, was.1 + dy),
+                    "page {}: the box at {was:?} is painted at {now:?}",
+                    after.number,
+                );
+                assert!(near(now.2, was.2) && near(now.3, was.3));
+                boxes += 1;
+            }
+            for (was, now) in content_items(before).iter().zip(content_items(after)) {
+                if was.3.contains("lilliputian") {
+                    assert!(near(now.0, was.0 + dx) && near(now.1, was.1 + dy));
+                    quoted += 1;
+                } else {
+                    assert_eq!((was.0, was.1), (now.0, now.1), "{:?} moved", now.3);
+                }
+            }
+        }
+        assert!(boxes > 1, "the box is painted on {boxes} page(s)");
+        assert!(quoted > 0);
     }
 
     /// Acceptance: no single line of a paragraph is stranded at a

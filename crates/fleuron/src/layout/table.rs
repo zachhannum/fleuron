@@ -16,7 +16,7 @@ use crate::content::{Block, NodeId, Row, SourcePos, origin, rows};
 use crate::pages::DrawItem;
 use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
-use super::build::Builder;
+use super::build::{Builder, Stacked, gather};
 use super::flow::{Painted, shift};
 use super::fragment::{BreakPoint, Decoration, Fragment, Marks, Piece, TableRow};
 
@@ -132,6 +132,7 @@ impl<'a> Builder<'a, '_> {
                 backdrop: self.paginator.backdrop(&cell_style.background),
                 cloned: false,
                 layer: cell_style.z_index,
+                offset: (0.0, 0.0),
             };
             items.extend(
                 Painted {
@@ -223,34 +224,10 @@ impl<'a> Builder<'a, '_> {
 
     /// What one cell's blocks come to: what they paint, from the top
     /// of the cell's content box, and how tall they stand.
-    fn cell(&mut self, blocks: &[Block], x: f32, measure: f32) -> Content {
+    fn cell(&mut self, blocks: &[Block], x: f32, measure: f32) -> Stacked {
         let mut inner = Builder::new(self.paginator, self.source);
         inner.blocks(blocks, x, measure);
-        let mut marks = None;
-        let mut anchors = Vec::new();
-        let mut placed = Vec::new();
-        let mut cursor = 0.0f32;
-        for fragment in &inner.fragments {
-            if let Piece::Anchor(node) = fragment.piece {
-                anchors.push(node);
-                continue;
-            }
-            gather(&mut marks, fragment.marks.clone());
-            let top = cursor + fragment.lead + fragment.fixed;
-            placed.push((top, fragment));
-            cursor = top + fragment.height;
-        }
-        gather(&mut marks, inner.pending_marks.take());
-        let mut items = decorate(&placed);
-        for (top, fragment) in &placed {
-            items.append(&mut self.paginator.fragment_items(fragment, 0.0, *top));
-        }
-        Content {
-            items,
-            height: cursor + inner.margin + inner.fixed,
-            anchors,
-            marks,
-        }
+        inner.stack()
     }
 
     /// Records a diagnostic at a place in the source.
@@ -259,61 +236,6 @@ impl<'a> Builder<'a, '_> {
         self.paginator
             .warn(message.to_string(), (!at.is_empty()).then_some(at));
     }
-}
-
-/// What one cell's blocks come to.
-struct Content {
-    /// What they paint, from the top of the cell's content box.
-    items: Vec<DrawItem>,
-    /// How tall they stand, the margins inside the cell included.
-    height: f32,
-    /// The images the sheet lifted out of the flow from inside the
-    /// cell.
-    anchors: Vec<NodeId>,
-    /// What the blocks set for the page furniture.
-    marks: Option<Box<Marks>>,
-}
-
-/// The decorated blocks inside one cell, as the rects they paint. A
-/// row is never split, so no box inside it is cut.
-fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
-    let mut boxes: Vec<Painted> = Vec::new();
-    let mut open: Vec<usize> = Vec::new();
-    for (top, fragment) in placed {
-        let Some(decorations) = &fragment.decorations else {
-            continue;
-        };
-        for decoration in &decorations.opens {
-            open.push(boxes.len());
-            boxes.push(Painted {
-                top: top - decoration.above,
-                decoration: decoration.clone(),
-                bottom: 0.0,
-                cut_above: false,
-                cut_below: false,
-            });
-        }
-        for _ in 0..decorations.closes {
-            let Some(index) = open.pop() else { continue };
-            boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
-        }
-    }
-    boxes
-        .iter()
-        .flat_map(|box_| box_.items((0.0, 0.0)))
-        .collect()
-}
-
-/// Adds what one fragment set for the page furniture to what is
-/// gathered already.
-fn gather(into: &mut Option<Box<Marks>>, from: Option<Box<Marks>>) {
-    let Some(from) = from else {
-        return;
-    };
-    let marks = into.get_or_insert_with(Box::default);
-    marks.strings.extend(from.strings);
-    marks.page_number = from.page_number.or(marks.page_number);
-    marks.targets.extend(from.targets);
 }
 
 /// What each border edge of one element is painted in, `currentColor`

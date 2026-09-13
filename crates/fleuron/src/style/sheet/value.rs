@@ -229,12 +229,14 @@ pub(super) fn hyphens(input: &mut Parser<'_, '_>) -> Option<Hyphens> {
     }
 }
 
-/// `position: static | absolute`. An absolute box comes out of the
-/// flow and sits against the page area.
+/// `position: static | relative | absolute`. The engine draws a
+/// relative box moved from its place in the flow. An absolute box comes
+/// out of the flow and sits against the page area.
 pub(super) fn positioning(input: &mut Parser<'_, '_>) -> Option<Position> {
     let keyword = input.expect_ident().ok()?.clone();
     match_ignore_ascii_case! { &keyword,
         "static" => Some(Position::Static),
+        "relative" => Some(Position::Relative),
         "absolute" => Some(Position::Absolute),
         _ => None,
     }
@@ -253,7 +255,8 @@ pub(super) fn z_index(input: &mut Parser<'_, '_>) -> Option<i32> {
     input.expect_integer().ok()
 }
 
-/// One inset: `auto`, or a length from the page area's edge.
+/// One inset: `auto`, or a length or a percentage from the page
+/// area's edge.
 pub(super) fn inset(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
     if input
         .try_parse(|input| input.expect_ident_matching("auto"))

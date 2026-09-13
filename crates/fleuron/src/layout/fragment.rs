@@ -129,6 +129,10 @@ pub struct Fragment {
     /// layers of the table it is part of on its items, so this is not
     /// read for one.
     pub layer: i32,
+    /// How far `position: relative` moves what the fragment paints,
+    /// across and down, from the blocks it came out of. Nothing around
+    /// the fragment moves with it.
+    pub offset: (f32, f32),
 }
 
 impl Fragment {
@@ -147,6 +151,7 @@ impl Fragment {
             reflow: None,
             spanning: false,
             layer: 0,
+            offset: (0.0, 0.0),
         }
     }
 }
@@ -195,6 +200,9 @@ pub struct Decoration {
     /// The layer the border box paints in, from the block's
     /// `z-index`.
     pub layer: i32,
+    /// How far `position: relative` moves the border box, across and
+    /// down.
+    pub offset: (f32, f32),
 }
 
 /// What a fragment tells the page it lands on: the running strings
@@ -224,11 +232,14 @@ pub(super) fn decorated(style: &ComputedStyle) -> bool {
 /// nothing. `x` and `measure` are what the block was laid out
 /// against; the border box takes its margins off them. `backdrop` is
 /// what the cascade put behind it, resolved against the asset table.
+/// `offset` is the sum of the moves of the relative blocks around it,
+/// itself included.
 pub(super) fn decoration(
     style: &ComputedStyle,
     x: f32,
     measure: f32,
     backdrop: Backdrop,
+    offset: (f32, f32),
 ) -> Option<Decoration> {
     if !decorated(style) {
         return None;
@@ -251,5 +262,6 @@ pub(super) fn decoration(
         backdrop,
         cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
         layer: style.z_index,
+        offset,
     })
 }
