@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::content::{
-    Attributes, Block, Inline, NodeId, Section, block_attributes, block_id, inline_attributes,
+    Block, Inline, NodeId, Section, block_attributes, block_id, inline_attributes, inline_id,
     origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
@@ -36,6 +36,7 @@ impl Paginator<'_> {
         let measure = geometry.measure();
         let mut builder = Builder::new(self, section.source.as_deref());
         let style = self.styles.style(section.id).clone();
+        builder.name(section.id);
         let start = builder.open(&style, &[], 0.0, measure);
         let column = style.content_box(0.0, measure);
         let whole = style.content_box(0.0, geometry.content_size().0);
@@ -247,22 +248,21 @@ impl Builder<'_, '_> {
         }
     }
 
-    /// Records the id an element carries. It lands on the first
-    /// fragment the element emits, the way a string it sets does, so
-    /// the page that fragment lands on is the page a reference to the
-    /// element prints.
-    fn name(&mut self, attributes: &Attributes) {
-        if let Some(id) = &attributes.id {
-            let marks = self.pending_marks.get_or_insert_with(Box::default);
-            marks.targets.push(id.clone());
-        }
+    /// Records a node a link can reach. It lands on the first fragment
+    /// the node emits, the way a string it sets does, so the page that
+    /// fragment lands on is the page a reference to the node prints.
+    fn name(&mut self, node: NodeId) {
+        let marks = self.pending_marks.get_or_insert_with(Box::default);
+        marks.targets.push(node);
     }
 
-    /// The same for the inlines of one block, which land on the
-    /// block's first line.
+    /// The same for the inlines of one block that carry an id, which
+    /// land on the block's first line.
     fn name_inlines(&mut self, inlines: &[Inline]) {
         for inline in inlines {
-            self.name(inline_attributes(inline));
+            if inline_attributes(inline).id.is_some() {
+                self.name(inline_id(inline));
+            }
             if let Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } = inline
@@ -409,7 +409,9 @@ impl Builder<'_, '_> {
     /// box's leading edge and breaking to `measure`.
     pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
         for block in blocks {
-            self.name(block_attributes(block));
+            if matches!(block, Block::Heading { .. }) || block_attributes(block).id.is_some() {
+                self.name(block_id(block));
+            }
             // A box against the page is not in the flow: it takes no
             // space here, and the margins that met around it still
             // meet.

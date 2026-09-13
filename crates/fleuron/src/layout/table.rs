@@ -95,9 +95,10 @@ impl<'a> Builder<'a, '_> {
         let mut cells = Vec::new();
         let mut anchors = Vec::new();
         let mut marks: Option<Box<Marks>> = None;
-        let named = std::iter::once(&row.attributes).chain(row.cells.iter().map(|c| &c.attributes));
-        for id in named.filter_map(|attributes| attributes.id.clone()) {
-            marks.get_or_insert_with(Box::default).targets.push(id);
+        let named = std::iter::once((row.id, &row.attributes))
+            .chain(row.cells.iter().map(|c| (c.id, &c.attributes)));
+        for (node, _) in named.filter(|(_, attributes)| attributes.id.is_some()) {
+            marks.get_or_insert_with(Box::default).targets.push(node);
         }
         let mut height = 0.0f32;
         for (column, cell) in row.cells.iter().enumerate() {

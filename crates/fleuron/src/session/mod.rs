@@ -174,6 +174,11 @@ impl Cached {
             return;
         }
         for fragment in &mut self.fragments {
+            if let Some(marks) = &mut fragment.marks {
+                for node in &mut marks.targets {
+                    *node = node.shifted(step);
+                }
+            }
             if let Piece::Anchor(node) = &mut fragment.piece {
                 *node = node.shifted(step);
             }

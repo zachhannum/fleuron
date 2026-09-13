@@ -41,9 +41,10 @@ pub(super) fn section_key(
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);
     if styles.refers() {
-        let named = Named::in_section(section, styles);
-        for id in named.pages.iter().chain(&named.texts) {
-            (id, references.text(id)).hash(h);
+        let named = Named::in_section(section, styles, references);
+        (named.pages.len(), named.texts.len()).hash(h);
+        for node in named.pages.iter().chain(&named.texts) {
+            references.text(*node).hash(h);
         }
     }
     hasher.finish()
@@ -52,11 +53,12 @@ pub(super) fn section_key(
 /// What one section's lines were built from on the pass that prints
 /// the pages its references name: what they were built from on the
 /// pass before, and the folio each of those references prints.
-pub(super) fn settled_key(key: u64, pages: &[String], found: &BTreeMap<String, u32>) -> u64 {
+pub(super) fn settled_key(key: u64, pages: &[NodeId], found: &BTreeMap<NodeId, u32>) -> u64 {
     let mut hasher = DefaultHasher::new();
     key.hash(&mut hasher);
-    for id in pages {
-        (id, found.get(id)).hash(&mut hasher);
+    // The folio, not the node: ids move when an earlier section changes.
+    for node in pages {
+        found.get(node).hash(&mut hasher);
     }
     hasher.finish()
 }

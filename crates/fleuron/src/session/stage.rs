@@ -192,7 +192,7 @@ impl Session<'_> {
         let mut warnings: Vec<Warning> = Vec::new();
         let mut settled = Vec::with_capacity(self.book.sections.len());
         for (section, first) in self.book.sections.iter().zip(&self.lines) {
-            let named = Named::in_section(section, &self.styles);
+            let named = Named::in_section(section, &self.styles, &self.references);
             if named.pages.is_empty() {
                 settled.push(None);
                 continue;
@@ -233,7 +233,7 @@ impl Session<'_> {
         self.settled = settled;
         self.stages.settle += 1;
         let paged = self.fragment(true);
-        warnings.extend(moved(&found, &landed(&paged), &printed));
+        warnings.extend(moved(&found, &landed(&paged), &printed, &self.references));
         self.settle_warnings = warnings;
         paged
     }

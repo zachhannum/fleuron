@@ -68,15 +68,13 @@ pub enum Target {
 }
 
 impl Target {
-    /// The id this target names, read from `href` where the target is
-    /// the link's own. A url that is not `#` and an id names nothing
-    /// in the book.
-    pub fn id<'a>(&'a self, href: Option<&'a str>) -> Option<&'a str> {
-        let url = match self {
-            Target::Href => href?,
-            Target::Url(url) => url,
-        };
-        url.strip_prefix('#').filter(|id| !id.is_empty())
+    /// The url this target names, read from `href` where the target is
+    /// the link's own.
+    pub fn url<'a>(&'a self, href: Option<&'a str>) -> Option<&'a str> {
+        match self {
+            Target::Href => href,
+            Target::Url(url) => Some(url),
+        }
     }
 }
 

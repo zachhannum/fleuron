@@ -59,6 +59,10 @@ use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
+mod anchor;
+
+pub use anchor::{Anchors, LinkTarget};
+
 /// Identity of one node in the content tree, for diagnostics and
 /// incremental relayout.
 ///
