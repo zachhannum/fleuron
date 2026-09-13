@@ -83,6 +83,19 @@ impl Session {
         self.engine.add_font(source).map_err(js_error)
     }
 
+    /// Keeps font bytes under the url a `@font-face` names them by.
+    ///
+    /// The sheet's rule decides the family, the weight and the
+    /// style the face registers under. The file and the sheet can
+    /// cross in either order, and a rule whose url has no bytes
+    /// warns on the next display structure.
+    #[wasm_bindgen(js_name = addFontFile)]
+    pub fn add_font_file(&mut self, url: &str, bytes: &[u8]) -> Result<(), JsError> {
+        self.engine
+            .add_font_file(url, bytes.to_vec())
+            .map_err(js_error)
+    }
+
     /// Which markdown the sources are written in: `fleuron`,
     /// `commonmark`, `gfm` or `obsidian`. `fleuron` is what a session
     /// reads until it is told otherwise.

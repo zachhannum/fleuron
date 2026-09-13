@@ -90,6 +90,7 @@ function info(pdf: Uint8Array): string | null {
 function reference(inputs: string[] = [fixture], named: string[] = []): {
   pages: number;
   pdf: Uint8Array;
+  stderr: string;
 } {
   const cli = flag('--cli') ?? join(root, 'target', 'release', 'fleuron');
   const out = join(mkdtempSync(join(tmpdir(), 'fleuron-harness-')), 'reference.pdf');
@@ -102,7 +103,23 @@ function reference(inputs: string[] = [fixture], named: string[] = []): {
   if (counted?.[1] === undefined) {
     throw new Error(`the CLI reported no page count: ${run.stderr}`);
   }
-  return { pages: Number(counted[1]), pdf: readFileSync(out) };
+  return { pages: Number(counted[1]), pdf: readFileSync(out), stderr: run.stderr };
+}
+
+/** The faces a PDF embeds, subset tags removed, or null where `pdffonts` is not installed. */
+function embedded(pdf: Uint8Array): string[] | null {
+  const path = join(mkdtempSync(join(tmpdir(), 'fleuron-fonts-')), 'book.pdf');
+  writeFileSync(path, pdf);
+  const run = spawnSync('pdffonts', [path], { encoding: 'utf8' });
+  if (run.status !== 0) {
+    return null;
+  }
+  return run.stdout
+    .split('\n')
+    .slice(2)
+    .map((line) => (line.split(/\s+/)[0] ?? '').replace(/^[A-Z]{6}\+/, ''))
+    .filter((name) => name !== '')
+    .sort();
 }
 
 /** A worker running the module, and a client talking to it. */
@@ -1139,6 +1156,96 @@ check(
     !sizesOf(reversed).includes(14),
   `layered ${sizesOf(layered).join(' ')}, concatenated ${sizesOf(concatenated).join(' ')},` +
     ` reversed ${sizesOf(reversed).join(' ')}`,
+);
+
+// A face through `@font-face`. The rule names a url and the family,
+// weight and style to register under. The sheet crosses first and the
+// bytes cross after it, under that url. The CLI reads the same file
+// from beside the manuscript, and the two runs agree about the book.
+const fellUrl = 'fonts/IMFellEnglishSC-Regular.ttf';
+const fellCss =
+  `@font-face { font-family: "Fell Caps"; src: url("${fellUrl}"); font-weight: 400; font-style: normal }\n` +
+  'h3 { font-family: "Fell Caps", serif }\n';
+const fellFolder = mkdtempSync(join(tmpdir(), 'fleuron-face-'));
+const fellSheet = join(fellFolder, 'faces.css');
+writeFileSync(fellSheet, fellCss);
+// A copy of the manuscript away from the fixtures has no font file beside it.
+const strandedPath = join(fellFolder, 'gulliver-excerpt.md');
+writeFileSync(strandedPath, markdown);
+const stranded = reference([strandedPath], ['-c', fellSheet]);
+const withFace = reference([fixture], ['-c', fellSheet]);
+
+const unloaded = await client.preview([styleOp(fellCss)]);
+const unloadedWarning = unloaded?.warnings.find((warning) => warning.message.includes('Fell Caps'));
+check(
+  'a `@font-face` whose url has no bytes warns the way the CLI warns',
+  unloadedWarning !== undefined &&
+    stranded.stderr.includes(`fleuron: warning: ${unloadedWarning.message}`),
+  unloadedWarning?.message ?? 'no warning names the family',
+);
+
+const fellBytes = new Uint8Array(readFileSync(join(root, 'fixtures', fellUrl)));
+const loaded = await client.preview([{ op: 'font', url: fellUrl, bytes: fellBytes }]);
+const fellIds = (loaded?.fonts ?? []).flatMap((font, id) => (font.family === 'fell caps' ? [id] : []));
+const fellId = fellIds[0] ?? -1;
+check(
+  'bytes sent under that url after the sheet register the face the rule declares',
+  fellIds.length === 1 &&
+    loaded?.fonts[fellId]?.attributes.weight === 400 &&
+    loaded?.fonts[fellId]?.attributes.italic === false,
+  JSON.stringify(loaded?.fonts.map((font) => font.family)),
+);
+const heads = (loaded?.pages ?? [])
+  .flatMap((page) => page.items)
+  .filter((item): item is TextItem => item.kind === 'text' && item.text.includes('CHAPTER'));
+check(
+  'and the chapter heads set in that face',
+  heads.length > 0 && heads.every((item) => item.fontId === fellId),
+  heads.map((item) => item.fontId).join(' '),
+);
+check(
+  'and no warning names the family',
+  loaded !== null && !loaded.warnings.some((warning) => warning.message.includes('Fell Caps')),
+);
+check(
+  'the book with the face sets in the same pages as the CLI sets it',
+  loaded?.pages.length === withFace.pages,
+  `worker ${loaded?.pages.length}, CLI ${withFace.pages}`,
+);
+const fellPdf = await client.exportPdf();
+const fellFaces = fellPdf === null ? null : embedded(fellPdf);
+const cliFaces = embedded(withFace.pdf);
+if (fellFaces === null || cliFaces === null) {
+  console.log('  skip  the PDF embeds the face the CLI embeds (pdffonts not installed)');
+  if (process.env['FLEURON_WASM_REQUIRE_TOOLS'] === '1') {
+    failures += 1;
+  }
+} else {
+  check(
+    'the PDF embeds the face the CLI embeds',
+    fellFaces.some((name) => /fell/i.test(name)) &&
+      JSON.stringify(fellFaces) === JSON.stringify(cliFaces),
+    `worker ${fellFaces.join(' ')}, CLI ${cliFaces.join(' ')}`,
+  );
+}
+
+const fellLines = client.stages.lines;
+const again = await client.preview([styleOp(fellCss)]);
+check(
+  'the same sheet again registers the face no second time and breaks no line again',
+  again !== null &&
+    again.fonts.length === (loaded?.fonts.length ?? -1) &&
+    client.stages.lines === fellLines,
+  `${again?.fonts.length} faces, lines broken ${fellLines} before, ${client.stages.lines} after`,
+);
+const unruled = await client.preview([styleOp('h3 { font-family: "Fell Caps", serif }\n')]);
+check(
+  'a sheet without the rule leaves no face under the family',
+  unruled !== null &&
+    !unruled.fonts.some((font) => font.family === 'fell caps') &&
+    unruled.pages
+      .flatMap((page) => page.items)
+      .every((item) => item.kind !== 'text' || item.fontId < unruled.fonts.length),
 );
 
 // The error channel: what the engine refuses comes back as an error

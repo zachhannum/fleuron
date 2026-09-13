@@ -116,9 +116,9 @@ export class Client {
    * The file a face was registered from, for a painter that has to
    * draw with the bytes the engine shaped with.
    *
-   * A question rather than a render: nothing overtakes it, and the
-   * answer does not go stale, since a face keeps its id for the
-   * session's life.
+   * A question rather than a render: nothing overtakes it. A face a
+   * `@font-face` rule declares can take a new id when the sheet or its
+   * file changes, so ask with an id from the latest font table.
    */
   async fontBytes(font: number): Promise<Uint8Array> {
     const response = await this.send({ ops: [], want: 'font', font });

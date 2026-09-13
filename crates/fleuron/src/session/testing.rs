@@ -18,6 +18,10 @@ pub(super) fn registry() -> &'static FontRegistry {
 /// The fixture map: a JPEG the layout pass sizes from its header.
 pub(super) const MAP: &[u8] = include_bytes!("../../../../fixtures/images/plate.jpg");
 
+/// A static face of one style: IM Fell English SC.
+pub(super) const FELL: &[u8] =
+    include_bytes!("../../../../fixtures/fonts/IMFellEnglishSC-Regular.ttf");
+
 /// A GIF's minimal header: the signature and a logical screen
 /// descriptor, which is all `probe` reads for the format.
 /// Anything after it is ignored, which is what lets two of these
