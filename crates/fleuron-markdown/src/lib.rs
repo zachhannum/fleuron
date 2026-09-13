@@ -209,6 +209,7 @@ pub fn assemble(metadata: Metadata, sections: Vec<Section>) -> Book {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fleuron::content::{Block, Inline, LinkTarget};
 
     #[test]
     fn a_heading_opens_a_section_at_its_level_or_shallower() {
@@ -234,91 +235,159 @@ mod tests {
         assert!(ids[0] > 0 && ids[1] > ids[0], "{ids:?}");
     }
 
-    /// Each source read whole, composed in the order given, and what
-    /// the frontend complained about.
+    /// Each source read whole as an Obsidian vault holds it, composed
+    /// in the order given, and what the frontend complained about.
     fn composed(sources: &[(&str, &str)]) -> (Book, Vec<Warning>) {
-        let per_file = Options {
+        let vault = Options {
             sections: Sections::Whole,
-            ..Options::default()
+            dialect: Dialect::obsidian(),
         };
         let mut sections = Vec::new();
         let mut warnings = Vec::new();
         for (name, text) in sources {
-            let (read, complaints) = to_sections(text, name, &per_file);
+            let (read, complaints) = to_sections(text, name, &vault);
             sections.extend(read);
             warnings.extend(complaints);
         }
         (assemble(Metadata::default(), sections), warnings)
     }
 
-    /// The id of every heading in the book, in document order.
-    fn heading_ids(book: &Book) -> Vec<Option<&str>> {
-        book.sections
+    /// The `nth` heading read from `source`, counted from 0.
+    fn heading_in(book: &Book, source: &str, nth: usize) -> LinkTarget {
+        let node = book
+            .sections
             .iter()
+            .filter(|section| section.source.as_deref() == Some(source))
             .flat_map(|section| &section.blocks)
             .filter_map(|block| match block {
-                fleuron::content::Block::Heading { attributes, .. } => {
-                    Some(attributes.id.as_deref())
-                }
+                Block::Heading { id, .. } => Some(*id),
+                _ => None,
+            })
+            .nth(nth)
+            .expect("the source has the heading");
+        LinkTarget::Node(node)
+    }
+
+    /// The url of every link in the paragraphs read from `source`.
+    fn urls(book: &Book, source: &str) -> Vec<String> {
+        book.sections
+            .iter()
+            .filter(|section| section.source.as_deref() == Some(source))
+            .flat_map(|section| &section.blocks)
+            .filter_map(|block| match block {
+                Block::Paragraph { inlines, .. } => Some(inlines),
+                _ => None,
+            })
+            .flatten()
+            .filter_map(|inline| match inline {
+                Inline::Link { url, .. } => Some(url.clone()),
                 _ => None,
             })
             .collect()
     }
 
-    /// Acceptance: `# The Hunter` with no attribute run takes the id
-    /// `the-hunter`.
+    /// Acceptance: a markdown link and a wikilink to a heading in
+    /// another note reach it, in each form Obsidian writes.
     #[test]
-    fn a_heading_with_no_attribute_run_takes_a_default_id() {
-        let (book, warnings) = composed(&[("one.md", "# The Hunter\n\nHe waited.\n")]);
-        assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(heading_ids(&book), [Some("the-hunter")]);
-    }
-
-    /// Acceptance: two headings with the same text in two sources take
-    /// `x` and `x-2`, in reading order, and nothing warns.
-    #[test]
-    fn default_ids_are_counted_over_the_whole_book() {
+    fn each_link_form_reaches_the_heading_in_its_file() {
         let (book, warnings) = composed(&[
-            ("one.md", "# Chapter One\n\nA.\n"),
-            ("two.md", "# Chapter One\n\nB.\n"),
+            (
+                "Chapter 1.md",
+                "# The Voyage\n\n[a](chapter-03.md#the-hunter)\n[b](Chapter%203.md#The%20Hunter)\n\
+                 [[Chapter 3#The Hunter]]\n[[Chapter 3#The Hunter|the hunter]]\n",
+            ),
+            ("Chapter 3.md", "# The Hunter\n\nHe waited.\n"),
+            ("chapter-03.md", "# The Hunter\n\nHe waited again.\n"),
         ]);
         assert!(warnings.is_empty(), "{warnings:?}");
+        let anchors = book.anchors();
+        let urls = urls(&book, "Chapter 1.md");
+        let reached: Vec<LinkTarget> = urls
+            .iter()
+            .map(|url| anchors.resolve(url, Some("Chapter 1.md")))
+            .collect();
+        let (spaced, slugged) = (
+            heading_in(&book, "Chapter 3.md", 0),
+            heading_in(&book, "chapter-03.md", 0),
+        );
+        assert_eq!(reached, [slugged, spaced, spaced, spaced], "{urls:?}");
+    }
+
+    /// Acceptance: a link with only `#heading` reaches the heading in
+    /// the source it is written in, so two chapters can each have one
+    /// called Notes.
+    #[test]
+    fn a_link_with_no_file_reaches_its_own_source() {
+        let chapter = "# Chapter\n\nSee [the notes](#notes).\n\n# Notes\n";
+        let (book, warnings) = composed(&[("one.md", chapter), ("two.md", chapter)]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let anchors = book.anchors();
+        for source in ["one.md", "two.md"] {
+            assert_eq!(
+                anchors.resolve("#notes", Some(source)),
+                heading_in(&book, source, 1),
+            );
+        }
+    }
+
+    /// Acceptance: two headings with the same text in one source take
+    /// `x` and `x-2`. The text form reaches the first, as in Obsidian.
+    #[test]
+    fn slugs_count_within_one_source() {
+        let (book, _) = composed(&[("one.md", "# Chapter One\n\n# Chapter One\n")]);
+        let anchors = book.anchors();
+        let at = |url| anchors.resolve(url, Some("one.md"));
+        assert_eq!(at("#chapter-one"), heading_in(&book, "one.md", 0));
+        assert_eq!(at("#chapter-one-2"), heading_in(&book, "one.md", 1));
+        assert_eq!(at("#Chapter One"), heading_in(&book, "one.md", 0));
+    }
+
+    /// A book read from one file and cut at its headings is one source,
+    /// so its slugs count over the whole file.
+    #[test]
+    fn slugs_count_over_a_file_cut_into_sections() {
+        let text = "# One\n\n## Notes\n\n# Two\n\n## Notes\n";
+        let (sections, _) = to_sections(text, "book.md", &Options::default());
+        let book = assemble(Metadata::default(), sections);
+        assert_eq!(book.sections.len(), 2);
+        let anchors = book.anchors();
         assert_eq!(
-            heading_ids(&book),
-            [Some("chapter-one"), Some("chapter-one-2")]
+            anchors.resolve("#notes-2", Some("book.md")),
+            heading_in(&book, "book.md", 3),
         );
     }
 
     /// Acceptance: a heading that writes `{#hunt}` takes `hunt`, and a
-    /// later `# Hunt` takes `hunt-2`.
+    /// later `# Hunt` in the same source takes `hunt-2`.
     #[test]
-    fn a_written_id_wins_over_a_default_id() {
+    fn a_written_id_comes_before_a_slug() {
         let (book, _) = composed(&[("one.md", "# The Chase {#hunt}\n\n# Hunt\n")]);
-        assert_eq!(heading_ids(&book), [Some("hunt"), Some("hunt-2")]);
+        let anchors = book.anchors();
+        assert_eq!(
+            anchors.resolve("#hunt", Some("one.md")),
+            heading_in(&book, "one.md", 0)
+        );
+        assert_eq!(
+            anchors.resolve("#hunt-2", Some("one.md")),
+            heading_in(&book, "one.md", 1)
+        );
     }
 
-    /// Acceptance: a heading whose text is only punctuation or markup
-    /// takes no default id.
+    /// Acceptance: an anchor is not written into the tree. The tree the
+    /// frontend read serializes the same after assembly, no heading
+    /// takes an id, and a byte of the heading still answers with the
+    /// run written there.
     #[test]
-    fn a_heading_of_punctuation_or_markup_takes_no_default_id() {
-        let (book, _) = composed(&[("one.md", "# ?!\n\n# *—*\n\n# <br>\n")]);
-        assert_eq!(heading_ids(&book), [None, None, None]);
-    }
-
-    /// Acceptance: a default id moves no byte offset. The tree the
-    /// frontend read serializes the same after assembly, and a byte of
-    /// the heading still answers with the run written there.
-    #[test]
-    fn a_default_id_moves_no_byte_offset() {
+    fn an_anchor_changes_nothing_in_the_tree() {
         let markdown = "# The Hunter\n\nHe *waited*.\n";
         let (read, _) = to_sections(markdown, "one.md", &Options::default());
         let before = serde_json::to_string(&read).expect("the sections serialize");
         let book = assemble(Metadata::default(), read);
-        assert_eq!(heading_ids(&book), [Some("the-hunter")]);
         assert_eq!(
             serde_json::to_string(&book.sections).expect("the sections serialize"),
             before,
         );
+        assert!(!before.contains("the-hunter"), "{before}");
 
         let byte = markdown.find("Hunter").expect("the source holds it") as u32;
         let node = book
@@ -331,17 +400,23 @@ mod tests {
         );
     }
 
-    /// Acceptance: assembled twice, a book gives the same default ids.
+    /// Acceptance: assembled twice, a book resolves each link to the
+    /// same node.
     #[test]
-    fn default_ids_are_deterministic() {
+    fn anchors_are_deterministic() {
         let sources = [
-            ("one.md", "# Chapter One\n\nA.\n"),
-            ("two.md", "# Chapter One\n\nB.\n"),
+            ("one.md", "# Chapter One\n\n[[two#Chapter One]]\n"),
+            ("two.md", "# Chapter One\n\n# Chapter One\n"),
         ];
         let (first, _) = composed(&sources);
         let (second, _) = composed(&sources);
         assert_eq!(first, second);
-        assert_eq!(heading_ids(&first), heading_ids(&second));
+        for url in ["two#Chapter One", "two.md#chapter-one-2", "#chapter-one"] {
+            assert_eq!(
+                first.anchors().resolve(url, Some("one.md")),
+                second.anchors().resolve(url, Some("one.md")),
+            );
+        }
     }
 
     /// A chapter file's frontmatter is the chapter's. Book metadata

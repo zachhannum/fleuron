@@ -306,12 +306,13 @@ impl Paginator<'_> {
             self.refer(resolved);
             self.settles.set(self.settles.get() + 1);
             paged = self.pass(book);
-            let printed: BTreeSet<String> = book
+            let references = self.references.borrow();
+            let printed: BTreeSet<_> = book
                 .sections
                 .iter()
-                .flat_map(|section| Named::in_section(section, self.styles).pages)
+                .flat_map(|section| Named::in_section(section, self.styles, &references).pages)
                 .collect();
-            for warning in moved(&found, &landed(&paged), &printed) {
+            for warning in moved(&found, &landed(&paged), &printed, &references) {
                 self.warn(warning.message, warning.origin);
             }
         }

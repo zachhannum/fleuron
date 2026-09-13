@@ -59,7 +59,7 @@ pub(crate) struct Paged {
     pub(crate) anchors: BTreeMap<NodeId, usize>,
     /// The page each id landed on: the page of the first fragment of
     /// the first element that carries it.
-    pub(crate) targets: BTreeMap<String, usize>,
+    pub(crate) targets: BTreeMap<NodeId, usize>,
 }
 
 /// One fragment placed on the page being built.
@@ -162,7 +162,7 @@ pub(super) struct Flow<'a, 'p> {
     /// Anchors waiting for the fragment whose page they take.
     pub(super) pending_anchors: Vec<NodeId>,
     /// Where each id landed, filled in as pages close.
-    targets: BTreeMap<String, usize>,
+    targets: BTreeMap<NodeId, usize>,
     /// Whether what is placed is painted. The pass that settles where
     /// the anchors land keeps no pages, so it paints nothing: which
     /// page a fragment falls on is a question about heights.

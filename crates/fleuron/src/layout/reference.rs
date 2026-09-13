@@ -1,10 +1,10 @@
 //! Cross-references: the text the sheet generates around an inline
-//! element, and the page the element it names lands on.
+//! element, and the page the node a link reaches lands on.
 //!
 //! A page number is known after pagination, and the reference that
 //! prints it is set before. So a book whose references print pages is
 //! laid out twice. The first pass sets a placeholder where each page
-//! number goes, and reads off the page each id landed on. The second
+//! number goes, and reads off the page each node landed on. The second
 //! sets the numbers the first found. The second pass ships, and where
 //! it moved an element the first one found, the run says so.
 
@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::Warning;
 use crate::content::{
-    Block, Book, Inline, NodeId, Row, Section, block_attributes, inline_attributes, inline_id,
+    Anchors, Block, Book, Inline, LinkTarget, NodeId, Row, Section, block_id, inline_id,
     inline_position, origin, rows, text,
 };
 use crate::lines::{Generated, InlineStyles, ParagraphStyle};
@@ -30,44 +30,67 @@ const PLACEHOLDER: &str = "000";
 /// What the references in one book resolve against.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct References {
-    /// The text of each element an id names, by that id. `None` where
-    /// the book is not known, so nothing can be missing from it.
-    texts: Option<Arc<BTreeMap<String, String>>>,
-    /// The folio each id landed on in the pass before this one.
+    /// What the links reach. `None` where the book is not known, so
+    /// nothing can be missing from it.
+    known: Option<Arc<Known>>,
+    /// The folio each node landed on in the pass before this one.
     /// `None` on the pass that finds them.
-    folios: Option<Arc<BTreeMap<String, u32>>>,
+    folios: Option<Arc<BTreeMap<NodeId, u32>>>,
+}
+
+#[derive(Debug)]
+struct Known {
+    anchors: Anchors,
+    /// The text of each node a link can reach.
+    texts: BTreeMap<NodeId, String>,
 }
 
 impl References {
-    /// The ids of one book, each with its element's text. The first
-    /// element to take an id keeps it.
+    /// What the links in one book reach, each node with its text.
     pub(crate) fn of(book: &Book) -> References {
+        let anchors = book.anchors();
         let mut texts = BTreeMap::new();
         for section in &book.sections {
-            texts_of(&section.blocks, &mut texts);
+            if anchors.reaches(section.id) {
+                texts.insert(section.id, section_text(section));
+            }
+            texts_of(&section.blocks, &anchors, &mut texts);
         }
         References {
-            texts: Some(Arc::new(texts)),
+            known: Some(Arc::new(Known { anchors, texts })),
             folios: None,
         }
     }
 
-    /// The same, with the folio each id landed on.
-    pub(crate) fn landed(&self, folios: BTreeMap<String, u32>) -> References {
+    /// The same, with the folio each node landed on.
+    pub(crate) fn landed(&self, folios: BTreeMap<NodeId, u32>) -> References {
         References {
-            texts: self.texts.clone(),
+            known: self.known.clone(),
             folios: Some(Arc::new(folios)),
         }
     }
 
-    /// The text of the element one id names.
-    pub(crate) fn text(&self, id: &str) -> Option<&str> {
-        self.texts.as_ref()?.get(id).map(String::as_str)
+    /// The text of one node a link can reach.
+    pub(crate) fn text(&self, node: NodeId) -> Option<&str> {
+        self.known.as_ref()?.texts.get(&node).map(String::as_str)
+    }
+
+    /// What a warning calls one node a link can reach.
+    fn name(&self, node: NodeId) -> String {
+        self.known
+            .as_ref()
+            .and_then(|known| known.anchors.name(node))
+            .map_or_else(|| format!("node {}", node.get()), str::to_string)
     }
 
     /// The text one `content` value generates on an element whose
-    /// `href` is `href`, or why it generates none.
-    fn resolve(&self, content: &Content, href: Option<&str>) -> Result<String, Unresolved> {
+    /// `href` is `href`, written in `source`, or why it generates none.
+    fn resolve(
+        &self,
+        content: &Content,
+        href: Option<&str>,
+        source: Option<&str>,
+    ) -> Result<String, Unresolved> {
         let pieces = match content {
             Content::Text(text) => return Ok(text.clone()),
             Content::Pieces(pieces) => pieces,
@@ -78,38 +101,43 @@ impl References {
             match piece {
                 ContentPiece::Text(text) => generated.push_str(text),
                 ContentPiece::TargetCounter { target, style } => {
-                    let id = self.target(target, href)?;
-                    match &self.folios {
-                        None => generated.push_str(PLACEHOLDER),
-                        Some(folios) => {
+                    let node = self.target(target, href, source)?;
+                    match (&self.folios, node) {
+                        (Some(folios), Some(node)) => {
                             let folio = folios
-                                .get(id)
-                                .ok_or_else(|| Unresolved::Unplaced(id.to_string()))?;
+                                .get(&node)
+                                .ok_or_else(|| Unresolved::Unplaced(self.name(node)))?;
                             generated.push_str(&style.format(*folio));
                         }
+                        _ => generated.push_str(PLACEHOLDER),
                     }
                 }
                 ContentPiece::TargetText { target } => {
-                    let id = self.target(target, href)?;
-                    generated.push_str(self.text(id).unwrap_or_default());
+                    if let Some(node) = self.target(target, href, source)? {
+                        generated.push_str(self.text(node).unwrap_or_default());
+                    }
                 }
             }
         }
         Ok(generated)
     }
 
-    /// The id one target names, where an element carries it.
-    fn target<'t>(&self, target: &'t Target, href: Option<&'t str>) -> Result<&'t str, Unresolved> {
-        let Some(id) = target.id(href) else {
-            return Err(match (target, href) {
-                (Target::Href, None) => Unresolved::NotALink,
-                (Target::Href, Some(url)) => Unresolved::NotAnId(url.to_string()),
-                (Target::Url(url), _) => Unresolved::NotAnId(url.clone()),
-            });
+    /// The node one target reaches from `source`. `None` where the
+    /// book is not known.
+    fn target(
+        &self,
+        target: &Target,
+        href: Option<&str>,
+        source: Option<&str>,
+    ) -> Result<Option<NodeId>, Unresolved> {
+        let url = target.url(href).ok_or(Unresolved::NotALink)?;
+        let Some(known) = &self.known else {
+            return Ok(None);
         };
-        match &self.texts {
-            Some(texts) if !texts.contains_key(id) => Err(Unresolved::Missing(id.to_string())),
-            _ => Ok(id),
+        match known.anchors.resolve(url, source) {
+            LinkTarget::Node(node) => Ok(Some(node)),
+            LinkTarget::Outside => Err(Unresolved::Outside),
+            LinkTarget::Missing => Err(Unresolved::Missing(url.to_string())),
         }
     }
 }
@@ -118,57 +146,61 @@ impl References {
 enum Unresolved {
     /// `attr(href url)` on an element that is not a link.
     NotALink,
-    /// A url that does not name an id.
-    NotAnId(String),
-    /// An id no element carries.
+    /// A url outside the book, which a sheet that styles every link
+    /// meets on purpose.
+    Outside,
+    /// A url that reaches nothing in the book.
     Missing(String),
-    /// An id whose element reached no page.
+    /// A node that reached no page, by its name.
     Unplaced(String),
 }
 
 impl Unresolved {
-    fn message(&self) -> String {
-        match self {
+    fn message(&self) -> Option<String> {
+        Some(match self {
             Unresolved::NotALink => "`attr(href url)` is used on an element that is not a link. \
                                      Nothing is generated."
                 .to_string(),
-            Unresolved::NotAnId(url) => {
-                format!("`{url}` is not an id in the book. Nothing is generated.")
+            Unresolved::Outside => return None,
+            Unresolved::Missing(url) => {
+                format!("`{url}` names nothing in the book. Nothing is generated.")
             }
-            Unresolved::Missing(id) => {
-                format!("No element has the id `{id}`. Nothing is generated.")
+            Unresolved::Unplaced(name) => {
+                format!("`{name}` is on no page. Nothing is generated.")
             }
-            Unresolved::Unplaced(id) => {
-                format!("The element with the id `{id}` is on no page. Nothing is generated.")
-            }
-        }
+        })
     }
 }
 
-/// Takes one id for the element that carries it, unless an element
-/// before it took the id already.
-fn claim(texts: &mut BTreeMap<String, String>, id: &Option<String>, text: impl FnOnce() -> String) {
-    if let Some(id) = id {
-        texts.entry(id.clone()).or_insert_with(text);
+/// Takes the text of one node a link can reach, unless an element
+/// before it took the node already.
+fn claim(
+    texts: &mut BTreeMap<NodeId, String>,
+    anchors: &Anchors,
+    node: NodeId,
+    text: impl FnOnce() -> String,
+) {
+    if anchors.reaches(node) {
+        texts.entry(node).or_insert_with(text);
     }
 }
 
-/// The text of every element an id names, in these blocks and
+/// The text of every node a link can reach, in these blocks and
 /// everything inside them.
-fn texts_of(blocks: &[Block], texts: &mut BTreeMap<String, String>) {
+fn texts_of(blocks: &[Block], anchors: &Anchors, texts: &mut BTreeMap<NodeId, String>) {
     for block in blocks {
-        claim(texts, &block_attributes(block).id, || block_text(block));
+        claim(texts, anchors, block_id(block), || block_text(block));
         match block {
             Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
-                inline_texts(inlines, texts)
+                inline_texts(inlines, anchors, texts)
             }
-            Block::Blockquote { blocks, .. } => texts_of(blocks, texts),
+            Block::Blockquote { blocks, .. } => texts_of(blocks, anchors, texts),
             Block::Table { head, body, .. } => {
                 for row in rows(head, body) {
-                    claim(texts, &row.attributes.id, || row_text(row));
+                    claim(texts, anchors, row.id, || row_text(row));
                     for cell in &row.cells {
-                        claim(texts, &cell.attributes.id, || blocks_text(&cell.blocks));
-                        texts_of(&cell.blocks, texts);
+                        claim(texts, anchors, cell.id, || blocks_text(&cell.blocks));
+                        texts_of(&cell.blocks, anchors, texts);
                     }
                 }
             }
@@ -178,18 +210,30 @@ fn texts_of(blocks: &[Block], texts: &mut BTreeMap<String, String>) {
 }
 
 /// The same, over the inlines of one block.
-fn inline_texts(inlines: &[Inline], texts: &mut BTreeMap<String, String>) {
+fn inline_texts(inlines: &[Inline], anchors: &Anchors, texts: &mut BTreeMap<NodeId, String>) {
     for inline in inlines {
-        claim(texts, &inline_attributes(inline).id, || {
+        claim(texts, anchors, inline_id(inline), || {
             text(std::slice::from_ref(inline))
         });
         if let Inline::Emphasis { children, .. }
         | Inline::Strong { children, .. }
         | Inline::Link { children, .. } = inline
         {
-            inline_texts(children, texts);
+            inline_texts(children, anchors, texts);
         }
     }
+}
+
+/// What `target-text()` prints for a link to a whole source: the
+/// section's title, or the words of the heading it opens with.
+fn section_text(section: &Section) -> String {
+    section
+        .title
+        .clone()
+        .unwrap_or_else(|| match section.blocks.first() {
+            Some(block @ Block::Heading { .. }) => block_text(block),
+            _ => String::new(),
+        })
 }
 
 /// What `target-text()` prints for one block: its words, markup
@@ -220,34 +264,45 @@ fn blocks_text(blocks: &[Block]) -> String {
     blocks.iter().map(block_text).collect::<Vec<_>>().join(" ")
 }
 
-/// The ids one section's references name, in the order they are
+/// The nodes one section's references reach, in the order they are
 /// written.
 #[derive(Debug, Default)]
 pub(crate) struct Named {
     /// Those whose page a reference prints.
-    pub(crate) pages: Vec<String>,
+    pub(crate) pages: Vec<NodeId>,
     /// Those whose text a reference prints.
-    pub(crate) texts: Vec<String>,
+    pub(crate) texts: Vec<NodeId>,
 }
 
 impl Named {
-    /// What the references in one section name.
-    pub(crate) fn in_section(section: &Section, styles: &StyleTree) -> Named {
+    /// What the references in one section reach.
+    pub(crate) fn in_section(
+        section: &Section,
+        styles: &StyleTree,
+        references: &References,
+    ) -> Named {
         let mut named = Named::default();
-        named.blocks(&section.blocks, styles);
+        let source = section.source.as_deref();
+        named.blocks(&section.blocks, styles, references, source);
         named
     }
 
-    fn blocks(&mut self, blocks: &[Block], styles: &StyleTree) {
+    fn blocks(
+        &mut self,
+        blocks: &[Block],
+        styles: &StyleTree,
+        references: &References,
+        source: Option<&str>,
+    ) {
         for block in blocks {
             match block {
                 Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
-                    self.inlines(inlines, styles)
+                    self.inlines(inlines, styles, references, source)
                 }
-                Block::Blockquote { blocks, .. } => self.blocks(blocks, styles),
+                Block::Blockquote { blocks, .. } => self.blocks(blocks, styles, references, source),
                 Block::Table { head, body, .. } => {
                     for cell in rows(head, body).flat_map(|row| &row.cells) {
-                        self.blocks(&cell.blocks, styles);
+                        self.blocks(&cell.blocks, styles, references, source);
                     }
                 }
                 Block::ThematicBreak { .. } | Block::Image { .. } => {}
@@ -255,7 +310,13 @@ impl Named {
         }
     }
 
-    fn inlines(&mut self, inlines: &[Inline], styles: &StyleTree) {
+    fn inlines(
+        &mut self,
+        inlines: &[Inline],
+        styles: &StyleTree,
+        references: &References,
+        source: Option<&str>,
+    ) {
         for inline in inlines {
             let (href, children) = match inline {
                 Inline::Text { .. } => continue,
@@ -276,42 +337,44 @@ impl Named {
                         ContentPiece::TargetCounter { target, .. } => (&mut self.pages, target),
                         ContentPiece::TargetText { target } => (&mut self.texts, target),
                     };
-                    if let Some(id) = target.id(href) {
-                        list.push(id.to_string());
+                    if let Ok(Some(node)) = references.target(target, href, source) {
+                        list.push(node);
                     }
                 }
             }
             if let Some(children) = children {
-                self.inlines(children, styles);
+                self.inlines(children, styles, references, source);
             }
         }
     }
 }
 
-/// The folio each id landed on, off one pass's pages.
-pub(crate) fn landed(paged: &Paged) -> BTreeMap<String, u32> {
+/// The folio each node landed on, off one pass's pages.
+pub(crate) fn landed(paged: &Paged) -> BTreeMap<NodeId, u32> {
     let numbers = folios(&paged.infos);
     paged
         .targets
         .iter()
-        .map(|(id, index)| (id.clone(), numbers[*index]))
+        .map(|(node, index)| (*node, numbers[*index]))
         .collect()
 }
 
-/// A warning for every element a reference prints the page of that
-/// the second pass set on another page than the first found it on.
+/// A warning for every node a reference prints the page of that the
+/// second pass set on another page than the first found it on.
 pub(crate) fn moved(
-    found: &BTreeMap<String, u32>,
-    landed: &BTreeMap<String, u32>,
-    printed: &BTreeSet<String>,
+    found: &BTreeMap<NodeId, u32>,
+    landed: &BTreeMap<NodeId, u32>,
+    printed: &BTreeSet<NodeId>,
+    references: &References,
 ) -> Vec<Warning> {
     printed
         .iter()
-        .filter_map(|id| {
-            let (was, now) = (found.get(id)?, landed.get(id)?);
+        .filter_map(|node| {
+            let (was, now) = (found.get(node)?, landed.get(node)?);
             (was != now).then(|| Warning {
                 message: format!(
-                    "The page printed for `{id}` is {was}, and the element is on page {now}."
+                    "The page printed for `{}` is {was}, and the element is on page {now}.",
+                    references.name(*node),
                 ),
                 origin: None,
             })
@@ -324,7 +387,8 @@ pub(crate) fn moved(
 /// the style of every inline of a paragraph.
 pub(super) struct Referring<'r, 'a> {
     pub(super) paginator: &'r Paginator<'a>,
-    /// The file the paragraph was read from, for diagnostics.
+    /// The file the paragraph was read from, for diagnostics and for
+    /// the links that name no file.
     pub(super) source: Option<&'r str>,
 }
 
@@ -342,17 +406,18 @@ impl InlineStyles for Referring<'_, '_> {
         };
         let text = |pseudo: Option<&ComputedStyle>| {
             let pseudo = pseudo?;
-            let resolved = self
-                .paginator
-                .references
-                .borrow()
-                .resolve(&pseudo.content, href);
+            let resolved =
+                self.paginator
+                    .references
+                    .borrow()
+                    .resolve(&pseudo.content, href, self.source);
             match resolved {
                 Ok(text) => Some((text, pseudo.paragraph())),
                 Err(unresolved) => {
-                    let at = origin(self.source, inline_position(inline));
-                    self.paginator
-                        .warn(unresolved.message(), (!at.is_empty()).then_some(at));
+                    if let Some(message) = unresolved.message() {
+                        let at = origin(self.source, inline_position(inline));
+                        self.paginator.warn(message, (!at.is_empty()).then_some(at));
+                    }
                     None
                 }
             }
@@ -392,7 +457,6 @@ mod tests {
             attributes: Attributes {
                 id: None,
                 classes: classes.iter().map(|class| class.to_string()).collect(),
-                default_id: false,
             },
             position: Some(SourcePos { line, column: 5 }),
             span: None,
@@ -403,7 +467,6 @@ mod tests {
         Attributes {
             id: Some(id.into()),
             classes: Vec::new(),
-            default_id: false,
         }
     }
 
@@ -636,33 +699,41 @@ mod tests {
         book_of(vec![chapter])
     }
 
-    /// Acceptance: a reference to an id nothing carries warns, naming
-    /// the line and column it was written at. It generates nothing,
-    /// and the run goes on.
+    /// Acceptance: a reference to a heading or a file that the book
+    /// does not have warns, naming the line and column it was written
+    /// at. It generates nothing, and the run goes on.
     #[test]
-    fn a_reference_to_an_id_nothing_carries_warns_and_generates_nothing() {
-        let book = linking_to("#nowhere");
-        let (pages, warnings, _) = lay_out(PAGE_REFERENCE, &book);
-        assert_eq!(
-            warnings,
-            [Warning {
-                message: "No element has the id `nowhere`. Nothing is generated.".into(),
-                origin: Some("one.md:12:5".into()),
-            }],
-        );
-        assert!(page_words(&pages[0]).contains("See elsewhere for the rest."));
-        assert!(!page_words(&pages[0]).contains("(page"));
+    fn a_reference_to_nothing_in_the_book_warns_and_generates_nothing() {
+        for url in ["#nowhere", "two.md#the-voyage", "two.md"] {
+            let (pages, warnings, _) = lay_out(PAGE_REFERENCE, &linking_to(url));
+            assert_eq!(
+                warnings,
+                [Warning {
+                    message: format!("`{url}` names nothing in the book. Nothing is generated."),
+                    origin: Some("one.md:12:5".into()),
+                }],
+            );
+            assert!(page_words(&pages[0]).contains("See elsewhere for the rest."));
+            assert!(!page_words(&pages[0]).contains("(page"));
+        }
     }
 
-    /// A url that names no id, and `attr(href url)` on an element that
-    /// is not a link, generate nothing either, and say why.
+    /// Acceptance: a link to something outside the book prints nothing
+    /// and does not warn.
     #[test]
-    fn a_reference_that_names_no_id_warns() {
-        let (_, warnings, _) = lay_out(PAGE_REFERENCE, &linking_to("https://example.com"));
-        assert_eq!(
-            warnings[0].message,
-            "`https://example.com` is not an id in the book. Nothing is generated.",
-        );
+    fn a_link_outside_the_book_prints_nothing_quietly() {
+        for url in ["https://example.com", "mailto:someone@example.com"] {
+            let (pages, warnings, _) = lay_out(PAGE_REFERENCE, &linking_to(url));
+            assert!(warnings.is_empty(), "{url}: {warnings:?}");
+            assert!(page_words(&pages[0]).contains("See elsewhere for the rest."));
+        }
+    }
+
+    /// `attr(href url)` on an element that is not a link generates
+    /// nothing, and says why. A url the sheet writes names its target
+    /// outright.
+    #[test]
+    fn a_reference_on_an_element_that_is_not_a_link_warns() {
         let css = "em::after { content: target-counter(attr(href url), page) }";
         let (_, warnings, _) = lay_out(css, &linking_to("#the-voyage"));
         assert_eq!(
@@ -675,7 +746,6 @@ mod tests {
             }],
         );
 
-        // A url written into the sheet names its target outright.
         let css = "em::after { content: \" (page \" target-counter(\"#the-voyage\", page) \")\" }";
         let (pages, warnings, _) = lay_out(css, &linking_to("#the-voyage"));
         assert!(warnings.is_empty(), "{warnings:?}");
@@ -686,15 +756,16 @@ mod tests {
     /// byte for byte the same, over the same number of pages.
     #[test]
     fn a_book_with_references_lays_out_the_same_twice() {
-        let book = cross_referenced();
-        let styles = styled(PAGE_REFERENCE, &book);
-        let run = || layout_book(&book, &styles, registry(), no_assets());
-        let (first, second) = (run(), run());
-        assert_eq!(first.pages.len(), second.pages.len());
-        assert_eq!(
-            crate::wire::encode(&first).expect("the output encodes"),
-            crate::wire::encode(&second).expect("the output encodes"),
-        );
+        for book in [cross_referenced(), chapter_files()] {
+            let styles = styled(PAGE_REFERENCE, &book);
+            let run = || layout_book(&book, &styles, registry(), no_assets());
+            let (first, second) = (run(), run());
+            assert_eq!(first.pages.len(), second.pages.len());
+            assert_eq!(
+                crate::wire::encode(&first).expect("the output encodes"),
+                crate::wire::encode(&second).expect("the output encodes"),
+            );
+        }
     }
 
     /// Acceptance: a book with no reference to a page lays out in one
@@ -737,96 +808,116 @@ mod tests {
         assert!(page_words(&pages[0]).contains(&format!("the mark (page {at})")));
     }
 
-    /// A chapter that opens on a heading with no id written, with a
-    /// link to `to` in its first paragraph and pages of prose after it.
-    fn unnamed_chapter(title: &str, to: &str, name: &str) -> Section {
-        let mut blocks = vec![
-            heading(title),
-            paragraph_of(vec![
-                words("See "),
-                link(to, name, 3, &[]),
-                words(" for the rest."),
-            ]),
-        ];
+    /// A chapter read from `source` that opens on a heading with no id
+    /// written, with the links in its first paragraph, pages of prose,
+    /// and a closing heading `Notes` over one line of its own.
+    fn chapter_file(source: &str, title: &str, links: &[(&str, &str)]) -> Section {
+        let mut inlines = vec![words("See")];
+        for (url, name) in links {
+            inlines.push(words(" "));
+            inlines.push(link(url, name, 3, &[]));
+        }
+        let mut blocks = vec![heading(title), paragraph_of(inlines)];
         blocks.extend(long_prose(30));
-        section(blocks)
+        blocks.push(heading("Notes"));
+        blocks.push(paragraph_of(vec![words(&format!("Notes to {title}."))]));
+        let mut chapter = section(blocks);
+        chapter.source = Some(source.into());
+        chapter
     }
 
-    /// Two chapters called The Hunter after one called The Voyage,
-    /// none of them with an id written.
-    fn hunters() -> Book {
+    /// Three chapters, one note each, as an Obsidian vault keeps them.
+    /// The first links to the third in every form a link can take, and
+    /// each links to its own notes.
+    fn chapter_files() -> Book {
         book_of(vec![
-            unnamed_chapter("The Voyage", "#the-hunter", "the hunter"),
-            unnamed_chapter("The Hunter", "#the-hunter-2", "the second hunter"),
-            unnamed_chapter("The Hunter", "#the-voyage", "the voyage"),
+            chapter_file(
+                "Chapter 1.md",
+                "The Voyage",
+                &[
+                    ("Chapter%203.md#the-hunter", "slug"),
+                    ("Chapter%203.md#The%20Hunter", "encoded"),
+                    ("Chapter 3#The Hunter", "wikilink"),
+                    ("chapter 3", "file"),
+                    ("#notes", "first notes"),
+                ],
+            ),
+            chapter_file("Chapter 2.md", "The Storm", &[("#Notes", "second notes")]),
+            chapter_file("Chapter 3.md", "The Hunter", &[("#notes", "third notes")]),
         ])
     }
 
-    /// Acceptance: a heading with no id written takes one from its
-    /// text. A link to it prints its page, `target-text()` prints its
-    /// words, and a `#id` selector reaches it. Two headings with the
-    /// same text do not warn.
+    /// Acceptance: a link that names a file and a heading prints the
+    /// page of that heading, in slug form, in text form, and as a
+    /// wikilink. A link that names only the file prints the page the
+    /// file starts on.
     #[test]
-    fn a_reference_reaches_a_default_id() {
-        let book = hunters();
-        let css = format!(
-            "{PAGE_REFERENCE} a::before {{ content: target-text(attr(href url)) \" \" }} \
-             #the-hunter-2 {{ font-size: 30pt }}"
-        );
-        let styles = styled(&css, &book);
-        assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
-        let (pages, warnings, _) = lay_out(&css, &book);
+    fn a_link_names_a_heading_in_a_file() {
+        let book = chapter_files();
+        let (pages, warnings, _) = lay_out(PAGE_REFERENCE, &book);
         assert!(warnings.is_empty(), "{warnings:?}");
-
-        let hunter = page_with(&pages, "See The Hunter the second hunter").number;
-        let second = page_with(&pages, "See The Voyage the voyage").number;
-        assert!(hunter < second, "{hunter}, {second}");
-        let printed = format!("See The Hunter the hunter (page {hunter}) for the rest.");
-        let page = page_with(&pages, "See The Hunter the hunter");
+        let hunter = page_with(&pages, "See third notes").number;
+        let printed: String = ["slug", "encoded", "wikilink", "file"]
+            .map(|name| format!(" {name} (page {hunter})"))
+            .concat();
+        let page = page_with(&pages, "See slug");
         assert!(page_words(page).contains(&printed), "{}", page_words(page));
-
-        let large: Vec<u32> = pages
-            .iter()
-            .filter(|page| {
-                page.items
-                    .iter()
-                    .any(|item| matches!(item, DrawItem::Text { size, .. } if *size == 30.0))
-            })
-            .map(|page| page.number)
-            .collect();
-        assert_eq!(large, [second], "only the second hunter is 30pt");
     }
 
-    /// Acceptance: laid out twice, a book of default ids comes out
-    /// byte for byte the same.
+    /// Acceptance: `#notes` reaches the heading in the source the link
+    /// is written in. Three chapters each have one, and nothing warns.
     #[test]
-    fn a_book_of_default_ids_lays_out_the_same_twice() {
-        let book = hunters();
-        let styles = styled(PAGE_REFERENCE, &book);
-        let run = || layout_book(&book, &styles, registry(), no_assets());
-        assert_eq!(
-            crate::wire::encode(&run()).expect("the output encodes"),
-            crate::wire::encode(&run()).expect("the output encodes"),
-        );
+    fn a_link_with_no_file_reaches_its_own_source() {
+        let book = chapter_files();
+        let (pages, warnings, _) = lay_out(PAGE_REFERENCE, &book);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        for (link, title) in [
+            ("first notes", "The Voyage"),
+            ("second notes", "The Storm"),
+            ("third notes", "The Hunter"),
+        ] {
+            let notes = page_with(&pages, &format!("Notes to {title}.")).number;
+            let page = page_with(&pages, &format!("{link} (page"));
+            assert!(
+                page_words(page).contains(&format!("{link} (page {notes})")),
+                "{}",
+                page_words(page),
+            );
+        }
     }
 
-    /// The second pass ships. An element a reference prints the page
-    /// of that the second pass set on another page is named.
+    /// Acceptance: a heading anchor is not a CSS id. A sheet that names
+    /// `#the-hunter` or `#notes` reaches no heading.
+    #[test]
+    fn a_heading_anchor_is_not_a_css_id() {
+        let book = chapter_files();
+        let css = "#the-hunter, #notes { font-size: 30pt }";
+        let (pages, _, _) = lay_out(css, &book);
+        let large = pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .any(|item| matches!(item, DrawItem::Text { size, .. } if *size == 30.0));
+        assert!(!large, "a heading took the size");
+    }
+
+    /// The second pass ships. A node a reference prints the page of
+    /// that the second pass set on another page is named.
     #[test]
     fn an_element_the_second_pass_moved_is_named() {
-        let folios = |pairs: [(&str, u32); 3]| -> BTreeMap<String, u32> {
-            pairs
-                .into_iter()
-                .map(|(id, folio)| (id.into(), folio))
-                .collect()
-        };
-        let found = folios([("moved", 12), ("stayed", 99), ("unprinted", 3)]);
-        let landed = folios([("moved", 13), ("stayed", 99), ("unprinted", 4)]);
-        let printed = BTreeSet::from(["moved".to_string(), "stayed".to_string()]);
+        let book = chapter_files();
+        let references = References::of(&book);
+        let hunter = block_id(&book.sections[2].blocks[0]);
+        let notes = block_id(&book.sections[2].blocks[32]);
+        let voyage = block_id(&book.sections[0].blocks[0]);
+        let folios = |pairs: [(NodeId, u32); 3]| pairs.into_iter().collect::<BTreeMap<_, _>>();
+        let found = folios([(hunter, 12), (notes, 99), (voyage, 3)]);
+        let landed = folios([(hunter, 13), (notes, 99), (voyage, 4)]);
+        let printed = BTreeSet::from([hunter, notes]);
         assert_eq!(
-            moved(&found, &landed, &printed),
+            moved(&found, &landed, &printed, &references),
             [Warning {
-                message: "The page printed for `moved` is 12, and the element is on page 13."
+                message: "The page printed for `Chapter 3.md#the-hunter` is 12, and the \
+                          element is on page 13."
                     .into(),
                 origin: None,
             }],

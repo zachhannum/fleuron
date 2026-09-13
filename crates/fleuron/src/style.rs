@@ -1258,7 +1258,6 @@ mod tests {
                     image(Attributes {
                         id: Some("frontispiece".into()),
                         classes: vec!["map".into()],
-                        default_id: false,
                     }),
                     image(Attributes::default()),
                 ],
