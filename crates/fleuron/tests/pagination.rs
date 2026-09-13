@@ -361,6 +361,42 @@ proptest! {
         }
     }
 
+    /// Acceptance: baselines still increase down a centered page. The
+    /// chapters of the book end short, so most of its pages move, and
+    /// none of them moves out of its content box.
+    #[test]
+    fn baselines_increase_down_a_centered_page(book in chapters_strategy()) {
+        let pages = paginate_styled("@page { align-content: center }", &book);
+        prop_assert_eq!(pages.len(), paginate(&book).len());
+        for page in &pages {
+            let geometry = master(Situation::Body(page.side)).geometry;
+            let (_, top) = geometry.content_origin();
+            let baselines: Vec<f32> = page
+                .items
+                .iter()
+                .filter(|i| !is_folio(i))
+                .filter_map(|i| match i {
+                    DrawItem::Text { y, .. } => Some(*y),
+                    _ => None,
+                })
+                .collect();
+            prop_assert!(
+                baselines.windows(2).all(|pair| pair[0] <= pair[1]),
+                "page {}: {:?}",
+                page.number,
+                baselines
+            );
+            for baseline in &baselines {
+                prop_assert!(
+                    *baseline >= top && *baseline <= top + geometry.content_size().1 + 1e-3,
+                    "page {}: baseline {} outside the content box",
+                    page.number,
+                    baseline
+                );
+            }
+        }
+    }
+
     /// Every folio, on any book, sits in the bottom margin box: below
     /// the content area, inside the folio band, centered on the trim —
     /// and reads as its own page number.
