@@ -265,21 +265,22 @@ pub enum BoxDecorationBreak {
     Clone,
 }
 
-/// The width a box is asked to take, from `width`.
+/// The size a box is asked to take on one axis, from `width`,
+/// `height` or `min-height`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Width {
-    /// `auto`: the box takes the width that layout gives it.
+    /// `auto`: the box takes the size that layout gives it.
     Auto,
     /// A length, in points.
     Points(f32),
-    /// A percentage of the width of the box around it.
+    /// A percentage of the same axis of the box around it.
     Percent(f32),
 }
 
 impl Width {
-    /// The width in points inside a box `of` points wide, or `None`
-    /// for `auto`.
+    /// The size in points inside a box `of` points on the same axis,
+    /// or `None` for `auto`.
     pub fn resolve(self, of: f32) -> Option<f32> {
         match self {
             Width::Auto => None,

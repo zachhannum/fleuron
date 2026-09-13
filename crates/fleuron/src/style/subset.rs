@@ -390,6 +390,7 @@ mod tests {
             PageDeclaration::ColumnGap(_) => "column-gap",
             PageDeclaration::ColumnRuleWidth(_) => "column-rule-width",
             PageDeclaration::ColumnRuleStyle(_) => "column-rule-style",
+            PageDeclaration::AlignContent(_) => "align-content",
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
             MarginDeclaration::Content(_) => "content",
@@ -504,6 +505,8 @@ mod tests {
             Declaration::BackgroundPosition(..) => "background-position",
             Declaration::BoxDecorationBreak(_) => "box-decoration-break",
             Declaration::Width(_) => "width",
+            Declaration::Height(_) => "height",
+            Declaration::MinHeight(_) => "min-height",
             Declaration::BorderCollapse(_) => "border-collapse",
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",

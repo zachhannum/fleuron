@@ -641,6 +641,85 @@ fn the_part_title_is_lifted_and_the_chapter_titles_are_raised() {
     assert!(raised > 0, "no chapter title is drawn");
 }
 
+/// The sheet gives every chapter title a height of at least 0.75in, so
+/// the rule under each title sits one fixed distance further down than
+/// it does without the height. The book ends a few lines into its last
+/// page, and the sheet centers those lines. Every other page ends full
+/// and stays where it is, and so does the folio of the last page.
+#[test]
+fn the_chapter_titles_take_their_height_and_the_last_page_is_centered() {
+    let rule = Color::rgb(0x8a, 0x7a, 0x5c);
+    // How far under each chapter title the nearest rule sits.
+    let gaps = |pages: &[Page]| -> Vec<f32> {
+        let mut gaps = Vec::new();
+        for page in pages {
+            for item in &page.items {
+                let DrawItem::Text { y, text, .. } = item else {
+                    continue;
+                };
+                if !text.contains("CHAPTER") {
+                    continue;
+                }
+                gaps.push(
+                    fills(page, rule)
+                        .filter(|(_, top, w, h, _)| w > h && top > y)
+                        .map(|(_, top, ..)| top - y)
+                        .fold(f32::MAX, f32::min),
+                );
+            }
+        }
+        gaps
+    };
+    let pages = styled_pages();
+    let (tall, short) = (
+        gaps(&pages),
+        gaps(&styled_pages_with("h3 { min-height: auto }")),
+    );
+    assert!(!tall.is_empty(), "no chapter title is drawn");
+    assert_eq!(tall.len(), short.len(), "chapter titles came or went");
+    let lowered = tall[0] - short[0];
+    assert!(lowered > 20.0, "the rule moved {lowered} under the title");
+    for (tall, short) in tall.iter().zip(&short) {
+        assert!(
+            (tall - short - lowered).abs() < 1e-3,
+            "a rule sits {tall} under its title, and {short} without the height",
+        );
+    }
+
+    let runs = |page: &Page| -> Vec<(f32, f32, String)> {
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Text { x, y, text, .. } => Some((*x, *y, text.clone())),
+                _ => None,
+            })
+            .collect()
+    };
+    let top = styled_pages_with("@page { align-content: start }");
+    assert_eq!(pages.len(), top.len(), "centering moved a page break");
+    let last = pages.len() - 1;
+    for (page, was) in pages[..last].iter().zip(&top) {
+        assert_eq!(runs(page), runs(was), "page {} moved", page.number);
+    }
+    let (now, was) = (runs(&pages[last]), runs(&top[last]));
+    assert_eq!(now.len(), was.len());
+    let moves: Vec<f32> = now
+        .iter()
+        .zip(&was)
+        .map(|(now, was)| now.1 - was.1)
+        .collect();
+    let down = moves.iter().copied().fold(0.0f32, f32::max);
+    assert!(down > 12.0, "the last page moved {down}");
+    let still = moves.iter().filter(|moved| moved.abs() < 1e-3).count();
+    assert_eq!(still, 1, "only the folio stays: {moves:?}");
+    assert!(
+        moves
+            .iter()
+            .all(|moved| moved.abs() < 1e-3 || (moved - down).abs() < 1e-3),
+        "the lines of the last page moved apart: {moves:?}",
+    );
+}
+
 /// The prose beside the ornament wraps to the shape the ornament's
 /// own alpha channel traces, rather than to its box.
 ///

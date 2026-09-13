@@ -7,10 +7,10 @@ use crate::fonts::GenericFamily;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, ColumnSpan, Content,
-    ContentPiece, CounterStyle, Declaration, Edge, Family, FontStyle, FontVariantCaps, Hyphens,
-    LINE_WIDTHS, Length, LineHeight, Position, ShapeSource, SizeSource, StringPiece, StringSet,
-    Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
+    AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
+    ColumnSpan, Content, ContentPiece, CounterStyle, Declaration, Edge, Family, FontStyle,
+    FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position, ShapeSource, SizeSource,
+    StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -126,6 +126,18 @@ fn auto_or<T>(
         return Some(None);
     }
     parse(input).map(Some)
+}
+
+/// `align-content` on `@page`: where the content of a page sits down
+/// its content box.
+pub(super) fn align_content(input: &mut Parser<'_, '_>) -> Option<AlignContent> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "start" => Some(AlignContent::Start),
+        "center" => Some(AlignContent::Center),
+        "end" => Some(AlignContent::End),
+        _ => None,
+    }
 }
 
 /// `width`: `auto`, or a length or a percentage.

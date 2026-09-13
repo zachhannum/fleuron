@@ -30,7 +30,7 @@ pub(crate) use computed::computed_size;
 pub use counter::{Content, ContentPiece, CounterStyle, StringPiece, StringSet, Target};
 pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
-pub use page::{Align, Band, ColumnRule, Columns, MarginBox, PageGeometry};
+pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
     FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
@@ -84,6 +84,8 @@ pub enum Declaration {
     BackgroundPosition(Length, Length),
     BoxDecorationBreak(BoxDecorationBreak),
     Width(Option<Length>),
+    Height(Option<Length>),
+    MinHeight(Option<Length>),
     BorderCollapse(BorderCollapse),
     BreakBefore(Break),
     BreakAfter(Break),

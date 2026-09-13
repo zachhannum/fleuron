@@ -13,8 +13,8 @@ use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox};
 use super::color::background_color;
 use super::declaration::{Spec, at, longhand, sides, written_at};
 use super::value::{
-    background_image, background_position, background_repeat, background_size, column_count,
-    column_gap, column_width, length, line_style, line_width, property,
+    align_content, background_image, background_position, background_repeat, background_size,
+    column_count, column_gap, column_width, length, line_style, line_width, property,
 };
 use super::{MarginDeclaration, PageDeclaration, PageRule, StyleError, warning};
 
@@ -213,6 +213,13 @@ pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
         syntax: "none | solid",
         examples: &["none", "solid"],
         read: |name, input| longhand(name, input, line_style, PageDeclaration::ColumnRuleStyle),
+    },
+    Spec {
+        name: "align-content",
+        inherited: false,
+        syntax: "start | center | end",
+        examples: &["start", "center", "end"],
+        read: |name, input| longhand(name, input, align_content, PageDeclaration::AlignContent),
     },
 ];
 

@@ -116,6 +116,12 @@ pub struct ComputedStyle {
     /// it off the cells of its first row to size its columns.
     #[serde(skip_serializing_if = "auto_width")]
     pub width: Width,
+    /// The height the content box is asked to take, from `height`.
+    #[serde(skip_serializing_if = "auto_width")]
+    pub height: Width,
+    /// The least height the content box takes, from `min-height`.
+    #[serde(skip_serializing_if = "auto_width")]
+    pub min_height: Width,
     /// Whether a table's cells share their borders, from
     /// `border-collapse`.
     #[serde(skip_serializing_if = "separate")]
@@ -171,6 +177,8 @@ impl ComputedStyle {
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
+            height: Width::Auto,
+            min_height: Width::Auto,
             border_collapse: BorderCollapse::Separate,
             break_before: Break::Auto,
             break_after: Break::Auto,
@@ -189,6 +197,8 @@ impl ComputedStyle {
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
+            height: Width::Auto,
+            min_height: Width::Auto,
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
@@ -293,21 +303,31 @@ impl ComputedStyle {
                 }
             }
             Declaration::BoxDecorationBreak(value) => self.box_decoration_break = *value,
-            Declaration::Width(width) => {
-                self.width = match width {
-                    None => Width::Auto,
-                    Some(Length::Percent(percent)) => Width::Percent(percent.max(0.0)),
-                    Some(length) => {
-                        Width::Points(length.to_points(self.font_size, root_size).max(0.0))
-                    }
-                }
-            }
+            Declaration::Width(width) => self.width = self.size(*width, root_size),
+            Declaration::Height(height) => self.height = self.size(*height, root_size),
+            Declaration::MinHeight(height) => self.min_height = self.size(*height, root_size),
             Declaration::BorderCollapse(value) => self.border_collapse = *value,
             Declaration::BreakBefore(value) => self.break_before = *value,
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
             Declaration::ColumnSpan(value) => self.column_span = *value,
         }
+    }
+
+    /// What a written size computes to. A percentage stays one,
+    /// because the box it measures against is sized in the layout
+    /// pass.
+    fn size(&self, written: Option<Length>, root_size: f32) -> Width {
+        match written {
+            None => Width::Auto,
+            Some(Length::Percent(percent)) => Width::Percent(percent.max(0.0)),
+            Some(length) => Width::Points(length.to_points(self.font_size, root_size).max(0.0)),
+        }
+    }
+
+    /// Whether the block asks for a height of its own content box.
+    pub fn sized(&self) -> bool {
+        self.height != Width::Auto || self.min_height != Width::Auto
     }
 
     /// What this style, computed for `::first-line`, changes about
@@ -502,6 +522,31 @@ mod tests {
 
         style.apply(&Declaration::ShapeMargin(Length::Em(1.5)), 10.0, 16.0);
         assert_eq!(style.shape_margin, 15.0);
+    }
+
+    /// Part: `height` and `min-height` compute as lengths and
+    /// percentages. A length in `em` resolves against the font size in
+    /// force, and a percentage stays a percentage until layout
+    /// resolves it against the content box.
+    #[test]
+    fn height_and_min_height_compute_as_lengths_and_percentages() {
+        let mut style = ComputedStyle::initial();
+        style.font_size = 10.0;
+        assert!(!style.sized());
+        style.apply(&Declaration::Height(Some(Length::Em(3.0))), 10.0, 16.0);
+        style.apply(
+            &Declaration::MinHeight(Some(Length::Percent(25.0))),
+            10.0,
+            16.0,
+        );
+        assert_eq!(style.height, Width::Points(30.0));
+        assert_eq!(style.min_height, Width::Percent(25.0));
+        assert_eq!(style.min_height.resolve(540.0), Some(135.0));
+        assert!(style.sized());
+        assert_eq!(style.inherit().height, Width::Auto);
+        assert_eq!(style.inherit().min_height, Width::Auto);
+        style.apply(&Declaration::Height(None), 10.0, 16.0);
+        assert_eq!(style.height, Width::Auto);
     }
 
     /// Part: `position: relative` computes, and an inset written as a

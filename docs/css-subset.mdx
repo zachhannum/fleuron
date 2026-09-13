@@ -36,7 +36,7 @@ book {
 
 ## The page
 
-`@page` describes the page itself: its size, its margins, its columns, and the boxes in the margins that contain running heads and page numbers.
+`@page` describes the page itself: its size, its margins, its columns, where its content sits, and the boxes in the margins that contain running heads and page numbers.
 
 {/* generated: page-grammar */}
 
@@ -58,6 +58,7 @@ book {
   column-gap: normal | <length>;
   column-rule-width: <length> | thin | medium | thick;
   column-rule-style: none | solid;
+  align-content: start | center | end;
   @<margin-box> {
     content: none | <string> | counter(page) | counter(page, <counter-style>) | string(<name>);
     /* text properties */
@@ -285,6 +286,32 @@ A spanning block is a block with `column-span: all`. The engine does not balance
 If a spanning block does not fit in the space left on the page, it moves to the next page whole. Only a spanning block that is taller than a page splits across pages. The built-in stylesheet gives every heading `break-after: avoid`. If the text after a spanning heading cannot start on the same page, the heading moves to the next page with that text.
 
 `column-span` applies to the blocks of a section. It does not apply to a block inside another block, such as a paragraph in a quotation or a table cell. On a page with one column, `column-span` has no effect.
+
+### Placing content down the page
+
+`align-content` puts the content of a page at the top, the middle, or the bottom of the content box.
+
+| value | where the content goes |
+|---|---|
+| `start` | at the top of the content box, which is the default |
+| `center` | the same distance from the top and from the bottom |
+| `end` | at the bottom of the content box |
+
+`align-content` moves only a page that has space below its content. A page can have that space when a break ends it, or when the book ends on it. A page that ends because nothing more fits on it does not move. The engine lays out a full page the same way under every value.
+
+The running heads and the page numbers stay where they are. An image or a block against the page stays where its insets put it. If the text of a page wraps around an image or a block, the content of that page stays at the top.
+
+The following example puts each chapter title on a page of its own, centered between the top and bottom margins:
+
+```css
+h2 {
+  break-after: page;
+}
+
+@page chapter:first {
+  align-content: center;
+}
+```
 
 ## Selectors
 
@@ -538,7 +565,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `wrap-flow` | `wrap-flow: end` |
 | `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
 | `shape-margin` | `shape-margin: 6pt` |
-| `width` | `width: 8em` |
+| `width`, `height`, `min-height` | `width: 8em` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -571,6 +598,8 @@ wrap-flow:            auto | both | start | end;
 shape-outside:        none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
 shape-margin:         <length> | <percentage>;
 width:                auto | <length> | <percentage>;
+height:               auto | <length> | <percentage>;
+min-height:           auto | <length> | <percentage>;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -631,6 +660,22 @@ The only border styles are `none` and `solid`.
 A border or padding on the left or right narrows the text and moves its left edge inward. On the top and bottom they take vertical space, and they stop the margins on either side from collapsing: a top border on a block quote sits between the quote's own top margin and its first paragraph's margin, and both take space.
 
 Where two edges of different colors meet, the corner takes the color of the horizontal edge rather than splitting diagonally.
+
+### Height
+
+`height` gives the height of a block, not counting its padding, its border, and its margins. `min-height` gives the least height of a block. Each one takes a length or a percentage.
+
+If the content of a block is shorter than its height, the engine leaves the rest as space below the content. The background and the border of the block cover that space. A page does not end between the content and the space below it. If the content is taller than its height, the block grows to hold the content.
+
+A percentage is a percentage of the height of the page's content box. Inside a block that has a `height`, a percentage is a percentage of that `height` instead. A `min-height` does not count for this.
+
+The following example gives each chapter title a height of 3 inches. The text of each chapter starts 3 inches below the top of its title:
+
+```css
+h2 {
+  height: 3in;
+}
+```
 
 ### Backgrounds
 
@@ -1168,7 +1213,7 @@ code { font-family: monospace }
 
 | area | not supported yet |
 |---|---|
-| layout | floats, grid, flexbox, transforms |
+| layout | floats, grid, flexbox, transforms, `max-height`, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |

@@ -74,6 +74,27 @@ impl Columns {
     }
 }
 
+/// Where a page's content sits down its content box, from
+/// `align-content` on `@page`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlignContent {
+    /// `start`: against the top of the content box.
+    Start,
+    /// `center`: the same distance from the top and the bottom.
+    Center,
+    /// `end`: against the bottom of the content box.
+    End,
+}
+
+impl AlignContent {
+    /// Whether the content sits at the top, which is where it sits
+    /// when a page names nothing.
+    pub fn is_start(&self) -> bool {
+        *self == AlignContent::Start
+    }
+}
+
 /// Page trim, margins and columns, in points: the resolved `@page`
 /// box.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -89,6 +110,10 @@ pub struct PageGeometry {
     /// How the content box divides.
     #[serde(skip_serializing_if = "Columns::single")]
     pub columns: Columns,
+    /// Where the content of a page that ends short of the foot of its
+    /// content box sits.
+    #[serde(skip_serializing_if = "AlignContent::is_start")]
+    pub align_content: AlignContent,
 }
 
 impl PageGeometry {

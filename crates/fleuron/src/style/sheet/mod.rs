@@ -22,8 +22,8 @@ use crate::Warning;
 use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
-    BackgroundRepeat, BorderStyle, Color, Content, Declaration, Edge, Length, MarginBox,
-    SizeSource, Url,
+    AlignContent, BackgroundRepeat, BorderStyle, Color, Content, Declaration, Edge, Length,
+    MarginBox, SizeSource, Url,
 };
 
 mod color;
@@ -158,6 +158,7 @@ pub enum PageDeclaration {
     ColumnGap(Option<Length>),
     ColumnRuleWidth(Length),
     ColumnRuleStyle(BorderStyle),
+    AlignContent(AlignContent),
 }
 
 /// A declaration inside a page margin box.
