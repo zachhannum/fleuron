@@ -66,6 +66,10 @@ An answer names four numbers, because what is printed on a page and where that p
 | `first`, `last` | The folios the content runs between, as printed. This is what a host puts on screen. |
 | `at`, `count` | Where those pages fall in the book, counting from 0. `{ first: at, count }` is a `want: 'preview'` range over every page the content is on. |
 
+Two more are about what styled the page. `want: 'inspect'`, with `node`, answers with what styled that node. The answer names the element, the rules that matched in cascade order, and the declarations that won. It also gives the computed value of every property and the border box on each page the element reaches. With `page` and `box` in place of `node`, the answer is about one margin box of that page, such as `bottom-center`.
+
+`want: 'hit'`, with `page`, `x`, and `y`, answers with the innermost element at that point on the page, or `null` outside every box. A page counts from 0, and a point is in points from the top-left corner of the page. Both questions answer in JSON, from the same cascade that styled the book, so a host matches no selectors of its own. A node id names a node only until the next edit. `Client.inspect`, `Client.inspectMarginBox`, and `Client.hit` are the host's side, and [sessions](../library/sessions.md) describes the answer in full.
+
 The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or a new manuscript. A response whose generation is behind the current one is dropped without painting.
 
 ### Latest render wins
