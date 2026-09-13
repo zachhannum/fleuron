@@ -635,6 +635,13 @@ impl Flow<'_, '_> {
                 listed = (spans.len(), band);
             }
         }
+        // A box down to the foot of the column leaves no band under
+        // it, so the line after the last band goes past the foot.
+        if gap != 0.0 {
+            gaps.push(gap);
+            reached = true;
+            listed = (spans.len(), band + 1);
+        }
         if !reached {
             return None;
         }
@@ -1076,6 +1083,109 @@ mod tests {
                 .iter()
                 .any(|(_, runs)| (runs[0].0 - left).abs() < 1e-3),
             "no line under the block runs the full measure",
+        );
+    }
+
+    /// The baselines of the prose lines a page sets below `top`,
+    /// leaving out the lifted quotation's own.
+    fn prose_below(page: &Page, top: f32) -> Vec<f32> {
+        content_lines(page)
+            .into_iter()
+            .filter(|(baseline, runs)| {
+                *baseline > top && !runs.iter().any(|run| run.2.contains("lilliputian"))
+            })
+            .map(|(baseline, _)| baseline)
+            .collect()
+    }
+
+    /// The sheet the tests of a block at the foot of the column lift
+    /// the quotation with.
+    const AT_THE_FOOT: &str = "blockquote { position: absolute; bottom: 0; left: 0; right: 0; \
+                               margin: 0; wrap-flow: both; background-color: #eeeeee }";
+
+    /// Acceptance: no line sets over a box with a `wrap-flow` other
+    /// than `auto` that reaches the foot of the column. The text
+    /// continues on the next page.
+    #[test]
+    fn prose_does_not_set_over_a_block_at_the_foot_of_the_column() {
+        let pages = paginate_styled(
+            AT_THE_FOOT,
+            vec![section(
+                std::iter::once(lifted_quote())
+                    .chain(long_prose(16))
+                    .collect(),
+            )],
+        );
+        assert!(pages.len() > 1, "the prose does not reach the foot");
+        let boxes = rects(&pages[0]);
+        let [(_, y, _, _, _)] = boxes.as_slice() else {
+            panic!("the block paints one box: {boxes:?}");
+        };
+        assert!(
+            !prose_below(&pages[0], 0.0).is_empty(),
+            "no prose on the first page",
+        );
+        assert_eq!(
+            prose_below(&pages[0], *y),
+            Vec::<f32>::new(),
+            "lines set over the block",
+        );
+        assert!(
+            !prose_below(&pages[1], 0.0).is_empty(),
+            "the prose does not continue on the next page",
+        );
+    }
+
+    /// Acceptance: a paragraph that starts in the space a box at the
+    /// foot of the column covers starts on the next page.
+    #[test]
+    fn a_paragraph_that_starts_beside_a_block_at_the_foot_starts_on_the_next_page() {
+        let one_line = || paragraph("my father had a small estate");
+        let pages = paginate_styled(
+            &format!("{AT_THE_FOOT} p {{ text-indent: 0 }}"),
+            vec![section(
+                std::iter::once(lifted_quote())
+                    .chain(std::iter::repeat_with(one_line).take(80))
+                    .collect(),
+            )],
+        );
+        assert!(pages.len() > 1, "the prose does not reach the foot");
+        let boxes = rects(&pages[0]);
+        let [(_, y, _, _, _)] = boxes.as_slice() else {
+            panic!("the block paints one box: {boxes:?}");
+        };
+        assert_eq!(
+            prose_below(&pages[0], *y),
+            Vec::<f32>::new(),
+            "paragraphs started over the block",
+        );
+    }
+
+    /// Acceptance: an anchored image at the foot of the column holds
+    /// the text off in the same way. Its margin takes the rest of the
+    /// measure, so no band beside it has room for a line.
+    #[test]
+    fn prose_does_not_set_over_an_image_at_the_foot_of_the_column() {
+        let measure = master(Situation::First(Side::Recto)).geometry.measure();
+        let output = with_image(
+            &format!(
+                "img {{ position: absolute; bottom: 0; left: 0; margin-right: {}pt; \
+                 wrap-flow: end }}",
+                measure - IMAGE,
+            ),
+            vec![section(
+                std::iter::once(image()).chain(long_prose(16)).collect(),
+            )],
+        );
+        assert!(output.pages.len() > 1, "the prose does not reach the foot");
+        let images = painted(&output.pages[0]);
+        let [(_, y, _, _)] = images.as_slice() else {
+            panic!("the first page paints one image: {images:?}");
+        };
+        assert_eq!(
+            prose_below(&output.pages[0], *y),
+            Vec::<f32>::new(),
+            "lines set over the image",
         );
     }
 
