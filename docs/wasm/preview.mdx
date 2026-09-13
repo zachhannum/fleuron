@@ -85,6 +85,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `setBook(sources)` | several sources, in reading order |
 | `edit(name, text)` | one source replaced, the rest of the book left standing |
 | `remove(name)` | one source dropped |
+| `setAttributes(name, { classes, id })` | the classes and id of one source's sections |
 | `setMetadata({ title, author, extra })` | what names the book |
 | `setStyle(css)` | the author's styling: one string, or named sheets in cascade order |
 | `addFont(bytes, url?)` | a font file, under the `@font-face` url that names it, or under the family name in the file when there is no url |
@@ -116,6 +117,18 @@ await preview.setBook([
 ```
 
 After that, `edit(name, text)` is the keystroke path: it reads that one file again and every other file keeps the lines it already has. A name the book has not seen is appended, so `edit` is also how a file arrives mid-session. `remove(name)` is how one leaves.
+
+A sheet reaches the sections of a source by the classes and the id that the host gives the source. The names stay with the source through an edit and a reorder. A rule for `section.chapter` matches the same chapters after the author moves one. The text does not change, so no byte offset of a node moves. The following example names the front matter and the first chapter, and then changes the classes of the chapter:
+
+```js
+await preview.setBook([
+  { name: 'preface.md', text: preface, attributes: { classes: ['front'] } },
+  { name: 'ch01.md', text: one, attributes: { classes: ['chapter'], id: 'chapter-one' } },
+]);
+await preview.setAttributes('ch01.md', { classes: ['chapter', 'opening'] });
+```
+
+`setAttributes(name, {})` takes the names away.
 
 A book of one file takes its title and author from that file's frontmatter. A book of several has no frontmatter of its own, so it is left unnamed until `setMetadata` names it:
 

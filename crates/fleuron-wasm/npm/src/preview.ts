@@ -20,6 +20,7 @@
 import { Client, type Transport } from './client.js';
 import {
   styleOp,
+  type Attributes,
   type Metadata,
   type Op,
   type Response,
@@ -232,6 +233,17 @@ export class Preview {
    */
   async setBook(sources: Source[]): Promise<void> {
     await this.render([{ op: 'book', sources }]);
+  }
+
+  /**
+   * Names the sections of one source by classes and an id, which a
+   * sheet reaches as `section.chapter` and `section#chapter-twelve`.
+   * The text is left as it is, so no offset moves, and the names stay
+   * with the source through an edit and a reorder. `{}` takes them
+   * away.
+   */
+  async setAttributes(name: string, attributes: Attributes): Promise<void> {
+    await this.render([{ op: 'attributes', name, attributes }]);
   }
 
   /** Drops one source and leaves the rest of the book standing. */

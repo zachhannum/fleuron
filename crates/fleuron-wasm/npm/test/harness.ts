@@ -1356,6 +1356,43 @@ check(
   `worker ${remaining?.pages.length}, CLI ${rest.pages}`,
 );
 
+// A host names a source's sections beside the text, and a sheet
+// reaches them by that name. A small page on the front source is what
+// shows the rule matched.
+const small = 4 * 72;
+const widths = (output: LayoutOutput | null): string =>
+  output === null ? 'nothing' : `${output.pages[0]?.width} then ${output.pages.at(-1)?.width}`;
+const fronted = await client.preview([
+  styleOp('@page front { size: 4in 6in } section.front { page: front }'),
+  {
+    op: 'book',
+    sources: sources.map((source, at) =>
+      at === 0 ? { ...source, attributes: { classes: ['front'] } } : source,
+    ),
+  },
+]);
+check(
+  'a class a host sets on a source reaches its sections in the cascade',
+  fronted !== null &&
+    fronted.pages[0]?.width === small &&
+    fronted.pages.at(-1)?.width !== small,
+  widths(fronted),
+);
+const edited = await client.preview([
+  { op: 'edit', name: 'part-1.md', text: `${parts[0]}\n` },
+]);
+check(
+  'and the source keeps the class when its text is edited',
+  edited !== null && edited.pages[0]?.width === small,
+  widths(edited),
+);
+const stripped = await client.preview([{ op: 'attributes', name: 'part-1.md', attributes: {} }]);
+check(
+  'and loses it when the host takes the class away',
+  stripped !== null && stripped.pages[0]?.width !== small,
+  widths(stripped),
+);
+
 await worker.terminate();
 
 // The module also answers with no worker around it: the batch case,

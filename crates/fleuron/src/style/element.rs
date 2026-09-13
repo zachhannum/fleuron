@@ -232,7 +232,7 @@ impl ElementTree {
                 let index = tree.push(
                     "section",
                     section.id,
-                    &Attributes::default(),
+                    &section.attributes,
                     Some(root),
                     false,
                 );

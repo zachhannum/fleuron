@@ -48,6 +48,7 @@ pub(super) fn paragraph(value: &str) -> Block {
 
 pub(super) fn section(blocks: Vec<Block>) -> Section {
     Section {
+        attributes: Default::default(),
         id: NodeId::UNASSIGNED,
         source: None,
         title: None,

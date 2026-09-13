@@ -61,6 +61,7 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 |---|---|
 | `source` | The file the frontend read, such as `chapter-01.md`. Diagnostics name it. |
 | `title` | A title supplied outside the body, from frontmatter `title:`. Implies heading level 1. |
+| `attributes` | The classes and the id that a sheet reaches the section by, as `section.front` and `section#preface`. |
 | `blocks` | The section's blocks, in reading order. |
 | `position` | Where in `source` the section began. |
 | `span` | The bytes of `source` the section was read from: the heading that opened it to the end of its last block. |

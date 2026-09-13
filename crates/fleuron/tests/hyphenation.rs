@@ -35,6 +35,7 @@ fn book(language: Option<&str>, prose: &str) -> Book {
             ..Default::default()
         },
         sections: vec![Section {
+            attributes: Default::default(),
             blocks: vec![Block::Paragraph {
                 id: NodeId::UNASSIGNED,
                 inlines: vec![Inline::Text {

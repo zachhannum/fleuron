@@ -164,7 +164,13 @@ export class Engine {
         this.session.setSources(
           op.sources.map((source) => source.name),
           op.sources.map((source) => source.text),
+          op.sources.map((source) =>
+            source.attributes === undefined ? '' : JSON.stringify(source.attributes),
+          ),
         );
+        break;
+      case 'attributes':
+        this.session.setSourceAttributes(op.name, JSON.stringify(op.attributes));
         break;
       case 'remove':
         this.session.removeMarkdown(op.name);

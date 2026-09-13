@@ -1208,6 +1208,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 id: NodeId::UNASSIGNED,
                 source: Some("chapter-01.md".into()),
                 title: None,
@@ -1285,6 +1286,58 @@ mod tests {
         nth(tree, element, 0)
     }
 
+    /// Two chapters of the sample, the first named `front` and
+    /// `preface`, the second `body`.
+    fn named_sections() -> Book {
+        let mut book = sample();
+        let mut body = book.sections[0].clone();
+        body.source = Some("chapter-02.md".into());
+        body.attributes.classes = vec!["body".into()];
+        book.sections[0].attributes = Attributes {
+            id: Some("preface".into()),
+            classes: vec!["front".into()],
+        };
+        book.sections.push(body);
+        book.assign_node_ids();
+        book
+    }
+
+    /// Acceptance: the page-name and page-counter examples on the
+    /// subset page reach the sections they name, and no other.
+    #[test]
+    fn the_subset_page_section_examples_match() {
+        let tree = compile(
+            &named_sections(),
+            "section.front { page: front }
+             section.body { counter-reset: page 1 }",
+        );
+        let (front, body) = (nth(&tree, "section", 0), nth(&tree, "section", 1));
+        assert_eq!(front.page.as_deref(), Some("front"));
+        assert_ne!(body.page.as_deref(), Some("front"));
+        assert_eq!(body.counter_reset, Some(1));
+        assert_eq!(front.counter_reset, None);
+    }
+
+    /// Acceptance: a section's class and id match in the cascade, and
+    /// `:is()` and a descendant selector see them.
+    #[test]
+    fn a_section_class_and_id_match_in_every_selector_form() {
+        let tree = compile(
+            &named_sections(),
+            "section#preface { page: by-id }
+             :is(section.body) { page: by-is }
+             section.front p { page: below-front }
+             :is(section.body) > h1 { page: below-body }",
+        );
+        assert_eq!(nth(&tree, "section", 0).page.as_deref(), Some("by-id"));
+        assert_eq!(nth(&tree, "section", 1).page.as_deref(), Some("by-is"));
+        // Each chapter of the sample holds three paragraphs.
+        assert_eq!(nth(&tree, "p", 2).page.as_deref(), Some("below-front"));
+        assert_ne!(nth(&tree, "p", 3).page.as_deref(), Some("below-front"));
+        assert_ne!(nth(&tree, "h1", 0).page.as_deref(), Some("below-body"));
+        assert_eq!(nth(&tree, "h1", 1).page.as_deref(), Some("below-body"));
+    }
+
     /// A book of two images, the first of them named.
     fn images() -> Book {
         let image = |named: Attributes| Block::Image {
@@ -1298,6 +1351,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 id: NodeId::UNASSIGNED,
                 source: Some("chapter-01.md".into()),
                 title: None,
@@ -1338,6 +1392,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 id: NodeId::UNASSIGNED,
                 source: Some("chapter-01.md".into()),
                 title: None,
@@ -2292,6 +2347,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![
                     Block::Paragraph {
                         id: NodeId::UNASSIGNED,
@@ -2707,6 +2763,7 @@ mod tests {
         let mut book = Book {
             metadata: Metadata::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![Block::Paragraph {
                     id: NodeId::UNASSIGNED,
                     inlines: vec![

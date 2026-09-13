@@ -54,6 +54,7 @@ fn chapter_strategy() -> impl Strategy<Value = Section> {
         }))
         .collect();
         Section {
+            attributes: Default::default(),
             id: NodeId::UNASSIGNED,
             source: None,
             title: None,
@@ -117,6 +118,7 @@ fn column_master(situation: Situation) -> &'static PageStyle {
             let mut book = Book {
                 metadata: Default::default(),
                 sections: vec![Section {
+                    attributes: Default::default(),
                     id: NodeId::UNASSIGNED,
                     source: None,
                     title: None,
@@ -158,6 +160,7 @@ fn ua() -> &'static StyleTree {
         let mut book = Book {
             metadata: Default::default(),
             sections: vec![Section {
+                attributes: Default::default(),
                 id: NodeId::UNASSIGNED,
                 source: None,
                 title: None,
@@ -650,6 +653,7 @@ fn page_assembly_snapshot() {
         span: None,
     };
     let chapter = |title: &str| Section {
+        attributes: Default::default(),
         id: NodeId::UNASSIGNED,
         source: None,
         title: None,

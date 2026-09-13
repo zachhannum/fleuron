@@ -9,12 +9,29 @@
  * one is dropped rather than painted.
  */
 
+/**
+ * The classes and id a sheet reaches a source's sections by, as
+ * `section.chapter` and `section#chapter-twelve`.
+ */
+export interface Attributes {
+  /** The classes, without the `.`. */
+  classes?: string[];
+  /** The id, without the `#`. */
+  id?: string;
+}
+
 /** One markdown source: what it is called, and what is in it. */
 export interface Source {
   /** What the book calls this file, and what an edit replaces. */
   name: string;
   /** Its markdown. */
   text: string;
+  /**
+   * The classes and id its sections take. They sit beside the text,
+   * so no byte of it moves, and the source keeps them when it is
+   * edited.
+   */
+  attributes?: Attributes;
 }
 
 /** One stylesheet: what warnings call it, and its CSS. */
@@ -65,6 +82,8 @@ export type Op =
   | { op: 'metadata'; metadata: Metadata }
   /** One source replaced: the keystroke path, where the rest of the book stands. */
   | { op: 'edit'; name: string; text: string }
+  /** The classes and id one source's sections take, with its text left as it is. */
+  | { op: 'attributes'; name: string; attributes: Attributes }
   /** A content tree, as JSON, for a host with a structured source of its own. */
   | { op: 'content'; json: string }
   /**

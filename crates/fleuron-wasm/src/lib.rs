@@ -25,7 +25,7 @@
 use std::collections::BTreeMap;
 
 use fleuron::Warning;
-use fleuron::content::{Book, HeadingLevel, Metadata, NodeId};
+use fleuron::content::{Attributes, Book, HeadingLevel, Metadata, NodeId, Section};
 use fleuron::fonts::{FontSource, bundled_registry};
 use fleuron::session::Session as Engine;
 use fleuron::style::{Source, Stylesheets};
@@ -55,6 +55,9 @@ pub struct Session {
     /// that replacing one file replaces its complaints and no
     /// others.
     complaints: BTreeMap<String, Vec<Warning>>,
+    /// The classes and id the host named each source's sections by,
+    /// kept so that a source read again keeps them.
+    names: BTreeMap<String, Attributes>,
 }
 
 #[wasm_bindgen]
@@ -68,6 +71,7 @@ impl Session {
             engine: Engine::owning(registry),
             reading: Options::default(),
             complaints: BTreeMap::new(),
+            names: BTreeMap::new(),
         })
     }
 
@@ -138,6 +142,7 @@ impl Session {
         self.engine
             .set_content(fleuron_markdown::assemble(metadata, sections));
         self.complaints.clear();
+        self.names.clear();
         self.complain(name, complaints);
     }
 
@@ -149,8 +154,18 @@ impl Session {
     /// to the section it became, and the book is left unnamed rather
     /// than named after whichever chapter came first, which is what
     /// [`Session::set_metadata`] is for.
+    ///
+    /// `attributes`, when given, holds one entry per source: the
+    /// classes and id its sections take, as JSON in the shape
+    /// [`Session::set_source_attributes`] reads, or an empty string
+    /// for none.
     #[wasm_bindgen(js_name = setSources)]
-    pub fn set_sources(&mut self, names: Vec<String>, texts: Vec<String>) -> Result<(), JsError> {
+    pub fn set_sources(
+        &mut self,
+        names: Vec<String>,
+        texts: Vec<String>,
+        attributes: Option<Vec<String>>,
+    ) -> Result<(), JsError> {
         if names.len() != texts.len() {
             return Err(JsError::new(&format!(
                 "{} sources named and {} handed over",
@@ -158,14 +173,29 @@ impl Session {
                 texts.len()
             )));
         }
+        let attributes = attributes.unwrap_or_default();
+        if !attributes.is_empty() && attributes.len() != names.len() {
+            return Err(JsError::new(&format!(
+                "{} sources named and {} named by attributes",
+                names.len(),
+                attributes.len()
+            )));
+        }
         let metadata = match texts.as_slice() {
             [whole] => fleuron_markdown::frontmatter(whole),
             _ => Metadata::default(),
         };
+        self.names.clear();
+        for (name, json) in names.iter().zip(&attributes) {
+            if !json.is_empty() {
+                self.names.insert(name.clone(), attributes_from(json)?);
+            }
+        }
         self.complaints.clear();
         let mut sections = Vec::new();
         for (name, text) in names.iter().zip(&texts) {
-            let (read, complaints) = fleuron_markdown::to_sections(text, name, &self.reading);
+            let (mut read, complaints) = fleuron_markdown::to_sections(text, name, &self.reading);
+            self.name(name, &mut read);
             sections.extend(read);
             self.complaints.insert(name.clone(), complaints);
         }
@@ -181,7 +211,30 @@ impl Session {
     pub fn remove_markdown(&mut self, name: &str) {
         self.engine.replace_source(name, Vec::new());
         self.complaints.remove(name);
+        self.names.remove(name);
         self.reflect();
+    }
+
+    /// Names every section read from one source by classes and an id,
+    /// from JSON: `{"classes": ["chapter"], "id": "chapter-twelve"}`.
+    /// `{}` takes the names away.
+    ///
+    /// A sheet reaches the sections as `section.chapter` and
+    /// `section#chapter-twelve`. The names stay with the source's name
+    /// rather than its place in the book, so a rule written against
+    /// them still matches after a reorder. The text is not touched,
+    /// so every byte `nodeAt` and `nodeSource` answer with stays where
+    /// it was, and the source keeps the names when it is read again.
+    #[wasm_bindgen(js_name = setSourceAttributes)]
+    pub fn set_source_attributes(&mut self, name: &str, json: &str) -> Result<(), JsError> {
+        let attributes = attributes_from(json)?;
+        self.engine.set_source_attributes(name, &attributes);
+        if attributes.is_empty() {
+            self.names.remove(name);
+        } else {
+            self.names.insert(name.to_string(), attributes);
+        }
+        Ok(())
     }
 
     /// Names the book, from JSON: `title`, `author`, and an `extra`
@@ -209,7 +262,8 @@ impl Session {
     /// read, and every other section keeps the lines it already has.
     #[wasm_bindgen(js_name = updateMarkdown)]
     pub fn update_markdown(&mut self, name: &str, text: &str) {
-        let (sections, complaints) = fleuron_markdown::to_sections(text, name, &self.reading);
+        let (mut sections, complaints) = fleuron_markdown::to_sections(text, name, &self.reading);
+        self.name(name, &mut sections);
         self.engine.replace_source(name, sections);
         self.complain(name, complaints);
     }
@@ -225,6 +279,7 @@ impl Session {
         let book: Book = serde_json::from_str(json).map_err(js_error)?;
         self.engine.set_content(book);
         self.complaints.clear();
+        self.names.clear();
         self.engine.set_source_warnings(Vec::new());
         Ok(())
     }
@@ -403,6 +458,21 @@ impl Session {
         self.engine
             .set_source_warnings(self.complaints.values().flatten().cloned().collect());
     }
+
+    /// Gives the sections just read from one source the names the host
+    /// set on it. A source the host named nothing keeps what its
+    /// frontmatter said.
+    fn name(&self, source: &str, sections: &mut [Section]) {
+        if let Some(attributes) = self.names.get(source) {
+            for section in sections {
+                section.attributes = attributes.clone();
+            }
+        }
+    }
+}
+
+fn attributes_from(json: &str) -> Result<Attributes, JsError> {
+    serde_json::from_str(json).map_err(js_error)
 }
 
 /// One markdown source and one stylesheet, laid out once: the batch

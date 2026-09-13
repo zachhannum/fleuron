@@ -132,6 +132,8 @@ section.front { page: front }
 }
 ```
 
+A section read from a whole file takes its classes from the `class:` field of the file's frontmatter, and its id from `id:`. A host can also give the sections of a source classes and an id beside the text. In the browser, the method is `setAttributes`. In Rust, it is `Session::set_source_attributes`.
+
 Page rules cascade like any other rule: origin first, then specificity, then source order. A page name outranks `:first` and `:blank`, which outrank `:left` and `:right`.
 
 ### Page backgrounds

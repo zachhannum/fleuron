@@ -400,6 +400,34 @@ mod tests {
         );
     }
 
+    /// Acceptance: the source offsets of every node in a section are
+    /// the same with and without attributes on the section.
+    #[test]
+    fn naming_a_section_moves_no_offset() {
+        let markdown =
+            "# The Hunter\n\nHe *waited*.\n\n> A `quiet` word.\n\n---\n\nThen he left.\n";
+        let reading = Options {
+            sections: Sections::Whole,
+            ..Options::default()
+        };
+        let (read, _) = to_sections(markdown, "one.md", &reading);
+        let mut named = read.clone();
+        named[0].attributes = fleuron::content::Attributes {
+            id: Some("chapter-twelve".into()),
+            classes: vec!["chapter".into()],
+        };
+        let plain = assemble(Metadata::default(), read);
+        let named = assemble(Metadata::default(), named);
+
+        for byte in 0..=markdown.len() as u32 {
+            let node = plain.node_at("one.md", byte);
+            assert_eq!(node, named.node_at("one.md", byte), "byte {byte}");
+            if let Some(node) = node {
+                assert_eq!(plain.source_of(node), named.source_of(node), "byte {byte}");
+            }
+        }
+    }
+
     /// Acceptance: assembled twice, a book resolves each link to the
     /// same node.
     #[test]

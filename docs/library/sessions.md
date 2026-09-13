@@ -59,6 +59,17 @@ let output = session.preview();
 Nothing re-reads the files that did not change. `fleuron_markdown::Cache` stores each source's sections 
 against its name and a hash of its bytes.
 
+`set_source_attributes(name, attributes)` gives every section from one file the classes and the id that a sheet reaches it by, such as `section.front`. The text does not change, so no node moves in the source. The following example names a preface:
+
+```rust
+use fleuron::content::Attributes;
+
+session.set_source_attributes(
+    "preface.md",
+    &Attributes { id: Some("preface".into()), classes: vec!["front".into()] },
+);
+```
+
 Node ids belong to the engine. The tree is renumbered on the way in, so sections built by hand need no ids of their own, 
 and nothing downstream is keyed on an id that renumbering will move.
 

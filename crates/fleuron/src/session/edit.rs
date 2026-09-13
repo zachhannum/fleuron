@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 
 use crate::Warning;
-use crate::content::{Book, Metadata, Section};
+use crate::content::{Attributes, Book, Metadata, Section};
 use crate::fonts::FontSource;
 use crate::images::Added;
 use crate::style::Stylesheets;
@@ -55,6 +55,22 @@ impl Session<'_> {
         self.images = has_images(&self.book);
         self.recompile();
         self.stale = Stale::Trace;
+    }
+
+    /// Names every section that came from one source by these classes
+    /// and this id, and styles the book again.
+    ///
+    /// The names sit beside the source rather than in it, so every
+    /// node keeps the bytes it was read from. A name the book does
+    /// not carry changes nothing.
+    pub fn set_source_attributes(&mut self, name: &str, attributes: &Attributes) {
+        let book = self.book.to_mut();
+        for section in &mut book.sections {
+            if section.source.as_deref() == Some(name) {
+                section.attributes = attributes.clone();
+            }
+        }
+        self.recompile();
     }
 
     /// Adds a frontend's complaints to the run's diagnostics.
@@ -179,6 +195,7 @@ mod tests {
     fn an_image_pushed_after_the_book_is_placed_and_indexed() {
         let mut book = Book {
             sections: vec![Section {
+                attributes: Default::default(),
                 blocks: vec![Block::Image {
                     id: NodeId::UNASSIGNED,
                     url: "plate.jpg".into(),
@@ -339,6 +356,64 @@ mod tests {
             .collect();
         assert_eq!(sources, vec![Some("one.md"), Some("two.md")]);
         assert_eq!(session.book().sections.len(), 2);
+    }
+
+    /// The page name the computed style of one source's section
+    /// carries.
+    fn page_of(session: &Session, source: &str) -> Option<String> {
+        let at = session
+            .book()
+            .sections
+            .iter()
+            .position(|section| section.source.as_deref() == Some(source))
+            .expect("the book carries the source");
+        let tree = session.styles();
+        let node = tree
+            .nodes()
+            .iter()
+            .filter(|node| node.element == "section")
+            .nth(at)
+            .expect("every section is styled");
+        tree.styles()[node.style as usize].page.clone()
+    }
+
+    /// Acceptance: a host sets a section's class and id without
+    /// changing the section's text, and the sheet reaches it by them.
+    #[test]
+    fn a_host_names_a_section_beside_its_source() {
+        let mut session = three_chapters();
+        session.set_style(sheets(
+            "section.front { page: front } section#closing { page: back }",
+        ));
+        session.preview();
+        let before = session.book().sections.clone();
+
+        session.set_source_attributes(
+            "one.md",
+            &Attributes {
+                id: None,
+                classes: vec!["front".into()],
+            },
+        );
+        session.set_source_attributes(
+            "three.md",
+            &Attributes {
+                id: Some("closing".into()),
+                classes: Vec::new(),
+            },
+        );
+        session.preview();
+
+        assert_eq!(page_of(&session, "one.md").as_deref(), Some("front"));
+        assert_eq!(page_of(&session, "two.md").as_deref(), Some("chapter"));
+        assert_eq!(page_of(&session, "three.md").as_deref(), Some("back"));
+        for (was, is) in before.iter().zip(&session.book().sections) {
+            assert_eq!(was.blocks, is.blocks, "naming a section changed its text");
+            assert_eq!(was.span, is.span);
+        }
+
+        session.set_source_attributes("one.md", &Attributes::default());
+        assert_eq!(page_of(&session, "one.md").as_deref(), Some("chapter"));
     }
 
     /// A file the book has not seen before arrives at the end.
