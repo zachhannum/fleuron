@@ -560,6 +560,70 @@ check(
     rendered !== null,
 );
 
+// What styled the run under the pointer, and where it is: the engine's
+// own cascade answers, so the host matches no selector of its own.
+const inspected = await client.inspect(run.node);
+check(
+  'a run answers for the element that holds its text',
+  inspected !== null && inspected.node !== null && inspected.node <= run.node,
+  JSON.stringify(inspected === null ? null : { node: inspected.node, element: inspected.element }),
+);
+check(
+  'the answer names the rules that matched and where they were written',
+  inspected !== null &&
+    inspected.rules.length > 0 &&
+    inspected.rules.every((rule) => rule.sheet.length > 0 && rule.line > 0 && rule.column > 0),
+);
+check(
+  'the answer gives computed values in points',
+  inspected !== null && /pt$/.test(inspected.computed['font-size'] ?? ''),
+  inspected?.computed['font-size'] ?? '',
+);
+const where = inspected?.boxes.find((box) => box.page === run.page);
+check('the element has a border box on the page its run is on', where !== undefined);
+if (where !== undefined && inspected !== null) {
+  const under = await client.hit(where.page, where.x + where.width / 2, where.y + where.height / 2);
+  const beneath = under === null ? null : await client.inspect(under);
+  check(
+    'a point inside that box answers with the element or one inside it',
+    under !== null &&
+      (under === inspected.node ||
+        (beneath?.ancestors.some((ancestor) => ancestor.node === inspected.node) ?? false)),
+    `${under}`,
+  );
+}
+check(
+  'a point outside every box answers null',
+  (await client.hit(run.page, 0.5, 0.5)) === null,
+);
+check('a node the book does not hold is inspected as null', (await client.inspect(0)) === null);
+
+const numbered = preview.pages.findIndex((page) =>
+  page.items.some((item) => item.kind === 'text' && item.layer === PAGE_FURNITURE),
+);
+const folioBox = numbered === -1 ? null : await client.inspectMarginBox(numbered, 'bottom-center');
+check(
+  'a page number answers with its page selector and the rules that set it',
+  folioBox !== null &&
+    folioBox.element === '@bottom-center' &&
+    (folioBox.page ?? '').startsWith('@page') &&
+    folioBox.rules.some((rule) => rule.declarations.some((d) => d.property === 'content' && d.applied)) &&
+    folioBox.boxes.length === 1,
+  JSON.stringify(folioBox === null ? null : { page: folioBox.page, boxes: folioBox.boxes }),
+);
+
+const [askedInspect, askedHit, renderedBeside] = await Promise.all([
+  client.inspect(run.node),
+  client.hit(run.page, 0.5, 0.5),
+  client.preview([{ op: 'markdown', name: 'gulliver-excerpt.md', text: markdown }]),
+]);
+check(
+  'inspecting and hit testing are questions a render does not overtake',
+  JSON.stringify(askedInspect) === JSON.stringify(inspected) &&
+    askedHit === null &&
+    renderedBeside !== null,
+);
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
 const wrongSelection = preview.pages

@@ -7,6 +7,8 @@ import {
   isFailed,
   isRendered,
   type Folios,
+  type Inspection,
+  type MarginBoxName,
   type NodeSource,
   type Op,
   type Request,
@@ -176,6 +178,44 @@ export class Client {
     return this.ask<(Folios | null)[]>({ ops: [], want: 'folios', nodes });
   }
 
+  /**
+   * What styled one node, and where it is on the pages: the element,
+   * the elements around it, the rules that matched in cascade order
+   * with the declarations that won, the computed value of every
+   * property, and the border box on each page. A text node, which a
+   * run names, answers for the element that holds it. `null` for a
+   * node the engine synthesized, or one the book does not hold.
+   *
+   * A question rather than a render: nothing overtakes it. A node id
+   * names a node only until the next edit, so ask about an id from
+   * the display structure the reader is looking at.
+   */
+  async inspect(node: number): Promise<Inspection | null> {
+    return this.ask<Inspection | null>({ ops: [], want: 'inspect', node });
+  }
+
+  /**
+   * The same for one margin box of one page, counting from 0. The
+   * answer names the page selector the page answers to, and its rules
+   * are the `@page` rules that set the box. `null` for a blank page,
+   * a page the book does not have, or a box no rule for that page
+   * names.
+   */
+  async inspectMarginBox(page: number, box: MarginBoxName): Promise<Inspection | null> {
+    return this.ask<Inspection | null>({ ops: [], want: 'inspect', page, box });
+  }
+
+  /**
+   * The innermost element at a point on one page, counting from 0, in
+   * points from the page's top-left corner: the element that holds
+   * the text there, or else the innermost block whose border box holds
+   * the point, padding and empty space included. `null` outside every
+   * box.
+   */
+  async hit(page: number, x: number, y: number): Promise<number | null> {
+    return this.ask<number | null>({ ops: [], want: 'hit', page, x, y });
+  }
+
   /** Applies inputs and asks for nothing back. */
   async apply(ops: Op[]): Promise<void> {
     await this.send({ ops });
@@ -216,6 +256,10 @@ export class Client {
     byte?: number;
     node?: number;
     nodes?: number[];
+    page?: number;
+    box?: MarginBoxName;
+    x?: number;
+    y?: number;
   }): Promise<T> {
     const response = await this.send(what);
     if (!isRendered(response)) {
@@ -233,6 +277,10 @@ export class Client {
     byte?: number;
     node?: number;
     nodes?: number[];
+    page?: number;
+    box?: MarginBoxName;
+    x?: number;
+    y?: number;
     first?: number;
     count?: number;
   }): Promise<Response> {
@@ -247,6 +295,10 @@ export class Client {
       ...(what.byte === undefined ? {} : { byte: what.byte }),
       ...(what.node === undefined ? {} : { node: what.node }),
       ...(what.nodes === undefined ? {} : { nodes: what.nodes }),
+      ...(what.page === undefined ? {} : { page: what.page }),
+      ...(what.box === undefined ? {} : { box: what.box }),
+      ...(what.x === undefined ? {} : { x: what.x }),
+      ...(what.y === undefined ? {} : { y: what.y }),
       ...(what.first === undefined ? {} : { first: what.first }),
       ...(what.count === undefined ? {} : { count: what.count }),
     };

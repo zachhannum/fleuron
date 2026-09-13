@@ -558,7 +558,8 @@ blockquote p { font-size: 9pt }";
         assert_eq!(inspection.element, "@top-left");
         assert_eq!(inspection.page.as_deref(), Some("@page :left"));
         assert_eq!(inspection.node, None);
-        let rules: Vec<(&str, u32, [u32; 3], Vec<(&str, &str, bool)>)> = author_rules(&inspection)
+        type Seen<'a> = (&'a str, u32, [u32; 3], Vec<(&'a str, &'a str, bool)>);
+        let rules: Vec<Seen<'_>> = author_rules(&inspection)
             .iter()
             .map(|rule| {
                 (
