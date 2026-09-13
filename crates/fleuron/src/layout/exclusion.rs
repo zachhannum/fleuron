@@ -363,6 +363,13 @@ impl AnchoredBoxes {
     pub(super) fn is_empty(&self) -> bool {
         self.by_page.is_empty()
     }
+
+    /// Whether the prose of the page at `index` wraps around a box.
+    pub(super) fn wraps(&self, index: usize) -> bool {
+        self.by_page
+            .get(&index)
+            .is_some_and(|boxes| boxes.iter().any(|at| self.all[*at].wrap != WrapFlow::Auto))
+    }
 }
 
 /// An image's size inside a box that has to hold it: its own, scaled

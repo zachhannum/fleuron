@@ -36,12 +36,12 @@ use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub use properties::{
-    Align, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band, Border,
-    BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan, Columns,
-    ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges, Family, FontStyle,
-    FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry, Position,
-    ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign,
-    TextJustify, TextTransform, Url, Width, WrapFlow,
+    Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
+    Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan,
+    Columns, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges, Family,
+    FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry,
+    Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target,
+    TextAlign, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -401,6 +401,7 @@ fn resolve_page(
         height: 792.0,
         margin: Edges::all(0.0),
         columns: Columns::undivided(root_size),
+        align_content: AlignContent::Start,
     };
     let mut background = Background::NONE;
     let mut boxes: BTreeMap<MarginBox, MarginBoxStyle> = BTreeMap::new();
@@ -447,6 +448,7 @@ fn resolve_page(
                     geometry.columns.rule.width = width.to_points(root_size, root_size)
                 }
                 PageDeclaration::ColumnRuleStyle(style) => geometry.columns.rule.style = *style,
+                PageDeclaration::AlignContent(align) => geometry.align_content = *align,
             }
         }
         for (which, declarations) in &rule.boxes {
@@ -1611,6 +1613,36 @@ mod tests {
             Some("recto.webp"),
         );
         assert_eq!(recto.size, BackgroundSize::Contain);
+    }
+
+    /// Part: `align-content` on `@page` reaches the page box of the
+    /// pages the rule selects, and a page that names nothing keeps its
+    /// content at the top.
+    #[test]
+    fn align_content_reaches_the_page_box() {
+        use crate::style::AlignContent;
+        let book = sample();
+        let css = "@page chapter:first { align-content: center } \
+                   @page :left { align-content: end }";
+        let align = |css: &str, situation: Situation| {
+            compile(&book, css)
+                .page(PageQuery {
+                    name: Some("chapter"),
+                    situation,
+                })
+                .geometry
+                .align_content
+        };
+        assert_eq!(align("", Situation::Body(Side::Recto)), AlignContent::Start);
+        assert_eq!(
+            align(css, Situation::First(Side::Recto)),
+            AlignContent::Center
+        );
+        assert_eq!(align(css, Situation::Body(Side::Verso)), AlignContent::End);
+        assert_eq!(
+            align(css, Situation::Body(Side::Recto)),
+            AlignContent::Start
+        );
     }
 
     /// The column properties resolve to points against the page's

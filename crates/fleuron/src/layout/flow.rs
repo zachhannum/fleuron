@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::content::{NodeId, Section};
 use crate::pages::{DrawItem, Page, Side};
-use crate::style::{Break, PageQuery, Situation};
+use crate::style::{AlignContent, Break, PageQuery, Situation};
 
 use super::Paginator;
 use super::build::Reflow;
@@ -90,6 +90,15 @@ pub(super) struct Placed {
     /// Whether it is a table's body row, which has the header rows
     /// set above it when it opens a column.
     repeats: bool,
+}
+
+/// Why the page being built ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// The next fragment did not fit.
+    Full,
+    /// A break or the end of the book ended it, with room left.
+    Short,
 }
 
 /// One tier of the page being built: a row of columns, or the whole
@@ -277,7 +286,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 Break::Column if fragment.spanning != self.tier().spanning => {}
                 Break::Column => self.break_column(),
                 _ => {
-                    self.close();
+                    self.close(Ending::Short);
                     if let Break::Side(side) = wanted {
                         self.square_to(side);
                     }
@@ -478,9 +487,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         if crossing {
             let kept = self.tiers.iter().filter(|tier| tier.start < cut).count();
             self.tiers.truncate(kept);
-            self.close();
+            self.close(Ending::Full);
         } else {
-            self.advance();
+            self.advance(Ending::Full);
         }
         let Some(head) = carried.first().map(|placed| placed.top) else {
             return;
@@ -517,14 +526,14 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Moves to the next column, or ends the page when the column
     /// that filled was its last. A tier of blocks that span the
     /// columns is one column.
-    fn advance(&mut self) {
+    fn advance(&mut self, ending: Ending) {
         let tier = self.tier();
         if !tier.spanning && self.column + 1 < self.columns {
             self.column += 1;
             self.cursor = tier.top;
             self.column_start = self.placed.len();
         } else {
-            self.close();
+            self.close(ending);
         }
     }
 
@@ -533,7 +542,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// for. A block that spans the columns has no next column.
     fn break_column(&mut self) {
         if !self.tier().spanning && !self.column_empty() {
-            self.advance();
+            self.advance(Ending::Short);
         }
     }
 
@@ -543,13 +552,16 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// they were placed: a fragment moved onto the next page sets
     /// its strings there instead, so a page's furniture only ever
     /// reads what stood on it.
-    fn close(&mut self) {
+    fn close(&mut self, ending: Ending) {
         if self.placed.is_empty() {
             return;
         }
         let opened = self.strings.clone();
         let mut reset = None;
-        let placed = std::mem::take(&mut self.placed);
+        let mut placed = std::mem::take(&mut self.placed);
+        if self.paints && ending == Ending::Short {
+            self.align(&mut placed);
+        }
         // Backgrounds, borders, column rules and images go in front
         // of the page's text, which is where the flow puts them. What
         // the sheet asked to paint elsewhere is sorted into place
@@ -603,6 +615,41 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.column_start = 0;
         self.tiers = vec![Tier::head(self.tier().spanning)];
         self.remaster();
+    }
+
+    /// Moves what the page being closed holds down its content box, as
+    /// `align-content` asks, with the columns and boxes painted over
+    /// it. The margin boxes are painted later and stay where they are.
+    ///
+    /// A page whose prose wraps around a box stays at the top, because
+    /// its lines were broken beside the box where they stand.
+    fn align(&mut self, placed: &mut [Placed]) {
+        let index = self.pages.len();
+        let share = match self
+            .paginator
+            .master(index, &self.slot)
+            .geometry
+            .align_content
+        {
+            AlignContent::Start => return,
+            AlignContent::Center => 0.5,
+            AlignContent::End => 1.0,
+        };
+        if self.anchored.wraps(index) {
+            return;
+        }
+        let foot = placed
+            .iter()
+            .map(|placed| placed.top + placed.height)
+            .fold(0.0, f32::max);
+        let down = (self.height - foot).max(0.0) * share;
+        for placed in placed.iter_mut() {
+            placed.top += down;
+            shift(&mut placed.items, 0.0, down);
+        }
+        for tier in &mut self.tiers {
+            tier.top += down;
+        }
     }
 
     /// Ships blank leaves until the next page falls on `side`.
@@ -808,7 +855,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     pub(super) fn finish(mut self) -> Paged {
-        self.close();
+        self.close(Ending::Short);
         // An anchor with nothing after it lands on the last page the
         // book reached.
         let last = self.pages.len().saturating_sub(1);
@@ -963,6 +1010,181 @@ mod tests {
     /// A page divided in two, with a gutter wide enough to tell the
     /// columns apart by where a line starts.
     const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
+
+    /// How far every content line and every rect of `page` sits below
+    /// the same line and rect of `plain`. Both pages hold the same
+    /// things, and each thing moved by the one distance.
+    fn moved_down(plain: &Page, page: &Page) -> f32 {
+        let (was, now) = (content_items(plain), content_items(page));
+        assert_eq!(was.len(), now.len(), "runs came or went");
+        assert!(!now.is_empty(), "the page holds no text");
+        let down = now[0].1 - was[0].1;
+        for (was, now) in was.iter().zip(&now) {
+            assert_eq!((was.0, was.3), (now.0, now.3), "{:?} moved across", now.3);
+            assert!(
+                (now.1 - was.1 - down).abs() < 1e-3,
+                "{:?} moved {} rather than {down}",
+                now.3,
+                now.1 - was.1,
+            );
+        }
+        let (was, now) = (rects(plain), rects(page));
+        assert_eq!(was.len(), now.len(), "rects came or went");
+        for (was, now) in was.iter().zip(&now) {
+            assert!(
+                (now.1 - was.1 - down).abs() < 1e-3,
+                "{now:?} did not move with the text"
+            );
+        }
+        down
+    }
+
+    /// A chapter opening: a title and one short quotation in a tinted
+    /// box.
+    fn title_page(title: &str) -> Section {
+        section(vec![
+            heading(title),
+            quote(vec![paragraph("A short epigraph.")]),
+        ])
+    }
+
+    const TINT: &str = "blockquote { background-color: #eeeeee }";
+
+    /// Prose over several pages whose last page holds only a few lines,
+    /// so that page has room to move into.
+    fn ends_short() -> Vec<Block> {
+        (24..48)
+            .map(long_prose)
+            .find(|blocks| {
+                let pages = paginate(vec![section(blocks.clone())]);
+                pages.len() > 2 && content_lines(&pages[pages.len() - 1]).len() < 10
+            })
+            .expect("a book that ends a few lines into a page")
+    }
+
+    /// Acceptance: `@page chapter-opening { align-content: center }`
+    /// centers a title page's content between the top and bottom
+    /// margins. The page that a break ends and the page that the end
+    /// of the book ends both center, and the box around the quotation
+    /// moves with the text.
+    #[test]
+    fn a_title_page_centers_between_the_top_and_bottom_margins() {
+        let sections = || vec![title_page("One"), title_page("Two")];
+        let named = format!("{TINT} section {{ page: chapter-opening }}");
+        let plain = paginate_styled(&named, sections());
+        let at = |align: &str| {
+            paginate_styled(
+                &format!("{named} @page chapter-opening {{ align-content: {align} }}"),
+                sections(),
+            )
+        };
+        let (centered, ended) = (at("center"), at("end"));
+        assert_eq!(plain.len(), 3, "two chapters and the blank between them");
+        assert_eq!(centered.len(), plain.len());
+        for index in [0, 2] {
+            let (center, end) = (
+                moved_down(&plain[index], &centered[index]),
+                moved_down(&plain[index], &ended[index]),
+            );
+            assert!(end > 100.0, "page {}: the content moved {end}", index + 1);
+            // `end` moves the content by all the room under it, and
+            // `center` by half of it: the room above and below match.
+            assert!(
+                (center * 2.0 - end).abs() < 1e-3,
+                "page {}: {center} above and {} below",
+                index + 1,
+                end - center,
+            );
+        }
+    }
+
+    /// Acceptance: a full page under the same rule sets exactly as it
+    /// does today. Only the last page of the book ends short, and it is
+    /// the only page that moves.
+    #[test]
+    fn a_full_page_under_align_content_sets_as_it_does_today() {
+        let blocks = ends_short();
+        let sections = || vec![section(blocks.clone())];
+        let plain = paginate(sections());
+        let centered = paginate_styled("@page { align-content: center }", sections());
+        assert!(plain.len() > 2, "the prose fills {} page(s)", plain.len());
+        assert_eq!(plain.len(), centered.len(), "the page count moved");
+        let last = plain.len() - 1;
+        for (was, now) in plain[..last].iter().zip(&centered[..last]) {
+            assert_eq!(
+                content_items(was),
+                content_items(now),
+                "page {} moved",
+                now.number
+            );
+        }
+        let down = moved_down(&plain[last], &centered[last]);
+        assert!(down > 1.0, "the last page moved {down}");
+    }
+
+    /// Part: margin boxes are unaffected. The folio of a page whose
+    /// content moves stays where the page master puts it.
+    #[test]
+    fn a_centered_page_leaves_its_folio_where_the_master_puts_it() {
+        use crate::layout::testing::folio;
+        let blocks = ends_short();
+        let sections = || vec![section(blocks.clone())];
+        let plain = paginate(sections());
+        let centered = paginate_styled("@page { align-content: end }", sections());
+        let last = plain.len() - 1;
+        assert!(moved_down(&plain[last], &centered[last]) > 1.0);
+        let at = |page: &Page| match folio(page) {
+            Some((DrawItem::Text { x, y, .. }, digits)) => (*x, *y, digits),
+            other => panic!("page {} carries no folio: {other:?}", page.number),
+        };
+        assert_eq!(at(&plain[last]), at(&centered[last]));
+    }
+
+    /// Part: the columns of a divided page move down together, with
+    /// the rule between them.
+    #[test]
+    fn a_divided_page_moves_its_columns_and_its_rule_together() {
+        let css = format!(
+            "{TWO_COLUMNS} @page {{ column-rule-style: solid; column-rule-width: 1pt }} \
+                 blockquote {{ break-before: column }}"
+        );
+        let sections = || {
+            vec![section(vec![
+                prose(),
+                prose(),
+                quote(vec![prose()]),
+                prose(),
+            ])]
+        };
+        let plain = paginate_styled(&css, sections());
+        let centered = paginate_styled(
+            &format!("{css} @page {{ align-content: center }}"),
+            sections(),
+        );
+        assert_eq!(plain.len(), 1);
+        assert_eq!(rects(&plain[0]).len(), 1, "the prose reaches both columns");
+        assert!(moved_down(&plain[0], &centered[0]) > 1.0);
+    }
+
+    /// A page whose prose wraps around an image against the page stays
+    /// at the top, because its lines were broken beside the image.
+    #[test]
+    fn a_page_that_wraps_around_an_image_stays_at_the_top() {
+        use crate::layout::testing::{image, with_image};
+        let sections = || vec![section(vec![image(), prose(), prose()])];
+        let css = "img { position: absolute; top: 0; left: 0; wrap-flow: end }";
+        let plain = with_image(css, sections()).pages;
+        let centered = with_image(
+            &format!("{css} @page {{ align-content: center }}"),
+            sections(),
+        )
+        .pages;
+        assert_eq!(content_items(&plain[0]), content_items(&centered[0]));
+        assert_eq!(
+            crate::layout::testing::painted(&plain[0]),
+            crate::layout::testing::painted(&centered[0])
+        );
+    }
 
     /// The same page, with a heading across both columns.
     const SPANNING: &str = "@page { column-count: 2; column-gap: 18pt } h1 { column-span: all }";

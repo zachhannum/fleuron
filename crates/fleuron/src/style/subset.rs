@@ -390,6 +390,7 @@ mod tests {
             PageDeclaration::ColumnGap(_) => "column-gap",
             PageDeclaration::ColumnRuleWidth(_) => "column-rule-width",
             PageDeclaration::ColumnRuleStyle(_) => "column-rule-style",
+            PageDeclaration::AlignContent(_) => "align-content",
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
             MarginDeclaration::Content(_) => "content",
