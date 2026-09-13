@@ -1281,6 +1281,126 @@ fn assign_inline(inline: &mut Inline, next: &mut u32) {
 mod tests {
     use super::*;
 
+    /// A heading with `title` as its text and `written` as the id its
+    /// source wrote.
+    fn titled(title: &str, written: Option<&str>) -> Block {
+        Block::Heading {
+            id: NodeId::UNASSIGNED,
+            level: HeadingLevel::H1,
+            inlines: vec![Inline::Text {
+                id: NodeId::UNASSIGNED,
+                value: title.into(),
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            }],
+            attributes: Attributes {
+                id: written.map(Into::into),
+                ..Attributes::default()
+            },
+            position: None,
+            span: None,
+        }
+    }
+
+    /// A numbered book of one section for each list of blocks.
+    fn numbered(sections: Vec<Vec<Block>>) -> Book {
+        let mut book = Book {
+            sections: sections
+                .into_iter()
+                .map(|blocks| Section {
+                    blocks,
+                    ..Section::default()
+                })
+                .collect(),
+            ..Book::default()
+        };
+        book.assign_node_ids();
+        book
+    }
+
+    /// The id of every heading in the book, in document order.
+    fn heading_ids(book: &Book) -> Vec<Option<&str>> {
+        book.sections
+            .iter()
+            .flat_map(|section| &section.blocks)
+            .filter(|block| matches!(block, Block::Heading { .. }))
+            .map(|block| block_attributes(block).id.as_deref())
+            .collect()
+    }
+
+    /// A default id is the heading's text lowercased, with each run of
+    /// characters that are not letters or digits as one hyphen. Text
+    /// with no letter or digit gives no id.
+    #[test]
+    fn a_heading_takes_a_default_id_from_its_text() {
+        for (title, id) in [
+            ("The Hunter", Some("the-hunter")),
+            ("  Chapter 1: “Arrival”!  ", Some("chapter-1-arrival")),
+            ("Café Noir", Some("café-noir")),
+            ("— ? —", None),
+            ("", None),
+        ] {
+            let book = numbered(vec![vec![titled(title, None)]]);
+            assert_eq!(heading_ids(&book), [id], "{title:?}");
+        }
+    }
+
+    /// A default id never takes an id written anywhere in the book,
+    /// nor one an earlier heading took.
+    #[test]
+    fn a_default_id_skips_written_ids_and_earlier_defaults() {
+        let book = numbered(vec![
+            vec![titled("Hunt", None)],
+            vec![titled("Chase", Some("hunt-2"))],
+            vec![titled("Hunt", None), titled("The Hunt", Some("hunt"))],
+        ]);
+        assert_eq!(
+            heading_ids(&book),
+            [Some("hunt-3"), Some("hunt-2"), Some("hunt-4"), Some("hunt")],
+        );
+    }
+
+    /// Default ids are given again whenever the tree is numbered, so
+    /// one that a removed heading pushed along comes back.
+    #[test]
+    fn numbering_again_gives_the_default_ids_again() {
+        let mut book = numbered(vec![vec![titled("Chapter One", None)]]);
+        book.sections.insert(
+            0,
+            Section {
+                blocks: vec![titled("Chapter One", None)],
+                ..Section::default()
+            },
+        );
+        book.assign_node_ids();
+        assert_eq!(
+            heading_ids(&book),
+            [Some("chapter-one"), Some("chapter-one-2")]
+        );
+
+        book.sections.remove(0);
+        book.assign_node_ids();
+        assert_eq!(heading_ids(&book), [Some("chapter-one")]);
+    }
+
+    /// A serialized tree holds only the ids its source wrote. Read
+    /// back and numbered, it is the same tree.
+    #[test]
+    fn a_serialized_tree_leaves_out_default_ids() {
+        let book = numbered(vec![vec![
+            titled("The Hunter", None),
+            titled("The Chase", Some("hunt")),
+        ]]);
+        let json = serde_json::to_string(&book).expect("the tree serializes");
+        assert!(!json.contains("the-hunter"), "{json}");
+        assert!(json.contains("\"id\":\"hunt\""), "{json}");
+
+        let mut back: Book = serde_json::from_str(&json).expect("the tree reads back");
+        back.assign_node_ids();
+        assert_eq!(back, book);
+    }
+
     /// The markdown the sample tree was read from, so that its spans
     /// are the bytes of something rather than numbers made up.
     const SOURCE: &str = "\

@@ -368,7 +368,7 @@ impl InlineStyles for Referring<'_, '_> {
 mod tests {
     use super::*;
     use crate::content::{Attributes, HeadingLevel, SourcePos};
-    use crate::layout::testing::{book_of, long_prose, registry, section, styled};
+    use crate::layout::testing::{book_of, heading, long_prose, registry, section, styled};
     use crate::layout::{layout_book, no_assets};
     use crate::pages::{DrawItem, Page};
     use crate::style::CounterStyle;
@@ -735,6 +735,79 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         let at = page_with(&pages, "The mark is here.").number;
         assert!(page_words(&pages[0]).contains(&format!("the mark (page {at})")));
+    }
+
+    /// A chapter that opens on a heading with no id written, with a
+    /// link to `to` in its first paragraph and pages of prose after it.
+    fn unnamed_chapter(title: &str, to: &str, name: &str) -> Section {
+        let mut blocks = vec![
+            heading(title),
+            paragraph_of(vec![
+                words("See "),
+                link(to, name, 3, &[]),
+                words(" for the rest."),
+            ]),
+        ];
+        blocks.extend(long_prose(30));
+        section(blocks)
+    }
+
+    /// Two chapters called The Hunter after one called The Voyage,
+    /// none of them with an id written.
+    fn hunters() -> Book {
+        book_of(vec![
+            unnamed_chapter("The Voyage", "#the-hunter", "the hunter"),
+            unnamed_chapter("The Hunter", "#the-hunter-2", "the second hunter"),
+            unnamed_chapter("The Hunter", "#the-voyage", "the voyage"),
+        ])
+    }
+
+    /// Acceptance: a heading with no id written takes one from its
+    /// text. A link to it prints its page, `target-text()` prints its
+    /// words, and a `#id` selector reaches it. Two headings with the
+    /// same text do not warn.
+    #[test]
+    fn a_reference_reaches_a_default_id() {
+        let book = hunters();
+        let css = format!(
+            "{PAGE_REFERENCE} a::before {{ content: target-text(attr(href url)) \" \" }} \
+             #the-hunter-2 {{ font-size: 30pt }}"
+        );
+        let styles = styled(&css, &book);
+        assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
+        let (pages, warnings, _) = lay_out(&css, &book);
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        let hunter = page_with(&pages, "See The Hunter the second hunter").number;
+        let second = page_with(&pages, "See The Voyage the voyage").number;
+        assert!(hunter < second, "{hunter}, {second}");
+        let printed = format!("See The Hunter the hunter (page {hunter}) for the rest.");
+        let page = page_with(&pages, "See The Hunter the hunter");
+        assert!(page_words(page).contains(&printed), "{}", page_words(page));
+
+        let large: Vec<u32> = pages
+            .iter()
+            .filter(|page| {
+                page.items
+                    .iter()
+                    .any(|item| matches!(item, DrawItem::Text { size, .. } if *size == 30.0))
+            })
+            .map(|page| page.number)
+            .collect();
+        assert_eq!(large, [second], "only the second hunter is 30pt");
+    }
+
+    /// Acceptance: laid out twice, a book of default ids comes out
+    /// byte for byte the same.
+    #[test]
+    fn a_book_of_default_ids_lays_out_the_same_twice() {
+        let book = hunters();
+        let styles = styled(PAGE_REFERENCE, &book);
+        let run = || layout_book(&book, &styles, registry(), no_assets());
+        assert_eq!(
+            crate::wire::encode(&run()).expect("the output encodes"),
+            crate::wire::encode(&run()).expect("the output encodes"),
+        );
     }
 
     /// The second pass ships. An element a reference prints the page

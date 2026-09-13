@@ -234,6 +234,111 @@ mod tests {
         assert!(ids[0] > 0 && ids[1] > ids[0], "{ids:?}");
     }
 
+    /// Each source read whole, composed in the order given, and what
+    /// the frontend complained about.
+    fn composed(sources: &[(&str, &str)]) -> (Book, Vec<Warning>) {
+        let per_file = Options {
+            sections: Sections::Whole,
+            ..Options::default()
+        };
+        let mut sections = Vec::new();
+        let mut warnings = Vec::new();
+        for (name, text) in sources {
+            let (read, complaints) = to_sections(text, name, &per_file);
+            sections.extend(read);
+            warnings.extend(complaints);
+        }
+        (assemble(Metadata::default(), sections), warnings)
+    }
+
+    /// The id of every heading in the book, in document order.
+    fn heading_ids(book: &Book) -> Vec<Option<&str>> {
+        book.sections
+            .iter()
+            .flat_map(|section| &section.blocks)
+            .filter_map(|block| match block {
+                fleuron::content::Block::Heading { attributes, .. } => {
+                    Some(attributes.id.as_deref())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Acceptance: `# The Hunter` with no attribute run takes the id
+    /// `the-hunter`.
+    #[test]
+    fn a_heading_with_no_attribute_run_takes_a_default_id() {
+        let (book, warnings) = composed(&[("one.md", "# The Hunter\n\nHe waited.\n")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(heading_ids(&book), [Some("the-hunter")]);
+    }
+
+    /// Acceptance: two headings with the same text in two sources take
+    /// `x` and `x-2`, in reading order, and nothing warns.
+    #[test]
+    fn default_ids_are_counted_over_the_whole_book() {
+        let (book, warnings) = composed(&[
+            ("one.md", "# Chapter One\n\nA.\n"),
+            ("two.md", "# Chapter One\n\nB.\n"),
+        ]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            heading_ids(&book),
+            [Some("chapter-one"), Some("chapter-one-2")]
+        );
+    }
+
+    /// Acceptance: a heading that writes `{#hunt}` takes `hunt`, and a
+    /// later `# Hunt` takes `hunt-2`.
+    #[test]
+    fn a_written_id_wins_over_a_default_id() {
+        let (book, _) = composed(&[("one.md", "# The Chase {#hunt}\n\n# Hunt\n")]);
+        assert_eq!(heading_ids(&book), [Some("hunt"), Some("hunt-2")]);
+    }
+
+    /// Acceptance: a heading whose text is only punctuation or markup
+    /// takes no default id.
+    #[test]
+    fn a_heading_of_punctuation_or_markup_takes_no_default_id() {
+        let (book, _) = composed(&[("one.md", "# ?!\n\n# *—*\n\n# <br>\n")]);
+        assert_eq!(heading_ids(&book), [None, None, None]);
+    }
+
+    /// Acceptance: a default id moves no byte offset. The tree the
+    /// frontend read serializes the same after assembly, and a byte of
+    /// the heading still answers with the run written there.
+    #[test]
+    fn a_default_id_moves_no_byte_offset() {
+        let markdown = "# The Hunter\n\nHe *waited*.\n";
+        let (read, _) = to_sections(markdown, "one.md", &Options::default());
+        let before = serde_json::to_string(&read).expect("the sections serialize");
+        let book = assemble(Metadata::default(), read);
+        assert_eq!(heading_ids(&book), [Some("the-hunter")]);
+        assert_eq!(
+            serde_json::to_string(&book.sections).expect("the sections serialize"),
+            before,
+        );
+
+        let byte = markdown.find("Hunter").expect("the source holds it") as u32;
+        let node = book.node_at("one.md", byte).expect("the heading was read there");
+        let (_, span) = book.source_of(node).expect("and it says where");
+        assert_eq!(&markdown[span.start as usize..span.end as usize], "The Hunter");
+    }
+
+    /// Acceptance: assembled twice, a book gives the same default ids.
+    #[test]
+    fn default_ids_are_deterministic() {
+        let sources = [
+            ("one.md", "# Chapter One\n\nA.\n"),
+            ("two.md", "# Chapter One\n\nB.\n"),
+        ];
+        let (first, _) = composed(&sources);
+        let (second, _) = composed(&sources);
+        assert_eq!(first, second);
+        assert_eq!(heading_ids(&first), heading_ids(&second));
+    }
+
     /// A chapter file's frontmatter is the chapter's. Book metadata
     /// is handed to assembly, so nothing here has to guess which of
     /// sixty files was describing the work.
