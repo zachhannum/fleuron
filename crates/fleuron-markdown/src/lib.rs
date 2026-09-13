@@ -404,7 +404,8 @@ mod tests {
     /// the same with and without attributes on the section.
     #[test]
     fn naming_a_section_moves_no_offset() {
-        let markdown = "# The Hunter\n\nHe *waited*.\n\n> A `quiet` word.\n\n---\n\nThen he left.\n";
+        let markdown =
+            "# The Hunter\n\nHe *waited*.\n\n> A `quiet` word.\n\n---\n\nThen he left.\n";
         let reading = Options {
             sections: Sections::Whole,
             ..Options::default()
