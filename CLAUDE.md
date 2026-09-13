@@ -33,13 +33,14 @@ wins and the quick fix waits for its own PR.
 - The tables on that page are rendered from the parser's own tables.
   After changing what the parser accepts, regenerate them with
   `FLEURON_UPDATE_DOCS=1 cargo test -p fleuron --test css_subset`.
-- Work is tracked in GitHub issues, grouped by the v0.1 epic (#13). An
-  issue's acceptance checkboxes are its definition of done.
+- Work is tracked in GitHub issues. An issue's acceptance checkboxes
+  are its definition of done.
 
 ## Unit testing
 
-- Tests are colocated: `#[cfg(test)]` modules inside the file under
-  test. No separate `tests/` directory inside `crates/fleuron`.
+- Unit tests are colocated: `#[cfg(test)]` modules inside the file
+  under test. Tests that go through the public API live in the crate's
+  `tests/` directory.
 - One test per acceptance checkbox on the issue being implemented. When
   you check a box, there is a test that proves it.
 - Layout invariants get **property tests** (`proptest`), not golden
@@ -55,8 +56,9 @@ wins and the quick fix waits for its own PR.
 ## E2E testing
 
 There is exactly one e2e definition in this repo: **fixture book
-markdown in → valid PDF out**, invoked through the CLI, living in
-`crates/fleuron-cli/tests/`.
+markdown in → valid PDF out**. The CLI runs it in
+`crates/fleuron-cli/tests/`. The npm package runs the same book in
+`crates/fleuron-wasm/npm/test/`.
 
 - Input: `fixtures/gulliver-excerpt.md`, checked in: realistic prose,
   dialogue, em-dashes, hyphenation-prone words; never lorem.
@@ -66,9 +68,8 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 - Any pipeline stage that does not extend the e2e path is not done. If
   you added a stage and didn't wire it into the fixture run, finish that
   first.
-- Perf is not e2e. Criterion benches report numbers; they do not gate
-  PRs until #12's harness has a stable baseline. After that, a
-  regression > 20% on the 300-page bench fails CI.
+- Perf is not e2e. Criterion benches report numbers and never gate a
+  PR. CI checks the budgets through `perf-gate`.
 
 ## Implementing changes
 
@@ -77,7 +78,8 @@ markdown in → valid PDF out**, invoked through the CLI, living in
 
 ## Perf harness
 
-- The corpus is two public-domain books in `fixtures/corpus/`, checked
+- The third book in `fixtures/corpus/` is for a site demo. The harness
+  corpus is the other two public-domain books, checked
   in as markdown and read into content trees through the shipped
   frontend, so the measured path is the shipped path. Pride and
   Prejudice is the gate: ~330 pages, the book scale the budgets are
@@ -131,11 +133,19 @@ markdown in → valid PDF out**, invoked through the CLI, living in
    `pdftotext` (tools installed via `apt` in the job)
 5. `cargo-deny` advisories check — no merged dependency with an open
    RUSTSEC advisory (rustybuzz taught us why this job exists)
-6. wasm32 build check: `cargo build -p fleuron-wasm
-   --target wasm32-unknown-unknown` — the bindings must never silently
-   rot while only native gets exercised
+6. wasm job: calls `wasm.yml`. It checks that every version agrees and
+   builds the module and the npm package. It runs the fixture book in a
+   worker, in Chromium and from an installed package. It tests
+   `fleuron-react` and reports the size budget.
 7. perf job: book-scale invariants in release, then `perf-gate` against
-   the budgets natively and under wasmtime, reported to the run summary
+   the budgets natively and under wasmtime. The display-structure
+   digests of the two targets must match.
+8. report job: on a PR from this repository, one comment rewritten on
+   every run with each job's result and the perf-gate reports.
+
+`.github/workflows/docs.yml` builds the site, runs both quickstarts,
+folds in rustdoc, checks the landing demo in a browser and deploys to
+GitHub Pages.
 
 ## Releases
 
