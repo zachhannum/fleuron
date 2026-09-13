@@ -173,10 +173,15 @@ pub struct Decorations {
     pub closes: u32,
 }
 
-/// One decorated block: what it paints, and where it sits around the
-/// fragments it spans.
+/// One block: what it paints, and where it sits around the fragments
+/// it spans.
 #[derive(Debug, Clone)]
 pub struct Decoration {
+    /// The content node the block stands for.
+    pub node: NodeId,
+    /// Whether the block paints a background or a border. A block that
+    /// paints neither still has a border box to answer for.
+    pub paints: bool,
     /// Leading edge of the border box, from the content box's own.
     pub x: f32,
     /// Width of the border box.
@@ -228,26 +233,25 @@ pub(super) fn decorated(style: &ComputedStyle) -> bool {
     style.background.paints() || style.border.paints()
 }
 
-/// The decoration one block paints, or `None` where it paints
-/// nothing. `x` and `measure` are what the block was laid out
-/// against; the border box takes its margins off them. `backdrop` is
-/// what the cascade put behind it, resolved against the asset table.
-/// `offset` is the sum of the moves of the relative blocks around it,
-/// itself included.
+/// The border box of one block, and what it paints there. `x` and
+/// `measure` are what the block was laid out against; the border box
+/// takes its margins off them. `backdrop` is what the cascade put
+/// behind it, resolved against the asset table. `offset` is the sum of
+/// the moves of the relative blocks around it, itself included.
 pub(super) fn decoration(
+    node: NodeId,
     style: &ComputedStyle,
     x: f32,
     measure: f32,
     backdrop: Backdrop,
     offset: (f32, f32),
-) -> Option<Decoration> {
-    if !decorated(style) {
-        return None;
-    }
+) -> Decoration {
     let (left, width) = style.border_box(x, measure);
     let border = style.border.widths();
     let ink = |edge: crate::style::Border| edge.color.unwrap_or(style.color);
-    Some(Decoration {
+    Decoration {
+        node,
+        paints: decorated(style),
         x: left,
         width,
         above: 0.0,
@@ -263,5 +267,5 @@ pub(super) fn decoration(
         cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
         layer: style.z_index,
         offset,
-    })
+    }
 }

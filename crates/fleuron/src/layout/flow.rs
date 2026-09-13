@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::content::{NodeId, Section};
-use crate::pages::{DrawItem, Page, Side};
+use crate::pages::{DrawItem, Page, PageBox, Side};
 use crate::style::{AlignContent, Break, PageQuery, Situation};
 
 use super::Paginator;
@@ -60,6 +60,9 @@ pub(crate) struct Paged {
     /// The page each id landed on: the page of the first fragment of
     /// the first element that carries it.
     pub(crate) targets: BTreeMap<NodeId, usize>,
+    /// The border box of each block in the flow, one for each page and
+    /// column it reaches, in the order the pages closed.
+    pub(crate) boxes: Vec<(NodeId, PageBox)>,
 }
 
 /// One fragment placed on the page being built.
@@ -180,6 +183,8 @@ pub(super) struct Flow<'a, 'p> {
     /// height, to set again where the table continues onto a new page
     /// or column.
     header: Vec<(f32, Vec<DrawItem>)>,
+    /// The border boxes of the blocks on the pages closed so far.
+    boxes: Vec<(NodeId, PageBox)>,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -212,6 +217,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             targets: BTreeMap::new(),
             paints: true,
             header: Vec::new(),
+            boxes: Vec::new(),
         }
     }
 
@@ -806,7 +812,25 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.carried.push(boxes[index].decoration.clone());
         }
         let origin = self.column_origin(column);
-        boxes.iter().flat_map(|box_| box_.items(origin)).collect()
+        let page = self.pages.len() as u32;
+        let mut items = Vec::new();
+        for painted in &boxes {
+            let (x, y, width, height) = painted.border_box(origin);
+            if height > 0.0 {
+                self.boxes.push((
+                    painted.decoration.node,
+                    PageBox {
+                        page,
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                ));
+            }
+            items.extend(painted.items(origin));
+        }
+        items
     }
 
     /// The rules down the gutters of the page being closed: in each
@@ -867,6 +891,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             infos: self.infos,
             anchors: self.anchors,
             targets: self.targets,
+            boxes: self.boxes,
         }
     }
 }
@@ -886,13 +911,23 @@ pub(super) struct Painted {
 }
 
 impl Painted {
+    /// The border box on the page, as left, top, width and height:
+    /// `origin` is the page's content box.
+    pub(super) fn border_box(&self, origin: (f32, f32)) -> (f32, f32, f32, f32) {
+        let (dx, dy) = self.decoration.offset;
+        (
+            origin.0 + self.decoration.x + dx,
+            origin.1 + self.top + dy,
+            self.decoration.width,
+            self.bottom - self.top,
+        )
+    }
+
     /// The rects this box paints, background first: `origin` is the
     /// page's content box.
     pub(super) fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
-        let (dx, dy) = self.decoration.offset;
-        let (x, y) = (origin.0 + self.decoration.x + dx, origin.1 + self.top + dy);
-        let (w, h) = (self.decoration.width, self.bottom - self.top);
-        if w <= 0.0 || h <= 0.0 {
+        let (x, y, w, h) = self.border_box(origin);
+        if !self.decoration.paints || w <= 0.0 || h <= 0.0 {
             return Vec::new();
         }
         let layer = self.decoration.layer;

@@ -300,6 +300,14 @@ fn matched_rule(
     }
 }
 
+/// The element that stands for one node of `book`: the node itself,
+/// or for a text node, the element that holds it.
+pub(crate) fn element_of(book: &Book, node: NodeId) -> Option<NodeId> {
+    book.subtree(node)?;
+    let elements = ElementTree::build(book);
+    owner(&elements, book, node).map(|index| elements.nodes()[index].id)
+}
+
 /// The element that stands for `node`: its own, or for a text node,
 /// which is not an element, the innermost element holding it.
 fn owner(elements: &ElementTree, book: &Book, node: NodeId) -> Option<usize> {

@@ -38,7 +38,8 @@
 //! the folios it prints.
 //!
 //! The parts have a file each: `edit` is what a host changes,
-//! `output` is what it asks for, `stage` runs the stages, `invalidate`
+//! `output` is what it asks for, `inspect` answers what styled one
+//! node and where it landed, `stage` runs the stages, `invalidate`
 //! decides which of them an edit reaches, and `key` fingerprints one
 //! section.
 
@@ -48,11 +49,13 @@ use crate::content::{Book, NodeId};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::layout::{Fragment, PageInfo, Piece, References, no_assets};
+use crate::pages::PageBox;
 use crate::style::{StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
 
 mod edit;
 mod faces;
+mod inspect;
 mod invalidate;
 mod key;
 mod output;
@@ -180,6 +183,11 @@ impl Cached {
                     *node = node.shifted(step);
                 }
             }
+            if let Some(decorations) = &mut fragment.decorations {
+                for decoration in &mut decorations.opens {
+                    decoration.node = decoration.node.shifted(step);
+                }
+            }
             if let Piece::Anchor(node) = &mut fragment.piece {
                 *node = node.shifted(step);
             }
@@ -263,6 +271,8 @@ pub struct Session<'a> {
     /// every element it set on another page than the pass before.
     settle_warnings: Vec<Warning>,
     infos: Vec<PageInfo>,
+    /// The border box of each block, on each page it reaches.
+    boxes: Vec<(NodeId, PageBox)>,
     output: Option<LayoutOutput>,
     /// What building lines complained about, deduped in the order the
     /// sections raised it.
@@ -308,6 +318,7 @@ impl<'a> Session<'a> {
             settled: Vec::new(),
             settle_warnings: Vec::new(),
             infos: Vec::new(),
+            boxes: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),
             source_warnings: Vec::new(),
@@ -360,6 +371,7 @@ impl<'a> Session<'a> {
             settled: Vec::new(),
             settle_warnings: Vec::new(),
             infos: Vec::new(),
+            boxes: Vec::new(),
             output: None,
             flow_warnings: Vec::new(),
             source_warnings: Vec::new(),

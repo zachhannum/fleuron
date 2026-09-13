@@ -47,7 +47,7 @@ impl<'a> Builder<'a, '_> {
         } else {
             style.clone()
         };
-        let start = self.open(&frame, &[], x, measure);
+        let start = self.open(id, &frame, &[], x, measure);
         let (left, width) = frame.content_box(x, measure);
         let rows: Vec<&Row> = rows(head, body).collect();
         let table = Table::new(styles, style, &rows, collapse);
@@ -124,6 +124,8 @@ impl<'a> Builder<'a, '_> {
             .items(grid.left, above, grid.width, height, layer);
         for (column, cell_style, _, _) in &cells {
             let decoration = Decoration {
+                node: crate::content::NodeId::UNASSIGNED,
+                paints: true,
                 x: grid.x[*column],
                 width: grid.widths[*column],
                 above: 0.0,

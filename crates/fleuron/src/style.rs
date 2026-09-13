@@ -36,6 +36,7 @@ use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
+pub(crate) use inspect::element_of;
 pub use inspect::{Ancestor, InspectedDeclaration, Inspection, MatchedRule};
 pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
