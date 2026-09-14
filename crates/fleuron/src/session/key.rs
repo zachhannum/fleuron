@@ -157,6 +157,15 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 (0u8, value, position).hash(h);
                 hash_node(*id, styles, h);
             }
+            Inline::Break {
+                id,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (5u8, position).hash(h);
+                hash_node(*id, styles, h);
+            }
             Inline::Emphasis {
                 id,
                 children,

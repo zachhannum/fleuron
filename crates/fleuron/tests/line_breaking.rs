@@ -151,6 +151,43 @@ proptest! {
         }
     }
 
+    /// A hard break ends a line at every measure: no line holds words
+    /// from both sides of one, and every verse line is set whole.
+    #[test]
+    fn no_line_runs_across_a_hard_break(
+        verses in proptest::collection::vec(text_strategy(), 1..6),
+        measure in 20.0f32..300.0,
+    ) {
+        let mut inlines = Vec::new();
+        for (index, verse) in verses.iter().enumerate() {
+            if index > 0 {
+                inlines.push(Inline::Break {
+                    id: NodeId::UNASSIGNED,
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                });
+            }
+            inlines.extend(inlines_of(verse));
+        }
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(&inlines, body(), measure, LineBreakOptions::default());
+        let mut set = lines
+            .iter()
+            .map(|line| line.runs.iter().map(|run| run.text.as_str()).collect::<String>());
+        for verse in &verses {
+            let wanted = verse.split_whitespace().count();
+            let mut words = 0;
+            while words < wanted {
+                let line = set.next();
+                prop_assert!(line.is_some(), "{:?} was not set whole", verse);
+                words += line.unwrap_or_default().split_whitespace().count();
+            }
+            prop_assert_eq!(words, wanted, "a line ran across the break after {:?}", verse);
+        }
+        prop_assert!(set.next().is_none(), "lines were set past the last verse");
+    }
+
     /// Layout is deterministic: two runs over the same input produce
     /// identical lines.
     #[test]

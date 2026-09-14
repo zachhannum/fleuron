@@ -134,8 +134,11 @@ A row and a cell each take an optional `position`, `span` and `attributes`, the 
 | `strong` | `children`. Bold, in the built-in sheet. |
 | `code` | `value`. Literal, with no markup inside, monospace and never hyphenated. |
 | `link` | `url` and `children`. The text lays out; the url reaches painters that can express one. |
+| `break` | No fields of its own. The line ends at the break, and the text after it stays in the same block. |
 
-Text runs are not elements as far as CSS is concerned. They take the style of the inline or block around them, and never count towards `:first-child`.
+Text runs are not elements as far as CSS is concerned. They take the style of the inline or block around them, and never count towards `:first-child`. A break is not an element either.
+
+Where the engine reads an inline tree as one string, a break is a newline. `string-set` with `content()` and `target-text()` read a heading that way.
 
 ## Naming a node
 

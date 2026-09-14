@@ -371,6 +371,7 @@ impl ElementTree {
                     text |= !value.is_empty();
                     continue;
                 }
+                Inline::Break { .. } => continue,
                 Inline::Code {
                     id,
                     value,

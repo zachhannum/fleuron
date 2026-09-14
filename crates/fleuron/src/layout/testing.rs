@@ -36,6 +36,27 @@ pub(super) fn heading(value: &str) -> Block {
     }
 }
 
+/// An `h1` of two lines with a hard break between them.
+pub(super) fn broken_heading(before: &str, after: &str) -> Block {
+    Block::Heading {
+        id: NodeId::UNASSIGNED,
+        level: HeadingLevel::H1,
+        inlines: vec![
+            text(before),
+            Inline::Break {
+                id: NodeId::UNASSIGNED,
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+            text(after),
+        ],
+        attributes: Attributes::default(),
+        position: Some(SourcePos { line: 1, column: 1 }),
+        span: None,
+    }
+}
+
 pub(super) fn paragraph(value: &str) -> Block {
     Block::Paragraph {
         id: NodeId::UNASSIGNED,

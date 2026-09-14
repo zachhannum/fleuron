@@ -282,6 +282,11 @@ The letter reached Marsh on a Tuesday, in *the second post*, and it was
 **not** what he had been waiting for. It began \`Dear sir\` and ended
 without a name, which is [the whole of the difficulty](https://example.com).
 
+It closed, as the last one had:
+
+Yours in haste,\\
+A friend at Smyrna
+
 {.aside}
 > Nothing in the file said where the ship had gone.
 >

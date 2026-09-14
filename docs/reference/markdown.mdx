@@ -247,8 +247,26 @@ A link to a web address, such as `https://example.com`, names nothing in the boo
 | `**strong**` | `strong` |
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
+| two spaces or `\` at the end of a line | `break` |
 
 A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
+
+Two spaces or a backslash at the end of a line is a hard break. The line ends there, and the next line stays in the same paragraph. Authors use it for verse, an address, and the closing of a letter. The following example keeps two lines of a sonnet as two lines:
+
+```markdown
+Shall I compare thee to a summer's day?\
+Thou art more lovely and more temperate:
+```
+
+A heading written with `#` holds one line of the source, so it has no hard break. A heading underlined with `=` or `-` can hold one. The following example is a chapter heading of two lines:
+
+```markdown
+Chapter One\
+The Voyage to Lilliput
+======================
+```
+
+A rule on `h1::first-line` styles the text before the break. The text after the break takes the style of `h1`. The whole heading is one heading to `string-set`, to a running head, and to its slug.
 
 ## What warns
 

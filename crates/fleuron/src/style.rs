@@ -934,7 +934,7 @@ fn named_inlines<'a>(
             warnings,
         );
         match inline {
-            Inline::Text { .. } | Inline::Code { .. } => {}
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => named_inlines(children, source, first, warnings),

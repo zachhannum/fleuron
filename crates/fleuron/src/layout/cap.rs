@@ -109,6 +109,7 @@ fn take_initial(inlines: &[Inline]) -> Option<Initial> {
                     }
                     *before += value.len();
                 }
+                Inline::Break { .. } => *before += '\n'.len_utf8(),
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. } => {

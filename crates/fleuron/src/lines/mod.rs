@@ -333,7 +333,8 @@ impl LineLayout<'_> {
                 line.width += width;
             }
             start = at.next;
-            if !span.ends_band {
+            let hard = at.forced && fit.at != breaker.end();
+            if !span.ends_band && !hard {
                 continue;
             }
             let Some((mut line, _)) = band.take() else {
@@ -413,10 +414,28 @@ pub struct Broken {
 mod tests {
     use crate::lines::flatten::SMALL_CAPS_RATIO;
     use crate::lines::testing::{
-        OPENING, body, drawn, layout_body, layout_first, line_text, one_run, registry, units_per_em,
+        OPENING, body, divided_band, drawn, layout_body, layout_first, line_text, one_run,
+        registry, units_per_em, with_breaks,
     };
     use crate::lines::{FirstLine, Inherited, LineBreakOptions, LineLayout, Measure, Opening};
     use crate::style::{FontVariantCaps, TextTransform};
+
+    /// A hard break ends the band it falls in. The text after a break
+    /// in the first span of a divided band opens the band under it,
+    /// not the span beside it.
+    #[test]
+    fn a_hard_break_in_a_divided_band_opens_the_next_band() {
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout(
+            &with_breaks("one\ntwo"),
+            body(),
+            divided_band(100.0, 20.0),
+            LineBreakOptions::default(),
+        );
+        assert_eq!(drawn(&lines), ["one", "two"]);
+        assert_eq!(lines[0].spans.len(), 1, "{:?}", lines[0].spans);
+        assert_eq!(lines[1].spans[0].offset, 0.0);
+    }
 
     /// A paragraph shaped once breaks to the same lines as the same
     /// text shaped and broken together. A break from the end of one
