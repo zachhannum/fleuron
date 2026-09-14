@@ -313,6 +313,9 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         break_inside,
         // A spanning block breaks to the whole content box.
         column_span,
+        // What a custom property holds reaches layout only through the
+        // properties that read it, which are hashed here already.
+        custom: _,
     } = style;
     (border_collapse, list_style_type).hash(h);
     for size in [width, height, min_height, max_width, max_height] {

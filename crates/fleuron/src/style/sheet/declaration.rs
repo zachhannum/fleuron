@@ -7,9 +7,10 @@ use cssparser::{
 };
 
 use crate::Warning;
-use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
+use crate::style::properties::{BorderStyle, Custom, Declaration, Edge, Length, MEDIUM, Pending};
 
 use super::color::{background_color, border_color, color};
+use super::custom::{mentions_var, raw};
 use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
     break_value, ceiling, column_span, count, counter_reset, decoration_break, edges, families,
@@ -109,11 +110,35 @@ impl<'i> DeclarationParser<'i> for Properties {
         start: &ParserState,
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
-            if self.first_line && !FIRST_LINE_PROPERTIES.contains(&&*name.to_ascii_lowercase()) {
+            let custom = name.starts_with("--");
+            if !custom
+                && self.first_line
+                && !FIRST_LINE_PROPERTIES.contains(&&*name.to_ascii_lowercase())
+            {
                 return Err(input.new_custom_error(StyleError::NotOnFirstLine(name.clone())));
             }
             let from = input.position();
-            let mut declarations = property(&name, input)?;
+            let origin = || position(&self.sheet, start.source_location());
+            let mut declarations = if custom {
+                vec![Declaration::Custom(Custom {
+                    name: name.to_string(),
+                    value: raw(input),
+                    origin: origin(),
+                })]
+            } else if mentions_var(input) {
+                let Some(spec) = Spec::find(PROPERTIES, &name) else {
+                    return Err(
+                        input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))
+                    );
+                };
+                vec![Declaration::Pending(Pending {
+                    property: spec.name.to_string(),
+                    value: raw(input),
+                    origin: origin(),
+                })]
+            } else {
+                property(&name, input)?
+            };
             let value = input.slice_from(from).trim().to_string();
             written_at(&mut declarations, &self.sheet, start);
             let importance = if input.try_parse(cssparser::parse_important).is_ok() {
@@ -125,7 +150,11 @@ impl<'i> DeclarationParser<'i> for Properties {
             Ok(Parsed {
                 declarations,
                 importance,
-                property: name.to_ascii_lowercase(),
+                property: if custom {
+                    name.to_string()
+                } else {
+                    name.to_ascii_lowercase()
+                },
                 value,
             })
         })(input)

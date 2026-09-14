@@ -39,6 +39,12 @@ pub(crate) const SELECTOR_LIST: (&str, &str) = (",", "h1, h2");
 /// The shape of one declaration.
 pub(crate) const DECLARATION: &str = "<property>: <value> !important?";
 
+/// The shape of one custom property declaration.
+pub(crate) const CUSTOM_PROPERTY: &str = "--<name>: <value> !important?";
+
+/// The function that puts a custom property's value in a declaration.
+pub(crate) const VAR: &str = "var( --<name> [, <fallback> ]? )";
+
 /// The combinators between two compounds, by their CSS names, with
 /// one use of each that parses.
 pub(crate) const COMBINATORS: &[(&str, &str)] = &[

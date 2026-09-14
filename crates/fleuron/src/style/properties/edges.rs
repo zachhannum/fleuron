@@ -29,6 +29,16 @@ impl<T: Copy> Edges<T> {
         }
     }
 
+    /// What the edge `which` holds.
+    pub fn get(&self, which: Edge) -> T {
+        match which {
+            Edge::Top => self.top,
+            Edge::Right => self.right,
+            Edge::Bottom => self.bottom,
+            Edge::Left => self.left,
+        }
+    }
+
     /// The edge `which`.
     pub fn edge(&mut self, which: Edge) -> &mut T {
         match which {

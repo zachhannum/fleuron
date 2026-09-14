@@ -131,6 +131,13 @@ fn every_listed_property_parses_a_value_the_description_names() {
     assert!(subset.declaration.contains("!important?"));
     parses(&rule("p", "color: black !important"));
 
+    assert!(subset.custom_property.starts_with("--<name>:"));
+    parses(&rule("p", "--accent: #d6075e !important"));
+    assert!(subset.var.starts_with("var("));
+    parses(&rule(":root", "--accent: #d6075e"));
+    parses(&rule("p", "color: var(--accent)"));
+    parses(&rule("p", "color: var(--accent, black)"));
+
     assert!(subset.page.prelude.starts_with("<name>?"));
     parses(&rule("@page chapter", "margin: 1in"));
     for selector in &subset.page.selectors {
@@ -181,7 +188,6 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("float", "left"),
         ("display", "block"),
         ("transform", "rotate(1deg)"),
-        ("--ornament", "\"❦\""),
         ("counter-increment", "page"),
         ("font-variant", "small-caps"),
         ("font", "italic 11pt serif"),
@@ -439,6 +445,11 @@ fn region(name: &str, subset: &Subset) -> String {
             block(&selectors.first_line_properties)
         ),
         "declaration" => format!("A declaration is `{}`.", subset.declaration),
+        "custom-properties" => format!(
+            "A custom property declaration is `{}`. `{}` stands for the value of a custom \
+             property in another declaration.",
+            subset.custom_property, subset.var
+        ),
         "defaults" => format!("```css\n{}```", fleuron::style::USER_AGENT_CSS),
         "text-properties" => properties_table(subset, true),
         "block-properties" => properties_table(subset, false),

@@ -16,7 +16,11 @@ use crate::content::{Book, NodeId};
 use crate::pages::PageBox;
 
 use super::element::ElementTree;
-use super::sheet::{Importance, MarginDeclaration, MarginRule, PageRule, SheetPosition, Written};
+use super::properties::Declaration;
+use super::sheet::{
+    self, Importance, MarginDeclaration, MarginRule, PageRule, SheetPosition, Written,
+    margin_longhands,
+};
 use super::{
     MarginBox, PageQuery, Situation, StyleTree, Stylesheets, align_hint, applicable, level, selects,
 };
@@ -130,18 +134,20 @@ impl Stylesheets {
         // The winner of each longhand, where `None` is the alignment
         // a table cell's column wrote, which no rule holds.
         let mut hint = element.align.map(align_hint);
-        let mut winners: HashMap<&str, Option<(usize, usize, usize)>> = HashMap::new();
+        let mut winners: HashMap<String, Option<(usize, usize, usize)>> = HashMap::new();
         for (level, _, sheet, rule, order) in &matched {
             if *level > 0
                 && let Some(hint) = hint.take()
             {
-                winners.insert(hint.property(), None);
+                winners.insert(hint.property().to_string(), None);
             }
             let at = (*sheet, *rule, *order);
-            winners.insert(declaration(at).property(), Some(at));
+            for property in longhands(declaration(at)) {
+                winners.insert(property, Some(at));
+            }
         }
         if let Some(hint) = hint {
-            winners.insert(hint.property(), None);
+            winners.insert(hint.property().to_string(), None);
         }
         let won: HashSet<(usize, usize, usize)> = winners.into_values().flatten().collect();
 
@@ -234,15 +240,23 @@ impl Stylesheets {
                 .enumerate()
                 .filter(move |(_, margin)| margin.which == which)
         }
-        let mut winners: HashMap<&str, (usize, usize, usize)> = HashMap::new();
+        let mut winners: HashMap<String, (usize, usize, usize)> = HashMap::new();
         for (index, (_, rule)) in matching.iter().enumerate() {
             for (at, margin) in boxes(rule, which) {
                 for (order, declaration) in margin.declarations.iter().enumerate() {
-                    let property = match declaration {
-                        MarginDeclaration::Content(_) => "content",
-                        MarginDeclaration::Style(declaration) => declaration.property(),
+                    let declarations = match declaration {
+                        MarginDeclaration::Pending(pending) => margin_longhands(&pending.property),
+                        declaration => vec![declaration.clone()],
                     };
-                    winners.insert(property, (index, at, order));
+                    for declaration in declarations {
+                        let property = match declaration {
+                            MarginDeclaration::Style(declaration) => {
+                                declaration.property().to_string()
+                            }
+                            _ => "content".to_string(),
+                        };
+                        winners.insert(property, (index, at, order));
+                    }
                 }
             }
         }
@@ -275,6 +289,18 @@ impl Stylesheets {
             computed,
             boxes: Vec::new(),
         })
+    }
+}
+
+/// The longhands a declaration sets. One that reads a custom property
+/// sets every longhand of its property, whatever the value comes to.
+fn longhands(declaration: &Declaration) -> Vec<String> {
+    match declaration {
+        Declaration::Pending(pending) => sheet::longhands(&pending.property)
+            .iter()
+            .map(|longhand| longhand.property().to_string())
+            .collect(),
+        declaration => vec![declaration.property().to_string()],
     }
 }
 

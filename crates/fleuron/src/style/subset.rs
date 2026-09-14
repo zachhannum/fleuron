@@ -18,9 +18,9 @@ use serde::{Deserialize, Serialize};
 use crate::style::element::ELEMENTS;
 use crate::style::properties::{CounterStyle, MarginBox};
 use crate::style::sheet::{
-    COMBINATORS, COMPOUNDS, DECLARATION, FIRST_LINE_PROPERTIES, FONT_FACE_DESCRIPTORS,
-    MARGIN_BOX_PROPERTIES, NAMED, PAGE_PROPERTIES, PAGE_SELECTORS, PAGE_SIZES, PROPERTIES,
-    PSEUDO_CLASSES, PSEUDO_ELEMENTS, SELECTOR_LIST, Spec, UNITS,
+    COMBINATORS, COMPOUNDS, CUSTOM_PROPERTY, DECLARATION, FIRST_LINE_PROPERTIES,
+    FONT_FACE_DESCRIPTORS, MARGIN_BOX_PROPERTIES, NAMED, PAGE_PROPERTIES, PAGE_SELECTORS,
+    PAGE_SIZES, PROPERTIES, PSEUDO_CLASSES, PSEUDO_ELEMENTS, SELECTOR_LIST, Spec, UNITS, VAR,
 };
 
 /// What the engine accepts, from the version that produced it.
@@ -32,6 +32,12 @@ pub struct Subset {
     pub selectors: Selectors,
     /// The shape of one declaration, in value-definition syntax.
     pub declaration: String,
+    /// The shape of one custom property declaration, in
+    /// value-definition syntax.
+    pub custom_property: String,
+    /// The function that puts a custom property's value in a
+    /// declaration, in value-definition syntax.
+    pub var: String,
     /// The properties a style rule may declare.
     pub properties: Vec<Property>,
     /// The `@page` rule.
@@ -170,6 +176,8 @@ impl Subset {
                 first_line_properties: strings(FIRST_LINE_PROPERTIES),
             },
             declaration: DECLARATION.to_string(),
+            custom_property: CUSTOM_PROPERTY.to_string(),
+            var: VAR.to_string(),
             properties: properties(PROPERTIES),
             page: Page {
                 prelude: format!(
@@ -350,7 +358,7 @@ mod tests {
     /// its longhands, a longhand into itself.
     #[test]
     fn examples_read_into_their_own_property() {
-        fn check<D>(specs: &[Spec<D>], property_of: fn(&D) -> &'static str) {
+        fn check<D>(specs: &[Spec<D>], property_of: fn(&D) -> &str) {
             for spec in specs {
                 for example in spec.examples {
                     let mut input = ParserInput::new(example);
@@ -391,10 +399,12 @@ mod tests {
             PageDeclaration::ColumnRuleWidth(_) => "column-rule-width",
             PageDeclaration::ColumnRuleStyle(_) => "column-rule-style",
             PageDeclaration::AlignContent(_) => "align-content",
+            PageDeclaration::Pending(pending) => &pending.property,
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
             MarginDeclaration::Content(_) => "content",
             MarginDeclaration::Style(declaration) => declaration.property(),
+            MarginDeclaration::Pending(pending) => &pending.property,
         });
         check(FONT_FACE_DESCRIPTORS, |declaration| match declaration {
             FaceDeclaration::Family(_) => "font-family",
