@@ -109,11 +109,12 @@ The answer is a walk over the pages the session already holds. Asking runs a sta
 
 ## What styled a node, and what is at a point
 
-`Session::inspect(node)` answers what styled one node and where it is on the pages. A text node answers for the element that holds it. The answer is an `Inspection`:
+`Session::inspect(node)` answers what styled one node and where it is on the pages. A text node answers for the element that holds it. A pseudo-element, such as a drop cap, answers for itself. The answer is an `Inspection`:
 
 | | |
 |---|---|
 | `element`, `id`, `classes` | The element, and the names a selector reaches it by. |
+| `pseudo_element` | For a pseudo-element, its name, such as `::first-letter`. `element` is then the element that it belongs to. |
 | `ancestors` | The elements it sits inside, the book first. |
 | `rules` | The rules that matched, in cascade order. Each rule gives its sheet, line, column, selector, and specificity. |
 | `computed` | The computed value of every property in the CSS subset, written as CSS, with lengths in points. |
@@ -123,7 +124,7 @@ The answer is a walk over the pages the session already holds. Asking runs a sta
 
 `Session::inspect_margin_box(page, which)` answers the same for one margin box of one page, such as `@top-left`. `page` counts from 0. The answer names the page selector that the page matches, such as `@page chapter:left`. Its rules are the `@page` rules that name the box.
 
-`Session::hit(page, x, y)` answers which element is at a point on a page, in points from the top-left corner. Where text is at the point, the answer is the element that holds the text. Elsewhere, the answer is the innermost block whose border box holds the point, so padding and empty space count.
+`Session::hit(page, x, y)` answers which element is at a point on a page, in points from the top-left corner. Where text is at the point, the answer is the element that holds the text. Elsewhere, the answer is the innermost block whose border box holds the point, so padding and empty space count. Where the point is on a pseudo-element, the answer is the id of that pseudo-element. The pseudo-elements are a drop cap, the first line of a paragraph, and the box or text of `::before` or `::after`. See [ids of pseudo-elements](../reference/display-structure.mdx#ids-of-pseudo-elements).
 
 The following example finds the element at a point and prints the rules that declare its color:
 
