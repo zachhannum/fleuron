@@ -721,6 +721,30 @@ h2 {
 }
 ```
 
+### Image size
+
+`width` and `height` give the size of an image. `max-width` and `max-height` give the largest size of an image. Each one takes a length or a percentage, and `max-width` and `max-height` also take `none`.
+
+If you give one side, the other side keeps the proportions of the image file. If you give both sides, the image takes both, and its proportions can change. If you give neither side, the image takes the size of its file.
+
+A percentage on `width` or `max-width` is a percentage of the width of the block the image is in. Inside a quotation, that is the width of the quotation. A percentage on `height` or `max-height` is a percentage of the height of the page's content box.
+
+An image is never wider than the block it is in or taller than the page's content box. If it does not fit, the engine makes it smaller and keeps its proportions. The engine warns when an image does not fit the height, or when a size you give does not fit the width.
+
+On an image, `height` is the height of the image. The engine leaves no space below an image that it makes smaller.
+
+The following example makes every image 200 points wide, and keeps each map under 3 inches tall:
+
+```css
+img {
+  width: 200pt;
+}
+
+img.map {
+  max-height: 3in;
+}
+```
+
 ### Backgrounds
 
 A background is a color, an image, or a color with an image over it. The engine paints it over the block's border box, and the border draws over it. Where a block breaks across a page turn, the engine paints the background on each page, behind the part the page holds.
@@ -1318,10 +1342,10 @@ code { font-family: monospace }
 
 | area | not supported yet |
 |---|---|
-| layout | floats, grid, flexbox, transforms, `max-height`, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
+| layout | floats, grid, flexbox, transforms, `min-width`, `max-width` and `max-height` on anything but an image, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
 | lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
-| table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
+| table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
