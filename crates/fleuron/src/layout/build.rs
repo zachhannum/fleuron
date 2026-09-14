@@ -9,7 +9,7 @@ use crate::content::{
     origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
-use crate::pages::DrawItem;
+use crate::pages::{DrawItem, PageBox};
 use crate::style::{
     Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
     TextAlign, TextJustify,
@@ -19,7 +19,7 @@ use super::Paginator;
 use super::cap::Cap;
 use super::flow::Painted;
 use super::fragment::{
-    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decorated, decoration,
+    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decoration,
 };
 use super::reference::Referring;
 
@@ -37,7 +37,7 @@ impl Paginator<'_> {
         let mut builder = Builder::new(self, section.source.as_deref());
         let style = self.styles.style(section.id).clone();
         builder.name(section.id);
-        let start = builder.open(&style, &[], 0.0, measure);
+        let start = builder.open(section.id, &style, &[], 0.0, measure);
         let column = style.content_box(0.0, measure);
         let whole = style.content_box(0.0, geometry.content_size().0);
         for block in &section.blocks {
@@ -79,7 +79,7 @@ pub(super) struct Builder<'a, 'p> {
     /// What the blocks opened so far have set, waiting for a fragment
     /// to attach it to a page.
     pub(super) pending_marks: Option<Box<Marks>>,
-    /// The decorated blocks still open, outermost first.
+    /// The blocks still open, outermost first.
     open: Vec<Pending>,
     /// Whether the block being built spans every column.
     spanning: bool,
@@ -139,7 +139,7 @@ struct Tall {
     least: f32,
 }
 
-/// A decorated block while its fragments are still being built.
+/// A block while its fragments are still being built.
 struct Pending {
     /// The fragment its first one will be.
     start: usize,
@@ -186,6 +186,7 @@ impl Builder<'_, '_> {
     /// margins on either side of it no longer meet.
     pub(super) fn open(
         &mut self,
+        node: NodeId,
         style: &ComputedStyle,
         inlines: &[Inline],
         x: f32,
@@ -206,14 +207,12 @@ impl Builder<'_, '_> {
         let start = self.fragments.len();
         let border = style.border.widths();
         let backdrop = self.paginator.backdrop(&style.background);
-        if let Some(decoration) = decoration(style, x, measure, backdrop, self.offset) {
-            self.open.push(Pending {
-                start,
-                open_fixed: self.fixed,
-                started: false,
-                decoration,
-            });
-        }
+        self.open.push(Pending {
+            start,
+            open_fixed: self.fixed,
+            started: false,
+            decoration: decoration(node, style, x, measure, backdrop, self.offset),
+        });
         if border.top + style.padding.top > 0.0 {
             let margin = std::mem::take(&mut self.margin);
             self.commit(margin);
@@ -332,10 +331,8 @@ impl Builder<'_, '_> {
             self.commit(margin);
             self.fixed += border.bottom + style.padding.bottom;
         }
-        if decorated(style) {
-            let pending = self.open.pop().expect("the block opened a decoration");
-            self.seal(pending);
-        }
+        let pending = self.open.pop().expect("the block opened a box");
+        self.seal(pending);
         if style.position == Position::Relative
             && let Some(offset) = self.moved.pop()
         {
@@ -456,12 +453,13 @@ impl Builder<'_, '_> {
             cursor = top + fragment.height;
         }
         gather(&mut marks, self.pending_marks.take());
-        let mut items = decorate(&placed);
+        let (mut items, boxes) = decorate(&placed);
         for (top, fragment) in &placed {
             items.append(&mut self.paginator.fragment_items(fragment, 0.0, *top));
         }
         Stacked {
             items,
+            boxes,
             height: cursor + self.margin + self.fixed,
             anchors,
             marks,
@@ -490,14 +488,14 @@ impl Builder<'_, '_> {
                 }
                 Block::Blockquote { id, blocks, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[], x, measure);
+                    let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
                     self.blocks(blocks, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::ThematicBreak { id, .. } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[], x, measure);
+                    let start = self.open(*id, &style, &[], x, measure);
                     self.ornament(&style, x, measure);
                     self.close(&style, start);
                 }
@@ -505,7 +503,7 @@ impl Builder<'_, '_> {
                     id, url, position, ..
                 } => {
                     let style = self.styles().style(*id).clone();
-                    let start = self.open(&style, &[], x, measure);
+                    let start = self.open(*id, &style, &[], x, measure);
                     self.image(&style, url, origin(self.source, *position), x, measure);
                     self.close(&style, start);
                 }
@@ -528,7 +526,7 @@ impl Builder<'_, '_> {
     /// space above a band the profile had to move past an image.
     fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
         let computed = self.styles().style(id).clone();
-        let start = self.open(&computed, inlines, x, measure);
+        let start = self.open(id, &computed, inlines, x, measure);
         let (x, measure) = computed.content_box(x, measure);
 
         let style = computed.paragraph();
@@ -843,6 +841,8 @@ pub struct Reflow {
 pub(super) struct Stacked {
     /// What they paint, from the top of their box.
     pub(super) items: Vec<DrawItem>,
+    /// The border boxes of the blocks, from the top of their box.
+    pub(super) boxes: Vec<(NodeId, PageBox)>,
     /// Their height, margins included.
     pub(super) height: f32,
     /// The boxes the sheet lifted out of the flow from inside them.
@@ -854,7 +854,7 @@ pub(super) struct Stacked {
 
 /// The decorated blocks inside one stack, as the rects they paint. A
 /// stack is never split, so no box inside it is cut.
-fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
+fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(NodeId, PageBox)>) {
     let mut boxes: Vec<Painted> = Vec::new();
     let mut open: Vec<usize> = Vec::new();
     for (top, fragment) in placed {
@@ -876,10 +876,23 @@ fn decorate(placed: &[(f32, &Fragment)]) -> Vec<DrawItem> {
             boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
         }
     }
-    boxes
-        .iter()
-        .flat_map(|box_| box_.items((0.0, 0.0)))
-        .collect()
+    let mut items = Vec::new();
+    let mut areas = Vec::new();
+    for painted in &boxes {
+        let (x, y, width, height) = painted.border_box((0.0, 0.0));
+        if painted.decoration.node != NodeId::UNASSIGNED && height > 0.0 {
+            let area = PageBox {
+                page: 0,
+                x,
+                y,
+                width,
+                height,
+            };
+            areas.push((painted.decoration.node, area));
+        }
+        items.extend(painted.items((0.0, 0.0)));
+    }
+    (items, areas)
 }
 
 /// Adds the marks of one fragment to the marks gathered so far.

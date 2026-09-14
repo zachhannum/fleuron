@@ -89,6 +89,28 @@ pub struct Folios {
     pub count: u32,
 }
 
+/// One box on one page, in points, origin top-left.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PageBox {
+    /// Which page of the book the box is on, counting from 0.
+    pub page: u32,
+    /// Left edge.
+    pub x: f32,
+    /// Top edge.
+    pub y: f32,
+    /// Width in points.
+    pub width: f32,
+    /// Height in points.
+    pub height: f32,
+}
+
+impl PageBox {
+    /// Whether a point on the box's page falls inside it.
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        (self.x..=self.x + self.width).contains(&x) && (self.y..=self.y + self.height).contains(&y)
+    }
+}
+
 /// A single paint operation. Deliberately tiny: text, rules, images.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DrawItem {

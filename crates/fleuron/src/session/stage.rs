@@ -148,6 +148,7 @@ impl Session<'_> {
             self.settle_warnings.clear();
         }
         self.infos = paged.infos;
+        self.boxes = paged.boxes;
         let (registry, assets) = (self.registry.get(), self.assets.get());
         self.output
             .get_or_insert_with(|| blank_output(registry, assets))

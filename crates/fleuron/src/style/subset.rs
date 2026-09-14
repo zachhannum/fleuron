@@ -376,7 +376,7 @@ mod tests {
                 }
             }
         }
-        check(PROPERTIES, property_of);
+        check(PROPERTIES, Declaration::property);
         check(PAGE_PROPERTIES, |declaration| match declaration {
             PageDeclaration::Size(..) => "size",
             PageDeclaration::Margin(edge, _) => margin_of(*edge),
@@ -394,7 +394,7 @@ mod tests {
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
             MarginDeclaration::Content(_) => "content",
-            MarginDeclaration::Style(declaration) => property_of(declaration),
+            MarginDeclaration::Style(declaration) => declaration.property(),
         });
         check(FONT_FACE_DESCRIPTORS, |declaration| match declaration {
             FaceDeclaration::Family(_) => "font-family",
@@ -432,86 +432,6 @@ mod tests {
             Edge::Right => "margin-right",
             Edge::Bottom => "margin-bottom",
             Edge::Left => "margin-left",
-        }
-    }
-
-    /// The full CSS longhand one border declaration writes, which is
-    /// finer than anything the engine takes as a property of its own.
-    fn border_of(edge: Edge, value: &str) -> &'static str {
-        match (edge, value) {
-            (Edge::Top, "width") => "border-top-width",
-            (Edge::Right, "width") => "border-right-width",
-            (Edge::Bottom, "width") => "border-bottom-width",
-            (Edge::Left, "width") => "border-left-width",
-            (Edge::Top, "style") => "border-top-style",
-            (Edge::Right, "style") => "border-right-style",
-            (Edge::Bottom, "style") => "border-bottom-style",
-            (Edge::Left, "style") => "border-left-style",
-            (Edge::Top, _) => "border-top-color",
-            (Edge::Right, _) => "border-right-color",
-            (Edge::Bottom, _) => "border-bottom-color",
-            (Edge::Left, _) => "border-left-color",
-        }
-    }
-
-    fn property_of(declaration: &Declaration) -> &'static str {
-        match declaration {
-            Declaration::FontFamily(_) => "font-family",
-            Declaration::Color(_) => "color",
-            Declaration::FontSize(_) => "font-size",
-            Declaration::FontStyle(_) => "font-style",
-            Declaration::FontWeight(_) => "font-weight",
-            Declaration::LineHeight(_) => "line-height",
-            Declaration::LetterSpacing(_) => "letter-spacing",
-            Declaration::FontVariantCaps(_) => "font-variant-caps",
-            Declaration::TextTransform(_) => "text-transform",
-            Declaration::TextAlign(_) => "text-align",
-            Declaration::TextJustify(_) => "text-justify",
-            Declaration::TextIndent(_) => "text-indent",
-            Declaration::HangingPunctuation(_) => "hanging-punctuation",
-            Declaration::Hyphens(_) => "hyphens",
-            Declaration::Orphans(_) => "orphans",
-            Declaration::Widows(_) => "widows",
-            Declaration::Page(_) => "page",
-            Declaration::Content(_) => "content",
-            Declaration::StringSet(_) => "string-set",
-            Declaration::CounterReset(_) => "counter-reset",
-            Declaration::InitialLetter(_) => "initial-letter",
-            Declaration::Position(_) => "position",
-            Declaration::Inset(edge, _) => match edge {
-                Edge::Top => "top",
-                Edge::Right => "right",
-                Edge::Bottom => "bottom",
-                Edge::Left => "left",
-            },
-            Declaration::ZIndex(_) => "z-index",
-            Declaration::WrapFlow(_) => "wrap-flow",
-            Declaration::ShapeOutside(_) => "shape-outside",
-            Declaration::ShapeMargin(_) => "shape-margin",
-            Declaration::Margin(edge, _) => margin_of(*edge),
-            Declaration::Padding(edge, _) => match edge {
-                Edge::Top => "padding-top",
-                Edge::Right => "padding-right",
-                Edge::Bottom => "padding-bottom",
-                Edge::Left => "padding-left",
-            },
-            Declaration::BorderWidth(edge, _) => border_of(*edge, "width"),
-            Declaration::BorderStyle(edge, _) => border_of(*edge, "style"),
-            Declaration::BorderColor(edge, _) => border_of(*edge, "color"),
-            Declaration::BackgroundColor(_) => "background-color",
-            Declaration::BackgroundImage(_) => "background-image",
-            Declaration::BackgroundRepeat(_) => "background-repeat",
-            Declaration::BackgroundSize(_) => "background-size",
-            Declaration::BackgroundPosition(..) => "background-position",
-            Declaration::BoxDecorationBreak(_) => "box-decoration-break",
-            Declaration::Width(_) => "width",
-            Declaration::Height(_) => "height",
-            Declaration::MinHeight(_) => "min-height",
-            Declaration::BorderCollapse(_) => "border-collapse",
-            Declaration::BreakBefore(_) => "break-before",
-            Declaration::BreakAfter(_) => "break-after",
-            Declaration::BreakInside(_) => "break-inside",
-            Declaration::ColumnSpan(_) => "column-span",
         }
     }
 

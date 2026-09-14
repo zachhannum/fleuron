@@ -10,6 +10,9 @@
 //! reads `@page`, `face` reads `@font-face`, and `vocabulary` is what
 //! the subset document is written from.
 
+use std::fmt;
+use std::ops::Range;
+
 use cssparser::{
     AtRuleParser, BasicParseErrorKind, CowRcStr, ParseError, ParseErrorKind, Parser, ParserInput,
     ParserState, QualifiedRuleParser, RuleBodyParser, SourceLocation, StyleSheetParser,
@@ -103,11 +106,59 @@ pub enum Importance {
     Important,
 }
 
+/// Where something was written in a stylesheet: the sheet's name, and
+/// the line and column of its first character, counted the way a
+/// warning counts them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SheetPosition {
+    /// The name the sheet was handed in under.
+    pub sheet: String,
+    /// The line, counting from 1.
+    pub line: u32,
+    /// The column, counting from 1.
+    pub column: u32,
+}
+
+impl SheetPosition {
+    pub(super) fn at(sheet: &str, location: SourceLocation) -> SheetPosition {
+        SheetPosition {
+            sheet: sheet.to_string(),
+            line: location.line + 1,
+            column: location.column,
+        }
+    }
+}
+
+impl fmt::Display for SheetPosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}:{}", self.sheet, self.line, self.column)
+    }
+}
+
+/// One declaration as the author wrote it, and the longhands it
+/// became.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Written {
+    /// The property name, in lowercase.
+    pub property: String,
+    /// The value, as written, without `!important`.
+    pub value: String,
+    /// Whether it was written `!important`.
+    pub important: bool,
+    /// Which of the rule's declarations it expanded to: several for a
+    /// shorthand, one for a longhand.
+    pub longhands: Range<usize>,
+}
+
 /// One style rule: what it matches, and what it says.
 #[derive(Debug)]
 pub struct StyleRule {
     pub selectors: SelectorList<Fleuron>,
     pub declarations: Vec<(Declaration, Importance)>,
+    /// The declarations as they were written, in order.
+    pub written: Vec<Written>,
+    /// Where the rule begins.
+    pub position: SheetPosition,
 }
 
 /// A `@page` rule: which pages it selects, the page box it sets, and
@@ -123,7 +174,20 @@ pub struct PageRule {
     /// `:left` / `:right`, as the side of the spread.
     pub side: Option<Side>,
     pub declarations: Vec<PageDeclaration>,
-    pub boxes: Vec<(MarginBox, Vec<MarginDeclaration>)>,
+    pub boxes: Vec<MarginRule>,
+    /// The prelude as written, `@page` included.
+    pub selector: String,
+    /// Where the rule begins.
+    pub position: SheetPosition,
+}
+
+/// One margin box inside a `@page` rule.
+#[derive(Debug, Clone)]
+pub struct MarginRule {
+    pub which: MarginBox,
+    pub declarations: Vec<MarginDeclaration>,
+    /// The declarations as they were written, in order.
+    pub written: Vec<Written>,
 }
 
 impl PageRule {
@@ -292,7 +356,7 @@ pub fn warning(sheet: &str, error: &ParseError<'_, StyleError<'_>>) -> Warning {
 
 /// A CSS position as diagnostics spell it: `author.css:12:3`.
 pub(super) fn position(sheet: &str, location: SourceLocation) -> String {
-    format!("{sheet}:{}:{}", location.line + 1, location.column)
+    SheetPosition::at(sheet, location).to_string()
 }
 
 impl<'i> QualifiedRuleParser<'i> for TopLevel {
@@ -310,18 +374,20 @@ impl<'i> QualifiedRuleParser<'i> for TopLevel {
     fn parse_block<'t>(
         &mut self,
         selectors: Self::Prelude,
-        _start: &ParserState,
+        start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
         let first_line = selectors
             .slice()
             .iter()
             .all(|selector| selector.pseudo_element() == Some(&PseudoElement::FirstLine));
-        let (declarations, warnings) = declarations(input, &self.name, first_line);
+        let (declarations, written, warnings) = declarations(input, &self.name, first_line);
         self.warnings.extend(warnings);
         Ok(Rule::Style(StyleRule {
             selectors,
             declarations,
+            written,
+            position: SheetPosition::at(&self.name, start.source_location()),
         }))
     }
 }
@@ -337,7 +403,14 @@ impl<'i> AtRuleParser<'i> for TopLevel {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
         match_ignore_ascii_case! { &name,
-            "page" => Ok(AtRule::Page(page_selector(input)?)),
+            "page" => {
+                let from = input.position();
+                let mut rule = page_selector(input)?;
+                rule.selector = format!("@page {}", input.slice_from(from).trim())
+                    .trim_end()
+                    .to_string();
+                Ok(AtRule::Page(rule))
+            },
             "font-face" => Ok(AtRule::FontFace),
             _ => Err(input.new_custom_error(StyleError::UnsupportedAtRule(name.clone()))),
         }
@@ -346,11 +419,12 @@ impl<'i> AtRuleParser<'i> for TopLevel {
     fn parse_block<'t>(
         &mut self,
         prelude: Self::Prelude,
-        _start: &ParserState,
+        start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
         match prelude {
             AtRule::Page(mut rule) => {
+                rule.position = SheetPosition::at(&self.name, start.source_location());
                 let mut body = PageBody {
                     name: self.name.clone(),
                     warnings: Vec::new(),
@@ -367,9 +441,7 @@ impl<'i> AtRuleParser<'i> for TopLevel {
                                     PageItem::Declaration(declaration) => {
                                         rule.declarations.push(declaration)
                                     }
-                                    PageItem::Box(which, declarations) => {
-                                        rule.boxes.push((which, declarations))
-                                    }
+                                    PageItem::Box(margin) => rule.boxes.push(margin),
                                 }
                             }
                         }
@@ -427,5 +499,68 @@ impl<'i> selectors::Parser<'i> for Selectors {
                 SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.clone()),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A rule records the sheet, line and column it begins at, and a
+    /// warning about a rule written at the same place names the same
+    /// position.
+    #[test]
+    fn a_rule_records_the_position_a_warning_names() {
+        let kept = "p { color: red }\n\n  h1 { color: red }";
+        let refused = "p { color: red }\n\n  !h1 { color: red }";
+        let (sheet, _) = parse(&Source::author("author.css", kept));
+        let (_, warnings) = parse(&Source::author("author.css", refused));
+
+        let rule = &sheet.rules[1];
+        assert_eq!(
+            rule.position,
+            SheetPosition {
+                sheet: "author.css".into(),
+                line: 3,
+                column: 3,
+            }
+        );
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(
+            warnings[0].origin.as_deref(),
+            Some(rule.position.to_string().as_str())
+        );
+
+        let page = "\n@page :left {\n  @top-left { content: \"Left\" }\n}";
+        let (sheet, _) = parse(&Source::author("pages.css", page));
+        assert_eq!(sheet.pages[0].position.to_string(), "pages.css:2:1");
+        assert_eq!(sheet.pages[0].selector, "@page :left");
+    }
+
+    /// A declaration keeps the name and value it was written with,
+    /// and a shorthand names every longhand it became.
+    #[test]
+    fn a_declaration_keeps_what_was_written() {
+        let css = "p { MARGIN: 1em 2em; color: red !important }";
+        let (sheet, _) = parse(&Source::author("author.css", css));
+        let rule = &sheet.rules[0];
+        assert_eq!(
+            rule.written,
+            vec![
+                Written {
+                    property: "margin".into(),
+                    value: "1em 2em".into(),
+                    important: false,
+                    longhands: 0..4,
+                },
+                Written {
+                    property: "color".into(),
+                    value: "red".into(),
+                    important: true,
+                    longhands: 4..5,
+                },
+            ]
+        );
+        assert_eq!(rule.declarations.len(), 5);
     }
 }

@@ -107,6 +107,42 @@ The answer is nothing for a node the book does not hold, for one the engine synt
 
 The answer is a walk over the pages the session already holds. Asking runs a stage only when an edit has left one to run.
 
+## What styled a node, and what is at a point
+
+`Session::inspect(node)` answers what styled one node and where it is on the pages. A text node answers for the element that holds it. The answer is an `Inspection`:
+
+| | |
+|---|---|
+| `element`, `id`, `classes` | The element, and the names a selector reaches it by. |
+| `ancestors` | The elements it sits inside, the book first. |
+| `rules` | The rules that matched, in cascade order. Each rule gives its sheet, line, column, selector, and specificity. |
+| `computed` | The computed value of every property in the CSS subset, written as CSS, with lengths in points. |
+| `boxes` | The border box on each page the element reaches, in points. A block that continues onto a second page has two boxes. |
+
+`applied` is true on each declaration that won the cascade. A shorthand such as `margin` counts as won where any of its longhands won. The answer comes from the same cascade that styled the book, so a host does not match selectors or compute styles itself.
+
+`Session::inspect_margin_box(page, which)` answers the same for one margin box of one page, such as `@top-left`. `page` counts from 0. The answer names the page selector that the page matches, such as `@page chapter:left`. Its rules are the `@page` rules that name the box.
+
+`Session::hit(page, x, y)` answers which element is at a point on a page, in points from the top-left corner. Where text is at the point, the answer is the element that holds the text. Elsewhere, the answer is the innermost block whose border box holds the point, so padding and empty space count.
+
+The following example finds the element at a point and prints the rules that declare its color:
+
+```rust
+if let Some(node) = session.hit(0, 200.0, 300.0) {
+    let inspection = session.inspect(node).expect("the book holds the node at a point");
+    for rule in &inspection.rules {
+        for declaration in rule.declarations.iter().filter(|d| d.property == "color") {
+            println!(
+                "{}:{}:{} {} {{ color: {} }} won: {}",
+                rule.sheet, rule.line, rule.column, rule.selector, declaration.value, declaration.applied
+            );
+        }
+    }
+}
+```
+
+The answer is nothing for a node the book does not hold, and for one the engine synthesized. A point outside every box answers nothing, and so does a page the book does not have. A node id names a node only until the next edit, so ask about an id from the pages the reader is looking at.
+
 ## What is in the cache
 
 Breaks, shaped glyph runs and advance widths, and no coordinates at all. Where a line breaks 

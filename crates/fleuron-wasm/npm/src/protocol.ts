@@ -123,16 +123,115 @@ export interface Folios {
   count: number;
 }
 
+/** One box on one page, in points from the page's top-left corner. */
+export interface PageBox {
+  /** Which page of the book, counting from 0, as `Request.first` counts. */
+  page: number;
+  /** Left edge. */
+  x: number;
+  /** Top edge. */
+  y: number;
+  /** Width in points. */
+  width: number;
+  /** Height in points. */
+  height: number;
+}
+
+/** One element that an inspected element sits inside. */
+export interface Ancestor {
+  /** Its node, or `null` for the book and for a table's `thead` and `tbody`. */
+  node: number | null;
+  /** The element name selectors match. */
+  element: string;
+  /** The id a selector reaches it by. */
+  id: string | null;
+  /** The classes a selector reaches it by. */
+  classes: string[];
+}
+
+/** One declaration of a matched rule. */
+export interface InspectedDeclaration {
+  /** The property, in lowercase. */
+  property: string;
+  /** The value as it was written. */
+  value: string;
+  /** Whether it was written `!important`. */
+  important: boolean;
+  /** Whether it won the cascade. A shorthand won where any longhand it sets did. */
+  applied: boolean;
+}
+
+/** One rule that matched. */
+export interface MatchedRule {
+  /** The name the sheet was handed in under: `user-agent.css` for the built-in sheet. */
+  sheet: string;
+  /** The line the rule begins on, counting from 1. */
+  line: number;
+  /** The column it begins at, counting from 1. */
+  column: number;
+  /** The selector as CSS writes it. For a margin box, the `@page` prelude. */
+  selector: string;
+  /**
+   * Ids, then classes, then element names. For a margin box: a page
+   * name, then `:first` or `:blank`, then `:left` or `:right`.
+   */
+  specificity: [number, number, number];
+  /** Its declarations, in the order they were written. */
+  declarations: InspectedDeclaration[];
+}
+
+/** What styled one element or one margin box, and where it is on the pages. */
+export interface Inspection {
+  /** The node the answer is about: the element asked about, or the element that holds the text asked about. `null` for a margin box. */
+  node: number | null;
+  /** The element name selectors match, or the margin box's at-rule, as `@top-left`. */
+  element: string;
+  /** The id a selector reaches it by. */
+  id: string | null;
+  /** The classes a selector reaches it by. */
+  classes: string[];
+  /** The elements it sits inside, the book first. */
+  ancestors: Ancestor[];
+  /** For a margin box, the page selector its page answers to, as `@page :left`. */
+  page?: string;
+  /** The rules that matched, in cascade order: where two set the same property, the later one wins. */
+  rules: MatchedRule[];
+  /** The computed value of every property in the subset, written as CSS, with lengths in points. */
+  computed: Record<string, string>;
+  /** The border box on each page it reaches. A block split across two pages has two. */
+  boxes: PageBox[];
+}
+
+/** The page margin boxes, as CSS names them. */
+export type MarginBoxName =
+  | 'top-left-corner'
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'top-right-corner'
+  | 'right-top'
+  | 'right-middle'
+  | 'right-bottom'
+  | 'bottom-right-corner'
+  | 'bottom-right'
+  | 'bottom-center'
+  | 'bottom-left'
+  | 'bottom-left-corner'
+  | 'left-bottom'
+  | 'left-middle'
+  | 'left-top';
+
 /**
  * What a request wants back, if anything: a display structure, a PDF,
  * the file a face was registered from, the node one byte of a source
- * was read into, the source one node was read from, or the folios
- * some nodes are set on.
+ * was read into, the source one node was read from, the folios some
+ * nodes are set on, what styled one element or margin box, or the
+ * element at a point.
  *
  * The first two are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
  */
-export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source' | 'folios';
+export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source' | 'folios' | 'inspect' | 'hit';
 
 /** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
@@ -150,10 +249,18 @@ export interface Request {
   source?: string;
   /** Which byte of it. */
   byte?: number;
-  /** Which node `want: 'source'` is asking about. */
+  /** Which node `want: 'source'` or `want: 'inspect'` is asking about. */
   node?: number;
   /** Which nodes `want: 'folios'` is asking about. */
   nodes?: number[];
+  /** Which page, counting from 0, `want: 'hit'` or a margin box's `want: 'inspect'` is asking about. */
+  page?: number;
+  /** Which margin box of that page `want: 'inspect'` is asking about, in place of `node`. */
+  box?: MarginBoxName;
+  /** With `y`, the point on the page `want: 'hit'` is asking about, in points from the top-left corner. */
+  x?: number;
+  /** See {@link Request.x}. */
+  y?: number;
   /**
    * With `count`, which pages of `want: 'preview'`'s answer to send:
    * `first` pages counting from 0, `count` of them. Leaving either

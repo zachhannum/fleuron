@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::content::{NodeId, Section};
-use crate::pages::{DrawItem, Page, Side};
+use crate::pages::{DrawItem, Page, PageBox, Side};
 use crate::style::{AlignContent, Break, PageQuery, Situation};
 
 use super::Paginator;
@@ -60,6 +60,9 @@ pub(crate) struct Paged {
     /// The page each id landed on: the page of the first fragment of
     /// the first element that carries it.
     pub(crate) targets: BTreeMap<NodeId, usize>,
+    /// The border box of each block in the flow, one for each page and
+    /// column it reaches, in the order the pages closed.
+    pub(crate) boxes: Vec<(NodeId, PageBox)>,
 }
 
 /// One fragment placed on the page being built.
@@ -90,6 +93,9 @@ pub(super) struct Placed {
     /// Whether it is a table's body row, which has the header rows
     /// set above it when it opens a column.
     repeats: bool,
+    /// The border boxes inside it, already positioned on this page: a
+    /// table row's own, its cells', and their blocks'.
+    boxes: Vec<(NodeId, PageBox)>,
 }
 
 /// Why the page being built ends.
@@ -180,6 +186,8 @@ pub(super) struct Flow<'a, 'p> {
     /// height, to set again where the table continues onto a new page
     /// or column.
     header: Vec<(f32, Vec<DrawItem>)>,
+    /// The border boxes of the blocks on the pages closed so far.
+    boxes: Vec<(NodeId, PageBox)>,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -212,6 +220,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             targets: BTreeMap::new(),
             paints: true,
             header: Vec::new(),
+            boxes: Vec::new(),
         }
     }
 
@@ -343,6 +352,15 @@ impl<'a, 'p> Flow<'a, 'p> {
         } else {
             Vec::new()
         };
+        let boxes = match &fragment.piece {
+            Piece::Row(row) if self.paints => {
+                let mut boxes = row.boxes.clone();
+                let (dx, dy) = fragment.offset;
+                shift_boxes(&mut boxes, x + dx + fragment.x, y + top + dy);
+                boxes
+            }
+            _ => Vec::new(),
+        };
         self.cursor = top + fragment.height;
         self.placed.push(Placed {
             section: self.section,
@@ -356,6 +374,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             decorations: fragment.decorations.clone(),
             anchors: std::mem::take(&mut self.pending_anchors),
             repeats: repeats(fragment),
+            boxes,
         });
     }
 
@@ -386,6 +405,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 decorations: None,
                 anchors: Vec::new(),
                 repeats: false,
+                boxes: Vec::new(),
             });
             self.cursor = top + height;
         }
@@ -518,6 +538,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             placed.column = self.column;
             placed.tier = self.tiers.len() - 1;
             shift(&mut placed.items, to_x - from_x, to_y - from_y + down);
+            shift_boxes(&mut placed.boxes, to_x - from_x, to_y - from_y + down);
             self.cursor = placed.top + placed.height;
             self.placed.push(placed);
         }
@@ -572,6 +593,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             items.append(&mut self.decorate(&placed));
             items.append(&mut self.rules(&placed));
             items.append(&mut self.anchored_items());
+            let page = self.pages.len() as u32;
+            for (node, area) in self.anchored_areas() {
+                self.boxes.push((node, PageBox { page, ..area }));
+            }
         }
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
@@ -581,6 +606,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             for node in placed.anchors {
                 self.anchors.insert(node, index);
+            }
+            for (node, area) in placed.boxes {
+                let page = index as u32;
+                self.boxes.push((node, PageBox { page, ..area }));
             }
             if let Some(marks) = placed.marks {
                 for (name, value) in marks.strings {
@@ -646,6 +675,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         for placed in placed.iter_mut() {
             placed.top += down;
             shift(&mut placed.items, 0.0, down);
+            shift_boxes(&mut placed.boxes, 0.0, down);
         }
         for tier in &mut self.tiers {
             tier.top += down;
@@ -735,6 +765,20 @@ impl<'a, 'p> Flow<'a, 'p> {
             .collect()
     }
 
+    /// The border boxes of the images and blocks the page being built
+    /// carries.
+    fn anchored_areas(&self) -> Vec<(NodeId, PageBox)> {
+        let index = self.pages.len();
+        let Some(anchored) = self.anchored.by_page.get(&index) else {
+            return Vec::new();
+        };
+        let geometry = self.paginator.master(index, &self.slot).geometry;
+        anchored
+            .iter()
+            .flat_map(|at| self.anchored.all[*at].boxes(geometry))
+            .collect()
+    }
+
     /// Resolves the decorations over the page being closed into the
     /// rects they paint there, column by column and tier by tier.
     ///
@@ -806,7 +850,25 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.carried.push(boxes[index].decoration.clone());
         }
         let origin = self.column_origin(column);
-        boxes.iter().flat_map(|box_| box_.items(origin)).collect()
+        let page = self.pages.len() as u32;
+        let mut items = Vec::new();
+        for painted in &boxes {
+            let (x, y, width, height) = painted.border_box(origin);
+            if height > 0.0 {
+                self.boxes.push((
+                    painted.decoration.node,
+                    PageBox {
+                        page,
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                ));
+            }
+            items.extend(painted.items(origin));
+        }
+        items
     }
 
     /// The rules down the gutters of the page being closed: in each
@@ -867,6 +929,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             infos: self.infos,
             anchors: self.anchors,
             targets: self.targets,
+            boxes: self.boxes,
         }
     }
 }
@@ -886,13 +949,23 @@ pub(super) struct Painted {
 }
 
 impl Painted {
+    /// The border box on the page, as left, top, width and height:
+    /// `origin` is the page's content box.
+    pub(super) fn border_box(&self, origin: (f32, f32)) -> (f32, f32, f32, f32) {
+        let (dx, dy) = self.decoration.offset;
+        (
+            origin.0 + self.decoration.x + dx,
+            origin.1 + self.top + dy,
+            self.decoration.width,
+            self.bottom - self.top,
+        )
+    }
+
     /// The rects this box paints, background first: `origin` is the
     /// page's content box.
     pub(super) fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
-        let (dx, dy) = self.decoration.offset;
-        let (x, y) = (origin.0 + self.decoration.x + dx, origin.1 + self.top + dy);
-        let (w, h) = (self.decoration.width, self.bottom - self.top);
-        if w <= 0.0 || h <= 0.0 {
+        let (x, y, w, h) = self.border_box(origin);
+        if !self.decoration.paints || w <= 0.0 || h <= 0.0 {
             return Vec::new();
         }
         let layer = self.decoration.layer;
@@ -960,6 +1033,15 @@ fn paragraph_end(fragments: &[Fragment], from: usize, reflow: &Arc<Reflow>) -> u
 /// set above it when it opens a column.
 fn repeats(fragment: &Fragment) -> bool {
     matches!(&fragment.piece, Piece::Row(row) if row.repeats)
+}
+
+/// Moves boxes that are already positioned, the way `shift` moves the
+/// items painted with them.
+pub(super) fn shift_boxes(boxes: &mut [(NodeId, PageBox)], dx: f32, dy: f32) {
+    for (_, area) in boxes {
+        area.x += dx;
+        area.y += dy;
+    }
 }
 
 /// Moves already-painted items: what moving a fragment to the next

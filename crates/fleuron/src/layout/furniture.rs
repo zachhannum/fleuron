@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::lines::ParagraphStyle;
-use crate::pages::{DrawItem, Page, Side};
-use crate::style::{Align, Band, Content, MarginBox, MarginBoxStyle, PageStyle};
+use crate::lines::{Line, ParagraphStyle};
+use crate::pages::{DrawItem, Page, PageBox, Side};
+use crate::style::{Align, Band, Content, MarginBox, MarginBoxStyle, PageQuery, PageStyle};
 
 use super::Paginator;
 use super::flow::PageInfo;
@@ -89,21 +89,37 @@ impl Paginator<'_> {
         align: Align,
         furniture: Furniture<'_>,
     ) {
+        let Some((line, area)) = self.margin_line(master, box_style, band, align, furniture) else {
+            return;
+        };
+        let baseline = area.y + line.box_.baseline;
+        page.items
+            .append(&mut self.text_items(&line, area.x, baseline, DrawItem::PAGE_FURNITURE));
+    }
+
+    /// One margin box's line, and the box it takes on the page: as
+    /// wide as the line, and as tall as the band. Nothing where the box
+    /// shows no text.
+    fn margin_line(
+        &self,
+        master: &PageStyle,
+        box_style: &MarginBoxStyle,
+        band: Band,
+        align: Align,
+        furniture: Furniture<'_>,
+    ) -> Option<(Line, PageBox)> {
         let text = match &box_style.content {
-            Content::None | Content::Pieces(_) => return,
+            Content::None | Content::Pieces(_) => return None,
             Content::Counter(counter) => counter.format(furniture.folio),
             Content::String(name) => furniture.strings.get(name).cloned().unwrap_or_default(),
             Content::Text(text) => text.clone(),
         };
         if text.is_empty() {
-            return;
+            return None;
         }
         let style = box_style.style.paragraph();
-        let Some(line) = self.line_of(&text, style) else {
-            return;
-        };
-        let (band_top, _) = margin_band(master, band, style);
-        let baseline = band_top + line.box_.baseline;
+        let line = self.line_of(&text, style)?;
+        let (band_top, band_height) = margin_band(master, band, style);
         let text_width = self.line_width(&line);
         let x = match align {
             // Centred on the trim, not on the content box: a folio
@@ -113,8 +129,45 @@ impl Paginator<'_> {
             Align::Start => master.geometry.margin.left,
             Align::End => master.geometry.width - master.geometry.margin.right - text_width,
         };
-        page.items
-            .append(&mut self.text_items(&line, x, baseline, DrawItem::PAGE_FURNITURE));
+        let area = PageBox {
+            page: 0,
+            x,
+            y: band_top,
+            width: text_width,
+            height: band_height,
+        };
+        Some((line, area))
+    }
+
+    /// The page a margin box on the page at `index` answers for, and
+    /// the box it takes there. Nothing for a page the book does not
+    /// have, or for a blank page, which shows no margin boxes. The box
+    /// is `None` where the margin box shows no text on that page.
+    pub(crate) fn margin_box<'i>(
+        &self,
+        infos: &'i [PageInfo],
+        index: usize,
+        which: MarginBox,
+    ) -> Option<(PageQuery<'i>, Option<PageBox>)> {
+        let info = infos.get(index)?;
+        if info.slot.blank {
+            return None;
+        }
+        let query = info.slot.query(Side::of_number(index as u32 + 1));
+        let master = self.styles.page(query);
+        let area = master.margin_box(which).and_then(|box_style| {
+            let (band, align) = which.band()?;
+            let furniture = Furniture {
+                folio: folios(infos)[index],
+                strings: &info.strings,
+            };
+            let (_, area) = self.margin_line(master, box_style, band, align, furniture)?;
+            Some(PageBox {
+                page: index as u32,
+                ..area
+            })
+        });
+        Some((query, area))
     }
 }
 

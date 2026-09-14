@@ -18,7 +18,7 @@ use super::value::{
     text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
-use super::{Importance, StyleError, position, warning};
+use super::{Importance, StyleError, Written, position, warning};
 
 /// Every declaration in one style-rule body, plus a warning for each
 /// one that fell outside the subset. `first_line` narrows the subset
@@ -27,22 +27,46 @@ pub(super) fn declarations(
     input: &mut Parser<'_, '_>,
     sheet: &str,
     first_line: bool,
-) -> (Vec<(Declaration, Importance)>, Vec<Warning>) {
+) -> (Vec<(Declaration, Importance)>, Vec<Written>, Vec<Warning>) {
     let mut properties = Properties {
         first_line,
         sheet: sheet.to_string(),
     };
     let mut kept = Vec::new();
+    let mut written = Vec::new();
     let mut warnings = Vec::new();
     for result in RuleBodyParser::new(input, &mut properties) {
         match result {
-            Ok((declarations, importance)) => {
-                kept.extend(declarations.into_iter().map(|d| (d, importance)))
+            Ok(parsed) => {
+                let importance = parsed.importance;
+                written.push(parsed.written(kept.len()));
+                kept.extend(parsed.declarations.into_iter().map(|d| (d, importance)))
             }
             Err((error, _)) => warnings.push(warning(sheet, &error)),
         }
     }
-    (kept, warnings)
+    (kept, written, warnings)
+}
+
+/// One declaration read: what it expanded to, and how it was written.
+pub(super) struct Parsed<D> {
+    pub(super) declarations: Vec<D>,
+    pub(super) importance: Importance,
+    pub(super) property: String,
+    pub(super) value: String,
+}
+
+impl<D> Parsed<D> {
+    /// How it was written, over the longhands it adds after the `at`
+    /// a rule already holds.
+    pub(super) fn written(&self, at: usize) -> Written {
+        Written {
+            property: self.property.clone(),
+            value: self.value.clone(),
+            important: self.importance == Importance::Important,
+            longhands: at..at + self.declarations.len(),
+        }
+    }
 }
 
 /// Pins a declaration's diagnostic to where the declaration began.
@@ -71,7 +95,7 @@ struct Properties {
 }
 
 /// What one declaration expands to: a shorthand is several longhands.
-type Longhands = (Vec<Declaration>, Importance);
+type Longhands = Parsed<Declaration>;
 
 impl<'i> DeclarationParser<'i> for Properties {
     type Declaration = Longhands;
@@ -87,7 +111,9 @@ impl<'i> DeclarationParser<'i> for Properties {
             if self.first_line && !FIRST_LINE_PROPERTIES.contains(&&*name.to_ascii_lowercase()) {
                 return Err(input.new_custom_error(StyleError::NotOnFirstLine(name.clone())));
             }
+            let from = input.position();
             let mut declarations = property(&name, input)?;
+            let value = input.slice_from(from).trim().to_string();
             written_at(&mut declarations, &self.sheet, start);
             let importance = if input.try_parse(cssparser::parse_important).is_ok() {
                 Importance::Important
@@ -95,7 +121,12 @@ impl<'i> DeclarationParser<'i> for Properties {
                 Importance::Normal
             };
             input.expect_exhausted()?;
-            Ok((declarations, importance))
+            Ok(Parsed {
+                declarations,
+                importance,
+                property: name.to_ascii_lowercase(),
+                value,
+            })
         })(input)
     }
 }

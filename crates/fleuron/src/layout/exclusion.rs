@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 
 use crate::content::{Block, Book, NodeId, block_id, cell_blocks, origin};
 use crate::lines::{Measure, Span};
-use crate::pages::DrawItem;
+use crate::pages::{DrawItem, PageBox};
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
 
 use super::Paginator;
 use super::build::{Builder, Reflow, carry_over, set_lines};
 use super::cap::Cap;
-use super::flow::{Flow, shift};
+use super::flow::{Flow, shift, shift_boxes};
 use super::fragment::Fragment;
 
 impl Paginator<'_> {
@@ -38,6 +38,7 @@ impl Paginator<'_> {
                         anchored.extend(match block {
                             Block::Image { url, position, .. } => paginator.anchored_image(
                                 node,
+                                id,
                                 style,
                                 url,
                                 origin(source, *position),
@@ -83,6 +84,7 @@ impl Paginator<'_> {
     fn anchored_image(
         &self,
         node: NodeId,
+        id: NodeId,
         style: &ComputedStyle,
         url: &str,
         origin: String,
@@ -107,6 +109,7 @@ impl Paginator<'_> {
             shape: self.shape(style, Some(asset), (width, height)),
             layer: style.z_index,
             paint: Paint::Image {
+                id,
                 asset,
                 x: margin.left,
                 y: margin.top,
@@ -157,7 +160,7 @@ impl Paginator<'_> {
             wrap: style.wrap_flow,
             shape: self.shape(style, None, inner),
             layer: style.z_index,
-            paint: Paint::Block(stacked.items),
+            paint: Paint::Block(stacked.items, stacked.boxes),
         }
     }
 
@@ -239,6 +242,8 @@ pub(super) struct Anchored {
 enum Paint {
     /// An image, inside the margins it keeps.
     Image {
+        /// The image's own node.
+        id: NodeId,
         /// Index into the asset table.
         asset: u32,
         /// Leading edge, from the margin box's own.
@@ -250,8 +255,9 @@ enum Paint {
         /// Height in points, after any scaling.
         height: f32,
     },
-    /// What a block was laid out as.
-    Block(Vec<DrawItem>),
+    /// What a block was laid out as, and the border boxes of the blocks
+    /// in it, from the top left corner of its margin box.
+    Block(Vec<DrawItem>, Vec<(NodeId, PageBox)>),
 }
 
 /// A contour in the coordinates of the box the insets place: `(0, 0)`
@@ -316,6 +322,7 @@ impl Anchored {
                 y,
                 width,
                 height,
+                ..
             } => vec![DrawItem::Image {
                 x: rect.x + x,
                 y: rect.y + y,
@@ -324,10 +331,40 @@ impl Anchored {
                 asset: *asset,
                 layer: self.layer,
             }],
-            Paint::Block(items) => {
+            Paint::Block(items, _) => {
                 let mut items = items.clone();
                 shift(&mut items, rect.x, rect.y);
                 items
+            }
+        }
+    }
+
+    /// The border boxes it takes on a page of this geometry: an
+    /// image's own, or those of the blocks a block is made of.
+    pub(super) fn boxes(&self, geometry: PageGeometry) -> Vec<(NodeId, PageBox)> {
+        let rect = self.rect(geometry);
+        match &self.paint {
+            Paint::Image {
+                id,
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => vec![(
+                *id,
+                PageBox {
+                    page: 0,
+                    x: rect.x + x,
+                    y: rect.y + y,
+                    width: *width,
+                    height: *height,
+                },
+            )],
+            Paint::Block(_, boxes) => {
+                let mut boxes = boxes.clone();
+                shift_boxes(&mut boxes, rect.x, rect.y);
+                boxes
             }
         }
     }

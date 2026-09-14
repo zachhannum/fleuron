@@ -92,3 +92,100 @@ pub enum Declaration {
     BreakInside(Break),
     ColumnSpan(ColumnSpan),
 }
+
+impl Declaration {
+    /// The longhand this declaration sets, as CSS names it. Of two
+    /// declarations that name the same longhand, the later one in
+    /// cascade order is the one that counts.
+    pub fn property(&self) -> &'static str {
+        let edge = |edge: &Edge, [top, right, bottom, left]: [&'static str; 4]| match edge {
+            Edge::Top => top,
+            Edge::Right => right,
+            Edge::Bottom => bottom,
+            Edge::Left => left,
+        };
+        match self {
+            Declaration::FontFamily(_) => "font-family",
+            Declaration::Color(_) => "color",
+            Declaration::FontSize(_) => "font-size",
+            Declaration::FontStyle(_) => "font-style",
+            Declaration::FontWeight(_) => "font-weight",
+            Declaration::LineHeight(_) => "line-height",
+            Declaration::LetterSpacing(_) => "letter-spacing",
+            Declaration::FontVariantCaps(_) => "font-variant-caps",
+            Declaration::TextTransform(_) => "text-transform",
+            Declaration::TextAlign(_) => "text-align",
+            Declaration::TextJustify(_) => "text-justify",
+            Declaration::TextIndent(_) => "text-indent",
+            Declaration::HangingPunctuation(_) => "hanging-punctuation",
+            Declaration::Hyphens(_) => "hyphens",
+            Declaration::Orphans(_) => "orphans",
+            Declaration::Widows(_) => "widows",
+            Declaration::Page(_) => "page",
+            Declaration::Content(_) => "content",
+            Declaration::StringSet(_) => "string-set",
+            Declaration::CounterReset(_) => "counter-reset",
+            Declaration::InitialLetter(_) => "initial-letter",
+            Declaration::Position(_) => "position",
+            Declaration::Inset(side, _) => edge(side, ["top", "right", "bottom", "left"]),
+            Declaration::ZIndex(_) => "z-index",
+            Declaration::WrapFlow(_) => "wrap-flow",
+            Declaration::ShapeOutside(_) => "shape-outside",
+            Declaration::ShapeMargin(_) => "shape-margin",
+            Declaration::Margin(side, _) => edge(
+                side,
+                ["margin-top", "margin-right", "margin-bottom", "margin-left"],
+            ),
+            Declaration::Padding(side, _) => edge(
+                side,
+                [
+                    "padding-top",
+                    "padding-right",
+                    "padding-bottom",
+                    "padding-left",
+                ],
+            ),
+            Declaration::BorderWidth(side, _) => edge(
+                side,
+                [
+                    "border-top-width",
+                    "border-right-width",
+                    "border-bottom-width",
+                    "border-left-width",
+                ],
+            ),
+            Declaration::BorderStyle(side, _) => edge(
+                side,
+                [
+                    "border-top-style",
+                    "border-right-style",
+                    "border-bottom-style",
+                    "border-left-style",
+                ],
+            ),
+            Declaration::BorderColor(side, _) => edge(
+                side,
+                [
+                    "border-top-color",
+                    "border-right-color",
+                    "border-bottom-color",
+                    "border-left-color",
+                ],
+            ),
+            Declaration::BackgroundColor(_) => "background-color",
+            Declaration::BackgroundImage(_) => "background-image",
+            Declaration::BackgroundRepeat(_) => "background-repeat",
+            Declaration::BackgroundSize(_) => "background-size",
+            Declaration::BackgroundPosition(..) => "background-position",
+            Declaration::BoxDecorationBreak(_) => "box-decoration-break",
+            Declaration::Width(_) => "width",
+            Declaration::Height(_) => "height",
+            Declaration::MinHeight(_) => "min-height",
+            Declaration::BorderCollapse(_) => "border-collapse",
+            Declaration::BreakBefore(_) => "break-before",
+            Declaration::BreakAfter(_) => "break-after",
+            Declaration::BreakInside(_) => "break-inside",
+            Declaration::ColumnSpan(_) => "column-span",
+        }
+    }
+}

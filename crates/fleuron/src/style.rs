@@ -14,6 +14,7 @@
 //! an id by the time layout sees it.
 
 mod element;
+mod inspect;
 mod properties;
 mod sheet;
 pub mod subset;
@@ -35,6 +36,8 @@ use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
 use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
+pub(crate) use inspect::element_of;
+pub use inspect::{Ancestor, InspectedDeclaration, Inspection, MatchedRule};
 pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan,
@@ -451,13 +454,13 @@ fn resolve_page(
                 PageDeclaration::AlignContent(align) => geometry.align_content = *align,
             }
         }
-        for (which, declarations) in &rule.boxes {
-            let entry = boxes.entry(*which).or_insert_with(|| MarginBoxStyle {
-                which: *which,
+        for margin in &rule.boxes {
+            let entry = boxes.entry(margin.which).or_insert_with(|| MarginBoxStyle {
+                which: margin.which,
                 content: Content::None,
                 style: root.inherit(),
             });
-            for declaration in declarations {
+            for declaration in &margin.declarations {
                 match declaration {
                     MarginDeclaration::Content(content) => entry.content = content.clone(),
                     MarginDeclaration::Style(style) => {

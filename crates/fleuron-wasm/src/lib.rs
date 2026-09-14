@@ -28,7 +28,7 @@ use fleuron::Warning;
 use fleuron::content::{Attributes, Book, HeadingLevel, Metadata, NodeId, Section};
 use fleuron::fonts::{FontSource, bundled_registry};
 use fleuron::session::Session as Engine;
-use fleuron::style::{Source, Stylesheets};
+use fleuron::style::{MarginBox, Source, Stylesheets};
 use fleuron::wire;
 use fleuron_markdown::{Dialect, Options, Sections};
 use wasm_bindgen::prelude::*;
@@ -430,6 +430,54 @@ impl Session {
     pub fn node_folios(&mut self, nodes: Vec<u32>) -> Result<String, JsError> {
         let nodes: Vec<NodeId> = nodes.into_iter().map(NodeId::new).collect();
         serde_json::to_string(&self.engine.folios(&nodes)).map_err(js_error)
+    }
+
+    /// What styled one node and where it landed, as JSON: the element
+    /// the node stands for and the elements around it, the rules that
+    /// matched it in cascade order with the declarations that won, the
+    /// computed value of every property, and its border box on each
+    /// page it reaches. A text node answers for the element that holds
+    /// it.
+    ///
+    /// The engine runs the cascade again for the one element, over the
+    /// sheets it laid the book out with, so a host matches no selector
+    /// of its own. `undefined` for a node the engine synthesized, or
+    /// one the book does not hold.
+    pub fn inspect(&mut self, node: u32) -> Result<Option<String>, JsError> {
+        self.engine
+            .inspect(NodeId::new(node))
+            .map(|inspection| serde_json::to_string(&inspection))
+            .transpose()
+            .map_err(js_error)
+    }
+
+    /// The same for one margin box of one page, named as CSS names it:
+    /// `top-left`, `bottom-center`. The page counts from 0. The answer
+    /// names the page selector the page answers to, and the rules are
+    /// the `@page` rules that set the box.
+    ///
+    /// `undefined` for a page the book does not have, a blank page, or
+    /// a box no rule for that page names.
+    #[wasm_bindgen(js_name = inspectMarginBox)]
+    pub fn inspect_margin_box(&mut self, page: u32, name: &str) -> Result<Option<String>, JsError> {
+        let which = MarginBox::parse(name)
+            .ok_or_else(|| JsError::new(&format!("unknown margin box {name}")))?;
+        self.engine
+            .inspect_margin_box(page as usize, which)
+            .map(|inspection| serde_json::to_string(&inspection))
+            .transpose()
+            .map_err(js_error)
+    }
+
+    /// The innermost element at a point on one page, in points from the
+    /// page's top-left corner: the element that holds the text there,
+    /// or else the innermost block whose border box holds the point.
+    /// The page counts from 0.
+    ///
+    /// `undefined` outside every box, and for a page the book does not
+    /// have.
+    pub fn hit(&mut self, page: u32, x: f32, y: f32) -> Option<u32> {
+        self.engine.hit(page as usize, x, y).map(|node| node.get())
     }
 
     /// How many times each stage has run since the session was made,
