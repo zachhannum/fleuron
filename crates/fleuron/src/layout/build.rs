@@ -926,7 +926,9 @@ pub(super) fn set_lines(
 /// onto the ones it was set again as: the space and the break above
 /// the first of them, what it tells the page furniture, and the
 /// decorations that open and close over the paragraph.
-pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
+///
+/// `fixed` is the paragraph's own space above the first of them.
+pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment], fixed: f32) {
     let (Some(head), Some(last)) = (old.first(), old.last()) else {
         return;
     };
@@ -949,7 +951,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
     if let Some(first) = fresh.first_mut() {
         first.break_before = head.break_before;
         first.lead = head.lead;
-        first.fixed += head.fixed;
+        first.fixed += fixed;
         first.marks = head.marks.clone();
         first.markers = head.markers.clone();
         if !opens.is_empty() {
