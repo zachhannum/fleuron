@@ -1,6 +1,8 @@
 //! What one node computes to: every property resolved, ready for
 //! the box tree to ask.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::fonts::GenericFamily;
@@ -147,6 +149,10 @@ pub struct ComputedStyle {
     /// page, from `column-span`.
     #[serde(skip_serializing_if = "one_column")]
     pub column_span: ColumnSpan,
+    /// The custom properties in force, by name, each with every
+    /// `var()` in its value already replaced. A child inherits them.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub custom: BTreeMap<String, String>,
 }
 
 impl ComputedStyle {
@@ -198,6 +204,7 @@ impl ComputedStyle {
             break_after: Break::Auto,
             break_inside: Break::Auto,
             column_span: ColumnSpan::None,
+            custom: BTreeMap::new(),
         }
     }
 
@@ -330,6 +337,81 @@ impl ComputedStyle {
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
             Declaration::ColumnSpan(value) => self.column_span = *value,
+            // The cascade resolves both before anything is applied.
+            Declaration::Custom(_) | Declaration::Pending(_) => {}
+        }
+    }
+
+    /// Sets the longhand `like` names back to what `base` holds for
+    /// it. `base` is the style before any declaration applied, so a
+    /// property that inherits takes its parent's value and one that
+    /// does not takes its initial value.
+    pub(crate) fn reset(&mut self, like: &Declaration, base: &ComputedStyle) {
+        match like {
+            Declaration::FontFamily(_) => self.font_family = base.font_family.clone(),
+            Declaration::FontSize(_) => self.font_size = base.font_size,
+            Declaration::FontStyle(_) => self.font_style = base.font_style,
+            Declaration::FontWeight(_) => self.font_weight = base.font_weight,
+            Declaration::Color(_) => self.color = base.color,
+            Declaration::LineHeight(_) => self.line_height = base.line_height,
+            Declaration::LetterSpacing(_) => self.letter_spacing = base.letter_spacing,
+            Declaration::FontVariantCaps(_) => self.font_variant_caps = base.font_variant_caps,
+            Declaration::TextTransform(_) => self.text_transform = base.text_transform,
+            Declaration::TextAlign(_) => self.text_align = base.text_align,
+            Declaration::TextJustify(_) => self.text_justify = base.text_justify,
+            Declaration::HangingPunctuation(_) => {
+                self.hanging_punctuation = base.hanging_punctuation
+            }
+            Declaration::TextIndent(_) => self.text_indent = base.text_indent,
+            Declaration::Hyphens(_) => self.hyphens = base.hyphens,
+            Declaration::Orphans(_) => self.orphans = base.orphans,
+            Declaration::Widows(_) => self.widows = base.widows,
+            Declaration::Page(_) => self.page = base.page.clone(),
+            Declaration::Content(_) => self.content = base.content.clone(),
+            Declaration::StringSet(_) => self.string_set = base.string_set.clone(),
+            Declaration::CounterReset(_) => self.counter_reset = base.counter_reset,
+            Declaration::InitialLetter(_) => self.initial_letter = base.initial_letter,
+            Declaration::Position(_) => self.position = base.position,
+            Declaration::Inset(edge, _) => *self.inset.edge(*edge) = base.inset.get(*edge),
+            Declaration::ZIndex(_) => self.z_index = base.z_index,
+            Declaration::WrapFlow(_) => self.wrap_flow = base.wrap_flow,
+            Declaration::ShapeOutside(_) => self.shape_outside = base.shape_outside.clone(),
+            Declaration::ShapeMargin(_) => self.shape_margin = base.shape_margin,
+            Declaration::Margin(edge, _) => *self.margin.edge(*edge) = base.margin.get(*edge),
+            Declaration::Padding(edge, _) => *self.padding.edge(*edge) = base.padding.get(*edge),
+            Declaration::BorderStyle(edge, _) => {
+                self.border.edge(*edge).style = base.border.get(*edge).style
+            }
+            Declaration::BorderWidth(edge, _) => {
+                self.border.edge(*edge).width = base.border.get(*edge).width
+            }
+            Declaration::BorderColor(edge, _) => {
+                self.border.edge(*edge).color = base.border.get(*edge).color
+            }
+            Declaration::BackgroundColor(_) => self.background.color = base.background.color,
+            Declaration::BackgroundImage(_) => {
+                self.background.image = base.background.image.clone()
+            }
+            Declaration::BackgroundRepeat(_) => self.background.repeat = base.background.repeat,
+            Declaration::BackgroundSize(_) => self.background.size = base.background.size,
+            Declaration::BackgroundPosition(..) => {
+                self.background.position = base.background.position
+            }
+            Declaration::BoxDecorationBreak(_) => {
+                self.box_decoration_break = base.box_decoration_break
+            }
+            Declaration::Width(_) => self.width = base.width,
+            Declaration::Height(_) => self.height = base.height,
+            Declaration::MinHeight(_) => self.min_height = base.min_height,
+            Declaration::MaxWidth(_) => self.max_width = base.max_width,
+            Declaration::MaxHeight(_) => self.max_height = base.max_height,
+            Declaration::BorderCollapse(_) => self.border_collapse = base.border_collapse,
+            Declaration::ListStyleType(_) => self.list_style_type = base.list_style_type,
+            Declaration::BreakBefore(_) => self.break_before = base.break_before,
+            Declaration::BreakAfter(_) => self.break_after = base.break_after,
+            Declaration::BreakInside(_) => self.break_inside = base.break_inside,
+            Declaration::ColumnSpan(_) => self.column_span = base.column_span,
+            Declaration::Custom(_) | Declaration::Pending(_) => {}
         }
     }
 
@@ -495,6 +577,16 @@ mod tests {
     use crate::style::properties::{
         Coord, CounterStyle, Declaration, Length, ShapeOutside, ShapeSource,
     };
+
+    /// Part: `ComputedStyle` carries the custom properties in force,
+    /// and a child inherits them.
+    #[test]
+    fn a_child_inherits_the_custom_properties() {
+        assert!(ComputedStyle::initial().custom.is_empty());
+        let mut style = ComputedStyle::initial();
+        style.custom.insert("--accent".into(), "#d6075e".into());
+        assert_eq!(style.inherit().custom, style.custom);
+    }
 
     /// Folios spell out in every style the subset supports, and a
     /// value a style has no spelling for falls back to decimal.

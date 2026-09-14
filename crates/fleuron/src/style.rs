@@ -18,6 +18,7 @@ mod inspect;
 mod properties;
 mod sheet;
 pub mod subset;
+mod substitution;
 
 use std::collections::BTreeMap;
 
@@ -49,6 +50,7 @@ pub use properties::{
 pub use sheet::{Origin, Source};
 
 use element::{BLOCK_ELEMENTS, ElementTree, INLINE_ELEMENTS, PseudoElement};
+use properties::{Custom, Declaration};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
 /// The defaults, as a stylesheet. There are no style constants in the
@@ -429,52 +431,27 @@ fn resolve_page(
         columns: Columns::undivided(root_size),
         align_content: AlignContent::Start,
     };
+    let initial = geometry;
     let mut background = Background::NONE;
     let mut boxes: BTreeMap<MarginBox, MarginBoxStyle> = BTreeMap::new();
     for (_, rule) in matching {
         for declaration in &rule.declarations {
-            match declaration {
-                PageDeclaration::Size(width, height) => {
-                    geometry.width = *width;
-                    geometry.height = *height;
-                }
-                PageDeclaration::Margin(edge, length) => {
-                    let points = length.to_points(root_size, root_size);
-                    match edge {
-                        Edge::Top => geometry.margin.top = points,
-                        Edge::Right => geometry.margin.right = points,
-                        Edge::Bottom => geometry.margin.bottom = points,
-                        Edge::Left => geometry.margin.left = points,
+            let PageDeclaration::Pending(pending) = declaration else {
+                apply_page(&mut geometry, &mut background, declaration, root_size);
+                continue;
+            };
+            let read = sheet::read_pending_page;
+            match substitution::substituted(pending, &root.custom, read, warnings) {
+                Some(declarations) => {
+                    for declaration in &declarations {
+                        apply_page(&mut geometry, &mut background, declaration, root_size);
                     }
                 }
-                PageDeclaration::BackgroundColor(color) => background.color = *color,
-                PageDeclaration::BackgroundImage(url) => background.image = url.clone(),
-                PageDeclaration::BackgroundRepeat(repeat) => background.repeat = *repeat,
-                PageDeclaration::BackgroundSize(size) => {
-                    background.size = properties::computed_size(*size, root_size, root_size)
-                }
-                PageDeclaration::BackgroundPosition(x, y) => {
-                    background.position = BackgroundPosition {
-                        x: Coord::of(*x, root_size, root_size),
-                        y: Coord::of(*y, root_size, root_size),
+                None => {
+                    for like in sheet::page_longhands(&pending.property) {
+                        reset_page(&mut geometry, &mut background, &like, &initial);
                     }
                 }
-                PageDeclaration::ColumnCount(count) => geometry.columns.count = *count,
-                PageDeclaration::ColumnWidth(width) => {
-                    geometry.columns.width =
-                        width.map(|width| width.to_points(root_size, root_size))
-                }
-                PageDeclaration::ColumnGap(gap) => {
-                    geometry.columns.gap = gap
-                        .map(|gap| gap.to_points(root_size, root_size))
-                        .unwrap_or(root_size)
-                        .max(0.0)
-                }
-                PageDeclaration::ColumnRuleWidth(width) => {
-                    geometry.columns.rule.width = width.to_points(root_size, root_size)
-                }
-                PageDeclaration::ColumnRuleStyle(style) => geometry.columns.rule.style = *style,
-                PageDeclaration::AlignContent(align) => geometry.align_content = *align,
             }
         }
         for margin in &rule.boxes {
@@ -484,10 +461,25 @@ fn resolve_page(
                 style: root.inherit(),
             });
             for declaration in &margin.declarations {
-                match declaration {
-                    MarginDeclaration::Content(content) => entry.content = content.clone(),
-                    MarginDeclaration::Style(style) => {
-                        entry.style.apply(style, root_size, root_size)
+                let MarginDeclaration::Pending(pending) = declaration else {
+                    apply_margin(entry, declaration, root_size);
+                    continue;
+                };
+                let read = sheet::read_pending_margin;
+                match substitution::substituted(pending, &root.custom, read, warnings) {
+                    Some(declarations) => {
+                        for declaration in &declarations {
+                            apply_margin(entry, declaration, root_size);
+                        }
+                    }
+                    None => {
+                        let base = root.inherit();
+                        for like in sheet::margin_longhands(&pending.property) {
+                            match like {
+                                MarginDeclaration::Style(like) => entry.style.reset(&like, &base),
+                                _ => entry.content = Content::None,
+                            }
+                        }
                     }
                 }
             }
@@ -500,6 +492,95 @@ fn resolve_page(
         geometry,
         background,
         boxes: boxes.into_values().collect(),
+    }
+}
+
+/// Applies one declaration of a `@page` body.
+fn apply_page(
+    geometry: &mut PageGeometry,
+    background: &mut Background,
+    declaration: &PageDeclaration,
+    root_size: f32,
+) {
+    match declaration {
+        PageDeclaration::Size(width, height) => {
+            geometry.width = *width;
+            geometry.height = *height;
+        }
+        PageDeclaration::Margin(edge, length) => {
+            *geometry.margin.edge(*edge) = length.to_points(root_size, root_size)
+        }
+        PageDeclaration::BackgroundColor(color) => background.color = *color,
+        PageDeclaration::BackgroundImage(url) => background.image = url.clone(),
+        PageDeclaration::BackgroundRepeat(repeat) => background.repeat = *repeat,
+        PageDeclaration::BackgroundSize(size) => {
+            background.size = properties::computed_size(*size, root_size, root_size)
+        }
+        PageDeclaration::BackgroundPosition(x, y) => {
+            background.position = BackgroundPosition {
+                x: Coord::of(*x, root_size, root_size),
+                y: Coord::of(*y, root_size, root_size),
+            }
+        }
+        PageDeclaration::ColumnCount(count) => geometry.columns.count = *count,
+        PageDeclaration::ColumnWidth(width) => {
+            geometry.columns.width = width.map(|width| width.to_points(root_size, root_size))
+        }
+        PageDeclaration::ColumnGap(gap) => {
+            geometry.columns.gap = gap
+                .map(|gap| gap.to_points(root_size, root_size))
+                .unwrap_or(root_size)
+                .max(0.0)
+        }
+        PageDeclaration::ColumnRuleWidth(width) => {
+            geometry.columns.rule.width = width.to_points(root_size, root_size)
+        }
+        PageDeclaration::ColumnRuleStyle(style) => geometry.columns.rule.style = *style,
+        PageDeclaration::AlignContent(align) => geometry.align_content = *align,
+        PageDeclaration::Pending(_) => {}
+    }
+}
+
+/// Sets what `like` declares on a page back to its initial value.
+fn reset_page(
+    geometry: &mut PageGeometry,
+    background: &mut Background,
+    like: &PageDeclaration,
+    initial: &PageGeometry,
+) {
+    match like {
+        PageDeclaration::Size(..) => {
+            geometry.width = initial.width;
+            geometry.height = initial.height;
+        }
+        PageDeclaration::Margin(edge, _) => {
+            *geometry.margin.edge(*edge) = initial.margin.get(*edge)
+        }
+        PageDeclaration::BackgroundColor(_) => background.color = Background::NONE.color,
+        PageDeclaration::BackgroundImage(_) => background.image = None,
+        PageDeclaration::BackgroundRepeat(_) => background.repeat = Background::NONE.repeat,
+        PageDeclaration::BackgroundSize(_) => background.size = Background::NONE.size,
+        PageDeclaration::BackgroundPosition(..) => background.position = Background::NONE.position,
+        PageDeclaration::ColumnCount(_) => geometry.columns.count = initial.columns.count,
+        PageDeclaration::ColumnWidth(_) => geometry.columns.width = initial.columns.width,
+        PageDeclaration::ColumnGap(_) => geometry.columns.gap = initial.columns.gap,
+        PageDeclaration::ColumnRuleWidth(_) => {
+            geometry.columns.rule.width = initial.columns.rule.width
+        }
+        PageDeclaration::ColumnRuleStyle(_) => {
+            geometry.columns.rule.style = initial.columns.rule.style
+        }
+        PageDeclaration::AlignContent(_) => geometry.align_content = initial.align_content,
+        PageDeclaration::Pending(_) => {}
+    }
+}
+
+/// Applies one declaration of a page margin box.
+fn apply_margin(entry: &mut MarginBoxStyle, declaration: &MarginDeclaration, root_size: f32) {
+    match declaration {
+        MarginDeclaration::Content(content) => entry.content = content.clone(),
+        MarginDeclaration::Style(style) => entry.style.apply(style, root_size, root_size),
+        MarginDeclaration::Pending(_) => {}
     }
 }
 
@@ -750,6 +831,7 @@ fn cascade(
             hint.as_ref(),
             parent_size,
             root_size,
+            &mut warnings,
         );
         let (font_id, warning) = resolve_face(&style, registry);
         style.font_id = font_id;
@@ -770,6 +852,7 @@ fn cascade(
                     None,
                     style.font_size,
                     root_size,
+                    warnings,
                 );
                 let (font_id, warning) = resolve_face(&pseudo, registry);
                 pseudo.font_id = font_id;
@@ -1079,17 +1162,41 @@ fn apply_all(
     hint: Option<&properties::Declaration>,
     parent_size: f32,
     root_size: Option<f32>,
+    warnings: &mut Vec<Warning>,
 ) {
     let root_size = root_size.unwrap_or(parent_size);
+    let declaration = |(_, _, sheet, rule, order): &Applicable| {
+        &sheets[*sheet].rules[*rule].declarations[*order].0
+    };
+    // Custom properties resolve first, because a declaration anywhere
+    // in the cascade can read one declared after it.
+    let declared: Vec<&Custom> = applicable
+        .iter()
+        .filter_map(|at| match declaration(at) {
+            Declaration::Custom(custom) => Some(custom),
+            _ => None,
+        })
+        .collect();
+    if !declared.is_empty() {
+        style.custom = substitution::resolve(&style.custom, &declared, warnings);
+    }
+    let base = applicable
+        .iter()
+        .any(|at| matches!(declaration(at), Declaration::Pending(_)))
+        .then(|| style.clone());
     let mut hint = hint;
-    for (level, _, sheet_index, rule_index, order) in applicable {
-        if *level > 0
+    for at in applicable {
+        if at.0 > 0
             && let Some(declaration) = hint.take()
         {
             style.apply(declaration, parent_size, root_size);
         }
-        let (declaration, _) = &sheets[*sheet_index].rules[*rule_index].declarations[*order];
-        style.apply(declaration, parent_size, root_size);
+        match (declaration(at), &base) {
+            (Declaration::Pending(pending), Some(base)) => {
+                substitution::apply(style, pending, base, parent_size, root_size, warnings)
+            }
+            (declaration, _) => style.apply(declaration, parent_size, root_size),
+        }
     }
     if let Some(declaration) = hint {
         style.apply(declaration, parent_size, root_size);

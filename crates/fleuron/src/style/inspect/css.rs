@@ -12,12 +12,15 @@ use crate::style::{
     StringSet, Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 
-/// The computed value of every property a style rule can declare.
+/// The computed value of every property a style rule can declare, and
+/// of every custom property in force.
 pub(super) fn computed(style: &ComputedStyle) -> BTreeMap<String, String> {
-    PROPERTIES
+    let mut computed: BTreeMap<String, String> = PROPERTIES
         .iter()
         .map(|spec| (spec.name.to_string(), value(style, spec.name)))
-        .collect()
+        .collect();
+    computed.extend(style.custom.clone());
+    computed
 }
 
 fn value(style: &ComputedStyle, property: &str) -> String {

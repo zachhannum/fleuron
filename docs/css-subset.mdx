@@ -463,6 +463,40 @@ pt px pc in cm mm q em rem
 
 A color can be a CSS color name, `#rgb`, `#rrggbb`, or `rgb()` with numbers or percentages. There is no alpha channel.
 
+### Custom properties
+
+A custom property gives a value a name, so you write the value once and use it in many places. The name of a custom property starts with `--`.
+
+{/* generated: custom-properties */}
+
+A custom property declaration is `--<name>: <value> !important?`. `var( --<name> [, <fallback> ]? )` stands for the value of a custom property in another declaration.
+
+{/* end generated */}
+
+The following example names a color on the book, and uses it for the headings and for the border of each quotation:
+
+```css
+:root {
+  --accent: #d6075e;
+}
+
+h2 {
+  color: var(--accent);
+}
+
+blockquote {
+  border-left: 2pt solid var(--accent);
+}
+```
+
+A custom property inherits. A value set on `section` reaches every element inside the section, and a value set on an element inside it overrides that value. `var()` can stand for a whole value or for part of one, in any property. The names are case-sensitive, so `--Accent` and `--accent` are two custom properties.
+
+If a custom property has no value, `var()` uses the fallback after the comma. `font-size: var(--size, 12pt)` gives 12pt where no rule declares `--size`. If there is no fallback, the property takes its inherited value if it inherits, or its initial value if it does not. The engine warns and names the line and column of the declaration.
+
+A custom property that depends on itself, such as `--a: var(--b)` with `--b: var(--a)`, has no value. The engine warns about each custom property in the cycle. If the value that `var()` gives is not one the property takes, the engine warns about an unsupported value. The property then takes its inherited or initial value.
+
+`@page` and the margin boxes can use `var()`. There, `var()` uses the custom properties of the book, which a rule on `:root` or `book` declares.
+
 ## Text
 
 These properties inherit. A value set on `book` or `section` reaches the text below it, and a rule on `h2` overrides what the heading inherited.
@@ -1349,7 +1383,7 @@ code { font-family: monospace }
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned block |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
-| custom properties | the `--name` syntax and `var()` |
+| custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
 | counters | any counter other than `page`, and `counter-increment` |
 | generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |

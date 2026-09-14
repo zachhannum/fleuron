@@ -98,13 +98,44 @@ pub enum Declaration {
     BreakAfter(Break),
     BreakInside(Break),
     ColumnSpan(ColumnSpan),
+    /// A custom property, whose value is read only through `var()`.
+    Custom(Custom),
+    /// A value that reads a custom property, parsed once the cascade
+    /// knows what the property holds.
+    Pending(Pending),
+}
+
+/// A custom property as written: a name that starts with `--`, and a
+/// value kept as CSS text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Custom {
+    /// The name, `--` included, in the case it was written in.
+    pub name: String,
+    /// The value, without `!important`.
+    pub value: String,
+    /// Where the declaration was written, as a warning names it.
+    pub origin: String,
+}
+
+/// A declaration whose value holds `var()`. The property is known and
+/// the value is kept as CSS text until each name it reads is known.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pending {
+    /// The property, in lowercase. A shorthand stays a shorthand.
+    pub property: String,
+    /// The value, without `!important`.
+    pub value: String,
+    /// Where the declaration was written, as a warning names it.
+    pub origin: String,
 }
 
 impl Declaration {
     /// The longhand this declaration sets, as CSS names it. Of two
     /// declarations that name the same longhand, the later one in
-    /// cascade order is the one that counts.
-    pub fn property(&self) -> &'static str {
+    /// cascade order is the one that counts. A pending declaration
+    /// names the property it was written for, which can be a
+    /// shorthand.
+    pub fn property(&self) -> &str {
         let edge = |edge: &Edge, [top, right, bottom, left]: [&'static str; 4]| match edge {
             Edge::Top => top,
             Edge::Right => right,
@@ -196,6 +227,8 @@ impl Declaration {
             Declaration::BreakAfter(_) => "break-after",
             Declaration::BreakInside(_) => "break-inside",
             Declaration::ColumnSpan(_) => "column-span",
+            Declaration::Custom(custom) => &custom.name,
+            Declaration::Pending(pending) => &pending.property,
         }
     }
 }

@@ -26,10 +26,11 @@ use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderStyle, Color, Content, Declaration, Edge, Length,
-    MarginBox, SizeSource, Url,
+    MarginBox, Pending, SizeSource, Url,
 };
 
 mod color;
+mod custom;
 mod declaration;
 mod face;
 mod page;
@@ -39,6 +40,10 @@ mod vocabulary;
 pub use face::{FontFace, Src};
 
 pub(crate) use color::NAMED;
+pub(crate) use custom::{
+    Unresolved, longhands, margin_longhands, page_longhands, read_pending, read_pending_margin,
+    read_pending_page, substitute,
+};
 pub(crate) use declaration::{PROPERTIES, Spec};
 pub(crate) use face::FONT_FACE_DESCRIPTORS;
 #[cfg(test)]
@@ -46,8 +51,8 @@ pub(crate) use face::FaceDeclaration;
 pub(crate) use page::{MARGIN_BOX_PROPERTIES, PAGE_PROPERTIES, PAGE_SELECTORS, PAGE_SIZES};
 pub(crate) use value::UNITS;
 pub(crate) use vocabulary::{
-    COMBINATORS, COMPOUNDS, DECLARATION, FIRST_LINE_PROPERTIES, PSEUDO_CLASSES, PSEUDO_ELEMENTS,
-    SELECTOR_LIST,
+    COMBINATORS, COMPOUNDS, CUSTOM_PROPERTY, DECLARATION, FIRST_LINE_PROPERTIES, PSEUDO_CLASSES,
+    PSEUDO_ELEMENTS, SELECTOR_LIST, VAR,
 };
 
 use declaration::declarations;
@@ -223,6 +228,8 @@ pub enum PageDeclaration {
     ColumnRuleWidth(Length),
     ColumnRuleStyle(BorderStyle),
     AlignContent(AlignContent),
+    /// A value that reads a custom property of the book's root.
+    Pending(Pending),
 }
 
 /// A declaration inside a page margin box.
@@ -231,6 +238,8 @@ pub enum MarginDeclaration {
     Content(Content),
     /// A text property; margin boxes set a line like any other.
     Style(Declaration),
+    /// A value that reads a custom property of the book's root.
+    Pending(Pending),
 }
 
 /// One parsed sheet.
@@ -562,5 +571,39 @@ mod tests {
             ]
         );
         assert_eq!(rule.declarations.len(), 5);
+    }
+
+    /// Part: a declaration whose name starts with `--` is kept as the
+    /// text it was written as rather than rejected, and a value that
+    /// reads one is kept as text for the cascade.
+    #[test]
+    fn a_custom_property_is_kept_as_written() {
+        let css = "p {\n  --Accent: rgb(214, 7, 94) !important;\n  color: var(--Accent, black);\n}";
+        let (sheet, warnings) = parse(&Source::author("author.css", css));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let rule = &sheet.rules[0];
+        assert_eq!(
+            rule.declarations,
+            vec![
+                (
+                    Declaration::Custom(crate::style::properties::Custom {
+                        name: "--Accent".into(),
+                        value: "rgb(214, 7, 94)".into(),
+                        origin: "author.css:2:3".into(),
+                    }),
+                    Importance::Important,
+                ),
+                (
+                    Declaration::Pending(Pending {
+                        property: "color".into(),
+                        value: "var(--Accent, black)".into(),
+                        origin: "author.css:3:3".into(),
+                    }),
+                    Importance::Normal,
+                ),
+            ]
+        );
+        assert_eq!(rule.written[0].property, "--Accent");
+        assert_eq!(rule.written[1].value, "var(--Accent, black)");
     }
 }

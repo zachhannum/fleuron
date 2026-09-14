@@ -8,10 +8,11 @@ use cssparser::{
 
 use crate::Warning;
 use crate::pages::Side;
-use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox};
+use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox, Pending};
 
 use super::color::background_color;
-use super::declaration::{Parsed, Spec, at, longhand, sides, written_at};
+use super::custom::{mentions_var, raw};
+use super::declaration::{PROPERTIES, Parsed, Spec, at, longhand, sides, written_at};
 use super::value::{
     align_content, background_image, background_position, background_repeat, background_size,
     column_count, column_gap, column_width, length, line_style, line_width, property,
@@ -278,7 +279,15 @@ impl<'i> DeclarationParser<'i> for PageBody {
             let Some(spec) = Spec::find(PAGE_PROPERTIES, &name) else {
                 return Err(input.new_custom_error(StyleError::UnsupportedProperty(name.clone())));
             };
-            let mut items = spec.read(&name, input)?;
+            let mut items = if mentions_var(input) {
+                vec![PageDeclaration::Pending(Pending {
+                    property: spec.name.to_string(),
+                    value: raw(input),
+                    origin: super::position(&self.name, start.source_location()),
+                })]
+            } else {
+                spec.read(&name, input)?
+            };
             input.expect_exhausted()?;
             page_written_at(&mut items, &self.name, start);
             Ok(items.into_iter().map(PageItem::Declaration).collect())
@@ -376,7 +385,23 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
     ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
         at(start, |input| {
             let from = input.position();
-            let declarations = match Spec::find(MARGIN_BOX_PROPERTIES, &name) {
+            let own = Spec::find(MARGIN_BOX_PROPERTIES, &name);
+            let declarations = match own {
+                _ if mentions_var(input) => {
+                    let known = own
+                        .map(|spec| spec.name)
+                        .or_else(|| Spec::find(PROPERTIES, &name).map(|spec| spec.name));
+                    let Some(property) = known else {
+                        return Err(
+                            input.new_custom_error(StyleError::UnsupportedProperty(name.clone()))
+                        );
+                    };
+                    vec![MarginDeclaration::Pending(Pending {
+                        property: property.to_string(),
+                        value: raw(input),
+                        origin: super::position(&self.sheet, start.source_location()),
+                    })]
+                }
                 Some(spec) => spec.read(&name, input)?,
                 None => {
                     let mut style = property(&name, input)?;
