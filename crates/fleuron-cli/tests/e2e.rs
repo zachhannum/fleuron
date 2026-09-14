@@ -1474,6 +1474,77 @@ fn a_page_with_a_spanning_heading_paints_the_same_in_the_preview_and_the_pdf() {
     }
 }
 
+/// Generated boxes over the fixture book: a rule under every chapter
+/// title, and an opening quotation mark before the paragraph that
+/// follows one. A title keeps the paragraph under it on its page, so
+/// every chapter opening carries both.
+const GENERATED_CSS: &str = "h3::after {\n  content: \"\";\n  height: 2pt;\n  background-color: #d6075e;\n}\n\nh3 + p::before {\n  content: \"\\201C\";\n}\n";
+
+/// Acceptance: the preview and the export agree over a page that
+/// carries a generated rule and a generated quotation mark.
+///
+/// The preview paints from the display structure, so what the two
+/// have to agree about is where every run and every rule goes.
+#[test]
+fn a_page_with_generated_boxes_paints_the_same_in_the_preview_and_the_pdf() {
+    const RULE: Color = Color::rgb(0xd6, 0x07, 0x5e);
+    let pages = pages_under(GENERATED_CSS);
+    let marked = |page: &Page| {
+        page.items
+            .iter()
+            .any(|item| matches!(item, DrawItem::Text { text, .. } if text == "\u{201C}"))
+    };
+    let carrying: Vec<&Page> = pages
+        .iter()
+        .filter(|page| fills(page, RULE).next().is_some() && marked(page))
+        .collect();
+    assert!(
+        !carrying.is_empty(),
+        "no page carries both a rule and a mark"
+    );
+
+    let sheet = write_sheet("generated", GENERATED_CSS);
+    let (pdf, stderr) = render("generated", &[&sheet]);
+    assert!(
+        !stderr.contains("warning"),
+        "the generated sheet is in the subset: {stderr}",
+    );
+    let Some(streams) = content_streams(&pdf) else {
+        return;
+    };
+    let painted: Vec<(f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+    let written = placed_runs(&streams);
+    assert_eq!(
+        painted.len(),
+        written.len(),
+        "the preview paints {} runs and the PDF writes {}",
+        painted.len(),
+        written.len(),
+    );
+    for (index, (paints, writes)) in painted.iter().zip(&written).enumerate() {
+        assert!(
+            (paints.0 - writes.0).abs() < 1e-3 && (paints.1 - writes.1).abs() < 1e-3,
+            "run {index}: the preview paints it at {paints:?} and the PDF at {writes:?}",
+        );
+    }
+    for page in carrying {
+        for (x, y, ..) in fills(page, RULE) {
+            let corner = format!("{x} {y} m");
+            assert!(
+                streams.contains(&corner),
+                "the PDF paints no rule at {corner}"
+            );
+        }
+    }
+}
+
 /// Every text run a PDF places, as `(x, baseline)` in the display
 /// structure's own coordinates, in the order the writer wrote them.
 ///

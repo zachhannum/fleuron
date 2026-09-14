@@ -854,7 +854,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut items = Vec::new();
         for painted in &boxes {
             let (x, y, width, height) = painted.border_box(origin);
-            if height > 0.0 {
+            if painted.decoration.node != NodeId::UNASSIGNED && height > 0.0 {
                 self.boxes.push((
                     painted.decoration.node,
                     PageBox {

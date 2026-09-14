@@ -241,6 +241,33 @@ impl LineLayout<'_> {
         lead: Lead,
     ) -> Option<Shaped> {
         let flat = self.flatten(inlines, style, styles, lead);
+        self.shape_flat(flat, style, options, lead.extent)
+    }
+
+    /// Breaks text that no node holds into lines of `measure`: what
+    /// `::before` and `::after` generate on a block.
+    pub(crate) fn layout_generated(
+        &self,
+        text: &str,
+        style: ParagraphStyle,
+        measure: &Measure,
+        options: LineBreakOptions,
+    ) -> Vec<Line> {
+        let flat = self.flatten_generated(text, style);
+        self.shape_flat(flat, style, options, None)
+            .map(|shaped| self.break_shaped(&shaped, measure, 0, None).lines)
+            .unwrap_or_default()
+    }
+
+    /// One flattened paragraph shaped. `opening` is where the line the
+    /// paragraph opens on has to end.
+    fn shape_flat(
+        &self,
+        flat: flatten::FlatParagraph,
+        style: ParagraphStyle,
+        options: LineBreakOptions,
+        opening: Option<usize>,
+    ) -> Option<Shaped> {
         if flat.text.is_empty() {
             return None;
         }
@@ -252,7 +279,7 @@ impl LineLayout<'_> {
             style,
             options,
             upem,
-            opening: lead.extent,
+            opening,
         })
     }
 

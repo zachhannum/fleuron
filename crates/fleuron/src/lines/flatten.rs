@@ -368,6 +368,18 @@ impl LineLayout<'_> {
         flat
     }
 
+    /// Flattens text the sheet generated with no paragraph around it.
+    pub(super) fn flatten_generated(&self, text: &str, style: ParagraphStyle) -> FlatParagraph {
+        let mut flat = FlatParagraph::new();
+        let lead = Lead {
+            style: None,
+            extent: None,
+            taken: 0,
+        };
+        self.push_generated(&mut flat, Some((text.to_string(), style)), lead);
+        flat
+    }
+
     fn walk_inlines(
         &self,
         inlines: &[Inline],
