@@ -1,8 +1,8 @@
 //! Image sizes through the whole engine: markdown in, pages out.
 //!
-//! Each test reads a manuscript with plates in it, lays it out under
+//! Each test reads a manuscript with images in it, lays it out under
 //! the built-in sheet and a few rules of its own, and reads the size
-//! of every plate back off the display structure.
+//! of every image back off the display structure.
 
 use std::path::Path;
 
@@ -16,7 +16,7 @@ use fleuron_markdown::Options;
 
 /// The fixture: a map, an ornament inside a quotation, and an
 /// ornament outside one.
-const FIXTURE: &str = include_str!("../../../fixtures/plates.md");
+const FIXTURE: &str = include_str!("../../../fixtures/sized-images.md");
 
 /// Three ornaments, and nothing else in their section.
 const ORNAMENTS: &str = "![one](images/fleuron.png)\n\n\
@@ -47,11 +47,11 @@ impl ImageLoader for Fixtures {
 
 fn lay_out(markdown: &str, css: &str) -> LayoutOutput {
     let (sections, warnings) =
-        fleuron_markdown::to_sections(markdown, "plates.md", &Options::default());
+        fleuron_markdown::to_sections(markdown, "sized-images.md", &Options::default());
     assert!(warnings.is_empty(), "the frontend warned: {warnings:?}");
     let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(markdown), sections);
     let styles =
-        Stylesheets::parse(&[Source::author("plates.css", css)]).compile(&book, registry());
+        Stylesheets::parse(&[Source::author("sized-images.css", css)]).compile(&book, registry());
     assert!(
         styles.warnings().is_empty(),
         "the sheet is in the subset: {:?}",
@@ -61,8 +61,8 @@ fn lay_out(markdown: &str, css: &str) -> LayoutOutput {
     layout_book(&book, &styles, registry(), &assets)
 }
 
-/// Every plate of every page, as `(width, height)`, in paint order.
-fn plates(output: &LayoutOutput) -> Vec<(f32, f32)> {
+/// Every image of every page, as `(width, height)`, in paint order.
+fn images(output: &LayoutOutput) -> Vec<(f32, f32)> {
     output
         .pages
         .iter()
@@ -86,12 +86,12 @@ fn scaled_to_fit(output: &LayoutOutput, too: &str) -> usize {
         .count()
 }
 
-/// Acceptance: `img { width: 200pt }` sets every plate 200pt wide,
+/// Acceptance: `img { width: 200pt }` sets every image 200pt wide,
 /// and its height follows the intrinsic ratio.
 #[test]
-fn a_width_sets_every_plate_that_wide_and_the_height_follows() {
-    let own = plates(&lay_out(FIXTURE, ""));
-    let sized = plates(&lay_out(FIXTURE, "img { width: 200pt }"));
+fn a_width_sets_every_image_that_wide_and_the_height_follows() {
+    let own = images(&lay_out(FIXTURE, ""));
+    let sized = images(&lay_out(FIXTURE, "img { width: 200pt }"));
     assert_eq!(own.len(), 3);
     assert_eq!(sized.len(), own.len());
     for ((width, height), (own_width, own_height)) in sized.into_iter().zip(own) {
@@ -108,11 +108,11 @@ fn a_width_sets_every_plate_that_wide_and_the_height_follows() {
 #[test]
 fn a_percentage_width_measures_the_width_the_image_is_in() {
     let skip_map = "img.map { width: auto }";
-    let full = plates(&lay_out(
+    let full = images(&lay_out(
         FIXTURE,
         &format!("img {{ width: 100% }} {skip_map}"),
     ));
-    let half = plates(&lay_out(
+    let half = images(&lay_out(
         FIXTURE,
         &format!("img {{ width: 50% }} {skip_map}"),
     ));
@@ -130,11 +130,11 @@ fn a_percentage_width_measures_the_width_the_image_is_in() {
     }
 }
 
-/// Acceptance: `img:nth-child(2) { width: 120pt }` sizes that plate and
+/// Acceptance: `img:nth-child(2) { width: 120pt }` sizes that image and
 /// no other.
 #[test]
-fn a_selector_sizes_the_plate_it_selects_and_no_other() {
-    let widths: Vec<f32> = plates(&lay_out(ORNAMENTS, "img:nth-child(2) { width: 120pt }"))
+fn a_selector_sizes_the_image_it_selects_and_no_other() {
+    let widths: Vec<f32> = images(&lay_out(ORNAMENTS, "img:nth-child(2) { width: 120pt }"))
         .into_iter()
         .map(|(width, _)| width)
         .collect();
@@ -151,9 +151,9 @@ fn a_size_larger_than_the_content_box_scales_to_fit_and_warns() {
     let fitted = lay_out(ORNAMENTS, "img { width: 100% }");
     assert_eq!(scaled_to_fit(&fitted, "wider"), 0);
 
-    // The three plates share a url, and a warning is said once.
+    // The three images share a url, and a warning is said once.
     let wide = lay_out(ORNAMENTS, "img { width: 400pt }");
-    assert_eq!(plates(&wide), plates(&fitted));
+    assert_eq!(images(&wide), images(&fitted));
     assert_eq!(scaled_to_fit(&wide, "wider"), 1);
 
     // Both sides given, so the height alone is too much for the page.
@@ -162,7 +162,7 @@ fn a_size_larger_than_the_content_box_scales_to_fit_and_warns() {
     assert_eq!(scaled_to_fit(&tall, "taller"), 1);
     assert_eq!(scaled_to_fit(&page, "taller"), 0);
     let heights = |output: &LayoutOutput| -> Vec<f32> {
-        plates(output)
+        images(output)
             .into_iter()
             .map(|(_, height)| height)
             .collect()
@@ -198,12 +198,12 @@ fn described(output: &LayoutOutput) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// Acceptance: the display structure of the fixture with sized plates,
+/// Acceptance: the display structure of the fixture with sized images,
 /// under snapshot.
 #[test]
-fn the_sized_plates_lay_out_to_the_display_list_they_are_checked_in_as() {
+fn the_sized_images_lay_out_to_the_display_list_they_are_checked_in_as() {
     let css = "img { width: 200pt } \
                img.map { max-height: 3in } \
                blockquote img { width: 25% }";
-    insta::assert_json_snapshot!("plates_fixture", described(&lay_out(FIXTURE, css)));
+    insta::assert_json_snapshot!("sized_images_fixture", described(&lay_out(FIXTURE, css)));
 }
