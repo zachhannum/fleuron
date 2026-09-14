@@ -62,6 +62,31 @@ impl Paginator<'_> {
                         host,
                         anchored,
                     ),
+                    Block::List { items, .. } => {
+                        walk(
+                            paginator,
+                            pseudo(GeneratedBox::Before),
+                            source,
+                            host,
+                            anchored,
+                        );
+                        for item in items {
+                            walk(
+                                paginator,
+                                children(styles, item.id, &item.blocks, item.position),
+                                source,
+                                host,
+                                anchored,
+                            );
+                        }
+                        walk(
+                            paginator,
+                            pseudo(GeneratedBox::After),
+                            source,
+                            host,
+                            anchored,
+                        );
+                    }
                     Block::Table { head, body, .. } => {
                         walk(
                             paginator,

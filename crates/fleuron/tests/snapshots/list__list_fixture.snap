@@ -1,0 +1,60 @@
+---
+source: crates/fleuron/tests/list.rs
+expression: "described(&lay_out(FIXTURE, \"\"))"
+---
+[
+  [
+    "text 54.00 72.98 18 \"The Articles\"",
+    "text 54.00 90.80 11 \"When this inventory was read over to the emperor, he directed me, although in\"",
+    "text 54.00 106.20 11 \"very gentle terms, to deliver up the several particulars:\"",
+    "text 64.47 127.10 11 \"• \"",
+    "text 70.50 127.10 11 \"my scimitar, scabbard and all\"",
+    "text 64.47 142.50 11 \"• \"",
+    "text 70.50 142.50 11 \"my pocket pistols\"",
+    "text 64.47 157.90 11 \"• \"",
+    "text 70.50 157.90 11 \"my pouch of powder and bullets\"",
+    "text 64.47 173.30 11 \"• \"",
+    "text 70.50 173.30 11 \"my watch, my purse, and my knife and razor\"",
+    "text 54.00 194.20 11 \"These articles were brought to me by Skyresh Bolgolam in person, and the first\"",
+    "text 54.00 209.60 11 \"of them read as follows:\"",
+    "text 60.49 230.50 11 \"1. \"",
+    "text 70.50 230.50 11 \"The man-mountain shall not depart from our dominions, without our\"",
+    "text 70.50 245.90 11 \"license under our great seal.\"",
+    "text 60.49 266.80 11 \"2. \"",
+    "text 70.50 266.80 11 \"He shall not presume to come into our metropolis, without our express\"",
+    "text 70.50 282.20 11 \"order; at which time, the inhabitants shall have two hours warning to keep\"",
+    "text 70.50 297.60 11 \"within doors.\"",
+    "text 70.50 318.50 11 \"The said man-mountain shall confine his walks to our principal high roads,\"",
+    "text 70.50 333.90 11 \"and not offer to walk, or lie down, in a meadow or field of corn.\"",
+    "text 54.00 354.80 11 \"The searchers had gone through every pocket about me, and in each of them\"",
+    "text 54.00 370.20 11 \"they found something:\"",
+    "text 64.47 391.10 11 \"• \"",
+    "text 70.50 391.10 11 \"In the right coat-pocket\"",
+    "text 81.39 406.50 11 \"◦ \"",
+    "text 87.00 406.50 11 \"one great piece of coarse-cloth, large enough to be a foot-cloth\"",
+    "text 64.47 421.90 11 \"• \"",
+    "text 70.50 421.90 11 \"In the left pocket\"",
+    "text 81.39 437.30 11 \"◦ \"",
+    "text 87.00 437.30 11 \"a huge silver chest, with a cover of the same metal\"",
+    "text 81.39 452.70 11 \"◦ \"",
+    "text 87.00 452.70 11 \"a sort of dust, which set them both a sneezing\"",
+    "text 54.00 473.60 11 \"The last of the articles bound me to the service of the emperor:\""
+  ],
+  [
+    "text 48.49 65.60 11 \"7. \"",
+    "text 58.50 65.60 11 \"That the said man-mountain shall, at his times of leisure, be aiding and\"",
+    "text 58.50 81.00 11 \"assisting to our workmen, in helping to raise certain great stones, towards\"",
+    "text 58.50 96.40 11 \"covering the wall of the principal park.\"",
+    "text 48.49 111.80 11 \"8. \"",
+    "text 58.50 111.80 11 \"That the said man-mountain shall, in two moons' time, deliver in an exact\"",
+    "text 58.50 127.20 11 \"survey of the circumference of our dominions, by a computation of his own\"",
+    "text 58.50 142.60 11 \"paces round the coast.\"",
+    "text 48.49 158.00 11 \"9. \"",
+    "text 58.50 158.00 11 \"That, upon his solemn oath to observe all the above articles, the said man-\"",
+    "text 58.50 173.40 11 \"mountain shall have a daily allowance of meat and drink sufficient for the\"",
+    "text 58.50 188.80 11 \"support of 1724 of our subjects.\"",
+    "text 42.00 209.70 11 \"I swore and subscribed to these articles with great cheerfulness and content,\"",
+    "text 42.00 225.10 11 \"although some of them were not so honourable as I could have wished.\"",
+    "text 213.84 624.19 9 \"2\""
+  ]
+]

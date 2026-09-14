@@ -12,7 +12,22 @@ impl Paginator<'_> {
     /// is measured from, and `top` is where the top of its box falls.
     pub(super) fn fragment_items(&self, fragment: &Fragment, x: f32, top: f32) -> Vec<DrawItem> {
         let (x, top) = (x + fragment.offset.0, top + fragment.offset.1);
-        match &fragment.piece {
+        let mut items = Vec::new();
+        for marker in fragment.markers.iter().flat_map(|markers| markers.iter()) {
+            // A marker sits on the baseline of the line its item opens
+            // with. Beside anything else, it sits at the top.
+            let baseline = match &fragment.piece {
+                Piece::Line { line, .. } => line.box_.baseline,
+                _ => marker.line.box_.baseline,
+            };
+            items.append(&mut self.text_items(
+                &marker.line,
+                x + marker.x,
+                top + baseline,
+                fragment.layer,
+            ));
+        }
+        items.append(&mut match &fragment.piece {
             Piece::Line { line, cap } => {
                 let baseline = top + line.box_.baseline;
                 let mut items = self.text_items(line, x + fragment.x, baseline, fragment.layer);
@@ -46,7 +61,8 @@ impl Paginator<'_> {
                 items
             }
             Piece::Blank | Piece::Anchor(_) => Vec::new(),
-        }
+        });
+        items
     }
 
     /// One string as a single shaped line: page furniture, and the

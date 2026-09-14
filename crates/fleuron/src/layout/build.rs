@@ -922,6 +922,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
         first.lead = head.lead;
         first.fixed += head.fixed;
         first.marks = head.marks.clone();
+        first.markers = head.markers.clone();
         if !opens.is_empty() {
             first.decorations = Some(Box::new(Decorations {
                 opens,

@@ -248,3 +248,28 @@ pub enum StringPiece {
     /// A literal.
     Text(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A bullet is a glyph and a space. A number takes the counter
+    /// style's spelling, a period, and a space. `none` is no marker.
+    #[test]
+    fn a_marker_is_its_glyph_or_its_number_and_a_space() {
+        assert_eq!(ListStyleType::Disc.marker(3).as_deref(), Some("\u{2022} "));
+        assert_eq!(
+            ListStyleType::Counter(CounterStyle::Decimal)
+                .marker(7)
+                .as_deref(),
+            Some("7. ")
+        );
+        assert_eq!(
+            ListStyleType::Counter(CounterStyle::UpperRoman)
+                .marker(9)
+                .as_deref(),
+            Some("IX. ")
+        );
+        assert_eq!(ListStyleType::None.marker(1), None);
+    }
+}

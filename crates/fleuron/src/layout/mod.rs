@@ -43,7 +43,7 @@ mod testing;
 
 pub use build::Reflow;
 pub use fragment::{
-    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, TableRow,
+    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marker, Marks, Piece, TableRow,
 };
 pub use furniture::margin_band;
 

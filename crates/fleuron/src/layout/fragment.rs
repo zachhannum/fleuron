@@ -91,6 +91,16 @@ pub struct DropCap {
     pub drop: f32,
 }
 
+/// The marker of a list item, set to the left of the item on the
+/// baseline of its first line.
+#[derive(Debug, Clone)]
+pub struct Marker {
+    /// The marker and the space after it, shaped in the item's style.
+    pub line: Line,
+    /// Leading edge, from the content box's own.
+    pub x: f32,
+}
+
 /// One thing the flow can place: a line, an image, an ornament.
 ///
 /// Everything horizontal is settled here — indentation, alignment,
@@ -119,6 +129,9 @@ pub struct Fragment {
     /// The decorated blocks this fragment opens and closes. Boxed
     /// for the same reason: most fragments decorate nothing.
     pub decorations: Option<Box<Decorations>>,
+    /// The markers of the list items that open on this fragment,
+    /// outermost first. Boxed, because most fragments open no item.
+    pub markers: Option<Box<Vec<Marker>>>,
     /// The paragraph this line came out of, shared by every line of
     /// it, and `None` on everything else. The flow reads it where an
     /// image narrows the bands the paragraph is set in. A book that
@@ -152,6 +165,7 @@ impl Fragment {
             piece,
             marks: None,
             decorations: None,
+            markers: None,
             reflow: None,
             spanning: false,
             layer: 0,

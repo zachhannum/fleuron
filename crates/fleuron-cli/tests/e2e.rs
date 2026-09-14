@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "4de23d21bb47c372b7ffbd87689a25526ff53e06aa7091fdef4d9840cb34d047";
+    "57150b5b698b65f3e89f8cfe0a753274b4a849fcf8c4745c8c27f653a067102c";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -2213,12 +2213,14 @@ enum Laid {
 fn laid_out(book: &Book) -> Vec<Laid> {
     let mut laid = Vec::new();
     for section in &book.sections {
-        append_blocks(&section.blocks, &mut laid);
+        append_blocks(&section.blocks, &mut laid, false);
     }
     laid
 }
 
-fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
+/// `nested` is whether the blocks are inside an item of a list, where
+/// the built-in sheet marks the items of a list with open circles.
+fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
     for block in blocks {
         match block {
             Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
@@ -2226,10 +2228,23 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
                 append_inlines(inlines, &mut text);
                 laid.push(Laid::Prose(text));
             }
-            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid),
-            Block::List { items, .. } => {
-                for item in items {
-                    append_blocks(&item.blocks, laid);
+            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid, nested),
+            // The marker of an item is set before the item's first
+            // line, to the left of it.
+            Block::List {
+                ordered,
+                start,
+                items,
+                ..
+            } => {
+                for (number, item) in (*start..).zip(items) {
+                    let marker = match (ordered, nested) {
+                        (true, _) => format!("{number}."),
+                        (false, false) => "\u{2022}".to_string(),
+                        (false, true) => "\u{25E6}".to_string(),
+                    };
+                    laid.push(Laid::Prose(marker));
+                    append_blocks(&item.blocks, laid, true);
                 }
             }
             Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
@@ -2247,7 +2262,7 @@ fn row_text(row: &Row) -> String {
     let mut text = String::new();
     for cell in &row.cells {
         let mut inner = Vec::new();
-        append_blocks(&cell.blocks, &mut inner);
+        append_blocks(&cell.blocks, &mut inner, false);
         for part in inner {
             if let Laid::Prose(prose) = part {
                 text.push_str(&prose);
