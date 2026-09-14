@@ -127,7 +127,7 @@ A node id is the engine's own name for a place in the book, and a host that hand
 
 ### Ids of generated boxes
 
-`::before` and `::after` on a block add a box that is not in the manuscript. [The CSS subset](../css-subset.mdx#pseudo-elements) describes these boxes. Each box has an id of its own. The `origin` of the text in the box has that id as its `node`, and `range` indexes the text of the box.
+`::before` and `::after` on a block add a box that is not in the manuscript. [The CSS subset](../css-subset.mdx) describes these boxes under Pseudo-elements. Each box has an id of its own. The `origin` of the text in the box has that id as its `node`, and `range` indexes the text of the box.
 
 No content node has the id of a generated box. The id of a content node is less than 2147483648 (2^31), and the id of a generated box is 2147483648 or more. The id comes from the element and the pseudo-element. The same book and stylesheets give the same id. A stylesheet edit that adds or removes a box does not change the id of a content node.
 
