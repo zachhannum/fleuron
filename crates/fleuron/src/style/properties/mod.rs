@@ -88,6 +88,10 @@ pub enum Declaration {
     Width(Option<Length>),
     Height(Option<Length>),
     MinHeight(Option<Length>),
+    /// `None` is `none`.
+    MaxWidth(Option<Length>),
+    /// `None` is `none`.
+    MaxHeight(Option<Length>),
     BorderCollapse(BorderCollapse),
     ListStyleType(ListStyleType),
     BreakBefore(Break),
@@ -184,6 +188,8 @@ impl Declaration {
             Declaration::Width(_) => "width",
             Declaration::Height(_) => "height",
             Declaration::MinHeight(_) => "min-height",
+            Declaration::MaxWidth(_) => "max-width",
+            Declaration::MaxHeight(_) => "max-height",
             Declaration::BorderCollapse(_) => "border-collapse",
             Declaration::ListStyleType(_) => "list-style-type",
             Declaration::BreakBefore(_) => "break-before",

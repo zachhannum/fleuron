@@ -122,6 +122,14 @@ pub struct ComputedStyle {
     /// The least height the content box takes, from `min-height`.
     #[serde(skip_serializing_if = "auto_width")]
     pub min_height: Width,
+    /// The most width an image takes, from `max-width`. `Auto` is
+    /// `none`.
+    #[serde(skip_serializing_if = "auto_width")]
+    pub max_width: Width,
+    /// The most height an image takes, from `max-height`. `Auto` is
+    /// `none`.
+    #[serde(skip_serializing_if = "auto_width")]
+    pub max_height: Width,
     /// Whether a table's cells share their borders, from
     /// `border-collapse`.
     #[serde(skip_serializing_if = "separate")]
@@ -182,6 +190,8 @@ impl ComputedStyle {
             width: Width::Auto,
             height: Width::Auto,
             min_height: Width::Auto,
+            max_width: Width::Auto,
+            max_height: Width::Auto,
             border_collapse: BorderCollapse::Separate,
             list_style_type: ListStyleType::Disc,
             break_before: Break::Auto,
@@ -203,6 +213,8 @@ impl ComputedStyle {
             width: Width::Auto,
             height: Width::Auto,
             min_height: Width::Auto,
+            max_width: Width::Auto,
+            max_height: Width::Auto,
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
@@ -310,6 +322,8 @@ impl ComputedStyle {
             Declaration::Width(width) => self.width = self.size(*width, root_size),
             Declaration::Height(height) => self.height = self.size(*height, root_size),
             Declaration::MinHeight(height) => self.min_height = self.size(*height, root_size),
+            Declaration::MaxWidth(width) => self.max_width = self.size(*width, root_size),
+            Declaration::MaxHeight(height) => self.max_height = self.size(*height, root_size),
             Declaration::BorderCollapse(value) => self.border_collapse = *value,
             Declaration::ListStyleType(value) => self.list_style_type = *value,
             Declaration::BreakBefore(value) => self.break_before = *value,
@@ -556,6 +570,39 @@ mod tests {
         assert_eq!(style.inherit().min_height, Width::Auto);
         style.apply(&Declaration::Height(None), 10.0, 16.0);
         assert_eq!(style.height, Width::Auto);
+    }
+
+    /// Part: `width`, `height`, `max-width` and `max-height` compute
+    /// as lengths and percentages, and a child does not inherit them.
+    #[test]
+    fn image_sizes_compute_as_lengths_and_percentages_and_do_not_inherit() {
+        let mut style = ComputedStyle::initial();
+        style.font_size = 10.0;
+        style.apply(&Declaration::Width(Some(Length::Points(200.0))), 10.0, 16.0);
+        style.apply(
+            &Declaration::Height(Some(Length::Percent(50.0))),
+            10.0,
+            16.0,
+        );
+        style.apply(&Declaration::MaxWidth(Some(Length::Em(12.0))), 10.0, 16.0);
+        style.apply(
+            &Declaration::MaxHeight(Some(Length::Percent(40.0))),
+            10.0,
+            16.0,
+        );
+        assert_eq!(style.width, Width::Points(200.0));
+        assert_eq!(style.height, Width::Percent(50.0));
+        assert_eq!(style.max_width, Width::Points(120.0));
+        assert_eq!(style.max_height, Width::Percent(40.0));
+
+        let child = style.inherit();
+        assert_eq!(
+            [child.width, child.height, child.max_width, child.max_height],
+            [Width::Auto; 4]
+        );
+
+        style.apply(&Declaration::MaxWidth(None), 10.0, 16.0);
+        assert_eq!(style.max_width, Width::Auto);
     }
 
     /// Part: `position: relative` computes, and an inset written as a

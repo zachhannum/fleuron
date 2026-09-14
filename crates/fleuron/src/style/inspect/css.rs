@@ -121,6 +121,8 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "width" => width(style.width),
         "height" => width(style.height),
         "min-height" => width(style.min_height),
+        "max-width" => ceiling(style.max_width),
+        "max-height" => ceiling(style.max_height),
         "margin" => sides(style.margin, |length| points(*length)),
         "margin-top" => points(style.margin.top),
         "margin-right" => points(style.margin.right),
@@ -250,6 +252,13 @@ fn width(value: Width) -> String {
         Width::Auto => "auto".into(),
         Width::Points(value) => points(value),
         Width::Percent(value) => format!("{}%", number(value)),
+    }
+}
+
+fn ceiling(value: Width) -> String {
+    match value {
+        Width::Auto => "none".into(),
+        value => width(value),
     }
 }
 

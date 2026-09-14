@@ -304,6 +304,8 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // A block taller than its content emits the space below it.
         height,
         min_height,
+        max_width,
+        max_height,
         border_collapse,
         list_style_type,
         break_before,
@@ -313,7 +315,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         column_span,
     } = style;
     (border_collapse, list_style_type).hash(h);
-    for size in [width, height, min_height] {
+    for size in [width, height, min_height, max_width, max_height] {
         match size {
             Width::Auto => 0u8.hash(h),
             Width::Points(points) => (1u8, points.to_bits()).hash(h),
