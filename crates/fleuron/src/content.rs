@@ -97,8 +97,55 @@ impl NodeId {
         if self == NodeId::UNASSIGNED {
             return self;
         }
+        if let Some((element, which)) = self.generated_box() {
+            return element.shifted(step).generated(which);
+        }
         NodeId((self.0 as i64 + step).max(0) as u32)
     }
+
+    /// The id of the box `::before` or `::after` generates inside this
+    /// element. No content node has it.
+    pub(crate) fn generated(self, which: GeneratedBox) -> NodeId {
+        let after = match which {
+            GeneratedBox::Before => 0,
+            GeneratedBox::After => 1,
+        };
+        NodeId(GENERATED | (self.0 << 1) | after)
+    }
+
+    /// The element and the pseudo-element a generated box belongs to,
+    /// where this id names one. Nothing for the id of a content node.
+    pub fn generated_box(self) -> Option<(NodeId, GeneratedBox)> {
+        if self.0 & GENERATED == 0 {
+            return None;
+        }
+        let which = if self.0 & 1 == 0 {
+            GeneratedBox::Before
+        } else {
+            GeneratedBox::After
+        };
+        Some((NodeId((self.0 & !GENERATED) >> 1), which))
+    }
+
+    /// The element this id stands for: the element a generated box
+    /// belongs to, or the node itself.
+    pub fn element(self) -> NodeId {
+        self.generated_box().map_or(self, |(element, _)| element)
+    }
+}
+
+/// The ids at and above this one name generated boxes. Content ids
+/// count up from 1 and stay below it.
+const GENERATED: u32 = 1 << 31;
+
+/// Which of the two boxes `::before` and `::after` generate inside a
+/// block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum GeneratedBox {
+    /// The box `::before` generates, the first child of the block.
+    Before,
+    /// The box `::after` generates, the last child of the block.
+    After,
 }
 
 /// A stretch of one node's text: the node it was written in, and
@@ -1128,6 +1175,17 @@ fn assign_inline(inline: &mut Inline, next: &mut u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A renumbered section moves a generated box with its element,
+    /// and the id stays one no content node has.
+    #[test]
+    fn a_generated_box_moves_with_its_element() {
+        let element = NodeId::new(40);
+        let after = element.generated(GeneratedBox::After);
+        let moved = after.shifted(-3);
+        assert_eq!(moved.generated_box(), Some((NodeId::new(37), GeneratedBox::After)));
+        assert_eq!(element.shifted(-3).generated_box(), None);
+    }
 
     /// The markdown the sample tree was read from, so that its spans
     /// are the bytes of something rather than numbers made up.
