@@ -89,6 +89,11 @@ pub struct ComputedStyle {
     /// later, and `auto` is layer 0.
     #[serde(skip_serializing_if = "ground_layer")]
     pub z_index: i32,
+    /// How much of what the block paints shows, from `opacity`: 1 is
+    /// all of it and 0 is none. The blocks inside it show that much
+    /// of their own.
+    #[serde(skip_serializing_if = "opaque")]
+    pub opacity: f32,
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
@@ -185,6 +190,7 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             z_index: 0,
+            opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -229,6 +235,7 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             z_index: 0,
+            opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -283,6 +290,7 @@ impl ComputedStyle {
                 }
             }
             Declaration::ZIndex(layer) => self.z_index = *layer,
+            Declaration::Opacity(opacity) => self.opacity = *opacity,
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
             Declaration::ShapeOutside(shape) => {
                 self.shape_outside = match shape {
@@ -374,6 +382,7 @@ impl ComputedStyle {
             Declaration::Position(_) => self.position = base.position,
             Declaration::Inset(edge, _) => *self.inset.edge(*edge) = base.inset.get(*edge),
             Declaration::ZIndex(_) => self.z_index = base.z_index,
+            Declaration::Opacity(_) => self.opacity = base.opacity,
             Declaration::WrapFlow(_) => self.wrap_flow = base.wrap_flow,
             Declaration::ShapeOutside(_) => self.shape_outside = base.shape_outside.clone(),
             Declaration::ShapeMargin(_) => self.shape_margin = base.shape_margin,
@@ -528,6 +537,10 @@ fn unplaced(inset: &Edges<Inset>) -> bool {
 
 fn ground_layer(layer: &i32) -> bool {
     *layer == 0
+}
+
+fn opaque(opacity: &f32) -> bool {
+    *opacity == 1.0
 }
 
 fn wraps_nothing(wrap: &WrapFlow) -> bool {

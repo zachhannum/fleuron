@@ -112,14 +112,16 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             coordinate(),
             any::<u32>(),
+            any::<u8>(),
             layer()
         )
-            .prop_map(|(x, y, w, h, asset, layer)| DrawItem::Image {
+            .prop_map(|(x, y, w, h, asset, alpha, layer)| DrawItem::Image {
                 x,
                 y,
                 w,
                 h,
                 asset,
+                alpha,
                 layer
             }),
     ]

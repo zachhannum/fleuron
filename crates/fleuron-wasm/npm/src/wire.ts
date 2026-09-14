@@ -163,6 +163,11 @@ export interface ImageItem {
   h: number;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /**
+   * How much of the image shows, from 0 to 255, where 255 is all of
+   * it: `opacity` on the image and the blocks around it.
+   */
+  alpha: number;
   /** Which layer the image paints in. */
   layer: number;
 }
@@ -198,6 +203,11 @@ export interface BackgroundItem {
   repeat: boolean;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /**
+   * How much of the image shows, from 0 to 255, where 255 is all of
+   * it: `opacity` on the blocks the box belongs to.
+   */
+  alpha: number;
   /** Which layer the image paints in. */
   layer: number;
 }
@@ -451,6 +461,7 @@ function item(r: Reader): DrawItem {
         w: r.f32(),
         h: r.f32(),
         asset: r.varint(),
+        alpha: r.byte(),
         layer: r.signed(),
       };
     case 3:
@@ -466,6 +477,7 @@ function item(r: Reader): DrawItem {
         tileH: r.f32(),
         repeat: r.bool(),
         asset: r.varint(),
+        alpha: r.byte(),
         layer: r.signed(),
       };
     default:

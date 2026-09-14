@@ -688,6 +688,17 @@ pub(super) fn edges<T: Copy>(
     ])
 }
 
+/// `opacity: <number> | <percentage>`. A value outside 0 to 1 is
+/// clamped to it.
+pub(super) fn opacity(input: &mut Parser<'_, '_>) -> Option<f32> {
+    let value = match input.next().ok()? {
+        Token::Number { value, .. } => *value,
+        Token::Percentage { unit_value, .. } => *unit_value,
+        _ => return None,
+    };
+    Some(value.clamp(0.0, 1.0))
+}
+
 /// A length in any unit the engine converts to points, or a
 /// percentage of whatever the property is relative to.
 pub(super) fn length(input: &mut Parser<'_, '_>) -> Option<Length> {

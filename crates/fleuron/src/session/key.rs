@@ -290,8 +290,10 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // fragments carry the offset its insets give them.
         position,
         inset,
-        // The layer travels on the fragments a block emits.
+        // The layer and the opacity travel on the fragments a block
+        // emits.
         z_index,
+        opacity,
         wrap_flow: _,
         shape_outside: _,
         shape_margin: _,
@@ -330,7 +332,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
-    (position, z_index).hash(h);
+    (position, z_index, opacity.to_bits()).hash(h);
     hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);

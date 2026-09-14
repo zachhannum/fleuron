@@ -4,7 +4,7 @@ use crate::lines::{Line, ParagraphStyle};
 use crate::pages::{DrawItem, Glyph};
 
 use super::Paginator;
-use super::flow::shift;
+use super::flow::{fade, shift};
 use super::fragment::{Fragment, Piece};
 
 impl Paginator<'_> {
@@ -51,6 +51,7 @@ impl Paginator<'_> {
                 w: *width,
                 h: *height,
                 asset: *asset,
+                alpha: 255,
                 layer: fragment.layer,
             }],
             // A row's items were painted with the layers of the
@@ -62,6 +63,7 @@ impl Paginator<'_> {
             }
             Piece::Blank | Piece::Anchor(_) => Vec::new(),
         });
+        fade(&mut items, fragment.opacity);
         items
     }
 

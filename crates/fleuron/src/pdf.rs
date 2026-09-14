@@ -303,6 +303,7 @@ fn paint(
             w,
             h,
             asset,
+            alpha,
             layer: _,
         } => {
             let image = images
@@ -312,9 +313,11 @@ fn paint(
                 number: page.number,
                 kind: "an image",
             })?;
-            surface.push_transform(&Transform::from_translate(*x, *y));
-            surface.draw_image(image.clone(), size);
-            surface.pop();
+            faded(surface, *alpha, |surface| {
+                surface.push_transform(&Transform::from_translate(*x, *y));
+                surface.draw_image(image.clone(), size);
+                surface.pop();
+            });
         }
         // The box clips and the tile is drawn inside it, once or as
         // many times as it takes to cover the box. Layout placed the
@@ -330,6 +333,7 @@ fn paint(
             tile_h,
             repeat,
             asset,
+            alpha,
             layer: _,
         } => {
             let image = images
@@ -349,20 +353,34 @@ fn paint(
                 number: page.number,
                 kind: "a background box",
             })?;
-            surface.push_clip_path(&path, &FillRule::NonZero);
-            for (left, top) in tiles(
-                [*x, *y, *w, *h],
-                [*tile_x, *tile_y, *tile_w, *tile_h],
-                *repeat,
-            ) {
-                surface.push_transform(&Transform::from_translate(left, top));
-                surface.draw_image(image.clone(), size);
+            faded(surface, *alpha, |surface| {
+                surface.push_clip_path(&path, &FillRule::NonZero);
+                for (left, top) in tiles(
+                    [*x, *y, *w, *h],
+                    [*tile_x, *tile_y, *tile_w, *tile_h],
+                    *repeat,
+                ) {
+                    surface.push_transform(&Transform::from_translate(left, top));
+                    surface.draw_image(image.clone(), size);
+                    surface.pop();
+                }
                 surface.pop();
-            }
-            surface.pop();
+            });
         }
     }
     Ok(())
+}
+
+/// Draws what `draw` draws at an eight-bit alpha, and writes nothing
+/// around it where the alpha is opaque.
+fn faded(surface: &mut Surface, alpha: u8, draw: impl FnOnce(&mut Surface)) {
+    if alpha == 255 {
+        draw(surface);
+        return;
+    }
+    surface.push_opacity(opacity(alpha));
+    draw(surface);
+    surface.pop();
 }
 
 /// How many tiles one background is drawn as, whatever the arithmetic
@@ -933,6 +951,7 @@ mod tests {
             w: 115.2,
             h: 76.8,
             asset: 0,
+            alpha: 255,
             layer: 0,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
@@ -966,6 +985,7 @@ mod tests {
                     w: 30.72,
                     h: 30.72,
                     asset: 0,
+                    alpha: 255,
                     layer: 0,
                 },
             ];
@@ -986,6 +1006,39 @@ mod tests {
         }
     }
 
+    /// An image with an alpha draws under a graphics state that
+    /// carries the alpha as its opacity, and an opaque one sets none.
+    #[test]
+    fn an_image_with_alpha_draws_at_that_alpha() {
+        let image = |alpha| {
+            vec![DrawItem::Image {
+                x: 54.0,
+                y: 90.0,
+                w: 72.0,
+                h: 48.0,
+                asset: 0,
+                alpha,
+                layer: 0,
+            }]
+        };
+        let table = assets(&[("plate.jpg", MAP)]);
+        let faded = with_images(
+            &page_of(image(128), 432.0, 648.0),
+            &table,
+            &Metadata::default(),
+        );
+        assert!(
+            faded.contains("/ca 0.5019608") && faded.contains("/CA 0.5019608"),
+            "no opacity of a half in:\n{faded}"
+        );
+        let opaque = with_images(
+            &page_of(image(255), 432.0, 648.0),
+            &table,
+            &Metadata::default(),
+        );
+        assert!(!opaque.contains("/ca "), "an opaque image set an opacity");
+    }
+
     /// Painters scale; they do not re-derive. An image layout sized
     /// down draws at the size layout gave it, not at the one its
     /// header declares.
@@ -997,6 +1050,7 @@ mod tests {
             w: 72.0,
             h: 48.0,
             asset: 0,
+            alpha: 255,
             layer: 0,
         }];
         let table = assets(&[("plate.jpg", MAP)]);

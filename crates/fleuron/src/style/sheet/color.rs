@@ -307,10 +307,7 @@ mod tests {
     fn hex_spells_an_alpha_only_where_there_is_one() {
         assert_eq!(Color::rgb(0xd6, 0x07, 0x5e).to_hex(), "#d6075e");
         assert_eq!(Color::rgba(0, 0, 0, 64).to_hex(), "#00000040");
-        assert_eq!(
-            Color::from_hex("#00000040"),
-            Some(Color::rgba(0, 0, 0, 64))
-        );
+        assert_eq!(Color::from_hex("#00000040"), Some(Color::rgba(0, 0, 0, 64)));
         assert_eq!(Color::rgb(10, 20, 30).faded(0.5).a, 128);
     }
 

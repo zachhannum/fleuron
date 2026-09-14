@@ -158,6 +158,17 @@ fn layered(layer: i32) -> String {
     }
 }
 
+/// The alpha of an image, and nothing at all where it is opaque: a
+/// book whose sheet names no `opacity` describes itself the way it
+/// did before there was one.
+fn translucent(alpha: u8) -> String {
+    if alpha == 255 {
+        String::new()
+    } else {
+        format!(" alpha {alpha}")
+    }
+}
+
 /// One draw item, every field of it, on one line. The match names
 /// each field rather than eliding it, so a field added to the display
 /// structure has to be answered for here.
@@ -219,10 +230,12 @@ fn described(item: &DrawItem) -> String {
             w,
             h,
             asset,
+            alpha,
             layer,
         } => {
             format!(
-                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}",
+                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}{}",
+                translucent(*alpha),
                 layered(*layer)
             )
         }
@@ -237,10 +250,12 @@ fn described(item: &DrawItem) -> String {
             tile_h,
             repeat,
             asset,
+            alpha,
             layer,
         } => format!(
             "background {x:?} {y:?} {w:?} {h:?} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
-             repeat {repeat} asset {asset}{}",
+             repeat {repeat} asset {asset}{}{}",
+            translucent(*alpha),
             layered(*layer)
         ),
     }
@@ -302,7 +317,10 @@ fn a_colour_with_alpha_reaches_the_runs_it_colours() {
         colour_of(&pages, "The Quay"),
         [Color::rgba(180, 30, 30, 64)]
     );
-    assert_eq!(colour_of(&pages, "harbour"), [Color::rgba(51, 102, 153, 77)]);
+    assert_eq!(
+        colour_of(&pages, "harbour"),
+        [Color::rgba(51, 102, 153, 77)]
+    );
     assert_eq!(colour_of(&pages, "The wind"), [Color::BLACK]);
 }
 

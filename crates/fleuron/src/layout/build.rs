@@ -94,6 +94,13 @@ pub(super) struct Builder<'a, 'p> {
     /// The value of `offset` before each open relative block added its
     /// move, innermost last.
     moved: Vec<(f32, f32)>,
+    /// How much shows of what the block being built paints, from 0 to
+    /// 1: the `opacity` of every block still open around it, its own
+    /// included, multiplied together.
+    pub(super) opacity: f32,
+    /// The value of `opacity` before each open block multiplied its
+    /// own into it, innermost last.
+    faded: Vec<f32>,
     /// The block this builder lays out on its own, against the page.
     /// Its own `position: absolute` does not anchor it a second time.
     pub(super) lifted: Option<NodeId>,
@@ -121,6 +128,8 @@ impl<'a, 'p> Builder<'a, 'p> {
             layer: 0,
             offset: (0.0, 0.0),
             moved: Vec::new(),
+            opacity: 1.0,
+            faded: Vec::new(),
             lifted: None,
             depth: 0.0,
             tall: Vec::new(),
@@ -242,6 +251,8 @@ impl Builder<'_, '_> {
             self.moved.push(self.offset);
             self.offset = (self.offset.0 + dx, self.offset.1 + dy);
         }
+        self.faded.push(self.opacity);
+        self.opacity *= style.opacity;
         self.margin = self.margin.max(style.margin.top);
         let start = self.fragments.len();
         let border = style.border.widths();
@@ -250,7 +261,14 @@ impl Builder<'_, '_> {
             start,
             open_fixed: self.fixed,
             started: false,
-            decoration: decoration(node, style, x, measure, backdrop, self.offset),
+            decoration: decoration(
+                node,
+                style,
+                x,
+                measure,
+                backdrop,
+                (self.offset, self.opacity),
+            ),
         });
         if border.top + style.padding.top > 0.0 {
             let margin = std::mem::take(&mut self.margin);
@@ -382,6 +400,9 @@ impl Builder<'_, '_> {
         {
             self.offset = offset;
         }
+        if let Some(opacity) = self.faded.pop() {
+            self.opacity = opacity;
+        }
         self.margin = self.margin.max(style.margin.bottom);
         // A block that emitted nothing settles nothing: what was
         // asked above it is still asked above whatever comes next.
@@ -462,6 +483,7 @@ impl Builder<'_, '_> {
         fragment.spanning = self.spanning;
         fragment.layer = self.layer;
         fragment.offset = self.offset;
+        fragment.opacity = self.opacity;
         self.depth += fragment.lead + fragment.fixed + fragment.height;
         self.fragments.push(fragment);
     }
@@ -912,6 +934,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment]) {
         fragment.spanning = head.spanning;
         fragment.layer = head.layer;
         fragment.offset = head.offset;
+        fragment.opacity = head.opacity;
     }
     let opens = head
         .decorations

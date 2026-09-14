@@ -17,7 +17,7 @@ use crate::pages::DrawItem;
 use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
 use super::build::{Builder, Child, Stacked, gather};
-use super::flow::{Painted, shift, shift_boxes};
+use super::flow::{Painted, fade, shift, shift_boxes};
 use super::fragment::{BreakPoint, Decoration, Fragment, Marks, Piece, TableRow};
 
 impl<'a> Builder<'a, '_> {
@@ -124,6 +124,7 @@ impl<'a> Builder<'a, '_> {
             .paginator
             .backdrop(&style.background)
             .items(grid.left, above, grid.width, height, layer);
+        fade(&mut items, style.opacity);
         for (column, _, cell_style, _, _) in &cells {
             let decoration = Decoration {
                 node: crate::content::NodeId::UNASSIGNED,
@@ -138,6 +139,7 @@ impl<'a> Builder<'a, '_> {
                 cloned: false,
                 layer: cell_style.z_index,
                 offset: (0.0, 0.0),
+                opacity: style.opacity * cell_style.opacity,
             };
             items.extend(
                 Painted {
@@ -178,9 +180,10 @@ impl<'a> Builder<'a, '_> {
             height,
         };
         let mut boxes = vec![(row.id, area(grid.left, grid.width))];
-        for (column, cell, _, top, mut content) in cells {
+        for (column, cell, cell_style, top, mut content) in cells {
             boxes.push((cell, area(grid.x[column], grid.widths[column])));
             shift(&mut content.items, 0.0, above + top);
+            fade(&mut content.items, style.opacity * cell_style.opacity);
             shift_boxes(&mut content.boxes, 0.0, above + top);
             items.append(&mut content.items);
             boxes.append(&mut content.boxes);

@@ -187,6 +187,7 @@ mod tests {
                         w: 3.0,
                         h: 4.0,
                         asset: 7,
+                        alpha: 128,
                         layer: -1,
                     },
                 ],

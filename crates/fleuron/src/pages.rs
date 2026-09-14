@@ -185,6 +185,9 @@ pub enum DrawItem {
         h: f32,
         /// Index into the asset table.
         asset: u32,
+        /// How much of the image shows, from 0 to 255, where 255 is
+        /// all of it: `opacity` on the image and the blocks around it.
+        alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
     },
@@ -216,6 +219,9 @@ pub enum DrawItem {
         repeat: bool,
         /// Index into the asset table.
         asset: u32,
+        /// How much of the image shows, from 0 to 255, where 255 is
+        /// all of it: `opacity` on the blocks the box belongs to.
+        alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
     },
@@ -245,6 +251,11 @@ impl DrawItem {
             | DrawItem::Background { layer, .. } => *layer,
         }
     }
+}
+
+/// An eight-bit alpha scaled by `opacity`, from 0 to 1.
+pub(crate) fn fade(alpha: u8, opacity: f32) -> u8 {
+    (alpha as f32 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
 /// One glyph: an id in its font and an absolute x. Kerning and

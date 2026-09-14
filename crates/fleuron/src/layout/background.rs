@@ -107,6 +107,7 @@ impl Tile {
             tile_h,
             repeat: self.repeat == BackgroundRepeat::Repeat,
             asset: self.asset,
+            alpha: 255,
             layer,
         })
     }

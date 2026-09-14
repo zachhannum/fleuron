@@ -101,6 +101,7 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "bottom" => inset(style.inset.bottom),
         "left" => inset(style.inset.left),
         "z-index" => style.z_index.to_string(),
+        "opacity" => number(style.opacity),
         "wrap-flow" => match style.wrap_flow {
             WrapFlow::Auto => "auto",
             WrapFlow::Both => "both",

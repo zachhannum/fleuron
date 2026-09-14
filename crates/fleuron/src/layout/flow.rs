@@ -286,6 +286,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                     }
                 }
                 shift(&mut items, fragment.offset.0, fragment.offset.1);
+                fade(&mut items, fragment.opacity);
                 self.header.push((fragment.height, items));
             }
         }
@@ -1010,6 +1011,7 @@ impl Painted {
             side,
             colors.right,
         );
+        fade(&mut items, self.decoration.opacity);
         items
     }
 }
@@ -1071,6 +1073,24 @@ pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
                 *y += dy;
                 *tile_x += dx;
                 *tile_y += dy;
+            }
+        }
+    }
+}
+
+/// Scales how much of each item shows by `opacity`, from 0 to 1: what
+/// the `opacity` of the blocks the items came out of comes to.
+pub(super) fn fade(items: &mut [DrawItem], opacity: f32) {
+    if opacity >= 1.0 {
+        return;
+    }
+    for item in items {
+        match item {
+            DrawItem::Text { color, .. } | DrawItem::Rect { color, .. } => {
+                *color = color.faded(opacity)
+            }
+            DrawItem::Image { alpha, .. } | DrawItem::Background { alpha, .. } => {
+                *alpha = crate::pages::fade(*alpha, opacity)
             }
         }
     }

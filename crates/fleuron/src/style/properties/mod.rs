@@ -70,6 +70,8 @@ pub enum Declaration {
     Position(Position),
     Inset(Edge, Option<Length>),
     ZIndex(i32),
+    /// From 0 to 1.
+    Opacity(f32),
     WrapFlow(WrapFlow),
     ShapeOutside(ShapeSource),
     ShapeMargin(Length),
@@ -167,6 +169,7 @@ impl Declaration {
             Declaration::Position(_) => "position",
             Declaration::Inset(side, _) => edge(side, ["top", "right", "bottom", "left"]),
             Declaration::ZIndex(_) => "z-index",
+            Declaration::Opacity(_) => "opacity",
             Declaration::WrapFlow(_) => "wrap-flow",
             Declaration::ShapeOutside(_) => "shape-outside",
             Declaration::ShapeMargin(_) => "shape-margin",

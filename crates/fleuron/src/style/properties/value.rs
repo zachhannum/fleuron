@@ -5,7 +5,7 @@ use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fonts::GenericFamily;
-use crate::pages::Side;
+use crate::pages::{Side, fade};
 
 /// A CSS length, before it is resolved against what it is relative to.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -126,19 +126,13 @@ impl Color {
     /// else.
     pub fn from_hex(text: &str) -> Option<Color> {
         let digits = text.strip_prefix('#')?;
-        if !matches!(digits.len(), 6 | 8) || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
-        {
+        if !matches!(digits.len(), 6 | 8) || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return None;
         }
         let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
         let alpha = if digits.len() == 8 { channel(6)? } else { 255 };
         Some(Color::rgba(channel(0)?, channel(2)?, channel(4)?, alpha))
     }
-}
-
-/// An eight-bit alpha scaled by `opacity`, from 0 to 1.
-pub(crate) fn fade(alpha: u8, opacity: f32) -> u8 {
-    (alpha as f32 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
 impl Serialize for Color {

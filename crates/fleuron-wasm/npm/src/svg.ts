@@ -172,8 +172,13 @@ function image(item: ImageItem, options: PaintOptions): string {
   const asset = options.assets?.[item.asset];
   const href = asset === undefined ? undefined : options.asset?.(asset, item.asset);
   return href === null || href === undefined
-    ? `<rect ${box} fill="none" stroke="currentColor" stroke-dasharray="3 3" data-missing-asset="${item.asset}"/>`
-    : `<image ${box} href="${escape(href)}" preserveAspectRatio="none"/>`;
+    ? `<rect ${box} fill="none" stroke="currentColor" stroke-dasharray="3 3" data-missing-asset="${item.asset}"${faded(item.alpha)}/>`
+    : `<image ${box} href="${escape(href)}" preserveAspectRatio="none"${faded(item.alpha)}/>`;
+}
+
+/** `opacity` for an eight-bit alpha, and nothing where it is opaque. */
+function faded(alpha: number): string {
+  return alpha === 255 ? '' : ` opacity="${num(alpha / 255)}"`;
 }
 
 /**
@@ -201,7 +206,7 @@ function background(item: BackgroundItem, options: PaintOptions, id: number): st
       `<image x="${num(item.tileX)}" y="${num(item.tileY)}"` +
       ` width="${num(item.tileW)}" height="${num(item.tileH)}"` +
       ` href="${escape(href)}" preserveAspectRatio="none"` +
-      ` clip-path="url(#${name})"/>`
+      ` clip-path="url(#${name})"${faded(item.alpha)}/>`
     );
   }
   return (
@@ -210,7 +215,7 @@ function background(item: BackgroundItem, options: PaintOptions, id: number): st
     ` width="${num(item.tileW)}" height="${num(item.tileH)}">` +
     `<image x="0" y="0" width="${num(item.tileW)}" height="${num(item.tileH)}"` +
     ` href="${escape(href)}" preserveAspectRatio="none"/></pattern></defs>` +
-    `<rect ${box} fill="url(#${name})"/>`
+    `<rect ${box} fill="url(#${name})"${faded(item.alpha)}/>`
   );
 }
 
