@@ -590,7 +590,7 @@ How far a mark hangs depends on the mark: nearly all of a period or comma, less 
 
 ## Blocks
 
-These do not inherit. A block is a paragraph, a heading, a quotation, an image, a thematic break, or a table.
+These do not inherit. A block is a paragraph, a heading, a quotation, an image, a thematic break, a list, a list item, or a table.
 
 {/* generated: block-properties */}
 
@@ -842,6 +842,38 @@ The header rows are in a `thead`, and the other rows are in a `tbody`. `tbody tr
 A table breaks across pages between two rows, and never inside a row. The header rows repeat at the top of every page that the table continues onto. A row that is taller than the page stays on one page and runs past the bottom of it, and the engine warns.
 
 The engine applies the alignment that the delimiter row gives a column as `text-align`. A `text-align` rule in a stylesheet takes priority over it.
+
+### Lists
+
+A list in the manuscript becomes a `ul` or an `ol`, and each item becomes an `li`. In the built-in stylesheet, the markers are in an indent of 1.5em to the left of the items. An `ol` has numbers, and a list inside an item has open circles.
+
+`list-style-type` chooses the marker. The marker uses the font of the item, has a space after it, and ends at the left edge of the item. It is on the same baseline as the first line of the item.
+
+| value | marker |
+|---|---|
+| `disc` | • |
+| `circle` | ◦ |
+| `square` | ■ |
+| `decimal` | 1. 2. 3. |
+| `lower-roman`, `upper-roman` | i. ii. iii. |
+| `lower-alpha`, `upper-alpha` | a. b. c. |
+| `none` | no marker |
+
+The following example numbers a list in capital roman numerals and puts space between its items:
+
+```css
+ol {
+  list-style-type: upper-roman;
+}
+
+li + li {
+  margin-top: 0.25em;
+}
+```
+
+In a tight list, the text of an item is not in a `p` element. So `li > p` selects only the paragraphs of a loose list, and the built-in stylesheet uses it to put space between them.
+
+A list breaks across pages between two items, or inside an item. A page does not end after the first item or before the last item. `break-inside: avoid` on a list or on an item keeps it on one page.
 
 ## Moving a block
 
@@ -1176,6 +1208,35 @@ blockquote {
   margin: 1em 2em;
 }
 
+/* A list has space above and below it. Its markers are in the
+   indent to the left of its items. */
+ul, ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+/* A list inside an item has no space above or below it, and its
+   markers are open circles. */
+li > :is(ul, ol) {
+  margin: 0;
+}
+
+li > ul {
+  list-style-type: circle;
+}
+
+/* An item of a loose list holds paragraphs, with space between them
+   and no indent. The items of a tight list have no space between
+   them. */
+li > p {
+  margin: 0.5em 0;
+  text-indent: 0;
+}
+
 /* A thematic break is a centered ornament. It belongs between
    paragraphs, so it never opens or closes a page. */
 hr {
@@ -1255,6 +1316,7 @@ code { font-family: monospace }
 | area | not supported yet |
 |---|---|
 | layout | floats, grid, flexbox, transforms, `max-height`, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
+| lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
