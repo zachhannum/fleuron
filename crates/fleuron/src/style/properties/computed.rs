@@ -13,7 +13,7 @@ use super::background::{
     Background, BackgroundPosition, BackgroundSize, SizeSource, no_background,
 };
 use super::counter::{Content, ListStyleType, StringSet};
-use super::edges::{Border, Edges};
+use super::edges::{Border, BorderRadius, CornerRadius, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
@@ -112,6 +112,11 @@ pub struct ComputedStyle {
     /// The four border edges.
     #[serde(skip_serializing_if = "no_border")]
     pub border: Edges<Border>,
+    /// How far each corner of the border box is rounded, from
+    /// `border-radius`. The background and the border follow the
+    /// corners.
+    #[serde(skip_serializing_if = "square")]
+    pub border_radius: BorderRadius,
     /// What is painted behind the block: a tint, and an image over
     /// it.
     #[serde(skip_serializing_if = "no_background")]
@@ -197,6 +202,7 @@ impl ComputedStyle {
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
+            border_radius: BorderRadius::SQUARE,
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
@@ -221,6 +227,7 @@ impl ComputedStyle {
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
+            border_radius: BorderRadius::SQUARE,
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
@@ -321,6 +328,12 @@ impl ComputedStyle {
                 self.border.edge(*edge).width = length.to_points(self.font_size, root_size).max(0.0)
             }
             Declaration::BorderColor(edge, color) => self.border.edge(*edge).color = *color,
+            Declaration::BorderRadius(corner, x, y) => {
+                *self.border_radius.corner(*corner) = CornerRadius {
+                    x: Coord::of(*x, self.font_size, root_size),
+                    y: Coord::of(*y, self.font_size, root_size),
+                }
+            }
             Declaration::BackgroundColor(color) => self.background.color = *color,
             Declaration::BackgroundImage(url) => self.background.image = url.clone(),
             Declaration::BackgroundRepeat(repeat) => self.background.repeat = *repeat,
@@ -396,6 +409,9 @@ impl ComputedStyle {
             }
             Declaration::BorderColor(edge, _) => {
                 self.border.edge(*edge).color = base.border.get(*edge).color
+            }
+            Declaration::BorderRadius(corner, ..) => {
+                *self.border_radius.corner(*corner) = base.border_radius.get(*corner)
             }
             Declaration::BackgroundColor(_) => self.background.color = base.background.color,
             Declaration::BackgroundImage(_) => {
@@ -553,6 +569,10 @@ fn no_padding(padding: &Edges) -> bool {
 
 fn no_border(border: &Edges<Border>) -> bool {
     *border == Edges::all(Border::NONE)
+}
+
+fn square(radius: &BorderRadius) -> bool {
+    *radius == BorderRadius::SQUARE
 }
 
 fn sliced(value: &BoxDecorationBreak) -> bool {

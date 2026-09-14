@@ -135,6 +135,7 @@ impl<'a> Builder<'a, '_> {
                 below: 0.0,
                 border: table.border(cell_style),
                 colors: inks(cell_style),
+                radius: cell_style.border_radius,
                 backdrop: self.paginator.backdrop(&cell_style.background),
                 cloned: false,
                 layer: cell_style.z_index,

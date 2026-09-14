@@ -8,7 +8,7 @@
 use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
-use fleuron::pages::{DrawItem, Page};
+use fleuron::pages::{Corners, DrawItem, Page};
 use fleuron::style::{Color, Source, StyleTree, Stylesheets};
 
 /// A sheet that sets a page and a heading and names no colour.
@@ -244,6 +244,7 @@ fn described(item: &DrawItem) -> String {
             y,
             w,
             h,
+            radii,
             tile_x,
             tile_y,
             tile_w,
@@ -253,11 +254,37 @@ fn described(item: &DrawItem) -> String {
             alpha,
             layer,
         } => format!(
-            "background {x:?} {y:?} {w:?} {h:?} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
+            "background {x:?} {y:?} {w:?} {h:?}{} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
              repeat {repeat} asset {asset}{}{}",
+            cornered(radii),
             translucent(*alpha),
             layered(*layer)
         ),
+        DrawItem::Rounded {
+            x,
+            y,
+            w,
+            h,
+            radii,
+            ring,
+            color: _,
+            layer,
+        } => format!(
+            "rounded {x:?} {y:?} {w:?} {h:?}{} ring {ring:?}{}",
+            cornered(radii),
+            layered(*layer)
+        ),
+    }
+}
+
+/// The corners of a box, and nothing at all where they are square: a
+/// book whose sheet names no `border-radius` describes itself the way
+/// it did before there was one.
+fn cornered(radii: &Corners) -> String {
+    if radii.is_square() {
+        String::new()
+    } else {
+        format!(" radii {radii:?}")
     }
 }
 
@@ -360,7 +387,9 @@ fn a_sheet_that_names_no_colour_sets_the_book_unchanged() {
         .iter()
         .flat_map(|page| &page.items)
         .map(|item| match item {
-            DrawItem::Text { color, .. } | DrawItem::Rect { color, .. } => *color,
+            DrawItem::Text { color, .. }
+            | DrawItem::Rect { color, .. }
+            | DrawItem::Rounded { color, .. } => *color,
             DrawItem::Image { .. } | DrawItem::Background { .. } => Color::BLACK,
         })
         .collect();

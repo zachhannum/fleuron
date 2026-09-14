@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::content::NodeId;
 use crate::lines::Line;
 use crate::pages::{DrawItem, PageBox};
-use crate::style::{BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
+use crate::style::{BorderRadius, BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
 
 use super::background::Backdrop;
 
@@ -218,6 +218,9 @@ pub struct Decoration {
     pub border: Edges,
     /// What each edge is painted in, `currentColor` resolved.
     pub colors: Edges<Color>,
+    /// How far each corner of the border box is rounded, before the
+    /// box's own size is known.
+    pub radius: BorderRadius,
     /// What is painted behind the whole border box: the tint, and
     /// the image over it.
     pub(super) backdrop: Backdrop,
@@ -290,6 +293,7 @@ pub(super) fn decoration(
             bottom: ink(style.border.bottom),
             left: ink(style.border.left),
         },
+        radius: style.border_radius,
         backdrop,
         cloned: style.box_decoration_break == BoxDecorationBreak::Clone,
         layer: style.z_index,

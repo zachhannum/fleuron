@@ -6,10 +6,11 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::sheet::PROPERTIES;
 use crate::style::{
-    BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderStyle, BoxDecorationBreak,
-    Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edges, Family,
-    FontStyle, FontVariantCaps, Hyphens, Inset, ListStyleType, Position, ShapeOutside, StringPiece,
-    StringSet, Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
+    BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderRadius, BorderStyle,
+    BoxDecorationBreak, Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord,
+    CornerRadius, CounterStyle, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Inset,
+    ListStyleType, Position, ShapeOutside, StringPiece, StringSet, Target, TextAlign, TextJustify,
+    TextTransform, Width, WrapFlow,
 };
 
 /// The computed value of every property a style rule can declare, and
@@ -155,6 +156,11 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "border-width" => sides(*border, |edge| points(edge.used())),
         "border-style" => sides(*border, |edge| line_style(edge.style).into()),
         "border-color" => sides(*border, |edge| edge.color.unwrap_or(style.color).to_hex()),
+        "border-radius" => radii(&style.border_radius),
+        "border-top-left-radius" => corner(style.border_radius.top_left),
+        "border-top-right-radius" => corner(style.border_radius.top_right),
+        "border-bottom-right-radius" => corner(style.border_radius.bottom_right),
+        "border-bottom-left-radius" => corner(style.border_radius.bottom_left),
         "background-color" => background
             .color
             .map(|color| color.to_hex())
@@ -275,6 +281,39 @@ fn sides<T: Copy>(edges: Edges<T>, write: impl Fn(&T) -> String) -> String {
         top
     } else {
         format!("{top} {right} {bottom} {left}")
+    }
+}
+
+/// One corner: one value where its two radii agree, both where they
+/// do not.
+fn corner(radius: CornerRadius) -> String {
+    let (x, y) = (coord(radius.x), coord(radius.y));
+    if x == y { x } else { format!("{x} {y}") }
+}
+
+/// Four corners as the shortest of the shorthand's forms, with the
+/// radii down the sides after a slash where they differ from the radii
+/// across.
+fn radii(radius: &BorderRadius) -> String {
+    let corners = [
+        radius.top_left,
+        radius.top_right,
+        radius.bottom_right,
+        radius.bottom_left,
+    ];
+    let shortest = |values: [String; 4]| {
+        if values.iter().all(|value| *value == values[0]) {
+            values[0].clone()
+        } else {
+            values.join(" ")
+        }
+    };
+    let across = shortest(corners.map(|corner| coord(corner.x)));
+    let down = shortest(corners.map(|corner| coord(corner.y)));
+    if across == down {
+        across
+    } else {
+        format!("{across} / {down}")
     }
 }
 

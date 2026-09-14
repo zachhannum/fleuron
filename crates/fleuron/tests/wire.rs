@@ -124,6 +124,31 @@ fn item() -> impl Strategy<Value = DrawItem> {
                 alpha,
                 layer
             }),
+        (
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            color(),
+            layer()
+        )
+            .prop_map(
+                |(x, y, w, h, radius, ring, color, layer)| DrawItem::Rounded {
+                    x,
+                    y,
+                    w,
+                    h,
+                    radii: fleuron::pages::Corners {
+                        top_left: fleuron::pages::Radius { x: radius, y: ring },
+                        ..Default::default()
+                    },
+                    ring: fleuron::style::Edges::all(ring),
+                    color,
+                    layer
+                }
+            ),
     ]
 }
 

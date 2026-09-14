@@ -1172,6 +1172,68 @@ check(
   JSON.stringify(clipped),
 );
 
+// Alpha, opacity and rounded corners. A tint with an alpha over the
+// scan behind a page leaves the scan showing, so the painter writes the
+// alpha as an opacity rather than as an opaque fill. The tint has
+// rounded corners, so it is a path, and a heading at `opacity: 0.05`
+// fills its runs at that opacity. The first tint on a page opens its
+// quotation, so its top corners are rounded whether or not a page turn
+// squares the bottom ones.
+const translucent = await client.preview([
+  styleOp(
+    '@page { background-image: url("images/plate.jpg"); background-size: cover } ' +
+      'blockquote { background-color: rgba(0, 0, 0, 0.25); border-radius: 3pt } ' +
+      'h3 { opacity: 0.05 }',
+  ),
+]);
+const tintedPage =
+  translucent?.pages.find((page) =>
+    page.items.some((item) => item.kind === 'rounded' && item.color === '#00000040'),
+  ) ?? null;
+const tintItem = tintedPage?.items.find(
+  (item) => item.kind === 'rounded' && item.color === '#00000040',
+);
+const tint = tintItem?.kind === 'rounded' ? tintItem : null;
+check(
+  'a tint with an alpha behind a quotation carries its alpha and its rounded corners',
+  tint !== null && tint.radii.topLeft.x === 3 && tint.radii.topRight.y === 3 && tint.ring.top === 0,
+  tint === null ? 'no rounded tint on any page' : JSON.stringify(tint),
+);
+check(
+  'and the display structure puts it over the scan behind the page',
+  tintedPage !== null &&
+    tintItem !== undefined &&
+    tintedPage.items.findIndex((item) => item.kind === 'background') !== -1 &&
+    tintedPage.items.findIndex((item) => item.kind === 'background') < tintedPage.items.indexOf(tintItem),
+  tintedPage?.items.map((item) => item.kind).join(' ') ?? '',
+);
+const tintedSvg =
+  tintedPage === null
+    ? ''
+    : paintPage(tintedPage, {
+        fonts: translucent?.fonts ?? [],
+        assets: translucent?.assets ?? [],
+        asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      });
+const scanAt = tintedSvg.indexOf('<image');
+const tintAt = tintedSvg.search(
+  /<path d="M[^"]*A3 3 0 0 1 [^"]*Z" fill-rule="evenodd" fill="#000000" fill-opacity="0\.25\d*"\/>/,
+);
+check(
+  'and the painter draws the scan, then the tint over it as a rounded path at a quarter opacity',
+  scanAt !== -1 && tintAt > scanAt,
+  `scan at ${scanAt}, tint at ${tintAt}`,
+);
+const fadedRuns =
+  translucent?.pages
+    .flatMap((page) => page.items)
+    .filter((item): item is TextItem => item.kind === 'text' && item.color === '#0000000d') ?? [];
+check(
+  'a heading at opacity 0.05 fills its runs at that opacity',
+  fadedRuns.length > 0,
+  `${fadedRuns.length} faded runs`,
+);
+
 // Named sheets. A host that builds its styling out of layers sends
 // the layers, and a warning names the layer it was written in.
 const layers = [

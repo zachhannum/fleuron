@@ -300,6 +300,8 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         margin,
         padding,
         border,
+        // A decoration carries its corners to the page.
+        border_radius,
         background,
         box_decoration_break,
         width,
@@ -342,6 +344,19 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     hash_edges(border.widths(), h);
     for edge in [border.top, border.right, border.bottom, border.left] {
         edge.color.hash(h);
+    }
+    for corner in [
+        border_radius.top_left,
+        border_radius.top_right,
+        border_radius.bottom_right,
+        border_radius.bottom_left,
+    ] {
+        for axis in [corner.x, corner.y] {
+            match axis {
+                crate::style::Coord::Points(points) => (0u8, points.to_bits()).hash(h),
+                crate::style::Coord::Percent(percent) => (1u8, percent.to_bits()).hash(h),
+            }
+        }
     }
 }
 

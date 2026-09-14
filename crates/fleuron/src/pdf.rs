@@ -25,7 +25,7 @@ use crate::LayoutOutput;
 use crate::content::Metadata;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::pages::{DrawItem, Glyph, Page};
+use crate::pages::{Corners, DrawItem, Glyph, Page};
 use crate::style::Color;
 
 /// What can go wrong turning the display structure into a PDF.
@@ -327,6 +327,7 @@ fn paint(
             y,
             w,
             h,
+            radii,
             tile_x,
             tile_y,
             tile_w,
@@ -348,7 +349,11 @@ fn paint(
                 kind: "a background box",
             })?;
             let mut builder = PathBuilder::new();
-            builder.push_rect(clip);
+            if radii.is_square() {
+                builder.push_rect(clip);
+            } else {
+                outline(&mut builder, [*x, *y, *w, *h], *radii);
+            }
             let path = builder.finish().ok_or(PdfError::Geometry {
                 number: page.number,
                 kind: "a background box",
@@ -367,8 +372,91 @@ fn paint(
                 surface.pop();
             });
         }
+        // The even-odd rule is what leaves the inside of a ring empty.
+        DrawItem::Rounded {
+            x,
+            y,
+            w,
+            h,
+            radii,
+            ring,
+            color,
+            layer: _,
+        } => {
+            surface.set_fill(Some(Fill {
+                paint: rgb::Color::new(color.r, color.g, color.b).into(),
+                opacity: opacity(color.a),
+                rule: FillRule::EvenOdd,
+            }));
+            let mut builder = PathBuilder::new();
+            outline(&mut builder, [*x, *y, *w, *h], *radii);
+            let inner = [
+                x + ring.left,
+                y + ring.top,
+                w - ring.left - ring.right,
+                h - ring.top - ring.bottom,
+            ];
+            let hollow = ring.top > 0.0 || ring.right > 0.0 || ring.bottom > 0.0 || ring.left > 0.0;
+            if hollow && inner[2] > 0.0 && inner[3] > 0.0 {
+                outline(&mut builder, inner, radii.inside(*ring));
+            }
+            let path = builder.finish().ok_or(PdfError::Geometry {
+                number: page.number,
+                kind: "a rounded box",
+            })?;
+            surface.draw_path(&path);
+        }
     }
     Ok(())
+}
+
+/// How far along its tangent each control point of a cubic curve sits,
+/// as a fraction of the radius, for the curve to follow a quarter
+/// ellipse.
+const KAPPA: f32 = 0.552_284_8;
+
+/// A box `[left, top, width, height]` with rounded corners, clockwise
+/// from the top left. Each corner is one cubic curve.
+fn outline(builder: &mut PathBuilder, box_: [f32; 4], radii: Corners) {
+    let [x, y, w, h] = box_;
+    let Corners {
+        top_left: tl,
+        top_right: tr,
+        bottom_right: br,
+        bottom_left: bl,
+    } = radii;
+    let near = 1.0 - KAPPA;
+    builder.move_to(x + tl.x, y);
+    builder.line_to(x + w - tr.x, y);
+    builder.cubic_to(
+        x + w - tr.x * near,
+        y,
+        x + w,
+        y + tr.y * near,
+        x + w,
+        y + tr.y,
+    );
+    builder.line_to(x + w, y + h - br.y);
+    builder.cubic_to(
+        x + w,
+        y + h - br.y * near,
+        x + w - br.x * near,
+        y + h,
+        x + w - br.x,
+        y + h,
+    );
+    builder.line_to(x + bl.x, y + h);
+    builder.cubic_to(
+        x + bl.x * near,
+        y + h,
+        x,
+        y + h - bl.y * near,
+        x,
+        y + h - bl.y,
+    );
+    builder.line_to(x, y + tl.y);
+    builder.cubic_to(x, y + tl.y * near, x + tl.x * near, y, x + tl.x, y);
+    builder.close();
 }
 
 /// Draws what `draw` draws at an eight-bit alpha, and writes nothing
@@ -1004,6 +1092,142 @@ mod tests {
                 "{url}: a raster image went in as a JPEG stream",
             );
         }
+    }
+
+    /// Four corners of one radius.
+    fn round(radius: f32) -> Corners {
+        let radius = crate::pages::Radius {
+            x: radius,
+            y: radius,
+        };
+        Corners {
+            top_left: radius,
+            top_right: radius,
+            bottom_right: radius,
+            bottom_left: radius,
+        }
+    }
+
+    /// A rounded tint fills a path whose corners are curves, and a ring
+    /// fills the band between two outlines by the even-odd rule.
+    #[test]
+    fn a_rounded_box_fills_a_curved_path() {
+        let items = vec![
+            DrawItem::Rounded {
+                x: 20.0,
+                y: 20.0,
+                w: 100.0,
+                h: 40.0,
+                radii: round(3.0),
+                ring: crate::style::Edges::all(0.0),
+                color: Color::rgb(0xf4, 0xf1, 0xea),
+                layer: 0,
+            },
+            DrawItem::Rounded {
+                x: 20.0,
+                y: 80.0,
+                w: 100.0,
+                h: 40.0,
+                radii: round(6.0),
+                ring: crate::style::Edges::all(2.0),
+                color: Color::rgb(0, 51, 102),
+                layer: 0,
+            },
+        ];
+        let painted = content(&readable(
+            &page_of(items, 200.0, 200.0),
+            &Metadata::default(),
+        ));
+        let curves = painted.matches(" c\n").count();
+        assert_eq!(
+            curves, 12,
+            "one curve per corner of three outlines:\n{painted}"
+        );
+        assert!(
+            painted.contains("\nf*\n"),
+            "the ring is not filled by the even-odd rule:\n{painted}"
+        );
+    }
+
+    /// Acceptance: a rounded background image is clipped to the same
+    /// curve as the tint under it.
+    #[test]
+    fn a_rounded_background_clips_to_a_curved_path() {
+        let items = vec![DrawItem::Background {
+            x: 40.0,
+            y: 60.0,
+            w: 120.0,
+            h: 80.0,
+            radii: round(3.0),
+            tile_x: 40.0,
+            tile_y: 60.0,
+            tile_w: 120.0,
+            tile_h: 80.0,
+            repeat: false,
+            asset: 0,
+            alpha: 255,
+            layer: 0,
+        }];
+        let table = assets(&[("plate.jpg", MAP)]);
+        let painted = content(&with_images(
+            &page_of(items, 432.0, 648.0),
+            &table,
+            &Metadata::default(),
+        ));
+        let clip = painted
+            .find("\nW\n")
+            .unwrap_or_else(|| panic!("the image is not clipped:\n{painted}"));
+        assert_eq!(
+            painted[..clip].matches(" c\n").count(),
+            4,
+            "the clip does not follow four curved corners:\n{painted}"
+        );
+    }
+
+    /// Acceptance: a tint with an alpha over the image behind a page
+    /// leaves the image showing through. The image is drawn first, and
+    /// the tint over it fills at a quarter of full opacity.
+    #[test]
+    fn a_translucent_tint_over_a_page_image_fills_at_its_alpha() {
+        let items = vec![
+            DrawItem::Background {
+                x: 0.0,
+                y: 0.0,
+                w: 432.0,
+                h: 648.0,
+                radii: Corners::SQUARE,
+                tile_x: 0.0,
+                tile_y: 0.0,
+                tile_w: 432.0,
+                tile_h: 648.0,
+                repeat: false,
+                asset: 0,
+                alpha: 255,
+                layer: DrawItem::PAGE_BACKGROUND,
+            },
+            DrawItem::Rect {
+                x: 54.0,
+                y: 100.0,
+                w: 324.0,
+                h: 120.0,
+                color: Color::rgba(0, 0, 0, 64),
+                layer: 0,
+            },
+        ];
+        let table = assets(&[("plate.jpg", MAP)]);
+        let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
+        assert!(
+            pdf.contains("/ca 0.2509804"),
+            "the tint fills opaque:\n{pdf}"
+        );
+        let painted = content(&pdf);
+        let image = painted
+            .find(" Do\n")
+            .unwrap_or_else(|| panic!("the page image is not drawn:\n{painted}"));
+        let tint = painted
+            .find("0 0 0 rg")
+            .unwrap_or_else(|| panic!("the tint is not filled:\n{painted}"));
+        assert!(image < tint, "the tint is under the image:\n{painted}");
     }
 
     /// An image with an alpha draws under a graphics state that

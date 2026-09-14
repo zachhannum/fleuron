@@ -513,7 +513,9 @@ fn described(output: &LayoutOutput) -> Vec<Vec<String>> {
                         "rect {x:.2} {y:.2} {w:.2} {h:.2} {}",
                         color.to_hex()
                     )),
-                    DrawItem::Image { .. } | DrawItem::Background { .. } => None,
+                    DrawItem::Image { .. }
+                    | DrawItem::Background { .. }
+                    | DrawItem::Rounded { .. } => None,
                 })
                 .collect()
         })

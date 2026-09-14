@@ -140,8 +140,8 @@ mod tests {
     use crate::content::{NodeId, SourceRange};
     use crate::fonts::{AxisSetting, FaceAttributes, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
-    use crate::pages::{DrawItem, Glyph, Page, Side};
-    use crate::style::Color;
+    use crate::pages::{Corners, DrawItem, Glyph, Page, Radius, Side};
+    use crate::style::{Color, Edges};
 
     fn output() -> LayoutOutput {
         LayoutOutput {
@@ -189,6 +189,22 @@ mod tests {
                         asset: 7,
                         alpha: 128,
                         layer: -1,
+                    },
+                    DrawItem::Rounded {
+                        x: 5.0,
+                        y: 6.0,
+                        w: 70.0,
+                        h: 20.0,
+                        radii: Corners {
+                            top_left: Radius { x: 3.0, y: 3.0 },
+                            ..Corners::SQUARE
+                        },
+                        ring: Edges {
+                            left: 2.0,
+                            ..Edges::all(0.0)
+                        },
+                        color: Color::rgba(51, 102, 153, 128),
+                        layer: 0,
                     },
                 ],
             }],

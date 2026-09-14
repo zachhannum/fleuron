@@ -6,10 +6,11 @@
 
 use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::images::Assets;
+use fleuron::images::{Assets, ImageLoader};
 use fleuron::layout::layout_book;
-use fleuron::pages::{DrawItem, Page};
-use fleuron::style::{Color, Source, StyleTree, Stylesheets};
+use fleuron::pages::{Corners, DrawItem, Page, Radius};
+use fleuron::style::{Color, Coord, CornerRadius, Edges, Source, StyleTree, Stylesheets};
+use fleuron::wire;
 
 /// A page large enough for the whole chapter, so every item is on
 /// page one.
@@ -198,5 +199,281 @@ fn opacity_one_sets_the_book_unchanged() {
     assert_eq!(
         pages("blockquote { background-color: #f4f1ea }"),
         pages("blockquote { background-color: #f4f1ea; opacity: 1 }")
+    );
+}
+
+/// A PNG header of a given pixel size. Layout reads the header and
+/// nothing else, so this is a whole image as far as the display
+/// structure is concerned.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    bytes.extend(13u32.to_be_bytes());
+    bytes.extend(b"IHDR");
+    bytes.extend(width.to_be_bytes());
+    bytes.extend(height.to_be_bytes());
+    bytes.extend([8, 6, 0, 0, 0]);
+    bytes.extend([0, 0, 0, 0]);
+    bytes.extend(0u32.to_be_bytes());
+    bytes.extend(b"IEND");
+    bytes.extend([0, 0, 0, 0]);
+    bytes
+}
+
+/// The host side: one ornament.
+struct Ornament;
+
+impl ImageLoader for Ornament {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        (url == "ornament.png").then(|| png(24, 24))
+    }
+}
+
+/// Four corners of one radius, in points.
+fn round(radius: f32) -> Corners {
+    let radius = Radius {
+        x: radius,
+        y: radius,
+    };
+    Corners {
+        top_left: radius,
+        top_right: radius,
+        bottom_right: radius,
+        bottom_left: radius,
+    }
+}
+
+/// Every rounded box on a page that fills a ring, with its ring and
+/// its colour.
+fn rings(page: &Page) -> Vec<(Edges, Color)> {
+    page.items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Rounded { ring, color, .. } if *ring != Edges::all(0.0) => {
+                Some((*ring, *color))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Part: `border-radius` and its per-corner longhands read into each
+/// corner, a slash gives the radii down the sides, and a negative
+/// radius is not a value.
+#[test]
+fn border_radius_and_its_longhands_read_into_each_corner() {
+    let book = fixture();
+    let styles = styles(
+        &book,
+        "blockquote { border-radius: 1pt 2pt 3pt / 4pt; border-bottom-left-radius: 10% 5pt }",
+    );
+    let Block::Blockquote { id, .. } = &book.sections[0].blocks[1] else {
+        unreachable!("the fixture's second block is a quotation")
+    };
+    let radius = styles.style(*id).border_radius;
+    let points = |x: f32, y: f32| CornerRadius {
+        x: Coord::Points(x),
+        y: Coord::Points(y),
+    };
+    assert_eq!(radius.top_left, points(1.0, 4.0));
+    assert_eq!(radius.top_right, points(2.0, 4.0));
+    assert_eq!(radius.bottom_right, points(3.0, 4.0));
+    assert_eq!(
+        radius.bottom_left,
+        CornerRadius {
+            x: Coord::Percent(10.0),
+            y: Coord::Points(5.0),
+        }
+    );
+
+    let negative = Stylesheets::parse(&[Source::author(
+        "negative.css",
+        "p {\n  border-radius: -1pt;\n}",
+    )]);
+    assert_eq!(negative.warnings().len(), 1, "{:?}", negative.warnings());
+}
+
+/// Acceptance: `border-radius: 3pt` rounds a tinted box's corners, and
+/// the background image over the tint is clipped to the same curve.
+#[test]
+fn a_border_radius_rounds_a_tinted_box_and_clips_its_image_to_the_same_curve() {
+    let book = fixture();
+    let styles = styles(
+        &book,
+        "blockquote { border-radius: 3pt; background-color: #f4f1ea; \
+         background-image: url(ornament.png) }",
+    );
+    let assets = Assets::probe(&book, &styles, &Ornament);
+    let output = layout_book(&book, &styles, registry(), &assets);
+    assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    let page = &output.pages[0];
+
+    let tint = page
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Rounded {
+                x,
+                y,
+                w,
+                h,
+                radii,
+                ring,
+                color,
+                ..
+            } if *color == TINT => Some(([*x, *y, *w, *h], *radii, *ring)),
+            _ => None,
+        })
+        .expect("the tint is a rounded box");
+    assert_eq!(tint.1, round(3.0));
+    assert_eq!(tint.2, Edges::all(0.0), "the tint fills the whole box");
+    assert!(tints(page).is_empty(), "the tint is painted square as well");
+
+    let image = page
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Background {
+                x, y, w, h, radii, ..
+            } => Some(([*x, *y, *w, *h], *radii)),
+            _ => None,
+        })
+        .expect("the ornament is behind the quotation");
+    assert_eq!(
+        image,
+        (tint.0, tint.1),
+        "the image is not clipped to the tint's curve"
+    );
+}
+
+/// A rounded border is one ring where its edges share a colour, and a
+/// ring for each edge where they do not.
+#[test]
+fn a_rounded_border_is_one_ring_or_a_ring_per_edge() {
+    let blue = Color::rgb(0x33, 0x66, 0x99);
+    let red = Color::rgb(0xb4, 0x1e, 0x1e);
+    let one = pages("blockquote { border-radius: 6pt; border: 2pt solid #336699 }");
+    assert_eq!(rings(&one[0]), [(Edges::all(2.0), blue)]);
+
+    let four = pages(
+        "blockquote { border-radius: 6pt; border: 2pt solid; \
+         border-color: #336699 #336699 #336699 #b41e1e }",
+    );
+    let none = Edges::all(0.0);
+    assert_eq!(
+        rings(&four[0]),
+        [
+            (Edges { top: 2.0, ..none }, blue),
+            (Edges { right: 2.0, ..none }, blue),
+            (
+                Edges {
+                    bottom: 2.0,
+                    ..none
+                },
+                blue
+            ),
+            (Edges { left: 2.0, ..none }, red),
+        ]
+    );
+}
+
+/// Acceptance: a book whose sheet uses no alpha, opacity or radius
+/// produces a display structure byte-identical to before the change.
+/// The checked-in snapshots hold what it was. Here, the values every
+/// colour and block start from change nothing: a sheet that writes them
+/// out encodes to the same bytes as one that leaves them out, and a
+/// style tree that uses none of them describes itself as it did.
+#[test]
+fn a_sheet_without_alpha_opacity_or_radius_sets_the_book_unchanged() {
+    let book = fixture();
+    let plain = "blockquote { background-color: #f4f1ea; border: 1pt solid #336699 }\n\
+                 h1 { color: #b41e1e }";
+    let written = "blockquote { background-color: rgba(244, 241, 234, 1); \
+                   border: 1pt solid #336699ff; opacity: 1; border-radius: 0 }\n\
+                   h1 { color: #b41e1eff }";
+    let encoded = |css: &str| {
+        let styles = styles(&book, css);
+        let output = layout_book(&book, &styles, registry(), &Assets::none());
+        assert!(
+            output.pages[0]
+                .items
+                .iter()
+                .all(|item| !matches!(item, DrawItem::Rounded { .. })),
+            "a square box painted a rounded item"
+        );
+        wire::encode(&output).expect("a display structure encodes")
+    };
+    assert_eq!(encoded(plain), encoded(written));
+
+    let described = serde_json::to_string(&styles(&book, plain)).expect("a style tree");
+    assert!(!described.contains("\"opacity\""), "{described}");
+    assert!(!described.contains("\"border_radius\""), "{described}");
+}
+
+/// The fixture with a quotation long enough to break across a page
+/// turn.
+fn long_quotation() -> Book {
+    let mut book = fixture();
+    let Block::Blockquote { blocks, .. } = &mut book.sections[0].blocks[1] else {
+        unreachable!("the fixture's second block is a quotation")
+    };
+    *blocks = (0..12)
+        .map(|_| {
+            paragraph(
+                "Quoted: the wind came off the water and the harbour lights went out, \
+                 one after another, until the quay was dark.",
+            )
+        })
+        .collect();
+    book.assign_node_ids();
+    book
+}
+
+/// Where a page turn breaks a rounded block, `slice` leaves the
+/// corners at the break square, and `clone` rounds all four corners of
+/// every part.
+#[test]
+fn a_page_turn_squares_the_corners_at_the_break_unless_the_box_is_cloned() {
+    let book = long_quotation();
+    let corners = |css: &str| -> Vec<Corners> {
+        let styles = styles(&book, css);
+        layout_book(&book, &styles, registry(), &Assets::none())
+            .pages
+            .iter()
+            .flat_map(|page| page.items.iter())
+            .filter_map(|item| match item {
+                DrawItem::Rounded { radii, color, .. } if *color == TINT => Some(*radii),
+                _ => None,
+            })
+            .collect()
+    };
+    let tint = "blockquote { border-radius: 3pt; background-color: #f4f1ea }";
+    let sliced = corners(tint);
+    assert!(sliced.len() >= 2, "the quotation did not break: {sliced:?}");
+    let three = Radius { x: 3.0, y: 3.0 };
+    assert_eq!(
+        sliced[0],
+        Corners {
+            top_left: three,
+            top_right: three,
+            ..Corners::SQUARE
+        }
+    );
+    assert_eq!(
+        sliced[sliced.len() - 1],
+        Corners {
+            bottom_right: three,
+            bottom_left: three,
+            ..Corners::SQUARE
+        }
+    );
+    assert!(sliced[1..sliced.len() - 1].iter().all(Corners::is_square));
+
+    let cloned = corners(&format!(
+        "{tint} blockquote {{ box-decoration-break: clone }}"
+    ));
+    assert_eq!(cloned.len(), sliced.len());
+    assert!(
+        cloned.iter().all(|radii| *radii == round(3.0)),
+        "{cloned:?}"
     );
 }

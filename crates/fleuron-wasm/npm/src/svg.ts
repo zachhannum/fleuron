@@ -26,11 +26,15 @@
 import type {
   Asset,
   BackgroundItem,
+  Corners,
   DrawItem,
+  Edges,
   FontRefEntry,
   ImageItem,
   Page,
+  Radius,
   RectItem,
+  RoundedItem,
   TextItem,
 } from './wire.js';
 
@@ -109,7 +113,78 @@ function paint(item: DrawItem, options: PaintOptions, id: () => number): string 
       return image(item, options);
     case 'background':
       return background(item, options, id());
+    case 'rounded':
+      return rounded(item);
   }
+}
+
+/**
+ * A rounded box, filled whole or as the ring between its outline and
+ * the outline `ring` in from it. The even-odd rule is what leaves the
+ * inside of a ring empty.
+ */
+function rounded(item: RoundedItem): string {
+  const { ring } = item;
+  const inner = {
+    x: item.x + ring.left,
+    y: item.y + ring.top,
+    w: item.w - ring.left - ring.right,
+    h: item.h - ring.top - ring.bottom,
+  };
+  const hollow = ring.top > 0 || ring.right > 0 || ring.bottom > 0 || ring.left > 0;
+  const hole =
+    hollow && inner.w > 0 && inner.h > 0
+      ? outline(inner.x, inner.y, inner.w, inner.h, inside(item.radii, ring))
+      : '';
+  return (
+    `<path d="${outline(item.x, item.y, item.w, item.h, item.radii)}${hole}"` +
+    ` fill-rule="evenodd"${filled(item.color)}/>`
+  );
+}
+
+/**
+ * The corners of the box `ring` in from one with these corners. Each
+ * radius loses the width of the edge it runs along, and goes no lower
+ * than zero. The engine's own `Corners::inside` is the same rule.
+ */
+function inside(radii: Corners, ring: Edges): Corners {
+  const less = (radius: Radius, across: number, down: number): Radius => ({
+    x: Math.max(radius.x - across, 0),
+    y: Math.max(radius.y - down, 0),
+  });
+  return {
+    topLeft: less(radii.topLeft, ring.left, ring.top),
+    topRight: less(radii.topRight, ring.right, ring.top),
+    bottomRight: less(radii.bottomRight, ring.right, ring.bottom),
+    bottomLeft: less(radii.bottomLeft, ring.left, ring.bottom),
+  };
+}
+
+/** Whether no corner is rounded. */
+function square(radii: Corners): boolean {
+  return [radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft].every(
+    (radius) => radius.x <= 0 || radius.y <= 0,
+  );
+}
+
+/** A box with rounded corners, as path data, clockwise from the top left. */
+function outline(x: number, y: number, w: number, h: number, radii: Corners): string {
+  const corner = (radius: Radius): Radius =>
+    radius.x > 0 && radius.y > 0 ? radius : { x: 0, y: 0 };
+  const [tl, tr, br, bl] = [radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft].map(
+    corner,
+  ) as [Radius, Radius, Radius, Radius];
+  const arc = (radius: Radius, toX: number, toY: number): string =>
+    radius.x > 0
+      ? `A${num(radius.x)} ${num(radius.y)} 0 0 1 ${num(toX)} ${num(toY)}`
+      : `L${num(toX)} ${num(toY)}`;
+  return (
+    `M${num(x + tl.x)} ${num(y)}` +
+    `H${num(x + w - tr.x)}${arc(tr, x + w, y + tr.y)}` +
+    `V${num(y + h - br.y)}${arc(br, x + w - br.x, y + h)}` +
+    `H${num(x + bl.x)}${arc(bl, x, y + h - bl.y)}` +
+    `V${num(y + tl.y)}${arc(tl, x + tl.x, y)}Z`
+  );
 }
 
 function text(item: TextItem, options: PaintOptions): string {
@@ -196,13 +271,15 @@ function background(item: BackgroundItem, options: PaintOptions, id: number): st
   if (href === null || href === undefined) {
     return '';
   }
-  const box =
-    `x="${num(item.x)}" y="${num(item.y)}"` +
-    ` width="${num(item.w)}" height="${num(item.h)}"`;
+  // A square box is a rect, and a rounded one the outline of its
+  // corners.
+  const shape = square(item.radii)
+    ? `rect x="${num(item.x)}" y="${num(item.y)}" width="${num(item.w)}" height="${num(item.h)}"`
+    : `path d="${outline(item.x, item.y, item.w, item.h, item.radii)}"`;
   const name = `fleuron-background-${id}`;
   if (!item.repeat) {
     return (
-      `<defs><clipPath id="${name}"><rect ${box}/></clipPath></defs>` +
+      `<defs><clipPath id="${name}"><${shape}/></clipPath></defs>` +
       `<image x="${num(item.tileX)}" y="${num(item.tileY)}"` +
       ` width="${num(item.tileW)}" height="${num(item.tileH)}"` +
       ` href="${escape(href)}" preserveAspectRatio="none"` +
@@ -215,7 +292,7 @@ function background(item: BackgroundItem, options: PaintOptions, id: number): st
     ` width="${num(item.tileW)}" height="${num(item.tileH)}">` +
     `<image x="0" y="0" width="${num(item.tileW)}" height="${num(item.tileH)}"` +
     ` href="${escape(href)}" preserveAspectRatio="none"/></pattern></defs>` +
-    `<rect ${box} fill="url(#${name})"${faded(item.alpha)}/>`
+    `<${shape} fill="url(#${name})"${faded(item.alpha)}/>`
   );
 }
 
