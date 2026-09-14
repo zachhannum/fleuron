@@ -143,9 +143,21 @@ function rect(item: RectItem): string {
  * An item's own fill, where it has one. A sheet that names no colour
  * leaves the item black, and the page's ink draws those, so a host
  * printing in grey still gets grey.
+ *
+ * An alpha goes in `fill-opacity` rather than in the colour, which
+ * every SVG renderer reads.
  */
 function filled(color: string): string {
-  return color === '#000000' ? '' : ` fill="${escape(color)}"`;
+  if (color === '#000000') {
+    return '';
+  }
+  const alpha = color.length === 9 ? Number.parseInt(color.slice(7), 16) : 255;
+  return ` fill="${escape(color.slice(0, 7))}"${opaque(alpha)}`;
+}
+
+/** `fill-opacity` for an eight-bit alpha, and nothing where it is opaque. */
+function opaque(alpha: number): string {
+  return alpha === 255 ? '' : ` fill-opacity="${num(alpha / 255)}"`;
 }
 
 /**

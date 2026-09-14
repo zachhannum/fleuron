@@ -287,6 +287,25 @@ fn every_run_carries_the_colour_its_style_named() {
     assert_eq!(colour_of(&pages, "1"), [Color::rgb(128, 128, 128)]);
 }
 
+/// Acceptance: text set in a colour with alpha carries that alpha to
+/// its runs, and the runs beside it stay opaque.
+#[test]
+fn a_colour_with_alpha_reaches_the_runs_it_colours() {
+    let book = fixture();
+    let styles = styles(
+        &book,
+        "h1 { color: rgba(180, 30, 30, 0.25) }\nem { color: #3366994d }",
+    );
+    assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
+    let pages = pages(&book, &styles);
+    assert_eq!(
+        colour_of(&pages, "The Quay"),
+        [Color::rgba(180, 30, 30, 64)]
+    );
+    assert_eq!(colour_of(&pages, "harbour"), [Color::rgba(51, 102, 153, 77)]);
+    assert_eq!(colour_of(&pages, "The wind"), [Color::BLACK]);
+}
+
 /// A hyphen the breaker draws inside a coloured word takes the
 /// word's colour. It is set in the paragraph's face, because that is
 /// where its width was charged.

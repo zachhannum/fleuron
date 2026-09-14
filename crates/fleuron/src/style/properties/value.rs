@@ -66,10 +66,12 @@ impl LineHeight {
 /// ascent and descent from the font; this is the factor over them.
 pub(super) const NORMAL_LINE_HEIGHT: f32 = 1.2;
 
-/// A colour: three eight-bit channels and no alpha.
+/// A colour: three eight-bit channels and an eight-bit alpha, where
+/// 255 is opaque.
 ///
 /// Serialization has two forms, `#rrggbb` where a person reads it
-/// and the three bytes on the wire.
+/// and the four bytes on the wire. A colour that is not opaque reads
+/// as `#rrggbbaa`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Color {
     /// Red channel.
@@ -78,32 +80,65 @@ pub struct Color {
     pub g: u8,
     /// Blue channel.
     pub b: u8,
+    /// Alpha: 0 is transparent and 255 is opaque.
+    pub a: u8,
 }
 
 impl Color {
     /// What a page is set in until a rule sets something else.
     pub const BLACK: Color = Color::rgb(0, 0, 0);
 
-    /// A colour from its three channels.
+    /// An opaque colour from its three channels.
     pub const fn rgb(r: u8, g: u8, b: u8) -> Color {
-        Color { r, g, b }
+        Color { r, g, b, a: 255 }
+    }
+
+    /// A colour from its three channels and its alpha.
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color {
+        Color { r, g, b, a }
+    }
+
+    /// Whether nothing under the colour shows through it.
+    pub const fn opaque(self) -> bool {
+        self.a == 255
+    }
+
+    /// The same colour with its alpha scaled by `opacity`, from 0 to 1.
+    pub fn faded(self, opacity: f32) -> Color {
+        Color {
+            a: fade(self.a, opacity),
+            ..self
+        }
     }
 
     /// The colour written the way CSS writes it, for a painter
     /// that takes a string.
     pub fn to_hex(self) -> String {
-        format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+        let rgb = format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b);
+        if self.opaque() {
+            rgb
+        } else {
+            format!("{rgb}{:02x}", self.a)
+        }
     }
 
-    /// A colour from `#rrggbb`, and `None` for anything else.
+    /// A colour from `#rrggbb` or `#rrggbbaa`, and `None` for anything
+    /// else.
     pub fn from_hex(text: &str) -> Option<Color> {
         let digits = text.strip_prefix('#')?;
-        if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        if !matches!(digits.len(), 6 | 8) || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
             return None;
         }
         let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
-        Some(Color::rgb(channel(0)?, channel(2)?, channel(4)?))
+        let alpha = if digits.len() == 8 { channel(6)? } else { 255 };
+        Some(Color::rgba(channel(0)?, channel(2)?, channel(4)?, alpha))
     }
+}
+
+/// An eight-bit alpha scaled by `opacity`, from 0 to 1.
+pub(crate) fn fade(alpha: u8, opacity: f32) -> u8 {
+    (alpha as f32 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
 impl Serialize for Color {
@@ -111,7 +146,7 @@ impl Serialize for Color {
         if serializer.is_human_readable() {
             serializer.serialize_str(&self.to_hex())
         } else {
-            [self.r, self.g, self.b].serialize(serializer)
+            [self.r, self.g, self.b, self.a].serialize(serializer)
         }
     }
 }
@@ -120,11 +155,12 @@ impl<'de> Deserialize<'de> for Color {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Color, D::Error> {
         if deserializer.is_human_readable() {
             let hex = String::deserialize(deserializer)?;
-            Color::from_hex(&hex)
-                .ok_or_else(|| D::Error::invalid_value(Unexpected::Str(&hex), &"#rrggbb"))
+            Color::from_hex(&hex).ok_or_else(|| {
+                D::Error::invalid_value(Unexpected::Str(&hex), &"#rrggbb or #rrggbbaa")
+            })
         } else {
-            let [r, g, b] = <[u8; 3]>::deserialize(deserializer)?;
-            Ok(Color::rgb(r, g, b))
+            let [r, g, b, a] = <[u8; 4]>::deserialize(deserializer)?;
+            Ok(Color::rgba(r, g, b, a))
         }
     }
 }

@@ -14,6 +14,7 @@ use krilla::color::rgb;
 use krilla::geom::{PathBuilder, Point, Rect, Size, Transform};
 use krilla::image::Image;
 use krilla::metadata::{DateTime, Metadata as PdfMetadata};
+use krilla::num::NormalizedF32;
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, FillRule};
 use krilla::surface::Surface;
@@ -404,12 +405,18 @@ fn tiles(box_: [f32; 4], tile: [f32; 4], repeat: bool) -> Vec<(f32, f32)> {
 }
 
 /// What the next item is filled with. A page starts out filling in
-/// black, so a run in black writes no colour at all.
+/// opaque black, so a run in opaque black writes no colour at all.
 fn ink(surface: &mut Surface, color: Color) {
     surface.set_fill((color != Color::BLACK).then(|| Fill {
         paint: rgb::Color::new(color.r, color.g, color.b).into(),
+        opacity: opacity(color.a),
         ..Fill::default()
     }));
+}
+
+/// An eight-bit alpha as the opacity krilla takes.
+fn opacity(alpha: u8) -> NormalizedF32 {
+    NormalizedF32::new(alpha as f32 / 255.0).unwrap_or(NormalizedF32::ONE)
 }
 
 /// Display-structure glyphs as krilla glyphs.
@@ -864,6 +871,33 @@ mod tests {
         assert!(
             !black.contains(" rg"),
             "a page in black wrote a colour of its own:\n{black}"
+        );
+    }
+
+    /// Acceptance: text set in a colour with alpha paints at that
+    /// alpha. The fill carries the colour, and a graphics state carries
+    /// the alpha as its fill opacity.
+    #[test]
+    fn a_run_in_a_colour_with_alpha_fills_at_that_alpha() {
+        let book = chapter();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "alpha.css",
+            "h1 { color: rgba(180, 30, 30, 0.25) }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let pdf = readable(&output, &Metadata::default());
+        assert!(
+            pdf.contains("/ca 0.2509804"),
+            "no fill opacity of a quarter in:\n{pdf}"
+        );
+        let painted = content(&pdf);
+        let red = painted
+            .find("0.7058824 0.11764706 0.11764706 rg")
+            .unwrap_or_else(|| panic!("the heading lost its colour:\n{painted}"));
+        assert!(
+            painted[..red].contains(" gs\n") || painted[red..].contains(" gs\n"),
+            "the fill opacity is never set on the page:\n{painted}"
         );
     }
 

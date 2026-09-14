@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 12;
+pub const VERSION: u16 = 13;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]

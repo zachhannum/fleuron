@@ -31,7 +31,8 @@ fn glyph() -> impl Strategy<Value = Glyph> {
 
 /// Any colour a sheet can name, black included.
 fn color() -> impl Strategy<Value = Color> {
-    (any::<u8>(), any::<u8>(), any::<u8>()).prop_map(|(r, g, b)| Color::rgb(r, g, b))
+    (any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>())
+        .prop_map(|(r, g, b, a)| Color::rgba(r, g, b, a))
 }
 
 /// Where a run was written, or nothing where the engine synthesized

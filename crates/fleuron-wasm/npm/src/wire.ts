@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 12;
+export const WIRE_VERSION = 13;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -97,8 +97,8 @@ export interface TextItem {
    */
   features: Features;
   /**
-   * The `#rrggbb` the run is painted in. A sheet that names no
-   * colour leaves it black.
+   * The `#rrggbb` the run is painted in, or `#rrggbbaa` where the
+   * colour has an alpha. A sheet that names no colour leaves it black.
    */
   color: string;
   /** The glyphs, in visual order. */
@@ -118,7 +118,7 @@ export interface RectItem {
   w: number;
   /** Height in points. */
   h: number;
-  /** The `#rrggbb` the rectangle is filled with. */
+  /** The `#rrggbb` or `#rrggbbaa` the rectangle is filled with. */
   color: string;
   /** Which layer the rectangle paints in. */
   layer: number;
@@ -381,12 +381,15 @@ class Reader {
     return value;
   }
 
-  /** Three bytes, one per channel, read back as `#rrggbb`. */
+  /**
+   * Four bytes, one per channel and one for alpha, read back as
+   * `#rrggbb`, or as `#rrggbbaa` where the colour is not opaque.
+   */
   color(): string {
-    const digits = [this.byte(), this.byte(), this.byte()]
-      .map((channel) => channel.toString(16).padStart(2, '0'))
-      .join('');
-    return `#${digits}`;
+    const hex = (channel: number): string => channel.toString(16).padStart(2, '0');
+    const digits = [this.byte(), this.byte(), this.byte()].map(hex).join('');
+    const alpha = this.byte();
+    return alpha === 255 ? `#${digits}` : `#${digits}${hex(alpha)}`;
   }
 
   /** An `Option<T>`: present or not, and the value when it is. */
