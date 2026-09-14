@@ -158,7 +158,7 @@ impl Paginator<'_> {
         };
         let (available, room) = self.styles.default_page().geometry.content_size();
         let margin = style.margin;
-        let (width, height) = fit(
+        let (width, height) = super::image::fit(
             intrinsic.size(),
             (available - margin.inline()).max(0.0),
             (room - margin.top - margin.bottom).max(0.0),
@@ -470,24 +470,6 @@ impl AnchoredBoxes {
             .get(&index)
             .is_some_and(|boxes| boxes.iter().any(|at| self.all[*at].wrap != WrapFlow::Auto))
     }
-}
-
-/// An image's size inside a box that has to hold it: its own, scaled
-/// down in proportion where either side does not fit.
-fn fit((width, height): (f32, f32), available: f32, room: f32) -> (f32, f32) {
-    let scale = |value: f32, from: f32, to: f32| {
-        if from > 0.0 { value * to / from } else { value }
-    };
-    let (mut width, mut height) = (width, height);
-    if width > available {
-        height = scale(height, width, available);
-        width = available;
-    }
-    if height > room {
-        width = scale(width, height, room);
-        height = room;
-    }
-    (width, height)
 }
 
 impl Flow<'_, '_> {

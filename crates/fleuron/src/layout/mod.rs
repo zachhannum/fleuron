@@ -33,6 +33,7 @@ mod exclusion;
 mod flow;
 mod fragment;
 mod furniture;
+mod image;
 mod list;
 mod reference;
 mod table;
