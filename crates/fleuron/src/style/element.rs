@@ -133,8 +133,25 @@ impl ToCss for PseudoElement {
 }
 
 /// The elements that sit inside a line of text rather than making
-/// one. `::before` and `::after` generate text on these alone.
+/// one. `::before` and `::after` generate text inside the line on
+/// these.
 pub const INLINE_ELEMENTS: [&str; 4] = ["code", "em", "strong", "a"];
+
+/// The blocks that `::before` and `::after` generate a box inside.
+pub const BLOCK_ELEMENTS: [&str; 12] = [
+    "section",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "blockquote",
+    "hr",
+    "img",
+    "table",
+];
 
 impl PseudoElementTrait for PseudoElement {
     type Impl = Fleuron;

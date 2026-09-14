@@ -48,7 +48,7 @@ pub use properties::{
 };
 pub use sheet::{Origin, Source};
 
-use element::{ElementTree, INLINE_ELEMENTS, PseudoElement};
+use element::{BLOCK_ELEMENTS, ElementTree, INLINE_ELEMENTS, PseudoElement};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
 /// The defaults, as a stylesheet. There are no style constants in the
@@ -255,8 +255,9 @@ impl StyleTree {
         Some(self.first_line(id)?.first_line_over(self.style(id)))
     }
 
-    /// The style `::before` computed for one inline node, when its
-    /// `content` generates text. The text is the style's `content`.
+    /// The style `::before` computed for one node, when its `content`
+    /// generates anything. On an inline that is text inside the line.
+    /// On a block it is a box, the first child of the block.
     pub fn before(&self, id: NodeId) -> Option<&ComputedStyle> {
         let index = (*self.before_by_node.get(id.get() as usize)?)?;
         Some(&self.styles[index as usize])
@@ -766,7 +767,7 @@ fn cascade(
         // `content: none`, the initial value, generates nothing.
         let [before, after] = [(before, "::before"), (after, "::after")].map(|(pseudo, name)| {
             let pseudo = pseudo.filter(|pseudo| pseudo.content != Content::None)?;
-            if INLINE_ELEMENTS.contains(&node.name) {
+            if INLINE_ELEMENTS.contains(&node.name) || BLOCK_ELEMENTS.contains(&node.name) {
                 return Some(pseudo);
             }
             let message = format!(
@@ -2634,22 +2635,46 @@ mod tests {
         let book = linked();
         let tree = compile(
             &book,
-            "a::after { color: red } em::before { content: none }",
+            "a::after { color: red } em::before { content: none } \
+             p::after { height: 2pt } h1::before { content: none; height: 2pt }",
         );
         assert!(tree.after(id_of(&tree, "a")).is_none());
         assert!(tree.before(id_of(&tree, "em")).is_none());
+        assert!(tree.after(id_of(&tree, "p")).is_none());
+        assert!(tree.before(id_of(&tree, "h1")).is_none());
         assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
     }
 
-    /// Text generated before or after a block is not supported yet.
-    /// A sheet that asks for it is told so once per element, and the
-    /// element is styled as though the rule were not there.
+    /// Part: `::before` and `::after` parse and match on a block, and
+    /// the cascade computes a style for each.
     #[test]
-    fn a_pseudo_element_on_a_block_warns_and_generates_nothing() {
+    fn a_pseudo_element_on_a_block_matches_and_computes_a_style() {
         let book = linked();
         let tree = compile(
             &book,
-            "p::before { content: \"x\" }\np { font-size: 15pt }\nh1::after { content: \"y\" }",
+            "p::before { content: \"x\"; color: red }\np { font-size: 15pt }\n\
+             h1::after { content: \"\"; height: 2pt }",
+        );
+        assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
+        let before = tree.before(id_of(&tree, "p")).expect("`p::before` generates");
+        assert_eq!(before.content, Content::Text("x".into()));
+        assert_eq!(before.color, Color::rgb(0xff, 0, 0));
+        let after = tree.after(id_of(&tree, "h1")).expect("`h1::after` generates");
+        assert_eq!(after.content, Content::Text(String::new()));
+        assert_eq!(after.height, Width::Points(2.0));
+        assert!(tree.after(id_of(&tree, "p")).is_none());
+        assert_eq!(first(&tree, "p").content, Content::None);
+    }
+
+    /// An element with no box of its own takes no generated box. A
+    /// sheet that asks for one is told so once, and the element is
+    /// styled as though the rule were not there.
+    #[test]
+    fn a_pseudo_element_on_the_book_warns_and_generates_nothing() {
+        let book = linked();
+        let tree = compile(
+            &book,
+            "book::before { content: \"x\" }\nbook { font-size: 15pt }",
         );
         let told: Vec<&str> = tree
             .warnings()
@@ -2658,13 +2683,31 @@ mod tests {
             .collect();
         assert_eq!(
             told,
-            [
-                "Unsupported pseudo-element `::after` on `h1`. Nothing is generated.",
-                "Unsupported pseudo-element `::before` on `p`. Nothing is generated.",
-            ],
+            ["Unsupported pseudo-element `::before` on `book`. Nothing is generated."],
         );
-        assert!(tree.before(id_of(&tree, "p")).is_none());
-        assert_eq!(first(&tree, "p").font_size, 15.0);
+        assert!(tree.before(id_of(&tree, "book")).is_none());
+        assert_eq!(first(&tree, "book").font_size, 15.0);
+    }
+
+    /// Acceptance: a pseudo-element inherits the element's family and
+    /// size, and a rule naming the pseudo-element beats it, however
+    /// specific the rule on the element is.
+    #[test]
+    fn a_block_pseudo_element_inherits_and_its_own_rule_beats_the_element() {
+        let book = linked();
+        let tree = compile(
+            &book,
+            "section > h1#the-hunter { font-size: 20pt; font-family: monospace }\n\
+             h1::before { content: \"x\" }\nh1::after { content: \"y\"; font-size: 8pt }",
+        );
+        let h1 = id_of(&tree, "h1");
+        let mono = registry().generic(GenericFamily::Monospace).unwrap();
+        let before = tree.before(h1).expect("`::before` generates");
+        assert_eq!(before.font_size, 20.0);
+        assert_eq!(before.font_id, mono);
+        let after = tree.after(h1).expect("`::after` generates");
+        assert_eq!(after.font_size, 8.0);
+        assert_eq!(after.font_id, mono);
     }
 
     /// Only a reference to a page asks for a second layout pass. The
@@ -2685,6 +2728,10 @@ mod tests {
             ),
             (
                 "p::after { content: target-counter(\"#the-hunter\", page) }",
+                true,
+            ),
+            (
+                "p::after { content: target-text(\"#the-hunter\") }",
                 false,
             ),
         ] {
