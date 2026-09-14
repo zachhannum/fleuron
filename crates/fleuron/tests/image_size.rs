@@ -191,7 +191,9 @@ fn described(output: &LayoutOutput) -> Vec<Vec<String>> {
                     DrawItem::Image { x, y, w, h, .. } => {
                         Some(format!("image {x:.2} {y:.2} {w:.2} {h:.2}"))
                     }
-                    DrawItem::Rect { .. } | DrawItem::Background { .. } => None,
+                    DrawItem::Rect { .. }
+                    | DrawItem::Background { .. }
+                    | DrawItem::Rounded { .. } => None,
                 })
                 .collect()
         })

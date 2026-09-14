@@ -30,7 +30,7 @@ pub(crate) use computed::computed_size;
 pub use counter::{
     Content, ContentPiece, CounterStyle, ListStyleType, StringPiece, StringSet, Target,
 };
-pub use edges::{Border, BorderStyle, Edge, Edges};
+pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
@@ -70,6 +70,8 @@ pub enum Declaration {
     Position(Position),
     Inset(Edge, Option<Length>),
     ZIndex(i32),
+    /// From 0 to 1.
+    Opacity(f32),
     WrapFlow(WrapFlow),
     ShapeOutside(ShapeSource),
     ShapeMargin(Length),
@@ -78,6 +80,8 @@ pub enum Declaration {
     BorderStyle(Edge, BorderStyle),
     BorderWidth(Edge, Length),
     BorderColor(Edge, Option<Color>),
+    /// Along the top or bottom edge, then along the left or right.
+    BorderRadius(Corner, Length, Length),
     BackgroundColor(Option<Color>),
     BackgroundImage(Option<Url>),
     BackgroundRepeat(BackgroundRepeat),
@@ -167,6 +171,7 @@ impl Declaration {
             Declaration::Position(_) => "position",
             Declaration::Inset(side, _) => edge(side, ["top", "right", "bottom", "left"]),
             Declaration::ZIndex(_) => "z-index",
+            Declaration::Opacity(_) => "opacity",
             Declaration::WrapFlow(_) => "wrap-flow",
             Declaration::ShapeOutside(_) => "shape-outside",
             Declaration::ShapeMargin(_) => "shape-margin",
@@ -210,6 +215,12 @@ impl Declaration {
                     "border-left-color",
                 ],
             ),
+            Declaration::BorderRadius(corner, ..) => match corner {
+                Corner::TopLeft => "border-top-left-radius",
+                Corner::TopRight => "border-top-right-radius",
+                Corner::BottomRight => "border-bottom-right-radius",
+                Corner::BottomLeft => "border-bottom-left-radius",
+            },
             Declaration::BackgroundColor(_) => "background-color",
             Declaration::BackgroundImage(_) => "background-image",
             Declaration::BackgroundRepeat(_) => "background-repeat",

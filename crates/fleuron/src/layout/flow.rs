@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::content::{NodeId, Section};
-use crate::pages::{DrawItem, Page, PageBox, Side};
-use crate::style::{AlignContent, Break, PageQuery, Situation};
+use crate::pages::{Corners, DrawItem, Page, PageBox, Radius, Side};
+use crate::style::{AlignContent, Break, Color, Edges, PageQuery, Situation};
 
 use super::Paginator;
 use super::build::Reflow;
@@ -286,6 +286,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                     }
                 }
                 shift(&mut items, fragment.offset.0, fragment.offset.1);
+                fade(&mut items, fragment.opacity);
                 self.header.push((fragment.height, items));
             }
         }
@@ -961,32 +962,44 @@ impl Painted {
         )
     }
 
-    /// The rects this box paints, background first: `origin` is the
-    /// page's content box.
+    /// What this box paints, background first: `origin` is the page's
+    /// content box.
     pub(super) fn items(&self, origin: (f32, f32)) -> Vec<DrawItem> {
         let (x, y, w, h) = self.border_box(origin);
         if !self.decoration.paints || w <= 0.0 || h <= 0.0 {
             return Vec::new();
         }
         let layer = self.decoration.layer;
-        let mut items = self.decoration.backdrop.items(x, y, w, h, layer);
         // `slice` leaves the two edges the break made open; `clone`
         // closes them.
         let closed = self.decoration.cloned;
+        let (open_above, open_below) = (self.cut_above && !closed, self.cut_below && !closed);
         let border = self.decoration.border;
-        let top = if self.cut_above && !closed {
-            0.0
-        } else {
-            border.top
-        };
-        let bottom = if self.cut_below && !closed {
-            0.0
-        } else {
-            border.bottom
-        };
-        // The corners fall to the horizontal edges: a filled rect is
-        // all the display structure has, and a mitre is a path.
+        let top = if open_above { 0.0 } else { border.top };
+        let bottom = if open_below { 0.0 } else { border.bottom };
+        // The box goes on past an open edge, so the corners on it are
+        // square.
+        let mut radii = self.decoration.radius.resolve(w, h);
+        if open_above {
+            (radii.top_left, radii.top_right) = (Radius::SQUARE, Radius::SQUARE);
+        }
+        if open_below {
+            (radii.bottom_left, radii.bottom_right) = (Radius::SQUARE, Radius::SQUARE);
+        }
+        let mut items = self.decoration.backdrop.rounded(x, y, w, h, radii, layer);
         let colors = self.decoration.colors;
+        if !radii.is_square() {
+            let widths = Edges {
+                top,
+                bottom,
+                ..border
+            };
+            items.extend(rings(x, y, w, h, radii, widths, colors, layer));
+            fade(&mut items, self.decoration.opacity);
+            return items;
+        }
+        // The corners fall to the horizontal edges: a filled rect is
+        // all a square box needs, and a mitre is a path.
         let mut rect = |x: f32, y: f32, w: f32, h: f32, color| {
             if w > 0.0 && h > 0.0 {
                 items.push(DrawItem::Rect {
@@ -1010,6 +1023,7 @@ impl Painted {
             side,
             colors.right,
         );
+        fade(&mut items, self.decoration.opacity);
         items
     }
 }
@@ -1056,7 +1070,9 @@ pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
                     glyph.x += dx;
                 }
             }
-            DrawItem::Rect { x, y, .. } | DrawItem::Image { x, y, .. } => {
+            DrawItem::Rect { x, y, .. }
+            | DrawItem::Image { x, y, .. }
+            | DrawItem::Rounded { x, y, .. } => {
                 *x += dx;
                 *y += dy;
             }
@@ -1071,6 +1087,96 @@ pub(super) fn shift(items: &mut [DrawItem], dx: f32, dy: f32) {
                 *y += dy;
                 *tile_x += dx;
                 *tile_y += dy;
+            }
+        }
+    }
+}
+
+/// The border of a rounded box, as rings. Where every edge that is
+/// drawn has one colour, the border is one ring. Otherwise each edge
+/// is a ring of its own, as wide as that edge and nothing on the other
+/// three.
+#[allow(clippy::too_many_arguments)]
+fn rings(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radii: Corners,
+    widths: Edges,
+    colors: Edges<Color>,
+    layer: i32,
+) -> Vec<DrawItem> {
+    let ring = |ring: Edges, color: Color| DrawItem::Rounded {
+        x,
+        y,
+        w,
+        h,
+        radii,
+        ring,
+        color,
+        layer,
+    };
+    let none = Edges::all(0.0);
+    let edges = [
+        (
+            Edges {
+                top: widths.top,
+                ..none
+            },
+            colors.top,
+        ),
+        (
+            Edges {
+                right: widths.right,
+                ..none
+            },
+            colors.right,
+        ),
+        (
+            Edges {
+                bottom: widths.bottom,
+                ..none
+            },
+            colors.bottom,
+        ),
+        (
+            Edges {
+                left: widths.left,
+                ..none
+            },
+            colors.left,
+        ),
+    ];
+    let drawn: Vec<(Edges, Color)> = edges
+        .into_iter()
+        .filter(|(edge, _)| edge.top + edge.right + edge.bottom + edge.left > 0.0)
+        .collect();
+    match drawn.first() {
+        None => Vec::new(),
+        Some((_, color)) if drawn.iter().all(|(_, other)| other == color) => {
+            vec![ring(widths, *color)]
+        }
+        Some(_) => drawn
+            .into_iter()
+            .map(|(edge, color)| ring(edge, color))
+            .collect(),
+    }
+}
+
+/// Scales how much of each item shows by `opacity`, from 0 to 1: what
+/// the `opacity` of the blocks the items came out of comes to.
+pub(super) fn fade(items: &mut [DrawItem], opacity: f32) {
+    if opacity >= 1.0 {
+        return;
+    }
+    for item in items {
+        match item {
+            DrawItem::Text { color, .. }
+            | DrawItem::Rect { color, .. }
+            | DrawItem::Rounded { color, .. } => *color = color.faded(opacity),
+            DrawItem::Image { alpha, .. } | DrawItem::Background { alpha, .. } => {
+                *alpha = crate::pages::fade(*alpha, opacity)
             }
         }
     }

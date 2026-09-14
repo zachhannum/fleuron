@@ -8,8 +8,8 @@
 //! the box is known.
 
 use crate::images::Intrinsic;
-use crate::pages::DrawItem;
-use crate::style::{Background, BackgroundRepeat, BackgroundSize, Color, Coord};
+use crate::pages::{Corners, DrawItem};
+use crate::style::{Background, BackgroundRepeat, BackgroundSize, Color, Coord, Edges};
 
 /// What one box paints behind its content, with the image's own size
 /// already read from its header.
@@ -67,22 +67,49 @@ impl Backdrop {
     /// What the backdrop paints over the box at `(x, y)`, in `layer`,
     /// tint first and image over it.
     pub(super) fn items(&self, x: f32, y: f32, w: f32, h: f32, layer: i32) -> Vec<DrawItem> {
+        self.rounded(x, y, w, h, Corners::SQUARE, layer)
+    }
+
+    /// The same over a box whose corners `radii` rounds: the tint
+    /// follows the corners, and the image is clipped to them.
+    pub(super) fn rounded(
+        &self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        radii: Corners,
+        layer: i32,
+    ) -> Vec<DrawItem> {
         let mut items = Vec::new();
         if w <= 0.0 || h <= 0.0 {
             return items;
         }
         if let Some(color) = self.color {
-            items.push(DrawItem::Rect {
-                x,
-                y,
-                w,
-                h,
-                color,
-                layer,
+            items.push(if radii.is_square() {
+                DrawItem::Rect {
+                    x,
+                    y,
+                    w,
+                    h,
+                    color,
+                    layer,
+                }
+            } else {
+                DrawItem::Rounded {
+                    x,
+                    y,
+                    w,
+                    h,
+                    radii,
+                    ring: Edges::all(0.0),
+                    color,
+                    layer,
+                }
             });
         }
         if let Some(tile) = &self.image {
-            items.extend(tile.item(x, y, w, h, layer));
+            items.extend(tile.item(x, y, w, h, radii, layer));
         }
         items
     }
@@ -91,7 +118,7 @@ impl Backdrop {
 impl Tile {
     /// The one item this image paints over a box, or `None` where it
     /// is drawn at no size at all.
-    fn item(&self, x: f32, y: f32, w: f32, h: f32, layer: i32) -> Option<DrawItem> {
+    fn item(&self, x: f32, y: f32, w: f32, h: f32, radii: Corners, layer: i32) -> Option<DrawItem> {
         let (tile_w, tile_h) = self.drawn(w, h);
         if tile_w <= 0.0 || tile_h <= 0.0 {
             return None;
@@ -101,12 +128,14 @@ impl Tile {
             y,
             w,
             h,
+            radii,
             tile_x: x + offset(self.position.0, w, tile_w),
             tile_y: y + offset(self.position.1, h, tile_h),
             tile_w,
             tile_h,
             repeat: self.repeat == BackgroundRepeat::Repeat,
             asset: self.asset,
+            alpha: 255,
             layer,
         })
     }

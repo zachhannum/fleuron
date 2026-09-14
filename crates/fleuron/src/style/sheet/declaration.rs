@@ -7,17 +7,19 @@ use cssparser::{
 };
 
 use crate::Warning;
-use crate::style::properties::{BorderStyle, Custom, Declaration, Edge, Length, MEDIUM, Pending};
+use crate::style::properties::{
+    BorderStyle, Corner, Custom, Declaration, Edge, Length, MEDIUM, Pending,
+};
 
 use super::color::{background_color, border_color, color};
 use super::custom::{mentions_var, raw};
 use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
-    break_value, ceiling, column_span, count, counter_reset, decoration_break, edges, families,
-    font_style, generated, hanging, hyphens, inset, keyword_or, length, letter_spacing,
-    line_height, line_style, line_width, list_style_type, page_name, positioning, property,
-    shape_outside, string_set, text_align, text_justify, text_transform, variant_caps, weight,
-    width, wrap_flow, z_index,
+    border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
+    decoration_break, edges, families, font_style, generated, hanging, hyphens, inset, keyword_or,
+    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
+    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
+    text_transform, variant_caps, weight, width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, Written, position, warning};
@@ -349,8 +351,12 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
             "darkslategray",
             "#369",
             "#336699",
+            "#3698",
+            "#33669980",
             "rgb(51, 102, 153)",
             "rgb(20% 40% 60%)",
+            "rgb(51 102 153 / 50%)",
+            "rgba(51, 102, 153, 0.5)",
         ],
         read: |name, input| longhand(name, input, color, Declaration::Color),
     },
@@ -547,6 +553,13 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "auto | <integer>",
         examples: &["auto", "10", "-1"],
         read: |name, input| longhand(name, input, z_index, Declaration::ZIndex),
+    },
+    Spec {
+        name: "opacity",
+        inherited: false,
+        syntax: "<number> | <percentage>",
+        examples: &["0.05", "50%"],
+        read: |name, input| longhand(name, input, opacity, Declaration::Opacity),
     },
     Spec {
         name: "wrap-flow",
@@ -761,6 +774,72 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "<color>{1,4}",
         examples: &["crimson", "#369 black"],
         read: |name, input| sides(name, input, border_color, Declaration::BorderColor),
+    },
+    Spec {
+        name: "border-radius",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,4} [ / [ <length> | <percentage> ]{1,4} ]?",
+        examples: &[
+            "3pt",
+            "3pt 6pt",
+            "3pt 6pt 0",
+            "3pt 6pt 0 1em",
+            "50%",
+            "12pt / 6pt",
+        ],
+        read: |name, input| {
+            let corners = keyword_or(input, border_radius, || {
+                StyleError::UnsupportedValue(name.clone())
+            })?;
+            Ok(corners
+                .into_iter()
+                .map(|(corner, x, y)| Declaration::BorderRadius(corner, x, y))
+                .collect())
+        },
+    },
+    Spec {
+        name: "border-top-left-radius",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,2}",
+        examples: &["3pt", "6pt 3pt"],
+        read: |name, input| {
+            longhand(name, input, corner_radius, |(x, y)| {
+                Declaration::BorderRadius(Corner::TopLeft, x, y)
+            })
+        },
+    },
+    Spec {
+        name: "border-top-right-radius",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,2}",
+        examples: &["3pt", "6pt 3pt"],
+        read: |name, input| {
+            longhand(name, input, corner_radius, |(x, y)| {
+                Declaration::BorderRadius(Corner::TopRight, x, y)
+            })
+        },
+    },
+    Spec {
+        name: "border-bottom-right-radius",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,2}",
+        examples: &["3pt", "6pt 3pt"],
+        read: |name, input| {
+            longhand(name, input, corner_radius, |(x, y)| {
+                Declaration::BorderRadius(Corner::BottomRight, x, y)
+            })
+        },
+    },
+    Spec {
+        name: "border-bottom-left-radius",
+        inherited: false,
+        syntax: "[ <length> | <percentage> ]{1,2}",
+        examples: &["3pt", "6pt 3pt"],
+        read: |name, input| {
+            longhand(name, input, corner_radius, |(x, y)| {
+                Declaration::BorderRadius(Corner::BottomLeft, x, y)
+            })
+        },
     },
     Spec {
         name: "background-color",

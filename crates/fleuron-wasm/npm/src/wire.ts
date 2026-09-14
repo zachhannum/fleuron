@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 12;
+export const WIRE_VERSION = 13;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -97,8 +97,8 @@ export interface TextItem {
    */
   features: Features;
   /**
-   * The `#rrggbb` the run is painted in. A sheet that names no
-   * colour leaves it black.
+   * The `#rrggbb` the run is painted in, or `#rrggbbaa` where the
+   * colour has an alpha. A sheet that names no colour leaves it black.
    */
   color: string;
   /** The glyphs, in visual order. */
@@ -118,7 +118,7 @@ export interface RectItem {
   w: number;
   /** Height in points. */
   h: number;
-  /** The `#rrggbb` the rectangle is filled with. */
+  /** The `#rrggbb` or `#rrggbbaa` the rectangle is filled with. */
   color: string;
   /** Which layer the rectangle paints in. */
   layer: number;
@@ -163,6 +163,11 @@ export interface ImageItem {
   h: number;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /**
+   * How much of the image shows, from 0 to 255, where 255 is all of
+   * it: `opacity` on the image and the blocks around it.
+   */
+  alpha: number;
   /** Which layer the image paints in. */
   layer: number;
 }
@@ -186,6 +191,8 @@ export interface BackgroundItem {
   w: number;
   /** Its height in points. */
   h: number;
+  /** How far each corner of the box is rounded. The image is clipped to the rounded box. */
+  radii: Corners;
   /** Left edge of the first tile. */
   tileX: number;
   /** Its top edge. */
@@ -198,12 +205,76 @@ export interface BackgroundItem {
   repeat: boolean;
   /** Index into {@link LayoutOutput.assets}. */
   asset: number;
+  /**
+   * How much of the image shows, from 0 to 255, where 255 is all of
+   * it: `opacity` on the blocks the box belongs to.
+   */
+  alpha: number;
   /** Which layer the image paints in. */
   layer: number;
 }
 
+/** How far one corner of a box is rounded: the two radii of the quarter ellipse it follows. */
+export interface Radius {
+  /** Along the top or bottom edge, in points. */
+  x: number;
+  /** Along the left or right edge, in points. */
+  y: number;
+}
+
+/**
+ * The four corners of a box, each rounded by its own radius. A corner
+ * with a radius of zero on either axis is square. The radii of two
+ * corners on one edge never add up to more than the edge is long.
+ */
+export interface Corners {
+  topLeft: Radius;
+  topRight: Radius;
+  bottomRight: Radius;
+  bottomLeft: Radius;
+}
+
+/** One number for each edge of a box, in points. */
+export interface Edges {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/**
+ * A filled box with rounded corners: a background, or a border drawn
+ * as a ring.
+ *
+ * The outer shape is the box with its corners rounded by
+ * {@link RoundedItem.radii}. Where {@link RoundedItem.ring} is zero on
+ * all four edges, the whole shape is filled. Otherwise the fill is the
+ * band between the outer shape and an inner one: the box `ring` in
+ * from each edge, where each corner radius loses the width of the edge
+ * it runs along and goes no lower than zero.
+ */
+export interface RoundedItem {
+  kind: 'rounded';
+  /** Left edge. */
+  x: number;
+  /** Top edge. */
+  y: number;
+  /** Width in points. */
+  w: number;
+  /** Height in points. */
+  h: number;
+  /** How far each corner is rounded. */
+  radii: Corners;
+  /** How far in from each edge the fill reaches. Zero on all four fills the whole shape. */
+  ring: Edges;
+  /** The `#rrggbb` or `#rrggbbaa` the shape is filled with. */
+  color: string;
+  /** Which layer the shape paints in. */
+  layer: number;
+}
+
 /** A single paint operation. */
-export type DrawItem = TextItem | RectItem | ImageItem | BackgroundItem;
+export type DrawItem = TextItem | RectItem | ImageItem | BackgroundItem | RoundedItem;
 
 /** One typeset page, and what to paint on it. */
 export interface Page {
@@ -381,12 +452,15 @@ class Reader {
     return value;
   }
 
-  /** Three bytes, one per channel, read back as `#rrggbb`. */
+  /**
+   * Four bytes, one per channel and one for alpha, read back as
+   * `#rrggbb`, or as `#rrggbbaa` where the colour is not opaque.
+   */
   color(): string {
-    const digits = [this.byte(), this.byte(), this.byte()]
-      .map((channel) => channel.toString(16).padStart(2, '0'))
-      .join('');
-    return `#${digits}`;
+    const hex = (channel: number): string => channel.toString(16).padStart(2, '0');
+    const digits = [this.byte(), this.byte(), this.byte()].map(hex).join('');
+    const alpha = this.byte();
+    return alpha === 255 ? `#${digits}` : `#${digits}${hex(alpha)}`;
   }
 
   /** An `Option<T>`: present or not, and the value when it is. */
@@ -409,6 +483,18 @@ function glyph(r: Reader): Glyph {
 
 function sourceRange(r: Reader): SourceRange {
   return { node: r.varint(), range: [r.varint(), r.varint()] };
+}
+
+function radius(r: Reader): Radius {
+  return { x: r.f32(), y: r.f32() };
+}
+
+function corners(r: Reader): Corners {
+  return { topLeft: radius(r), topRight: radius(r), bottomRight: radius(r), bottomLeft: radius(r) };
+}
+
+function edges(r: Reader): Edges {
+  return { top: r.f32(), right: r.f32(), bottom: r.f32(), left: r.f32() };
 }
 
 function item(r: Reader): DrawItem {
@@ -448,6 +534,7 @@ function item(r: Reader): DrawItem {
         w: r.f32(),
         h: r.f32(),
         asset: r.varint(),
+        alpha: r.byte(),
         layer: r.signed(),
       };
     case 3:
@@ -457,12 +544,26 @@ function item(r: Reader): DrawItem {
         y: r.f32(),
         w: r.f32(),
         h: r.f32(),
+        radii: corners(r),
         tileX: r.f32(),
         tileY: r.f32(),
         tileW: r.f32(),
         tileH: r.f32(),
         repeat: r.bool(),
         asset: r.varint(),
+        alpha: r.byte(),
+        layer: r.signed(),
+      };
+    case 4:
+      return {
+        kind: 'rounded',
+        x: r.f32(),
+        y: r.f32(),
+        w: r.f32(),
+        h: r.f32(),
+        radii: corners(r),
+        ring: edges(r),
+        color: r.color(),
         layer: r.signed(),
       };
     default:

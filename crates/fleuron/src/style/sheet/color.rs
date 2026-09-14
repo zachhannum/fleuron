@@ -7,7 +7,8 @@ use crate::style::properties::Color;
 
 use super::StyleError;
 
-/// `color: <named-colour> | #rgb | #rrggbb | rgb()`.
+/// `color: <named-colour> | #rgb | #rgba | #rrggbb | #rrggbbaa |
+/// rgb() | rgba()`.
 pub(super) fn color(input: &mut Parser<'_, '_>) -> Option<Color> {
     if let Ok(color) = input.try_parse(rgb_function) {
         return Some(color);
@@ -19,10 +20,15 @@ pub(super) fn color(input: &mut Parser<'_, '_>) -> Option<Color> {
     }
 }
 
-/// `rgb(r, g, b)`, with either commas or spaces between the
-/// channels. All three are numbers or all three are percentages.
+/// `rgb()` and `rgba()`, which are one function under two names. With
+/// commas, an alpha is a fourth value after a comma. With spaces, it
+/// follows a slash. All three channels are numbers or all three are
+/// percentages.
 fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, StyleError<'i>>> {
-    input.expect_function_matching("rgb")?;
+    let name = input.expect_function()?.clone();
+    if !name.eq_ignore_ascii_case("rgb") && !name.eq_ignore_ascii_case("rgba") {
+        return Err(input.new_error_for_next_token());
+    }
     input.parse_nested_block(|input| {
         let (red, percentages) = channel(input, None)?;
         let commas = input.try_parse(|input| input.expect_comma()).is_ok();
@@ -31,9 +37,25 @@ fn rgb_function<'i>(input: &mut Parser<'i, '_>) -> Result<Color, ParseError<'i, 
             input.expect_comma()?;
         }
         let (blue, _) = channel(input, Some(percentages))?;
+        let separated = if commas {
+            input.try_parse(|input| input.expect_comma()).is_ok()
+        } else {
+            input.try_parse(|input| input.expect_delim('/')).is_ok()
+        };
+        let alpha = if separated { alpha(input)? } else { 255 };
         input.expect_exhausted()?;
-        Ok(Color::rgb(red, green, blue))
+        Ok(Color::rgba(red, green, blue, alpha))
     })
+}
+
+/// The alpha of `rgb()`: a number from 0 to 1, or a percentage.
+/// A value outside the range is clamped to it.
+fn alpha<'i>(input: &mut Parser<'i, '_>) -> Result<u8, ParseError<'i, StyleError<'i>>> {
+    let value = match input.try_parse(|input| input.expect_percentage()) {
+        Ok(percentage) => percentage,
+        Err(_) => input.expect_number()?,
+    };
+    Ok((value.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
 /// One channel of `rgb()`: `0` to `255`, or a percentage of it, and
@@ -54,12 +76,12 @@ fn channel<'i>(
     Ok((value.round().clamp(0.0, 255.0) as u8, percentage.is_ok()))
 }
 
-/// The two hex forms. `#abc` is `#aabbcc`: each digit stands for a
-/// pair of itself.
+/// The four hex forms. `#abc` is `#aabbcc` and `#abcd` is
+/// `#aabbccdd`: each digit stands for a pair of itself.
 fn hex(digits: &str) -> Option<Color> {
     let spelled: String = match digits.len() {
-        3 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
-        6 => digits.to_string(),
+        3 | 4 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
+        6 | 8 => digits.to_string(),
         _ => return None,
     };
     Color::from_hex(&format!("#{spelled}"))
@@ -251,6 +273,44 @@ mod tests {
 
     /// The name table is sorted, because the search over it is
     /// binary, and every name in it reads back.
+    fn parsed(css: &str) -> Option<Color> {
+        let mut input = cssparser::ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        let read = color(&mut parser);
+        parser.expect_exhausted().ok().and(read)
+    }
+
+    /// Part: `rgba()`, the four- and eight-digit hex forms, and the
+    /// alpha slash form of `rgb()` all read an alpha.
+    #[test]
+    fn every_form_with_an_alpha_reads_it() {
+        let quarter = Color::rgba(0, 0, 0, 64);
+        assert_eq!(parsed("rgba(0, 0, 0, 0.25)"), Some(quarter));
+        assert_eq!(parsed("RGBA(0, 0, 0, 25%)"), Some(quarter));
+        assert_eq!(parsed("rgb(0, 0, 0, 0.25)"), Some(quarter));
+        assert_eq!(parsed("rgb(0 0 0 / 0.25)"), Some(quarter));
+        assert_eq!(parsed("rgba(0% 0% 0% / 25%)"), Some(quarter));
+        assert_eq!(parsed("#00000040"), Some(quarter));
+        assert_eq!(parsed("#0004"), Some(Color::rgba(0, 0, 0, 0x44)));
+        assert_eq!(parsed("rgba(51, 102, 153)"), Some(Color::rgb(51, 102, 153)));
+        assert_eq!(parsed("rgb(0 0 0 / 2)"), Some(Color::BLACK));
+        // A comma form takes no slash, and a space form no fourth
+        // value after a comma.
+        assert_eq!(parsed("rgb(0, 0, 0 / 0.25)"), None);
+        assert_eq!(parsed("rgb(0 0 0, 0.25)"), None);
+        assert_eq!(parsed("#00000"), None);
+    }
+
+    /// An opaque colour reads back as it did before there was an
+    /// alpha, and one that is not reads back with its alpha.
+    #[test]
+    fn hex_spells_an_alpha_only_where_there_is_one() {
+        assert_eq!(Color::rgb(0xd6, 0x07, 0x5e).to_hex(), "#d6075e");
+        assert_eq!(Color::rgba(0, 0, 0, 64).to_hex(), "#00000040");
+        assert_eq!(Color::from_hex("#00000040"), Some(Color::rgba(0, 0, 0, 64)));
+        assert_eq!(Color::rgb(10, 20, 30).faded(0.5).a, 128);
+    }
+
     #[test]
     fn every_colour_name_is_in_order_and_reads_back() {
         for pair in NAMED.windows(2) {

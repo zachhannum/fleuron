@@ -26,7 +26,7 @@ impl Paginator<'_> {
             paginator: &Paginator,
             boxes: impl IntoIterator<Item = Child<'b>>,
             source: Option<&str>,
-            host: Option<NodeId>,
+            around: Around,
             anchored: &mut Vec<Anchored>,
         ) {
             let styles = paginator.styles;
@@ -34,17 +34,32 @@ impl Paginator<'_> {
                 let id = child.id();
                 let style = styles.style(id);
                 let lifted = style.position == Position::Absolute;
-                let host = if lifted {
-                    let node = host.unwrap_or(id);
+                let opacity = around.opacity * style.opacity;
+                let node = if lifted {
+                    let node = around.node.unwrap_or(id);
                     anchored.extend(match child {
                         Child::Block(Block::Image { url, position, .. }) => paginator
-                            .anchored_image(node, id, style, url, origin(source, *position)),
-                        _ => Some(paginator.anchored_block(node, child, style, source)),
+                            .anchored_image(
+                                node,
+                                id,
+                                style,
+                                url,
+                                origin(source, *position),
+                                opacity,
+                            ),
+                        _ => Some(paginator.anchored_block(
+                            node,
+                            child,
+                            style,
+                            source,
+                            around.opacity,
+                        )),
                     });
                     Some(node)
                 } else {
-                    host
+                    around.node
                 };
+                let host = Around { node, opacity };
                 let Child::Block(block) = child else {
                     continue;
                 };
@@ -131,7 +146,10 @@ impl Paginator<'_> {
                 self,
                 children(self.styles, section.id, &section.blocks, section.position),
                 section.source.as_deref(),
-                None,
+                Around {
+                    node: None,
+                    opacity: self.styles.style(section.id).opacity,
+                },
                 &mut anchored,
             );
         }
@@ -143,6 +161,8 @@ impl Paginator<'_> {
     ///
     /// It is sized as a block image is, with a percentage measuring
     /// the page area, and scaled down where that does not fit it.
+    /// `opacity` is its own and that of the blocks around it,
+    /// multiplied together.
     fn anchored_image(
         &self,
         node: NodeId,
@@ -150,6 +170,7 @@ impl Paginator<'_> {
         style: &ComputedStyle,
         url: &str,
         origin: String,
+        opacity: f32,
     ) -> Option<Anchored> {
         let Some((asset, intrinsic)) = self.assets.lookup(url) else {
             self.missing(url, origin);
@@ -174,6 +195,7 @@ impl Paginator<'_> {
             wrap: style.wrap_flow,
             shape: self.shape(style, Some(asset), (width, height)),
             layer: style.z_index,
+            opacity,
             paint: Paint::Image {
                 id,
                 asset,
@@ -192,12 +214,16 @@ impl Paginator<'_> {
     /// area. With both insets set, that is the width between them. With
     /// one set, it runs from that inset to the far edge. With neither
     /// set, it is `geometry.measure()`.
+    ///
+    /// `around` is the `opacity` of the blocks around it, multiplied
+    /// together. The block multiplies its own into that.
     fn anchored_block(
         &self,
         node: NodeId,
         child: Child<'_>,
         style: &ComputedStyle,
         source: Option<&str>,
+        around: f32,
     ) -> Anchored {
         let geometry = self.styles.default_page().geometry;
         let (area, _) = geometry.content_size();
@@ -211,6 +237,7 @@ impl Paginator<'_> {
         };
         let mut builder = Builder::new(self, source);
         builder.lifted = Some(child.id());
+        builder.opacity = around;
         builder.blocks([child], 0.0, width);
         let stacked = builder.stack();
         let margin = style.margin;
@@ -226,6 +253,7 @@ impl Paginator<'_> {
             wrap: style.wrap_flow,
             shape: self.shape(style, None, inner),
             layer: style.z_index,
+            opacity: style.opacity * around,
             paint: Paint::Block(stacked.items, stacked.boxes),
         }
     }
@@ -299,8 +327,20 @@ pub(super) struct Anchored {
     /// items of a block carry the layers of the blocks they came out
     /// of.
     layer: i32,
+    /// How much of an image shows, from 0 to 1: its own `opacity` and
+    /// that of the blocks around it. The items of a block already
+    /// show as much as the blocks they came out of let them.
+    opacity: f32,
     /// What it paints, from the top left corner of its margin box.
     paint: Paint,
+}
+
+/// What the blocks around one box in the walk come to: the anchored
+/// block it sits inside, and their `opacity` multiplied together.
+#[derive(Debug, Clone, Copy)]
+struct Around {
+    node: Option<NodeId>,
+    opacity: f32,
 }
 
 /// What one anchored box paints.
@@ -395,6 +435,7 @@ impl Anchored {
                 w: *width,
                 h: *height,
                 asset: *asset,
+                alpha: crate::pages::fade(255, self.opacity),
                 layer: self.layer,
             }],
             Paint::Block(items, _) => {

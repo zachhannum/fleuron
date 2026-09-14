@@ -8,7 +8,7 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
-    ColumnSpan, Content, ContentPiece, CounterStyle, Declaration, Edge, Family, FontStyle,
+    ColumnSpan, Content, ContentPiece, Corner, CounterStyle, Declaration, Edge, Family, FontStyle,
     FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType, Position,
     ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform,
     Url, WrapFlow,
@@ -686,6 +686,83 @@ pub(super) fn edges<T: Copy>(
         (Edge::Bottom, bottom),
         (Edge::Left, left),
     ])
+}
+
+/// One radius of a corner: a length or a percentage, and not below
+/// zero.
+fn radius(input: &mut Parser<'_, '_>) -> Option<Length> {
+    let length = length(input)?;
+    let (Length::Points(value) | Length::Em(value) | Length::Rem(value) | Length::Percent(value)) =
+        length;
+    (value >= 0.0).then_some(length)
+}
+
+/// One to four radii, clockwise from the top left corner. A corner
+/// left out takes the radius of the corner opposite it.
+fn radii(input: &mut Parser<'_, '_>) -> Option<[Length; 4]> {
+    let mut values = Vec::new();
+    while values.len() < 4 {
+        match input.try_parse(|input| radius(input).ok_or(())) {
+            Ok(value) => values.push(value),
+            Err(()) => break,
+        }
+    }
+    Some(match values[..] {
+        [all] => [all; 4],
+        [diagonal, other] => [diagonal, other, diagonal, other],
+        [top_left, other, bottom_right] => [top_left, other, bottom_right, other],
+        [top_left, top_right, bottom_right, bottom_left] => {
+            [top_left, top_right, bottom_right, bottom_left]
+        }
+        _ => return None,
+    })
+}
+
+/// `border-radius`: the radii along the top and bottom edges, then,
+/// after a slash, the radii along the left and right edges. Without a
+/// slash the two are the same.
+pub(super) fn border_radius(input: &mut Parser<'_, '_>) -> Option<Vec<(Corner, Length, Length)>> {
+    let across = radii(input)?;
+    let down = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+        radii(input)?
+    } else {
+        across
+    };
+    let corners = [
+        Corner::TopLeft,
+        Corner::TopRight,
+        Corner::BottomRight,
+        Corner::BottomLeft,
+    ];
+    Some(
+        corners
+            .into_iter()
+            .zip(across.into_iter().zip(down))
+            .map(|(corner, (x, y))| (corner, x, y))
+            .collect(),
+    )
+}
+
+/// `border-top-left-radius` and the other corners: one radius for
+/// both edges, or one along the top or bottom edge and one along the
+/// side.
+pub(super) fn corner_radius(input: &mut Parser<'_, '_>) -> Option<(Length, Length)> {
+    let x = radius(input)?;
+    let y = input
+        .try_parse(|input| radius(input).ok_or(()))
+        .unwrap_or(x);
+    Some((x, y))
+}
+
+/// `opacity: <number> | <percentage>`. A value outside 0 to 1 is
+/// clamped to it.
+pub(super) fn opacity(input: &mut Parser<'_, '_>) -> Option<f32> {
+    let value = match input.next().ok()? {
+        Token::Number { value, .. } => *value,
+        Token::Percentage { unit_value, .. } => *unit_value,
+        _ => return None,
+    };
+    Some(value.clamp(0.0, 1.0))
 }
 
 /// A length in any unit the engine converts to points, or a

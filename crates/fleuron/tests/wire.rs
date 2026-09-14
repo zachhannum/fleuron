@@ -31,7 +31,8 @@ fn glyph() -> impl Strategy<Value = Glyph> {
 
 /// Any colour a sheet can name, black included.
 fn color() -> impl Strategy<Value = Color> {
-    (any::<u8>(), any::<u8>(), any::<u8>()).prop_map(|(r, g, b)| Color::rgb(r, g, b))
+    (any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>())
+        .prop_map(|(r, g, b, a)| Color::rgba(r, g, b, a))
 }
 
 /// Where a run was written, or nothing where the engine synthesized
@@ -111,16 +112,43 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             coordinate(),
             any::<u32>(),
+            any::<u8>(),
             layer()
         )
-            .prop_map(|(x, y, w, h, asset, layer)| DrawItem::Image {
+            .prop_map(|(x, y, w, h, asset, alpha, layer)| DrawItem::Image {
                 x,
                 y,
                 w,
                 h,
                 asset,
+                alpha,
                 layer
             }),
+        (
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            coordinate(),
+            color(),
+            layer()
+        )
+            .prop_map(
+                |(x, y, w, h, radius, ring, color, layer)| DrawItem::Rounded {
+                    x,
+                    y,
+                    w,
+                    h,
+                    radii: fleuron::pages::Corners {
+                        top_left: fleuron::pages::Radius { x: radius, y: ring },
+                        ..Default::default()
+                    },
+                    ring: fleuron::style::Edges::all(ring),
+                    color,
+                    layer
+                }
+            ),
     ]
 }
 

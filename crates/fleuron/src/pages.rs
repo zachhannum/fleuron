@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::content::{NodeId, SourceRange};
 use crate::fonts::Features;
-use crate::style::Color;
+use crate::style::{Color, Edges};
 
 /// Which side of the spread a page falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -111,7 +111,8 @@ impl PageBox {
     }
 }
 
-/// A single paint operation. Deliberately tiny: text, rules, images.
+/// A single paint operation. Deliberately tiny: text, rules, images,
+/// and the rounded boxes a border radius draws.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DrawItem {
     /// A run of shaped glyphs sharing a font, size, and baseline.
@@ -185,6 +186,9 @@ pub enum DrawItem {
         h: f32,
         /// Index into the asset table.
         asset: u32,
+        /// How much of the image shows, from 0 to 255, where 255 is
+        /// all of it: `opacity` on the image and the blocks around it.
+        alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
     },
@@ -204,6 +208,9 @@ pub enum DrawItem {
         w: f32,
         /// Its height in points.
         h: f32,
+        /// How far each corner of the box is rounded. The image is
+        /// clipped to the rounded box.
+        radii: Corners,
         /// Left edge of the first tile.
         tile_x: f32,
         /// Its top edge.
@@ -216,9 +223,115 @@ pub enum DrawItem {
         repeat: bool,
         /// Index into the asset table.
         asset: u32,
+        /// How much of the image shows, from 0 to 255, where 255 is
+        /// all of it: `opacity` on the blocks the box belongs to.
+        alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
     },
+    /// A filled box with rounded corners: a background, or a border
+    /// drawn as a ring.
+    ///
+    /// The outer shape is the box with its corners rounded by `radii`.
+    /// Where `ring` is zero on all four edges, the whole shape is
+    /// filled. Otherwise the fill is the band between the outer shape
+    /// and an inner one: the box `ring` in from each edge, with the
+    /// corners [`Corners::inside`] gives.
+    Rounded {
+        /// Left edge.
+        x: f32,
+        /// Top edge.
+        y: f32,
+        /// Width in points.
+        w: f32,
+        /// Height in points.
+        h: f32,
+        /// How far each corner is rounded.
+        radii: Corners,
+        /// How far in from each edge the fill reaches, in points. Zero
+        /// on all four fills the whole shape.
+        ring: Edges,
+        /// What the shape is filled with.
+        color: Color,
+        /// Which layer the shape paints in.
+        layer: i32,
+    },
+}
+
+/// How far one corner of a box is rounded: the two radii of the
+/// quarter ellipse the corner follows, in points.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Radius {
+    /// Along the top or bottom edge.
+    pub x: f32,
+    /// Along the left or right edge.
+    pub y: f32,
+}
+
+impl Radius {
+    /// A corner that is not rounded.
+    pub const SQUARE: Radius = Radius { x: 0.0, y: 0.0 };
+
+    /// Whether the corner is rounded at all. A radius of zero on
+    /// either axis leaves it square.
+    pub fn is_square(self) -> bool {
+        self.x <= 0.0 || self.y <= 0.0
+    }
+}
+
+/// The four corners of a box, each rounded by its own radius.
+///
+/// The radii of two corners on one edge never add up to more than the
+/// edge is long: layout scales all four down together until they fit.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Corners {
+    /// The top left corner.
+    pub top_left: Radius,
+    /// The top right corner.
+    pub top_right: Radius,
+    /// The bottom right corner.
+    pub bottom_right: Radius,
+    /// The bottom left corner.
+    pub bottom_left: Radius,
+}
+
+impl Corners {
+    /// Four square corners.
+    pub const SQUARE: Corners = Corners {
+        top_left: Radius::SQUARE,
+        top_right: Radius::SQUARE,
+        bottom_right: Radius::SQUARE,
+        bottom_left: Radius::SQUARE,
+    };
+
+    /// Whether no corner is rounded.
+    pub fn is_square(&self) -> bool {
+        [
+            self.top_left,
+            self.top_right,
+            self.bottom_right,
+            self.bottom_left,
+        ]
+        .iter()
+        .all(|radius| radius.is_square())
+    }
+
+    /// The corners of the box `ring` in from this one. Each radius
+    /// loses the width of the edge it runs along, and none goes below
+    /// zero, so a ring wider than a radius leaves that inner corner
+    /// square.
+    pub fn inside(&self, ring: Edges) -> Corners {
+        let less = |radius: Radius, across: f32, down: f32| Radius {
+            x: (radius.x - across).max(0.0),
+            y: (radius.y - down).max(0.0),
+        };
+        Corners {
+            top_left: less(self.top_left, ring.left, ring.top),
+            top_right: less(self.top_right, ring.right, ring.top),
+            bottom_right: less(self.bottom_right, ring.right, ring.bottom),
+            bottom_left: less(self.bottom_left, ring.left, ring.bottom),
+        }
+    }
 }
 
 impl DrawItem {
@@ -242,9 +355,15 @@ impl DrawItem {
             DrawItem::Text { layer, .. }
             | DrawItem::Rect { layer, .. }
             | DrawItem::Image { layer, .. }
-            | DrawItem::Background { layer, .. } => *layer,
+            | DrawItem::Background { layer, .. }
+            | DrawItem::Rounded { layer, .. } => *layer,
         }
     }
+}
+
+/// An eight-bit alpha scaled by `opacity`, from 0 to 1.
+pub(crate) fn fade(alpha: u8, opacity: f32) -> u8 {
+    (alpha as f32 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
 /// One glyph: an id in its font and an absolute x. Kerning and

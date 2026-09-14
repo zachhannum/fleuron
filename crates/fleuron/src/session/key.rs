@@ -290,14 +290,18 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // fragments carry the offset its insets give them.
         position,
         inset,
-        // The layer travels on the fragments a block emits.
+        // The layer and the opacity travel on the fragments a block
+        // emits.
         z_index,
+        opacity,
         wrap_flow: _,
         shape_outside: _,
         shape_margin: _,
         margin,
         padding,
         border,
+        // A decoration carries its corners to the page.
+        border_radius,
         background,
         box_decoration_break,
         width,
@@ -330,7 +334,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (content, string_set, counter_reset, initial_letter).hash(h);
-    (position, z_index).hash(h);
+    (position, z_index, opacity.to_bits()).hash(h);
     hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);
@@ -340,6 +344,19 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     hash_edges(border.widths(), h);
     for edge in [border.top, border.right, border.bottom, border.left] {
         edge.color.hash(h);
+    }
+    for corner in [
+        border_radius.top_left,
+        border_radius.top_right,
+        border_radius.bottom_right,
+        border_radius.bottom_left,
+    ] {
+        for axis in [corner.x, corner.y] {
+            match axis {
+                crate::style::Coord::Points(points) => (0u8, points.to_bits()).hash(h),
+                crate::style::Coord::Percent(percent) => (1u8, percent.to_bits()).hash(h),
+            }
+        }
     }
 }
 

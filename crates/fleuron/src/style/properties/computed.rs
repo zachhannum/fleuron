@@ -13,7 +13,7 @@ use super::background::{
     Background, BackgroundPosition, BackgroundSize, SizeSource, no_background,
 };
 use super::counter::{Content, ListStyleType, StringSet};
-use super::edges::{Border, Edges};
+use super::edges::{Border, BorderRadius, CornerRadius, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
@@ -89,6 +89,11 @@ pub struct ComputedStyle {
     /// later, and `auto` is layer 0.
     #[serde(skip_serializing_if = "ground_layer")]
     pub z_index: i32,
+    /// How much of what the block paints shows, from `opacity`: 1 is
+    /// all of it and 0 is none. The blocks inside it show that much
+    /// of their own.
+    #[serde(skip_serializing_if = "opaque")]
+    pub opacity: f32,
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
@@ -107,6 +112,11 @@ pub struct ComputedStyle {
     /// The four border edges.
     #[serde(skip_serializing_if = "no_border")]
     pub border: Edges<Border>,
+    /// How far each corner of the border box is rounded, from
+    /// `border-radius`. The background and the border follow the
+    /// corners.
+    #[serde(skip_serializing_if = "square")]
+    pub border_radius: BorderRadius,
     /// What is painted behind the block: a tint, and an image over
     /// it.
     #[serde(skip_serializing_if = "no_background")]
@@ -185,12 +195,14 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             z_index: 0,
+            opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
+            border_radius: BorderRadius::SQUARE,
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
@@ -215,6 +227,7 @@ impl ComputedStyle {
             margin: Edges::all(0.0),
             padding: Edges::all(0.0),
             border: Edges::all(Border::NONE),
+            border_radius: BorderRadius::SQUARE,
             background: Background::NONE,
             box_decoration_break: BoxDecorationBreak::Slice,
             width: Width::Auto,
@@ -229,6 +242,7 @@ impl ComputedStyle {
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
             z_index: 0,
+            opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -283,6 +297,7 @@ impl ComputedStyle {
                 }
             }
             Declaration::ZIndex(layer) => self.z_index = *layer,
+            Declaration::Opacity(opacity) => self.opacity = *opacity,
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
             Declaration::ShapeOutside(shape) => {
                 self.shape_outside = match shape {
@@ -313,6 +328,12 @@ impl ComputedStyle {
                 self.border.edge(*edge).width = length.to_points(self.font_size, root_size).max(0.0)
             }
             Declaration::BorderColor(edge, color) => self.border.edge(*edge).color = *color,
+            Declaration::BorderRadius(corner, x, y) => {
+                *self.border_radius.corner(*corner) = CornerRadius {
+                    x: Coord::of(*x, self.font_size, root_size),
+                    y: Coord::of(*y, self.font_size, root_size),
+                }
+            }
             Declaration::BackgroundColor(color) => self.background.color = *color,
             Declaration::BackgroundImage(url) => self.background.image = url.clone(),
             Declaration::BackgroundRepeat(repeat) => self.background.repeat = *repeat,
@@ -374,6 +395,7 @@ impl ComputedStyle {
             Declaration::Position(_) => self.position = base.position,
             Declaration::Inset(edge, _) => *self.inset.edge(*edge) = base.inset.get(*edge),
             Declaration::ZIndex(_) => self.z_index = base.z_index,
+            Declaration::Opacity(_) => self.opacity = base.opacity,
             Declaration::WrapFlow(_) => self.wrap_flow = base.wrap_flow,
             Declaration::ShapeOutside(_) => self.shape_outside = base.shape_outside.clone(),
             Declaration::ShapeMargin(_) => self.shape_margin = base.shape_margin,
@@ -387,6 +409,9 @@ impl ComputedStyle {
             }
             Declaration::BorderColor(edge, _) => {
                 self.border.edge(*edge).color = base.border.get(*edge).color
+            }
+            Declaration::BorderRadius(corner, ..) => {
+                *self.border_radius.corner(*corner) = base.border_radius.get(*corner)
             }
             Declaration::BackgroundColor(_) => self.background.color = base.background.color,
             Declaration::BackgroundImage(_) => {
@@ -530,6 +555,10 @@ fn ground_layer(layer: &i32) -> bool {
     *layer == 0
 }
 
+fn opaque(opacity: &f32) -> bool {
+    *opacity == 1.0
+}
+
 fn wraps_nothing(wrap: &WrapFlow) -> bool {
     *wrap == WrapFlow::Auto
 }
@@ -540,6 +569,10 @@ fn no_padding(padding: &Edges) -> bool {
 
 fn no_border(border: &Edges<Border>) -> bool {
     *border == Edges::all(Border::NONE)
+}
+
+fn square(radius: &BorderRadius) -> bool {
+    *radius == BorderRadius::SQUARE
 }
 
 fn sliced(value: &BoxDecorationBreak) -> bool {

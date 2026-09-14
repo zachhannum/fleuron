@@ -8,7 +8,7 @@
 use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
-use fleuron::pages::{DrawItem, Page};
+use fleuron::pages::{Corners, DrawItem, Page};
 use fleuron::style::{Color, Source, StyleTree, Stylesheets};
 
 /// A sheet that sets a page and a heading and names no colour.
@@ -158,6 +158,17 @@ fn layered(layer: i32) -> String {
     }
 }
 
+/// The alpha of an image, and nothing at all where it is opaque: a
+/// book whose sheet names no `opacity` describes itself the way it
+/// did before there was one.
+fn translucent(alpha: u8) -> String {
+    if alpha == 255 {
+        String::new()
+    } else {
+        format!(" alpha {alpha}")
+    }
+}
+
 /// One draw item, every field of it, on one line. The match names
 /// each field rather than eliding it, so a field added to the display
 /// structure has to be answered for here.
@@ -219,10 +230,12 @@ fn described(item: &DrawItem) -> String {
             w,
             h,
             asset,
+            alpha,
             layer,
         } => {
             format!(
-                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}",
+                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}{}",
+                translucent(*alpha),
                 layered(*layer)
             )
         }
@@ -231,18 +244,47 @@ fn described(item: &DrawItem) -> String {
             y,
             w,
             h,
+            radii,
             tile_x,
             tile_y,
             tile_w,
             tile_h,
             repeat,
             asset,
+            alpha,
             layer,
         } => format!(
-            "background {x:?} {y:?} {w:?} {h:?} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
-             repeat {repeat} asset {asset}{}",
+            "background {x:?} {y:?} {w:?} {h:?}{} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
+             repeat {repeat} asset {asset}{}{}",
+            cornered(radii),
+            translucent(*alpha),
             layered(*layer)
         ),
+        DrawItem::Rounded {
+            x,
+            y,
+            w,
+            h,
+            radii,
+            ring,
+            color: _,
+            layer,
+        } => format!(
+            "rounded {x:?} {y:?} {w:?} {h:?}{} ring {ring:?}{}",
+            cornered(radii),
+            layered(*layer)
+        ),
+    }
+}
+
+/// The corners of a box, and nothing at all where they are square: a
+/// book whose sheet names no `border-radius` describes itself the way
+/// it did before there was one.
+fn cornered(radii: &Corners) -> String {
+    if radii.is_square() {
+        String::new()
+    } else {
+        format!(" radii {radii:?}")
     }
 }
 
@@ -287,6 +329,28 @@ fn every_run_carries_the_colour_its_style_named() {
     assert_eq!(colour_of(&pages, "1"), [Color::rgb(128, 128, 128)]);
 }
 
+/// Acceptance: text set in a colour with alpha carries that alpha to
+/// its runs, and the runs beside it stay opaque.
+#[test]
+fn a_colour_with_alpha_reaches_the_runs_it_colours() {
+    let book = fixture();
+    let styles = styles(
+        &book,
+        "h1 { color: rgba(180, 30, 30, 0.25) }\nem { color: #3366994d }",
+    );
+    assert!(styles.warnings().is_empty(), "{:?}", styles.warnings());
+    let pages = pages(&book, &styles);
+    assert_eq!(
+        colour_of(&pages, "The Quay"),
+        [Color::rgba(180, 30, 30, 64)]
+    );
+    assert_eq!(
+        colour_of(&pages, "harbour"),
+        [Color::rgba(51, 102, 153, 77)]
+    );
+    assert_eq!(colour_of(&pages, "The wind"), [Color::BLACK]);
+}
+
 /// A hyphen the breaker draws inside a coloured word takes the
 /// word's colour. It is set in the paragraph's face, because that is
 /// where its width was charged.
@@ -323,7 +387,9 @@ fn a_sheet_that_names_no_colour_sets_the_book_unchanged() {
         .iter()
         .flat_map(|page| &page.items)
         .map(|item| match item {
-            DrawItem::Text { color, .. } | DrawItem::Rect { color, .. } => *color,
+            DrawItem::Text { color, .. }
+            | DrawItem::Rect { color, .. }
+            | DrawItem::Rounded { color, .. } => *color,
             DrawItem::Image { .. } | DrawItem::Background { .. } => Color::BLACK,
         })
         .collect();

@@ -183,7 +183,7 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("background", "white"),
         ("background-attachment", "fixed"),
         ("background-clip", "content-box"),
-        ("border-radius", "3pt"),
+        ("box-shadow", "0 0 2pt black"),
         ("border-top-width", "1pt"),
         ("float", "left"),
         ("display", "block"),
