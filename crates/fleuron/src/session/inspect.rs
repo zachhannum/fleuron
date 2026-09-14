@@ -11,7 +11,9 @@ use super::Session;
 impl Session<'_> {
     /// The element one node stands for, the rules that matched it and
     /// what it computed to, and its border box on each page it
-    /// reaches. A text node answers for the element that holds it.
+    /// reaches. A text node answers for the element that holds it, and
+    /// a box that `::before` or `::after` generates answers for the
+    /// element it belongs to.
     ///
     /// Nothing for a node the book does not hold, or for the id the
     /// engine writes its own text under. An id names a node only
@@ -51,7 +53,8 @@ impl Session<'_> {
     /// points from its top-left corner: the element that holds the
     /// text there, or else the innermost block whose border box holds
     /// the point, padding and empty space included. Where two such
-    /// things overlap, the one painted later answers.
+    /// things overlap, the one painted later answers. A box that
+    /// `::before` or `::after` generates answers with its element.
     ///
     /// Nothing outside every box, and nothing for a page the book does
     /// not have.
@@ -70,7 +73,7 @@ impl Session<'_> {
             .boxes
             .iter()
             .filter(|(_, area)| area.page as usize == index && area.contains(x, y))
-            .map(|(node, _)| *node)
+            .map(|(node, _)| node.element())
             .collect();
         // A box that holds another box under the point is not the
         // innermost one. A block against the page is recorded after the

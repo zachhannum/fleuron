@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::content::{
-    Block, Inline, NodeId, Section, SourcePos, block_attributes, block_id, block_position,
-    inline_attributes, inline_id, origin, text,
+    Block, GeneratedBox, Inline, NodeId, Section, SourcePos, block_attributes, block_id,
+    block_position, inline_attributes, inline_id, origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::pages::{DrawItem, PageBox};
@@ -40,18 +40,11 @@ impl Paginator<'_> {
         let start = builder.open(section.id, &style, &[], 0.0, measure);
         let column = style.content_box(0.0, measure);
         let whole = style.content_box(0.0, geometry.content_size().0);
-        builder.generated(
-            section.id,
-            Which::Before,
-            section.position,
-            column.0,
-            column.1,
-        );
-        for block in &section.blocks {
-            builder.spanning = self.styles.style(block_id(block)).column_span == ColumnSpan::All;
+        for child in children(self.styles, section.id, &section.blocks, section.position) {
+            builder.spanning = self.styles.style(child.id()).column_span == ColumnSpan::All;
             let (x, measure) = if builder.spanning { whole } else { column };
             let first = builder.fragments.len();
-            builder.blocks(std::slice::from_ref(block), x, measure);
+            builder.blocks([child], x, measure);
             if builder.spanning {
                 for fragment in builder.fragments[first..]
                     .iter_mut()
@@ -63,13 +56,6 @@ impl Paginator<'_> {
             }
         }
         builder.spanning = false;
-        builder.generated(
-            section.id,
-            Which::After,
-            section.position,
-            column.0,
-            column.1,
-        );
         builder.close(&style, start);
         builder.fragments
     }
@@ -141,14 +127,42 @@ impl<'a, 'p> Builder<'a, 'p> {
     }
 }
 
-/// Which of the two boxes `::before` and `::after` generate inside a
-/// block.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Which {
-    /// The first child of the block.
-    Before,
-    /// The last child of the block.
-    After,
+/// One box among the children of an element: a block the manuscript
+/// wrote, or a box that `::before` or `::after` generates.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Child<'b> {
+    Block(&'b Block),
+    /// A generated box, and where its element was written.
+    Generated(NodeId, Option<SourcePos>),
+}
+
+impl Child<'_> {
+    pub(super) fn id(self) -> NodeId {
+        match self {
+            Child::Block(block) => block_id(block),
+            Child::Generated(id, _) => id,
+        }
+    }
+}
+
+/// The children of the element `id`, written at `position`: the box
+/// `::before` generates, then `blocks`, then the box `::after`
+/// generates.
+pub(super) fn children<'b>(
+    styles: &StyleTree,
+    id: NodeId,
+    blocks: &'b [Block],
+    position: Option<SourcePos>,
+) -> impl Iterator<Item = Child<'b>> + use<'b> {
+    let generated = |which| {
+        styles
+            .generated_box(id, which)
+            .map(|id| Child::Generated(id, position))
+    };
+    generated(GeneratedBox::Before)
+        .into_iter()
+        .chain(blocks.iter().map(Child::Block))
+        .chain(generated(GeneratedBox::After))
 }
 
 /// A block that asks for a height, while its fragments are still being
@@ -492,19 +506,34 @@ impl Builder<'_, '_> {
 
     /// Every block of one nesting level, at `x` from the content
     /// box's leading edge and breaking to `measure`.
-    pub(super) fn blocks(&mut self, blocks: &[Block], x: f32, measure: f32) {
-        for block in blocks {
-            if matches!(block, Block::Heading { .. }) || block_attributes(block).id.is_some() {
-                self.name(block_id(block));
+    pub(super) fn blocks<'b>(
+        &mut self,
+        boxes: impl IntoIterator<Item = Child<'b>>,
+        x: f32,
+        measure: f32,
+    ) {
+        for child in boxes {
+            let id = child.id();
+            if let Child::Block(block) = child
+                && (matches!(block, Block::Heading { .. }) || block_attributes(block).id.is_some())
+            {
+                self.name(id);
             }
             // A box against the page is not in the flow: it takes no
             // space here, and the margins that met around it still
             // meet.
-            let id = block_id(block);
             if self.lifted != Some(id) && self.styles().style(id).position == Position::Absolute {
                 self.anchor(id);
                 continue;
             }
+            let block = match child {
+                Child::Block(block) => block,
+                Child::Generated(id, position) => {
+                    self.generated(id, position, x, measure);
+                    continue;
+                }
+            };
+            let styles = self.paginator.styles;
             let position = block_position(block);
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
@@ -512,30 +541,28 @@ impl Builder<'_, '_> {
                     self.paragraph(*id, inlines, position, x, measure);
                 }
                 Block::Blockquote { id, blocks, .. } => {
-                    let style = self.styles().style(*id).clone();
+                    let style = styles.style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
-                    self.generated(*id, Which::Before, position, inner, narrowed);
-                    self.blocks(blocks, inner, narrowed);
-                    self.generated(*id, Which::After, position, inner, narrowed);
+                    self.blocks(children(styles, *id, blocks, position), inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::ThematicBreak { id, .. } => {
-                    let style = self.styles().style(*id).clone();
+                    let style = styles.style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
-                    self.generated(*id, Which::Before, position, inner, narrowed);
+                    self.pseudo(*id, GeneratedBox::Before, position, inner, narrowed);
                     self.ornament(&style, x, measure);
-                    self.generated(*id, Which::After, position, inner, narrowed);
+                    self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::Image { id, url, .. } => {
-                    let style = self.styles().style(*id).clone();
+                    let style = styles.style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
-                    self.generated(*id, Which::Before, position, inner, narrowed);
+                    self.pseudo(*id, GeneratedBox::Before, position, inner, narrowed);
                     self.image(&style, url, origin(self.source, position), x, measure);
-                    self.generated(*id, Which::After, position, inner, narrowed);
+                    self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::Table {
@@ -566,7 +593,7 @@ impl Builder<'_, '_> {
         let computed = self.styles().style(id).clone();
         let start = self.open(id, &computed, inlines, x, measure);
         let (x, measure) = computed.content_box(x, measure);
-        self.generated(id, Which::Before, position, x, measure);
+        self.pseudo(id, GeneratedBox::Before, position, x, measure);
 
         let style = computed.paragraph();
         let options = self.options(&computed);
@@ -626,7 +653,7 @@ impl Builder<'_, '_> {
             fragment.reflow = reflow.clone();
             self.emit(&mut first, fragment);
         }
-        self.generated(id, Which::After, position, x, measure);
+        self.pseudo(id, GeneratedBox::After, position, x, measure);
         self.close(&computed, start);
     }
 
@@ -646,36 +673,43 @@ impl Builder<'_, '_> {
         }
     }
 
-    /// The box `::before` or `::after` generates inside the block
-    /// `id`, across the content box at `x` and `measure`. It holds the
-    /// text of its `content`, or nothing. A page does not end between
-    /// the box and the rest of the block.
-    pub(super) fn generated(
+    /// The children of the block `element` that `::before` or
+    /// `::after` generates, at `x` and `measure`. `position` is where
+    /// the block was written.
+    pub(super) fn pseudo(
         &mut self,
-        id: NodeId,
-        which: Which,
+        element: NodeId,
+        which: GeneratedBox,
         position: Option<SourcePos>,
         x: f32,
         measure: f32,
     ) {
-        let styles = self.styles();
-        let pseudo = match which {
-            Which::Before => styles.before(id),
-            Which::After => styles.after(id),
-        };
-        let Some(mut style) = pseudo.cloned() else {
+        let child = self
+            .styles()
+            .generated_box(element, which)
+            .map(|id| Child::Generated(id, position));
+        self.blocks(child, x, measure);
+    }
+
+    /// The generated box `id` in the flow, across the content box at
+    /// `x` and `measure`. `position` is where its element was written.
+    /// It holds the text of its `content`, or nothing. A page does not
+    /// end between the box and the rest of its element.
+    fn generated(&mut self, id: NodeId, position: Option<SourcePos>, x: f32, measure: f32) {
+        let Some((_, which)) = id.generated_box() else {
             return;
         };
+        let mut style = self.styles().style(id).clone();
         // A box with no layer of its own paints in the layer of its
         // block.
         let layer = self.layer;
         if style.z_index == 0 {
             style.z_index = layer;
         }
-        if which == Which::After {
+        if which == GeneratedBox::After {
             self.ask(Break::Avoid);
         }
-        let start = self.open(NodeId::UNASSIGNED, &style, &[], x, measure);
+        let start = self.open(id, &style, &[], x, measure);
         let (x, measure) = style.content_box(x, measure);
         let text = self
             .paginator
@@ -688,7 +722,7 @@ impl Builder<'_, '_> {
             let options = self.options(&style);
             self.paginator
                 .lines
-                .layout_generated(&text, style.paragraph(), &spec, options)
+                .layout_generated(&text, id, style.paragraph(), &spec, options)
         };
         if lines.is_empty() {
             self.emit_one(x, 0.0, Piece::Blank);
@@ -708,7 +742,7 @@ impl Builder<'_, '_> {
         }
         self.close(&style, start);
         self.layer = layer;
-        if which == Which::Before {
+        if which == GeneratedBox::Before {
             self.ask(Break::Avoid);
         }
     }
@@ -992,7 +1026,7 @@ fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(NodeId, PageBox
     let mut areas = Vec::new();
     for painted in &boxes {
         let (x, y, width, height) = painted.border_box((0.0, 0.0));
-        if painted.decoration.node != NodeId::UNASSIGNED && height > 0.0 {
+        if height > 0.0 {
             let area = PageBox {
                 page: 0,
                 x,

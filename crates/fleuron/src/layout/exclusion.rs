@@ -4,13 +4,13 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, NodeId, block_id, cell_blocks, origin};
+use crate::content::{Block, Book, GeneratedBox, NodeId, block_position, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::{DrawItem, PageBox};
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
 
 use super::Paginator;
-use super::build::{Builder, Reflow, carry_over, set_lines};
+use super::build::{Builder, Child, Reflow, carry_over, children, set_lines};
 use super::cap::Cap;
 use super::flow::{Flow, shift, shift_boxes};
 use super::fragment::Fragment;
@@ -22,43 +22,63 @@ impl Paginator<'_> {
     /// A box inside a block that is anchored as well lands on the page
     /// that block lands on.
     pub(super) fn anchored_boxes(&self, book: &Book) -> Vec<Anchored> {
-        fn walk(
+        fn walk<'b>(
             paginator: &Paginator,
-            blocks: &[Block],
+            boxes: impl IntoIterator<Item = Child<'b>>,
             source: Option<&str>,
             host: Option<NodeId>,
             anchored: &mut Vec<Anchored>,
         ) {
-            for block in blocks {
-                let id = block_id(block);
-                let style = paginator.styles.style(id);
-                let host = match style.position {
-                    Position::Absolute => {
-                        let node = host.unwrap_or(id);
-                        anchored.extend(match block {
-                            Block::Image { url, position, .. } => paginator.anchored_image(
-                                node,
-                                id,
-                                style,
-                                url,
-                                origin(source, *position),
-                            ),
-                            _ => Some(paginator.anchored_block(node, block, style, source)),
-                        });
-                        Some(node)
-                    }
-                    _ => host,
+            let styles = paginator.styles;
+            for child in boxes {
+                let id = child.id();
+                let style = styles.style(id);
+                let lifted = style.position == Position::Absolute;
+                let host = if lifted {
+                    let node = host.unwrap_or(id);
+                    anchored.extend(match child {
+                        Child::Block(Block::Image { url, position, .. }) => paginator
+                            .anchored_image(node, id, style, url, origin(source, *position)),
+                        _ => Some(paginator.anchored_block(node, child, style, source)),
+                    });
+                    Some(node)
+                } else {
+                    host
+                };
+                let Child::Block(block) = child else {
+                    continue;
+                };
+                let position = block_position(block);
+                let pseudo = |which| {
+                    styles
+                        .generated_box(id, which)
+                        .map(|id| Child::Generated(id, position))
                 };
                 match block {
-                    Block::Blockquote { blocks, .. } => {
-                        walk(paginator, blocks, source, host, anchored)
-                    }
+                    Block::Blockquote { blocks, .. } => walk(
+                        paginator,
+                        children(styles, id, blocks, position),
+                        source,
+                        host,
+                        anchored,
+                    ),
                     Block::Table { head, body, .. } => {
+                        walk(paginator, pseudo(GeneratedBox::Before), source, host, anchored);
                         for blocks in cell_blocks(head, body) {
-                            walk(paginator, blocks, source, host, anchored);
+                            walk(paginator, blocks.iter().map(Child::Block), source, host, anchored);
                         }
+                        walk(paginator, pseudo(GeneratedBox::After), source, host, anchored);
                     }
-                    _ => {}
+                    // An image against the page is placed whole, with no
+                    // children in it.
+                    Block::Image { .. } if lifted => {}
+                    _ => walk(
+                        paginator,
+                        children(styles, id, &[], position),
+                        source,
+                        host,
+                        anchored,
+                    ),
                 }
             }
         }
@@ -66,7 +86,7 @@ impl Paginator<'_> {
         for section in &book.sections {
             walk(
                 self,
-                &section.blocks,
+                children(self.styles, section.id, &section.blocks, section.position),
                 section.source.as_deref(),
                 None,
                 &mut anchored,
@@ -129,7 +149,7 @@ impl Paginator<'_> {
     fn anchored_block(
         &self,
         node: NodeId,
-        block: &Block,
+        child: Child<'_>,
         style: &ComputedStyle,
         source: Option<&str>,
     ) -> Anchored {
@@ -144,8 +164,8 @@ impl Paginator<'_> {
             _ => (area - left.unwrap_or(0.0) - right.unwrap_or(0.0)).max(0.0),
         };
         let mut builder = Builder::new(self, source);
-        builder.lifted = Some(block_id(block));
-        builder.blocks(std::slice::from_ref(block), 0.0, width);
+        builder.lifted = Some(child.id());
+        builder.blocks([child], 0.0, width);
         let stacked = builder.stack();
         let margin = style.margin;
         let inner = (

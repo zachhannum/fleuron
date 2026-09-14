@@ -107,10 +107,14 @@ impl Stylesheets {
     /// `tree` is, compiled from these sheets. A text node answers for
     /// the element that holds it.
     ///
+    /// The id of a box that `::before` or `::after` generates answers
+    /// for the element the box belongs to.
+    ///
     /// `None` for a node the book does not hold, and for the id the
     /// engine writes its own text under. The boxes are left empty,
     /// since only a laid-out book has them.
     pub fn inspect(&self, book: &Book, tree: &StyleTree, node: NodeId) -> Option<Inspection> {
+        let node = node.element();
         book.subtree(node)?;
         let elements = ElementTree::build(book);
         let index = owner(&elements, book, node)?;
@@ -303,6 +307,7 @@ fn matched_rule(
 /// The element that stands for one node of `book`: the node itself,
 /// or for a text node, the element that holds it.
 pub(crate) fn element_of(book: &Book, node: NodeId) -> Option<NodeId> {
+    let node = node.element();
     book.subtree(node)?;
     let elements = ElementTree::build(book);
     owner(&elements, book, node).map(|index| elements.nodes()[index].id)
