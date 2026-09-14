@@ -84,6 +84,28 @@ pub(super) fn one_run(text: &str) -> Vec<Inline> {
     }]
 }
 
+/// One paragraph with a hard break at every newline of `text`.
+pub(super) fn with_breaks(text: &str) -> Vec<Inline> {
+    let mut inlines = Vec::new();
+    for (index, line) in text.split('\n').enumerate() {
+        if index > 0 {
+            inlines.push(Inline::Break {
+                id: NodeId::UNASSIGNED,
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            });
+        }
+        inlines.extend(one_run(line));
+    }
+    inlines
+}
+
+/// The same, laid out in the body style.
+pub(super) fn layout_verse(text: &str, measure_pt: f32, options: LineBreakOptions) -> Vec<Line> {
+    LineLayout::new(registry()).layout(&with_breaks(text), body(), measure_pt, options)
+}
+
 /// One paragraph with `first_line` over the line it opens on,
 /// ragged and unhyphenated.
 pub(super) fn layout_first(

@@ -70,8 +70,40 @@ pub(super) fn skip_spaces(text: &str, mut at: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::lines::testing::{body, justified, layout_body_opts, registry, units_per_em};
+    use crate::lines::testing::{
+        body, justified, layout_body, layout_body_opts, layout_verse, line_text, registry,
+        units_per_em,
+    };
     use crate::lines::{Line, LineBreakOptions};
+
+    /// Acceptance: the line before a hard break is not stretched to
+    /// the measure. It keeps the advances it was shaped at, and a
+    /// line that wrapped before it still fills the measure.
+    #[test]
+    fn the_line_before_a_hard_break_is_not_stretched() {
+        let text = "My father had a small estate in Nottinghamshire, and I was the \
+                    third of five sons.\nHe sent me to Emanuel College in Cambridge \
+                    at fourteen years old, where I resided three years.";
+        let lines = layout_verse(text, 140.0, justified());
+        let width = |line: &Line| line.width as f32 / units_per_em() as f32 * body().size;
+        let before = lines
+            .iter()
+            .position(|line| line_text(line).ends_with("sons."))
+            .expect("the break ends a line");
+        assert!(before > 0, "the first sentence did not wrap: {lines:?}");
+        assert!(
+            (width(&lines[0]) - 140.0).abs() < 0.01,
+            "a wrapped line stopped filling the measure: {}pt",
+            width(&lines[0]),
+        );
+        assert!(
+            width(&lines[before]) < 139.0,
+            "the line before the break was stretched to {}pt",
+            width(&lines[before]),
+        );
+        let natural = layout_body(&line_text(&lines[before]), 1000.0);
+        assert_eq!(lines[before].width, natural[0].width);
+    }
 
     /// Justified: every line but the last reaches the right edge of
     /// the measure. The tolerance is the rounding the shaper's

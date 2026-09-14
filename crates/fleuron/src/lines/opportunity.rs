@@ -17,6 +17,8 @@ struct Opportunity {
     /// True when this break sits inside a word and the line must be
     /// charged for a hyphen glyph.
     hyphen: bool,
+    /// True when the line has to end here.
+    forced: bool,
 }
 
 /// One place a line may end, with everything the breaker measures it
@@ -30,6 +32,9 @@ pub(super) struct Break {
     pub(super) next: usize,
     /// Whether taking this break puts a hyphen on the line.
     pub(super) hyphen: bool,
+    /// Whether the line has to end here: at a hard break, and at the
+    /// end of the paragraph.
+    pub(super) forced: bool,
     /// Whether the line after this break would open with a dash.
     pub(super) dash: bool,
     /// Font units of the last glyph that may hang past the measure.
@@ -56,9 +61,10 @@ impl LineLayout<'_> {
                     BreakOpportunity::Allowed | BreakOpportunity::Mandatory
                 )
             })
-            .map(|(index, _)| Opportunity {
+            .map(|(index, kind)| Opportunity {
                 end: index,
                 hyphen: false,
+                forced: kind == BreakOpportunity::Mandatory,
             })
             .collect();
         if options.hyphenate {
@@ -103,6 +109,7 @@ impl LineLayout<'_> {
                         opportunities.push(Opportunity {
                             end: offset,
                             hyphen: true,
+                            forced: false,
                         });
                     }
                 }
@@ -136,14 +143,17 @@ impl LineLayout<'_> {
             content_end: 0,
             next: 0,
             hyphen: false,
+            forced: false,
             dash: false,
             hang_end: 0.0,
             hang_start: start_hang(0),
         }];
         for opportunity in self.opportunities(text, widths, options) {
-            let content_end = opportunity.end - trailing_spaces(text, 0, opportunity.end);
+            let end = opportunity.end - newline_before(text, opportunity.end);
+            let content_end = end - trailing_spaces(text, 0, end);
             let next = skip_spaces(text, opportunity.end);
-            let hang = if !hangs {
+            let hard = opportunity.forced && opportunity.end < text.len();
+            let hang = if !hangs || hard {
                 0.0
             } else if opportunity.hyphen {
                 hang_end('-') * hyphen
@@ -159,6 +169,7 @@ impl LineLayout<'_> {
                 content_end,
                 next,
                 hyphen: opportunity.hyphen,
+                forced: opportunity.forced,
                 dash: matches!(
                     text[next..].chars().next(),
                     Some('-' | '\u{2010}' | '\u{2013}' | '\u{2014}')
@@ -171,11 +182,56 @@ impl LineLayout<'_> {
     }
 }
 
+/// Bytes of the line separator a line ends on at `end`, which is
+/// never drawn: a newline, a carriage return and the newline after
+/// it, or one of the other separators UAX #14 breaks after.
+fn newline_before(text: &str, end: usize) -> usize {
+    let before = &text[..end];
+    if before.ends_with("\r\n") {
+        return 2;
+    }
+    match before.chars().next_back() {
+        Some(separator @ ('\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}')) => {
+            separator.len_utf8()
+        }
+        _ => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::lines::testing::{
-        body, hyphenated, layout_body, layout_body_opts, line_text, units_per_em,
+        body, hyphenated, layout_body, layout_body_opts, layout_verse, line_text, units_per_em,
     };
+    use crate::lines::{HangEnd, HangingPunctuation, LineBreakOptions};
+
+    /// No mark hangs at a hard break. The same comma at a line end the
+    /// measure chose hangs past it.
+    #[test]
+    fn no_mark_hangs_at_a_hard_break() {
+        let forced = LineBreakOptions {
+            hanging: HangingPunctuation {
+                end: HangEnd::Force,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let broken = layout_verse(
+            "My father had a small estate,\nand I was the third of five sons.",
+            400.0,
+            forced,
+        );
+        assert_eq!(line_text(&broken[0]), "My father had a small estate,");
+        assert_eq!(broken[0].overhang, 0.0, "the comma hung at a hard break");
+
+        let wrapped = layout_body_opts(
+            "My father had a small estate, and I was the third of five sons.",
+            116.0,
+            forced,
+        );
+        assert_eq!(line_text(&wrapped[0]), "My father had a small estate,");
+        assert!(wrapped[0].overhang > 0.0, "the comma did not hang at all");
+    }
 
     /// Em-dash: UAX #14 allows the break after B2-class characters,
     /// so `word—word` has an opportunity mid-string.

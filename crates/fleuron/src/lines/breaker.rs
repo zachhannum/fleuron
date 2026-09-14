@@ -184,10 +184,10 @@ impl Breaker<'_> {
         };
         let width = natural - overhang;
 
-        let last = b == self.end();
-        // The last line of a paragraph fills whatever it fills: the
-        // glue that finishes it stretches without limit.
-        let (stretch, shrink) = if last {
+        // The last line of a paragraph fills whatever it fills, and so
+        // does a line a hard break ends: the glue that finishes it
+        // stretches without limit.
+        let (stretch, shrink) = if self.breaks[b].forced {
             let shrink = if self.options.justify {
                 spaces * SPACE_SHRINK
             } else {
@@ -236,6 +236,19 @@ impl Breaker<'_> {
         }
     }
 
+    /// The slot the line after `from` fills. A hard break ends the
+    /// band it falls in, so the line after one opens the next band
+    /// rather than the next span of the same band.
+    fn next_slot(&self, from: &Node) -> usize {
+        let mut filled = from.slot;
+        if filled > 0 && self.breaks[from.at].forced {
+            while filled - 1 < self.settled && !self.span(filled - 1).ends_band {
+                filled += 1;
+            }
+        }
+        filled + 1
+    }
+
     /// Whether the band the span at `index` sits in opens there.
     fn opens_band(&self, index: usize) -> bool {
         index == 0 || self.span(index - 1).ends_band
@@ -275,18 +288,32 @@ impl Breaker<'_> {
         let mut candidates: Vec<Candidate> = Vec::new();
 
         for b in self.from + 1..self.breaks.len() {
-            let forced = b == self.end();
+            let forced = self.breaks[b].forced;
             // The cheapest way to break here anyway, for a paragraph
             // that cannot be set inside the measure at all.
             let mut overfull: Option<Candidate> = None;
+            // A path a hard break cut before the opening line could
+            // end, for when it is the only path left.
+            let mut stranded: Option<Candidate> = None;
             let mut index = 0;
             while index < active.len() {
                 let a = active[index];
-                let slot = nodes[a].slot + 1;
+                let slot = self.next_slot(&nodes[a]);
                 // The opening line ends where the style over it does,
                 // so the text set in that style is the text on it.
                 if slot == self.first_band + 1 && self.opening.is_some_and(|end| end != b) {
-                    index += 1;
+                    // Past that end the node reaches nothing, and a
+                    // hard break before it ends the line anyway.
+                    let past = self.opening.is_some_and(|end| b > end);
+                    if forced && !past {
+                        let fit = self.fit(nodes[a].at, b, slot);
+                        stranded.get_or_insert_with(|| self.forced(&nodes[a], a, b, slot, &fit));
+                    }
+                    if forced || past {
+                        active.remove(index);
+                    } else {
+                        index += 1;
+                    }
                     continue;
                 }
                 let fit = self.fit(nodes[a].at, b, slot);
@@ -321,7 +348,11 @@ impl Breaker<'_> {
                 }
                 // Nothing fits and nothing is left to try: overflow
                 // the measure rather than drop the text.
-                candidates.push(overfull.expect("a line was too long to set"));
+                candidates.push(
+                    overfull
+                        .or(stranded)
+                        .expect("a line was too long to set"),
+                );
             }
             for candidate in candidates.drain(..) {
                 nodes.push(Node {
@@ -435,9 +466,10 @@ impl Breaker<'_> {
         if hyphens > MAX_CONSECUTIVE_HYPHENS {
             return None;
         }
-        // The last line is not stretched to the measure, so what is
-        // left at its right is not a fault to be charged for.
-        let ratio = if b == self.end() && fit.ratio > 0.0 {
+        // The last line, and a line a hard break ends, is not
+        // stretched to the measure, so what is left at its right is
+        // not a fault to be charged for.
+        let ratio = if self.breaks[b].forced && fit.ratio > 0.0 {
             0.0
         } else {
             fit.ratio
@@ -501,7 +533,40 @@ fn fitness(ratio: f32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::lines::testing::{hyphenated, layout_body, layout_body_opts, line_text};
+    use crate::lines::testing::{
+        hyphenated, layout_body, layout_body_opts, layout_verse, line_text,
+    };
+
+    /// A hard break ends the line wherever the measure would have
+    /// put a break. A measure wide enough for the whole stanza still
+    /// sets it as its four lines, and at a narrow one no line runs
+    /// across a break.
+    #[test]
+    fn a_hard_break_ends_the_line_at_any_measure() {
+        let stanza = "Shall I compare thee to a summer's day?\n\
+                      Thou art more lovely and more temperate:\n\
+                      Rough winds do shake the darling buds of May,\n\
+                      And summer's lease hath all too short a date;";
+        let written: Vec<&str> = stanza.lines().collect();
+        let wide: Vec<String> = layout_verse(stanza, 1000.0, Default::default())
+            .iter()
+            .map(line_text)
+            .collect();
+        assert_eq!(wide, written);
+
+        let narrow = layout_verse(stanza, 90.0, Default::default());
+        assert!(narrow.len() > written.len(), "nothing wrapped: {narrow:?}");
+        let mut set = narrow.iter().map(line_text);
+        for verse in written {
+            let mut line = set.next().expect("every verse line is set");
+            while line.len() < verse.len() {
+                let more = set.next().expect("the verse line is set whole");
+                line = format!("{line} {more}");
+            }
+            assert_eq!(line, verse, "a line ran across a hard break");
+        }
+        assert_eq!(set.next(), None);
+    }
 
     /// Acceptance: hyphenation never runs to three line ends in a
     /// row, whatever the demerits would otherwise say. A narrow
