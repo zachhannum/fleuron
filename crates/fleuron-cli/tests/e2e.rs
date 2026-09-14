@@ -317,6 +317,71 @@ fn the_display_typography_book_extracts_as_it_was_written() {
     }
 }
 
+/// Acceptance: a stanza of verse sets as its lines, and `pdftotext`
+/// reads them back as lines. `fixtures/verse.md` is a sonnet with a
+/// backslash at the end of each line, a heading broken the same way,
+/// and a letter's closing broken with two spaces. Every piece a hard
+/// break ends comes back as a line of its own, and every word of the
+/// book comes back in order.
+#[test]
+fn a_stanza_of_verse_reads_back_as_its_lines() {
+    let source = fixtures().join("verse.md");
+    let (pdf, _) = run("verse", &[source.as_path()], &[]);
+
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}{}",
+            String::from_utf8_lossy(&check.stdout),
+            String::from_utf8_lossy(&check.stderr),
+        );
+    }
+
+    let book = {
+        let markdown = std::fs::read_to_string(&source).expect("the fixture is checked in");
+        let name = source.display().to_string();
+        let (sections, warnings) =
+            fleuron_markdown::to_sections(&markdown, &name, &Options::default());
+        assert!(warnings.is_empty(), "the fixture is clean: {warnings:?}");
+        fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections)
+    };
+    let mut verses = Vec::new();
+    for block in book.sections.iter().flat_map(|section| &section.blocks) {
+        let (Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. }) = block else {
+            continue;
+        };
+        if inlines
+            .iter()
+            .any(|inline| matches!(inline, Inline::Break { .. }))
+        {
+            verses.extend(
+                fleuron::content::text(inlines)
+                    .split('\n')
+                    .map(String::from),
+            );
+        }
+    }
+    assert_eq!(
+        verses.len(),
+        2 + 14 + 3,
+        "a broken heading, a sonnet and a letter's closing: {verses:?}",
+    );
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    for verse in &verses {
+        assert!(
+            lines.contains(&verse.as_str()),
+            "pdftotext does not read {verse:?} back as a line:\n{text}",
+        );
+    }
+    if let Err(difference) = holds(&book, &strip_furniture(&text, None), squeeze, true) {
+        panic!("the PDF's prose is not the book's: {difference}");
+    }
+}
+
 /// Art behind the page and behind a block, through the fixture book:
 /// `fixtures/styled.css` puts a scan behind every chapter opening at
 /// `background-size: cover`, and tiles the ornament behind the
