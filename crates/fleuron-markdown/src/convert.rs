@@ -375,7 +375,13 @@ impl<'a> Converter<'a> {
             ),
             // A wrapped line is a space; the shaper never sees the
             // markdown's ragged column.
-            Event::SoftBreak | Event::HardBreak => self.text(" ", read),
+            Event::SoftBreak => self.text(" ", read),
+            Event::HardBreak => self.inline(Inline::Break {
+                id: Default::default(),
+                attributes: Attributes::default(),
+                position: Some(at),
+                span: Some(read.span),
+            }),
             Event::Rule => self.rule(read),
             Event::End(_) => {}
         }
@@ -1033,10 +1039,87 @@ mod tests {
         assert_eq!(inline_text(inlines), "Plain stressed plain.");
     }
 
+    /// Acceptance: a soft break is still a space.
     #[test]
     fn wrapped_lines_join_with_a_space() {
         let sections = read("# C\n\none\ntwo\n");
         assert_eq!(text_of(&sections[0].blocks[1]), "one two");
+        let Block::Paragraph { inlines, .. } = &sections[0].blocks[1] else {
+            panic!("expected a paragraph");
+        };
+        assert!(
+            !inlines.iter().any(|i| matches!(i, Inline::Break { .. })),
+            "{inlines:?}",
+        );
+    }
+
+    /// The inlines of a block that holds a hard break: the text
+    /// before it, the break, and the text after it.
+    fn broken(block: &Block) -> (&str, &str) {
+        let (Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. }) = block else {
+            panic!("expected text, got {block:?}");
+        };
+        match inlines.as_slice() {
+            [
+                Inline::Text { value: before, .. },
+                Inline::Break { .. },
+                Inline::Text { value: after, .. },
+            ] => (before, after),
+            other => panic!("expected text, a break and text, got {other:?}"),
+        }
+    }
+
+    /// Acceptance: two spaces at the end of a line break the line
+    /// and stay in the paragraph.
+    #[test]
+    fn two_spaces_at_the_end_of_a_line_break_it_in_the_paragraph() {
+        let markdown = "# C\n\nShall I compare thee  \nto a summer's day?\n";
+        let sections = read(markdown);
+        assert_eq!(sections[0].blocks.len(), 2, "{:?}", sections[0].blocks);
+        assert_eq!(
+            broken(&sections[0].blocks[1]),
+            ("Shall I compare thee", "to a summer's day?"),
+        );
+        assert_eq!(
+            text_of(&sections[0].blocks[1]),
+            "Shall I compare thee\nto a summer's day?"
+        );
+    }
+
+    /// Acceptance: a backslash at the end of a line does the same,
+    /// and the break spans the backslash and the newline it was
+    /// read from.
+    #[test]
+    fn a_backslash_at_the_end_of_a_line_breaks_it_in_the_paragraph() {
+        let markdown = "# C\n\nShall I compare thee\\\nto a summer's day?\n";
+        let sections = read(markdown);
+        assert_eq!(sections[0].blocks.len(), 2, "{:?}", sections[0].blocks);
+        assert_eq!(
+            broken(&sections[0].blocks[1]),
+            ("Shall I compare thee", "to a summer's day?"),
+        );
+        let Block::Paragraph { inlines, .. } = &sections[0].blocks[1] else {
+            panic!("expected a paragraph");
+        };
+        let span = inline_span(&inlines[1]).expect("the break was read from somewhere");
+        assert_eq!(&markdown[span.start as usize..span.end as usize], "\\\n");
+    }
+
+    /// Acceptance: a backslash at the end of a line in a setext
+    /// heading breaks the heading and stays in it.
+    #[test]
+    fn a_backslash_in_a_setext_heading_breaks_the_heading() {
+        let markdown = "Chapter One\\\nThe Voyage to Lilliput\n======================\n\nProse.\n";
+        let sections = read(markdown);
+        let Block::Heading { level, .. } = &sections[0].blocks[0] else {
+            panic!("expected a heading, got {:?}", sections[0].blocks);
+        };
+        assert_eq!(*level, HeadingLevel::H1);
+        assert_eq!(sections[0].blocks.len(), 2, "{:?}", sections[0].blocks);
+        assert_eq!(
+            broken(&sections[0].blocks[0]),
+            ("Chapter One", "The Voyage to Lilliput"),
+        );
     }
 
     #[test]
