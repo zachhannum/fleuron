@@ -7,7 +7,7 @@
 use fleuron::LayoutOutput;
 use fleuron::content::Book;
 use fleuron::fonts::{FontRegistry, bundled_registry};
-use fleuron::images::Assets;
+use fleuron::images::{Assets, ImageLoader};
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page, Side};
 use fleuron::style::{PageQuery, Situation, Source, StyleTree, Stylesheets};
@@ -361,6 +361,84 @@ fn two_layouts_of_the_fixture_are_byte_identical() {
         serde_json::to_vec(&once).expect("a layout serializes"),
         serde_json::to_vec(&twice).expect("a layout serializes"),
     );
+}
+
+/// A PNG header and nothing else, two inches square at 96dpi.
+struct Plate;
+
+impl ImageLoader for Plate {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        (url == "image.png").then(|| {
+            let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+            bytes.extend(13u32.to_be_bytes());
+            bytes.extend(b"IHDR");
+            bytes.extend(192u32.to_be_bytes());
+            bytes.extend(192u32.to_be_bytes());
+            bytes.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+            bytes
+        })
+    }
+}
+
+/// A list that opens under an image the sheet anchors to the page,
+/// and the box the image paints on the first page.
+fn beside_an_image(css: &str) -> (LayoutOutput, (f32, f32, f32, f32)) {
+    let items: String = (1..=8)
+        .map(|item| format!("- item {item} {}\n", "words to wrap ".repeat(6)))
+        .collect();
+    let book = read(&format!("![a plate](image.png)\n\n{items}"));
+    let styles = styled(&book, css);
+    let assets = Assets::probe(&book, &styles, &Plate);
+    let output = layout_book(&book, &styles, registry(), &assets);
+    let plate = output.pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+            _ => None,
+        })
+        .expect("the first page paints the image");
+    (output, plate)
+}
+
+/// A marker beside an image that its item wraps around keeps clear of
+/// the image, and stays to the left of its item. This holds where the
+/// image pushes the text over, and where the image reaches only the
+/// marker.
+#[test]
+fn a_marker_keeps_clear_of_an_image_its_item_wraps_around() {
+    let (indent, _) = indent_and_size();
+    for left in [0.0, indent - 146.0] {
+        let css = format!("img {{ position: absolute; top: 0; left: {left}pt; wrap-flow: end }}");
+        let (output, (x, y, w, h)) = beside_an_image(&css);
+        let page = runs(&output.pages[0]);
+        let beside: Vec<&Run> = page
+            .iter()
+            .filter(|run| !run.named && run.y > y && run.y < y + h)
+            .collect();
+        assert!(
+            !beside.is_empty(),
+            "left {left}: no marker beside the image"
+        );
+        for marker in beside {
+            assert!(
+                marker.x >= x + w - 0.05,
+                "left {left}: the marker at {} is over the image, which ends at {}",
+                marker.x,
+                x + w,
+            );
+            let item = page
+                .iter()
+                .filter(|run| run.named && close(run.y, marker.y))
+                .map(|run| run.x)
+                .fold(f32::MAX, f32::min);
+            assert!(
+                marker.right < item,
+                "left {left}: the marker at {} runs into its item at {item}",
+                marker.x,
+            );
+        }
+    }
 }
 
 /// Every text run and rect of every page, one line each, in paint

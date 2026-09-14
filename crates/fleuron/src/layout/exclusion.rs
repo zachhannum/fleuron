@@ -522,7 +522,20 @@ impl Flow<'_, '_> {
             let lead = if self.opening() { 0.0 } else { set[at].lead };
             let top = self.cursor + lead + set[at].fixed;
             let from = if at == 0 { 0 } else { ends[at - 1] };
-            let profile = self.profile(top, reflow, from == 0);
+            // The markers of the items the paragraph opens hang before
+            // its first line, and keep clear of an image as it does.
+            let hung = original[0]
+                .markers
+                .as_ref()
+                .filter(|_| from == 0)
+                .map(|markers| {
+                    markers
+                        .iter()
+                        .map(|marker| marker.x)
+                        .fold(f32::MAX, f32::min)
+                        - reflow.setting.x
+                });
+            let profile = self.profile(top, reflow, from == 0, hung);
             if profile.is_some() || narrowed {
                 narrowed = profile.is_some();
                 let profile = profile.unwrap_or_else(|| Profile::plain(reflow, from == 0));
@@ -542,6 +555,17 @@ impl Flow<'_, '_> {
                     &reflow.setting.wrapped(from == 0, profile.letter),
                 );
                 carry_over(&mut fresh, &set[at..]);
+                if from == 0
+                    && let Some(first) = fresh.first_mut()
+                {
+                    let moved = profile.measure.at(0).origin - reflow.base.at(0).origin;
+                    first.markers = original[0].markers.clone().map(|mut markers| {
+                        for marker in markers.iter_mut() {
+                            marker.x += moved;
+                        }
+                        markers
+                    });
+                }
                 set = Cow::Owned(fresh);
                 ends = Cow::Owned(broken.ends);
                 at = 0;
@@ -625,7 +649,16 @@ impl Flow<'_, '_> {
     /// paragraph's own leading, so a line is either set beside it or
     /// clear of it. A band it covers the whole of is a band nothing
     /// is set in, and the paragraph goes on below it.
-    fn profile(&self, top: f32, reflow: &Reflow, opening: bool) -> Option<Profile> {
+    ///
+    /// `hung` is where the markers of the list items the paragraph
+    /// opens start, from its leading edge.
+    fn profile(
+        &self,
+        top: f32,
+        reflow: &Reflow,
+        opening: bool,
+        hung: Option<f32>,
+    ) -> Option<Profile> {
         // The bands are the paragraph's own, from its leading edge.
         // The images are the column's. One of them has to move.
         let holes: Vec<Hole> = self
@@ -677,7 +710,10 @@ impl Flow<'_, '_> {
                 (true, None) => reflow.base.at(band),
                 (false, None) => plain,
             };
-            let mut free = clear(base, &holes, y, y + leading, narrowest);
+            let mut free = match hung.filter(|_| opening && band == 0 && sunk.is_none()) {
+                Some(hung) => clear_hung(base, hung, &holes, y, y + leading, narrowest),
+                None => clear(base, &holes, y, y + leading, narrowest),
+            };
             if let Some(cap) = sunk {
                 // Where the letter goes is settled on the first of
                 // its bands and held for the rest of them.
@@ -882,6 +918,41 @@ fn clear(base: Span, holes: &[Hole], top: f32, bottom: f32, narrowest: f32) -> V
     free.into_iter()
         .map(|(start, end)| (start, end - start))
         .collect()
+}
+
+/// What one band has left of it for the line a list item opens on,
+/// where the item's markers start at `hung`. The markers keep their
+/// distance from the text, so an image in the way of either moves both.
+fn clear_hung(
+    base: Span,
+    hung: f32,
+    holes: &[Hole],
+    top: f32,
+    bottom: f32,
+    narrowest: f32,
+) -> Vec<(f32, f32)> {
+    let before = base.origin - hung;
+    if before <= 0.0 {
+        return clear(base, holes, top, bottom, narrowest);
+    }
+    let mut free = clear(
+        Span::band(hung, base.width + before),
+        holes,
+        top,
+        bottom,
+        narrowest,
+    );
+    while let Some(&(start, width)) = free.first() {
+        if start == hung && width - before >= narrowest {
+            return clear(base, holes, top, bottom, narrowest);
+        }
+        if width - before >= narrowest {
+            free[0] = (start + before, width - before);
+            break;
+        }
+        free.remove(0);
+    }
+    free
 }
 
 /// The leftmost and rightmost point a contour reaches between two
