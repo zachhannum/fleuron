@@ -402,7 +402,31 @@ The pseudo-elements are `::first-letter`, `::first-line`, `::before`, and `::aft
 
 Each pseudo-element starts from the style of the element it belongs to, so a rule on `p::first-letter` begins with that paragraph's own font and size. `::first-letter` produces [a drop cap](#drop-caps), and `::first-line` styles [a paragraph's opening line](#first-lines). Where both apply to the same paragraph, `::first-letter` takes the initial letter and `::first-line` styles the rest of that line.
 
-`::before` adds text before an inline element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, or code. The `content` property holds the text. The text properties style it. A rule with no `content` adds nothing. If the rule selects a block, the engine warns and adds nothing. See [Cross-references](#cross-references) for how `content` prints the page number or the text of another element.
+`::before` and `::after` add content to an element. The `content` property holds what they add. A rule with no `content`, or with `content: none`, adds nothing. See [Cross-references](#cross-references) for how to print the page number or the text of another element in `content`.
+
+On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, or code. The text properties style that text.
+
+On a block or a section, `::before` adds a box as the first child, and `::after` adds a box as the last child. The box is as wide as the content box of the element. It takes the text properties of the element, and a rule on the pseudo-element overrides them.
+
+The box also takes the properties under [Blocks](#blocks): a margin, a border, padding, a height, and a background. It takes up height like any other block, so the blocks under it move down. A page break does not separate the box from its element.
+
+`content` in the box holds a string, or a reference to a target you write, such as `target-counter("#glossary", page)`. An empty string gives a box with no text. `attr(href url)` is the url of a link, so a block has none. The engine warns about it and adds nothing.
+
+The following example draws a rule under every `h4` heading and puts an opening quotation mark before every quotation:
+
+```css
+h4::after {
+  content: "";
+  height: 2pt;
+  background-color: #d6075e;
+}
+
+blockquote::before {
+  content: "\201C";
+}
+```
+
+A book, a table row, a table cell, `thead`, and `tbody` take no box. If a rule adds one to them, the engine warns and adds nothing.
 
 ## Declarations, values, and units
 
@@ -1042,7 +1066,7 @@ a.see::after {
 }
 ```
 
-A reference prints only in `::before` and `::after` on an inline element. If a reference names a source, a heading, or an id that the book does not have, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for `attr(href url)` on an element that is not a link. A reference to a web address, such as `https://example.com`, prints nothing, and the engine does not warn.
+A reference prints only in `::before` and `::after`. If a reference names a source, a heading, or an id that the book does not have, the pseudo-element prints nothing. The engine warns and names the line and column of the link. The engine does the same for `attr(href url)` on an element that is not a link. A reference to a web address, such as `https://example.com`, prints nothing, and the engine does not warn.
 
 ### Two layouts
 
@@ -1223,7 +1247,7 @@ code { font-family: monospace }
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
-| generated content | `::before` and `::after` on a block, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
+| generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on a pseudo-element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |
