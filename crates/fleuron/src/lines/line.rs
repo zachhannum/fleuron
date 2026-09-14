@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use crate::content::SourceRange;
+use crate::content::{NodeId, SourceRange};
 use crate::fonts::{Features, ShapedGlyph};
 use crate::linebox::LineBox;
 use crate::style::Color;
@@ -35,6 +35,9 @@ pub struct ShapedRun {
     /// the bytes of that node's own text it stands for. `None` for
     /// text no node was walked for: page furniture, an ornament.
     pub origin: Option<SourceRange>,
+    /// The pseudo-element the run was cut from, where it was cut from
+    /// one.
+    pub pseudo_element: Option<NodeId>,
     /// The features the run was shaped with.
     pub features: Features,
     /// What the run is painted in.
@@ -297,6 +300,7 @@ pub(super) fn cut_runs(
             // Where the run was written is settled once the
             // paragraph is broken, by `tile`.
             origin: None,
+            pseudo_element: None,
             features: spec.features,
             color: spec.color,
             glyphs,
@@ -331,6 +335,7 @@ pub(super) fn tile(lines: &mut [Line], flat: &FlatParagraph) {
     for run in lines.iter_mut().flat_map(|line| &mut line.runs) {
         let to = ends.next().unwrap_or(flat.text.len());
         run.origin = flat.origin_of(after, run.text_start as usize, to);
+        run.pseudo_element = flat.pseudo_element_of(run.origin.as_ref(), run.text_start as usize);
         after = run.origin.as_ref().map(|origin| origin.node);
     }
 }

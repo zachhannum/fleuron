@@ -454,7 +454,7 @@ proptest! {
             LineBreakOptions::default(),
             fleuron::lines::Opening {
                 first_line,
-                taken: 0,
+                ..fleuron::lines::Opening::default()
             },
         );
         let lines = broken();

@@ -182,10 +182,12 @@ export interface MatchedRule {
 
 /** What styled one element or one margin box, and where it is on the pages. */
 export interface Inspection {
-  /** The node the answer is about: the element asked about, or the element that holds the text asked about. `null` for a margin box. */
+  /** The node the answer is about: the element or pseudo-element asked about, or the element that holds the text asked about. `null` for a margin box. */
   node: number | null;
-  /** The element name selectors match, or the margin box's at-rule, as `@top-left`. */
+  /** The element name selectors match, or the margin box's at-rule, as `@top-left`. For a pseudo-element, the element it belongs to. */
   element: string;
+  /** For a pseudo-element, its name as CSS writes it, as `::first-letter`. */
+  pseudoElement?: string;
   /** The id a selector reaches it by. */
   id: string | null;
   /** The classes a selector reaches it by. */

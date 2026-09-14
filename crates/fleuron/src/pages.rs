@@ -143,11 +143,16 @@ pub enum DrawItem {
         /// from and the bytes of that node's own text it stands for.
         /// The runs that name one node tile it, so a cursor in the
         /// manuscript lands on a run and a run lands back on the
-        /// manuscript. Absent on text the engine adds to the book: a
-        /// folio, a running head, a scene break's ornament, a table's
-        /// header row set again on a later page, and the text of
-        /// `::before` and `::after`.
+        /// manuscript. The text of `::before` and `::after` names the
+        /// id of that pseudo-element. Absent on text the engine adds
+        /// to the book: a folio, a running head, a scene break's
+        /// ornament, and a table's header row set again on a later
+        /// page.
         origin: Option<SourceRange>,
+        /// The pseudo-element the run was cut from: a drop cap, the
+        /// line a paragraph opens on, or the text of `::before` or
+        /// `::after`. `origin` still names the text it stands for.
+        pseudo_element: Option<NodeId>,
         /// The features the run was shaped with. A painter that draws
         /// characters asks the face for these; one that draws glyphs
         /// has the answer already.

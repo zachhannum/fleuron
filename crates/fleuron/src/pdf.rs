@@ -248,6 +248,7 @@ fn paint(
             // page of a PDF does not move.
             features: _,
             origin: _,
+            pseudo_element: _,
             // The page's items arrived in paint order, so the layer
             // that put them in it is spent.
             layer: _,
@@ -831,6 +832,7 @@ mod tests {
             source: String::new(),
             source_map: Vec::new(),
             origin: None,
+            pseudo_element: None,
             features: Features::NONE,
             color: Color::BLACK,
             layer: 0,

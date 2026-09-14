@@ -121,7 +121,7 @@ pub(super) fn layout_first(
         LineBreakOptions::default(),
         Opening {
             first_line,
-            taken: 0,
+            ..Opening::default()
         },
     )
 }

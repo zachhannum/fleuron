@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::content::{
-    Block, GeneratedBox, Inline, NodeId, Section, SourcePos, block_attributes, block_id,
+    Block, Inline, NodeId, PseudoElement, Section, SourcePos, block_attributes, block_id,
     block_position, inline_attributes, inline_id, origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
@@ -166,13 +166,13 @@ pub(super) fn children<'b>(
 ) -> impl Iterator<Item = Child<'b>> + use<'b> {
     let generated = |which| {
         styles
-            .generated_box(id, which)
+            .pseudo_element(id, which)
             .map(|id| Child::Generated(id, position))
     };
-    generated(GeneratedBox::Before)
+    generated(PseudoElement::Before)
         .into_iter()
         .chain(blocks.iter().map(Child::Block))
-        .chain(generated(GeneratedBox::After))
+        .chain(generated(PseudoElement::After))
 }
 
 /// A block that asks for a height, while its fragments are still being
@@ -579,9 +579,9 @@ impl Builder<'_, '_> {
                     let style = styles.style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
-                    self.pseudo(*id, GeneratedBox::Before, position, inner, narrowed);
+                    self.pseudo(*id, PseudoElement::Before, position, inner, narrowed);
                     self.ornament(&style, x, measure);
-                    self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
+                    self.pseudo(*id, PseudoElement::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::Image { id, url, .. } => {
@@ -594,9 +594,9 @@ impl Builder<'_, '_> {
                     };
                     let start = self.open(*id, &boxed, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
-                    self.pseudo(*id, GeneratedBox::Before, position, inner, narrowed);
+                    self.pseudo(*id, PseudoElement::Before, position, inner, narrowed);
                     self.image(&style, url, origin(self.source, position), x, measure);
-                    self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
+                    self.pseudo(*id, PseudoElement::After, position, inner, narrowed);
                     self.close(&boxed, start);
                 }
                 Block::List {
@@ -634,7 +634,7 @@ impl Builder<'_, '_> {
         let computed = self.styles().style(id).clone();
         let start = self.open(id, &computed, inlines, x, measure);
         let (x, measure) = computed.content_box(x, measure);
-        self.pseudo(id, GeneratedBox::Before, position, x, measure);
+        self.pseudo(id, PseudoElement::Before, position, x, measure);
 
         let style = computed.paragraph();
         let options = self.options(&computed);
@@ -661,6 +661,7 @@ impl Builder<'_, '_> {
         let opening = Opening {
             first_line: self.styles().opening_line(id),
             taken: cap.as_ref().map_or(0, |(_, taken)| *taken),
+            node: id,
         };
         let referring = Referring {
             paginator: self.paginator,
@@ -694,7 +695,7 @@ impl Builder<'_, '_> {
             fragment.reflow = reflow.clone();
             self.emit(&mut first, fragment);
         }
-        self.pseudo(id, GeneratedBox::After, position, x, measure);
+        self.pseudo(id, PseudoElement::After, position, x, measure);
         self.close(&computed, start);
     }
 
@@ -720,14 +721,14 @@ impl Builder<'_, '_> {
     pub(super) fn pseudo(
         &mut self,
         element: NodeId,
-        which: GeneratedBox,
+        which: PseudoElement,
         position: Option<SourcePos>,
         x: f32,
         measure: f32,
     ) {
         let child = self
             .styles()
-            .generated_box(element, which)
+            .pseudo_element(element, which)
             .map(|id| Child::Generated(id, position));
         self.blocks(child, x, measure);
     }
@@ -737,7 +738,7 @@ impl Builder<'_, '_> {
     /// It holds the text of its `content`, or nothing. A page does not
     /// end between the box and the rest of its element.
     fn generated(&mut self, id: NodeId, position: Option<SourcePos>, x: f32, measure: f32) {
-        let Some((_, which)) = id.generated_box() else {
+        let Some((_, which)) = id.pseudo_element() else {
             return;
         };
         let mut style = self.styles().style(id).clone();
@@ -747,7 +748,7 @@ impl Builder<'_, '_> {
         if style.z_index == 0 {
             style.z_index = layer;
         }
-        if which == GeneratedBox::After {
+        if which == PseudoElement::After {
             self.ask(Break::Avoid);
         }
         let start = self.open(id, &style, &[], x, measure);
@@ -783,7 +784,7 @@ impl Builder<'_, '_> {
         }
         self.close(&style, start);
         self.layer = layer;
-        if which == GeneratedBox::Before {
+        if which == PseudoElement::Before {
             self.ask(Break::Avoid);
         }
     }

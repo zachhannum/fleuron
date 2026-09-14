@@ -77,6 +77,7 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
                 // own; one that was is covered where the transform is.
                 source: String::new(),
                 source_map: Vec::new(),
+                pseudo_element: origin.as_ref().map(|origin| origin.node),
                 origin,
                 features: fleuron::fonts::Features::NONE,
                 color,

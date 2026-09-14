@@ -281,8 +281,14 @@ impl<'a, 'p> Flow<'a, 'p> {
                 // so the runs that name a node still tile it once.
                 let mut items = row.items.clone();
                 for item in &mut items {
-                    if let DrawItem::Text { origin, .. } = item {
+                    if let DrawItem::Text {
+                        origin,
+                        pseudo_element,
+                        ..
+                    } = item
+                    {
                         *origin = None;
+                        *pseudo_element = None;
                     }
                 }
                 shift(&mut items, fragment.offset.0, fragment.offset.1);

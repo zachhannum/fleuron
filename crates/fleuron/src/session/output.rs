@@ -86,7 +86,7 @@ impl Session<'_> {
                     ..
                 } = item
                 {
-                    reached(origin.node);
+                    reached(origin.node.element());
                 }
             }
         }
