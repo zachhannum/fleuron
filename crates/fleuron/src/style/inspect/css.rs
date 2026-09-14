@@ -8,8 +8,8 @@ use crate::style::sheet::PROPERTIES;
 use crate::style::{
     BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderStyle, BoxDecorationBreak,
     Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edges, Family,
-    FontStyle, FontVariantCaps, Hyphens, Inset, Position, ShapeOutside, StringPiece, StringSet,
-    Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
+    FontStyle, FontVariantCaps, Hyphens, Inset, ListStyleType, Position, ShapeOutside, StringPiece,
+    StringSet, Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 
 /// The computed value of every property a style rule can declare.
@@ -79,6 +79,7 @@ fn value(style: &ComputedStyle, property: &str) -> String {
             BorderCollapse::Collapse => "collapse",
         }
         .into(),
+        "list-style-type" => ListStyleType::keyword(style.list_style_type).into(),
         "content" => content(&style.content),
         "string-set" => string_set(&style.string_set),
         "counter-reset" => match style.counter_reset {

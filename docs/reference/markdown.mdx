@@ -100,12 +100,28 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `> …` | `blockquote`, nesting |
 | `---` | `thematic_break` |
 | `![alt](url)` | `image`, as a block |
+| `- item` or `1. item` | `list`, with an item for each marker |
 | a table | `table`, with a row for each line and a cell for each column |
 | `{.class #id}` on a line of its own | the classes and id of the block under it |
 
 An image is a block in the vocabulary and inline in markdown. One written on a line of its own is that block. One written among prose becomes a block directly after the paragraph it appeared in, alt text and all. Moving it changes the page, so it warns.
 
 The string in `![](…)` is the name the image is matched under, and it does not have to be a real URL. The host supplies the bytes under that name, the engine reads the header for the intrinsic size, and a name nothing is supplied for is a warning and a gap.
+
+## Lists
+
+A list in markdown becomes a `list` in the tree. Each item holds blocks, so a list that is indented under an item becomes a block of that item.
+
+A list whose markers are numbers is ordered. `start` is the number on its first item, so the following list counts from 7:
+
+```markdown
+7. That the said man-mountain shall help our workmen.
+8. That he shall deliver an exact survey of our dominions.
+```
+
+A list with no blank line between its items is tight. A blank line between any two items makes the list loose, and each item of a loose list holds paragraphs. In a tight item, the text is not in a `p` element, as HTML writes `<li>text</li>`. So `li > p` in a stylesheet selects only the paragraphs of a loose list.
+
+An attribute line above a list names the list, not its first item.
 
 ## Tables
 
@@ -283,7 +299,6 @@ These constructs have no counterpart in the content tree. The frontend lays them
 
 | construct | becomes |
 |---|---|
-| a list | one paragraph per item |
 | a code block | a paragraph |
 | a definition list | one paragraph per entry |
 | a footnote | prose where the definition was written |

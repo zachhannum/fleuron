@@ -2,8 +2,8 @@
 //!
 //! The markdown frontend produces this; the element vocabulary is
 //! bounded by what a book needs — book/section, heading, paragraph,
-//! blockquote, thematic break, image, table, emphasis/strong/code,
-//! link, hard break.
+//! blockquote, thematic break, image, list, table,
+//! emphasis/strong/code, link, hard break.
 //!
 //! This module is the **input contract**: everything downstream (style,
 //! box construction, layout) consumes these types, and nothing widens
@@ -403,6 +403,36 @@ pub enum Block {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// A list of items, numbered or not. An item holds blocks, as a
+    /// blockquote does, so a list nests inside an item of another.
+    List {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// Whether the items are numbered.
+        #[serde(default)]
+        ordered: bool,
+        /// The number of the first item of a numbered list.
+        #[serde(default = "first_number", skip_serializing_if = "is_first_number")]
+        start: u32,
+        /// Whether the source wrote the items without blank lines
+        /// between them: a list of phrases rather than a list of
+        /// paragraphs.
+        #[serde(default)]
+        tight: bool,
+        /// The items, in reading order.
+        #[serde(default)]
+        items: Vec<ListItem>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// A grid of cells. A cell holds blocks, as a blockquote does.
     Table {
         /// Engine-assigned identity, for diagnostics; never serialized.
@@ -477,6 +507,40 @@ impl TryFrom<u8> for HeadingLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("heading level must be 1-6, got {0}")]
 pub struct InvalidHeadingLevel(pub u8);
+
+/// What a numbered list counts from when the source names no start.
+fn first_number() -> u32 {
+    1
+}
+
+fn is_first_number(start: &u32) -> bool {
+    *start == 1
+}
+
+/// One item of a list.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ListItem {
+    /// Engine-assigned identity, for diagnostics; never serialized.
+    #[serde(skip)]
+    pub id: NodeId,
+    /// The item's content, in reading order. An empty item has none.
+    #[serde(default)]
+    pub blocks: Vec<Block>,
+    /// What a sheet names it by.
+    #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+    pub attributes: Attributes,
+    /// Where the frontend read this from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<SourcePos>,
+    /// The bytes of that source it was read from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<SourceSpan>,
+}
+
+/// The blocks of every item of a list, in reading order.
+pub fn item_blocks(items: &[ListItem]) -> impl Iterator<Item = &[Block]> {
+    items.iter().map(|item| item.blocks.as_slice())
+}
 
 /// One row of a table.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -788,11 +852,28 @@ fn subtree_in_blocks(blocks: &[Block], node: NodeId) -> Option<Range<u32>> {
                 subtree_in_inlines(inlines, node)
             }
             Block::Blockquote { blocks, .. } => subtree_in_blocks(blocks, node),
+            Block::List { items, .. } => subtree_in_items(items, node),
             Block::Table { head, body, .. } => subtree_in_rows(rows(head, body), node),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
     }
     None
+}
+
+/// The same, over the items of one list.
+fn subtree_in_items(items: &[ListItem], node: NodeId) -> Option<Range<u32>> {
+    let item = items
+        .iter()
+        .find(|item| (item.id.get()..item.id.get() + item_nodes(item)).contains(&node.get()))?;
+    if item.id == node {
+        return Some(item.id.get()..item.id.get() + item_nodes(item));
+    }
+    subtree_in_blocks(&item.blocks, node)
+}
+
+/// How many ids one list item holds, itself included.
+fn item_nodes(item: &ListItem) -> u32 {
+    1 + item.blocks.iter().map(block_nodes).sum::<u32>()
 }
 
 /// The same, over the inlines of one block.
@@ -823,6 +904,7 @@ fn block_nodes(block: &Block) -> u32 {
             inlines.iter().map(inline_nodes).sum()
         }
         Block::Blockquote { blocks, .. } => blocks.iter().map(block_nodes).sum(),
+        Block::List { items, .. } => items.iter().map(item_nodes).sum(),
         Block::Table { head, body, .. } => rows(head, body).map(row_nodes).sum(),
         Block::ThematicBreak { .. } | Block::Image { .. } => 0,
     }
@@ -907,6 +989,7 @@ fn node_in_blocks(blocks: &[Block], byte: u32) -> Option<(NodeId, SourceSpan)> {
                 node_in_inlines(inlines, byte)
             }
             Block::Blockquote { blocks, .. } => node_in_blocks(blocks, byte),
+            Block::List { items, .. } => node_in_items(items, byte),
             Block::Table { head, body, .. } => node_in_rows(rows(head, body), byte),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
@@ -952,6 +1035,7 @@ fn span_in_blocks(blocks: &[Block], node: NodeId) -> Option<SourceSpan> {
                 span_in_inlines(inlines, node)
             }
             Block::Blockquote { blocks, .. } => span_in_blocks(blocks, node),
+            Block::List { items, .. } => span_in_items(items, node),
             Block::Table { head, body, .. } => span_in_rows(rows(head, body), node),
             Block::ThematicBreak { .. } | Block::Image { .. } => None,
         };
@@ -960,6 +1044,29 @@ fn span_in_blocks(blocks: &[Block], node: NodeId) -> Option<SourceSpan> {
         }
     }
     None
+}
+
+/// The innermost item, block or inline of a list a byte was read
+/// into.
+fn node_in_items(items: &[ListItem], byte: u32) -> Option<(NodeId, SourceSpan)> {
+    items.iter().find_map(|item| {
+        let span = item.span.filter(|span| span.covers(byte))?;
+        Some(narrowest(
+            (item.id, span),
+            node_in_blocks(&item.blocks, byte),
+        ))
+    })
+}
+
+/// The span of one node of a list's items, by id.
+fn span_in_items(items: &[ListItem], node: NodeId) -> Option<SourceSpan> {
+    items.iter().find_map(|item| {
+        if item.id == node {
+            item.span
+        } else {
+            span_in_blocks(&item.blocks, node)
+        }
+    })
 }
 
 /// The same, over the inlines of one block.
@@ -1030,6 +1137,7 @@ pub fn block_attributes(block: &Block) -> &Attributes {
         | Block::Blockquote { attributes, .. }
         | Block::ThematicBreak { attributes, .. }
         | Block::Image { attributes, .. }
+        | Block::List { attributes, .. }
         | Block::Table { attributes, .. } => attributes,
     }
 }
@@ -1054,6 +1162,7 @@ pub fn block_position(block: &Block) -> Option<SourcePos> {
         | Block::Blockquote { position, .. }
         | Block::ThematicBreak { position, .. }
         | Block::Image { position, .. }
+        | Block::List { position, .. }
         | Block::Table { position, .. } => *position,
     }
 }
@@ -1078,6 +1187,7 @@ pub fn block_id(block: &Block) -> NodeId {
         | Block::Blockquote { id, .. }
         | Block::ThematicBreak { id, .. }
         | Block::Image { id, .. }
+        | Block::List { id, .. }
         | Block::Table { id, .. } => *id,
     }
 }
@@ -1090,6 +1200,7 @@ pub fn block_span(block: &Block) -> Option<SourceSpan> {
         | Block::Blockquote { span, .. }
         | Block::ThematicBreak { span, .. }
         | Block::Image { span, .. }
+        | Block::List { span, .. }
         | Block::Table { span, .. } => *span,
     }
 }
@@ -1140,6 +1251,15 @@ fn assign_block(block: &mut Block, next: &mut u32) {
         }
         Block::ThematicBreak { id, .. } | Block::Image { id, .. } => {
             *id = next_id(next);
+        }
+        Block::List { id, items, .. } => {
+            *id = next_id(next);
+            for item in items {
+                item.id = next_id(next);
+                for nested in &mut item.blocks {
+                    assign_block(nested, next);
+                }
+            }
         }
         Block::Table { id, head, body, .. } => {
             *id = next_id(next);
@@ -1203,6 +1323,9 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
 
 ![The drawer of knives](images/drawer.png)
 
+1. A watch
+2. A purse
+
 | Pocket | Found |
 |:---|---:|
 | Right | A handkerchief |
@@ -1227,6 +1350,94 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
             position: None,
             span: span(value),
         }
+    }
+
+    /// An item of the sample list: one paragraph of one run, the item
+    /// spanning the line it was written on.
+    fn item(line: &str, value: &str) -> ListItem {
+        ListItem {
+            blocks: vec![Block::Paragraph {
+                id: NodeId::UNASSIGNED,
+                inlines: vec![text(value)],
+                attributes: Attributes::default(),
+                position: None,
+                span: span(value),
+            }],
+            span: span(line),
+            ..ListItem::default()
+        }
+    }
+
+    /// A list serializes as its items and each item as its blocks. A
+    /// list that counts from one leaves `start` out.
+    #[test]
+    fn a_list_serializes_as_items_of_blocks() {
+        let list = sample_book().sections[0].blocks[5].clone();
+        let json = serde_json::to_value(&list).unwrap();
+        assert_eq!(json["type"], "list");
+        assert_eq!(json["ordered"], true);
+        assert_eq!(json["tight"], true);
+        assert!(json.get("start").is_none(), "{json}");
+        assert_eq!(
+            json["items"][1]["blocks"][0]["inlines"][0]["value"],
+            "A purse"
+        );
+
+        let Block::List {
+            ordered,
+            tight,
+            items,
+            attributes,
+            position,
+            span,
+            ..
+        } = list
+        else {
+            panic!("the sixth block is a list");
+        };
+        let seventh = Block::List {
+            id: NodeId::UNASSIGNED,
+            ordered,
+            start: 7,
+            tight,
+            items,
+            attributes,
+            position,
+            span,
+        };
+        let json = serde_json::to_value(&seventh).unwrap();
+        assert_eq!(json["start"], 7);
+        let read: Block = serde_json::from_value(json).unwrap();
+        assert_eq!(read, seventh);
+    }
+
+    /// A list is numbered like every other node: the list before its
+    /// items, an item before what it holds. A byte of an item answers
+    /// with the run typed into it, and a byte of its marker with the
+    /// item.
+    #[test]
+    fn a_list_numbers_its_items_and_a_byte_of_one_answers_with_its_run() {
+        let mut book = sample_book();
+        book.assign_node_ids();
+        let Block::List { id, items, .. } = &book.sections[0].blocks[5] else {
+            panic!("the sixth block is a list");
+        };
+        assert!(*id < items[0].id);
+        assert!(items[0].id < block_id(&items[0].blocks[0]));
+        assert!(block_id(&items[0].blocks[0]) < items[1].id);
+        let held = book.subtree(*id).expect("the book holds the list");
+        assert!(held.contains(&block_id(&items[1].blocks[0]).get()));
+
+        let Block::Paragraph { inlines, .. } = &items[1].blocks[0] else {
+            panic!("the item holds a paragraph");
+        };
+        let byte = SOURCE.find("purse").unwrap() as u32;
+        assert_eq!(
+            book.node_at("chapter-01.md", byte),
+            Some(inline_id(&inlines[0]))
+        );
+        let marker = SOURCE.find("2. A purse").unwrap() as u32;
+        assert_eq!(book.node_at("chapter-01.md", marker), Some(items[1].id));
     }
 
     /// A row of the sample table, spanning the line it was written on.
@@ -1416,6 +1627,22 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         position: Some(SourcePos { line: 9, column: 1 }),
                         span: span("![The drawer of knives](images/drawer.png)"),
                     },
+                    Block::List {
+                        id: NodeId::UNASSIGNED,
+                        ordered: true,
+                        start: 1,
+                        tight: true,
+                        items: vec![
+                            item("1. A watch\n", "A watch"),
+                            item("2. A purse\n", "A purse"),
+                        ],
+                        attributes: Attributes::default(),
+                        position: Some(SourcePos {
+                            line: 11,
+                            column: 1,
+                        }),
+                        span: span("1. A watch\n2. A purse\n"),
+                    },
                     Block::Table {
                         id: NodeId::UNASSIGNED,
                         head: vec![row(
@@ -1434,7 +1661,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         )],
                         attributes: Attributes::default(),
                         position: Some(SourcePos {
-                            line: 11,
+                            line: 14,
                             column: 1,
                         }),
                         span: span("| Pocket | Found |\n|:---|---:|\n| Right | A handkerchief |\n"),
@@ -1464,6 +1691,15 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                     }
                 }
                 Block::ThematicBreak { id, .. } | Block::Image { id, .. } => ids.push(*id),
+                Block::List { id, items, .. } => {
+                    ids.push(*id);
+                    for item in items {
+                        ids.push(item.id);
+                        for nested in &item.blocks {
+                            walk_block(ids, nested);
+                        }
+                    }
+                }
                 Block::Table { id, head, body, .. } => {
                     ids.push(*id);
                     for row in rows(head, body) {

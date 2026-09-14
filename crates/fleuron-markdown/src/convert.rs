@@ -10,8 +10,9 @@ use std::ops::Range;
 
 use fleuron::Warning;
 use fleuron::content::{
-    Alignment, Attributes, Block, Cell, HeadingLevel, Inline, Row, Section, SourcePos, SourceSpan,
-    block_position, block_span, origin, text as inline_text,
+    Alignment, Attributes, Block, Cell, HeadingLevel, Inline, ListItem, Row, Section, SourcePos,
+    SourceSpan, block_position, block_span, inline_position, inline_span, origin,
+    text as inline_text,
 };
 use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
@@ -92,6 +93,18 @@ fn extent(blocks: &[Block]) -> Option<SourceSpan> {
     })
 }
 
+/// Where a run of inlines was read from, together.
+fn inline_extent(inlines: &[Inline]) -> Option<Read> {
+    let spans = || inlines.iter().filter_map(inline_span);
+    Some(Read {
+        position: inlines.iter().find_map(inline_position)?,
+        span: SourceSpan {
+            start: spans().map(|span| span.start).min()?,
+            end: spans().map(|span| span.end).max()?,
+        },
+    })
+}
+
 /// Byte offset to 1-based line and column, for source positions.
 struct LineIndex {
     starts: Vec<usize>,
@@ -140,9 +153,30 @@ enum InlineFor {
     },
     /// A cell of the table being read.
     Cell,
+    /// The text an item of a tight list holds directly, with no
+    /// paragraph written around it.
+    Item,
     /// Markup with no counterpart in the vocabulary: the children
     /// fold into the parent unwrapped.
     Plain,
+}
+
+/// A list while its items are still arriving.
+struct ListFrame {
+    read: Read,
+    ordered: bool,
+    start: u32,
+    /// Whether no item has held a paragraph of its own yet.
+    tight: bool,
+    items: Vec<ListItem>,
+    /// The item whose blocks are arriving, and where it was read from.
+    item: Option<Read>,
+    /// How many block frames are open while the blocks of that item
+    /// arrive.
+    depth: usize,
+    /// The attribute line held above the list, which names the list
+    /// rather than its first item.
+    held: Option<Pending>,
 }
 
 /// A table while its rows are still arriving.
@@ -169,8 +203,8 @@ struct Converter<'a> {
     sections: Vec<Section>,
     warnings: Vec<Warning>,
     /// Block frames, innermost last: the outermost is the current
-    /// section's body, each nested one a blockquote under
-    /// construction.
+    /// section's body, each nested one a blockquote or a list item
+    /// under construction.
     blocks: Vec<Vec<Block>>,
     /// Inline frames, innermost last, with what each is collecting
     /// for and where it was read from.
@@ -183,6 +217,8 @@ struct Converter<'a> {
     /// One held attribute line per open blockquote: the line before a
     /// quote names the quote, and the blocks inside it are their own.
     quoted: Vec<Option<Pending>>,
+    /// The lists being read, innermost last.
+    lists: Vec<ListFrame>,
     /// The table being read. A cell holds only inlines, so tables do
     /// not nest.
     table: Option<TableFrame>,
@@ -204,6 +240,7 @@ impl<'a> Converter<'a> {
             deferred: Vec::new(),
             pending: None,
             quoted: Vec::new(),
+            lists: Vec::new(),
             table: None,
             metadata: 0,
         }
@@ -212,11 +249,30 @@ impl<'a> Converter<'a> {
     fn event(&mut self, event: Event<'_>, range: Range<usize>) {
         let read = self.read(range);
         let at = read.position;
+        if matches!(
+            event,
+            Event::Start(
+                Tag::Paragraph
+                    | Tag::Heading { .. }
+                    | Tag::BlockQuote(_)
+                    | Tag::CodeBlock(_)
+                    | Tag::List(_)
+                    | Tag::Table(_)
+                    | Tag::HtmlBlock
+                    | Tag::FootnoteDefinition(_)
+                    | Tag::DefinitionList
+            ) | Event::Rule
+        ) {
+            self.settle_item();
+        }
         match event {
             Event::Start(Tag::MetadataBlock(_)) => self.metadata += 1,
             Event::End(TagEnd::MetadataBlock(_)) => self.metadata -= 1,
 
-            Event::Start(Tag::Paragraph) => self.push_inlines(InlineFor::Paragraph, read),
+            Event::Start(Tag::Paragraph) => {
+                self.loosen();
+                self.push_inlines(InlineFor::Paragraph, read)
+            }
             Event::Start(Tag::Heading {
                 level,
                 id,
@@ -272,10 +328,19 @@ impl<'a> Converter<'a> {
                 self.blocks.push(Vec::new());
             }
 
-            Event::Start(Tag::List(_)) => self.warn(
-                "Lists are not supported. Falling back to one paragraph per item.",
-                at,
-            ),
+            Event::Start(Tag::List(first)) => self.lists.push(ListFrame {
+                read,
+                ordered: first.is_some(),
+                start: first.map_or(1, |number| u32::try_from(number).unwrap_or(u32::MAX)),
+                tight: true,
+                items: Vec::new(),
+                item: None,
+                depth: 0,
+                held: self.pending.take(),
+            }),
+            Event::Start(Tag::Item) => self.open_item(read),
+            Event::End(TagEnd::Item) => self.close_item(),
+            Event::End(TagEnd::List(_)) => self.close_list(read),
             Event::Start(Tag::Table(columns)) => {
                 self.table = Some(TableFrame {
                     read,
@@ -324,18 +389,13 @@ impl<'a> Converter<'a> {
             Event::Start(Tag::HtmlBlock) => {
                 self.warn("HTML blocks are not supported and will be ignored.", at)
             }
-            // A tight list item has its text directly inside it, with
-            // no paragraph around it. The frame catches that text; a
-            // loose item's own paragraph closes first and leaves this
-            // one empty.
-            Event::Start(Tag::Item | Tag::DefinitionListTitle | Tag::DefinitionListDefinition) => {
+            Event::Start(Tag::DefinitionListTitle | Tag::DefinitionListDefinition) => {
                 self.push_inlines(InlineFor::Paragraph, read)
             }
 
             Event::End(
                 TagEnd::Paragraph
                 | TagEnd::CodeBlock
-                | TagEnd::Item
                 | TagEnd::TableCell
                 | TagEnd::DefinitionListTitle
                 | TagEnd::DefinitionListDefinition
@@ -423,9 +483,17 @@ impl<'a> Converter<'a> {
         });
     }
 
-    /// Appends to the innermost inline frame. Text outside any block
-    /// has nowhere to go and is dropped; the parser does not emit it.
+    /// Appends to the innermost inline frame. Text directly inside an
+    /// item of a tight list opens a frame of its own. Text outside any
+    /// block has nowhere to go and is dropped; the parser does not
+    /// emit it.
     fn inline(&mut self, inline: Inline) {
+        if self.inlines.is_empty()
+            && self.in_item()
+            && let Some(read) = inline_extent(std::slice::from_ref(&inline))
+        {
+            self.push_inlines(InlineFor::Item, read);
+        }
         if let Some((frame, ..)) = self.inlines.last_mut() {
             frame.push(inline);
         }
@@ -533,22 +601,109 @@ impl<'a> Converter<'a> {
                 self.push_block(heading);
                 self.flush_deferred();
             }
-            InlineFor::Paragraph => {
-                if let Some(children) = self.brace_run(children, read) {
-                    self.displaced(&children);
-                    if !children.is_empty() {
-                        self.push_block(Block::Paragraph {
-                            id: Default::default(),
-                            inlines: children,
-                            attributes: Attributes::default(),
-                            position: at,
-                            span,
-                        });
-                    }
-                }
-                self.flush_deferred();
+            InlineFor::Paragraph => self.paragraph(children, read),
+            // The item's span covers its marker and whatever is nested
+            // under it, so the paragraph takes the span of its words.
+            InlineFor::Item => {
+                let read = inline_extent(&children).unwrap_or(read);
+                self.paragraph(children, read)
             }
         }
+    }
+
+    /// Files a paragraph whose inlines have all arrived.
+    fn paragraph(&mut self, children: Vec<Inline>, read: Read) {
+        if let Some(children) = self.brace_run(children, read) {
+            self.displaced(&children);
+            if !children.is_empty() {
+                self.push_block(Block::Paragraph {
+                    id: Default::default(),
+                    inlines: children,
+                    attributes: Attributes::default(),
+                    position: Some(read.position),
+                    span: Some(read.span),
+                });
+            }
+        }
+        self.flush_deferred();
+    }
+
+    /// Whether the blocks arriving are directly inside a list item,
+    /// rather than inside a block the item holds.
+    fn in_item(&self) -> bool {
+        self.lists
+            .last()
+            .is_some_and(|list| list.item.is_some() && self.blocks.len() == list.depth)
+    }
+
+    /// Marks the list loose: an item holds a paragraph of its own.
+    fn loosen(&mut self) {
+        if self.in_item()
+            && let Some(list) = self.lists.last_mut()
+        {
+            list.tight = false;
+        }
+    }
+
+    /// Files the text a tight item holds directly, once a block inside
+    /// the item follows it.
+    fn settle_item(&mut self) {
+        if matches!(self.inlines.last(), Some((_, InlineFor::Item, _))) {
+            self.close_inlines();
+        }
+    }
+
+    /// Opens an item of the innermost list.
+    fn open_item(&mut self, read: Read) {
+        let Some(list) = self.lists.last_mut() else {
+            return;
+        };
+        list.item = Some(read);
+        self.blocks.push(Vec::new());
+        list.depth = self.blocks.len();
+    }
+
+    /// Files the item whose blocks have all arrived. A line at the end
+    /// of the item names nothing.
+    fn close_item(&mut self) {
+        self.settle_item();
+        self.flush_deferred();
+        self.dangling();
+        let Some(read) = self.lists.last_mut().and_then(|list| list.item.take()) else {
+            return;
+        };
+        let blocks = self.blocks.pop().unwrap_or_default();
+        if let Some(list) = self.lists.last_mut() {
+            list.items.push(ListItem {
+                id: Default::default(),
+                blocks,
+                attributes: Attributes::default(),
+                position: Some(read.position),
+                span: Some(read.span),
+            });
+        }
+    }
+
+    /// Files the list whose items have all arrived. It takes the names
+    /// of the attribute line above it, as any block does.
+    fn close_list(&mut self, end: Read) {
+        let Some(list) = self.lists.pop() else {
+            return;
+        };
+        self.pending = list.held;
+        self.push_block(Block::List {
+            id: Default::default(),
+            ordered: list.ordered,
+            start: list.start,
+            tight: list.tight,
+            items: list.items,
+            attributes: Attributes::default(),
+            position: Some(list.read.position),
+            span: Some(SourceSpan {
+                start: list.read.span.start,
+                end: list.read.span.end.max(end.span.end),
+            }),
+        });
     }
 
     /// Whether a heading was written as a line of text underlined by
@@ -858,6 +1013,9 @@ fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
         | Block::Image {
             attributes, span, ..
         }
+        | Block::List {
+            attributes, span, ..
+        }
         | Block::Table {
             attributes, span, ..
         } => (attributes, span),
@@ -1164,21 +1322,12 @@ mod tests {
         assert_eq!(sections[0].id, fleuron::content::NodeId::UNASSIGNED);
     }
 
-    /// The two constructs a manuscript most often reaches for that
-    /// the vocabulary has no room for. Each says where it was
-    /// written, and each leaves its prose behind.
+    /// The construct a manuscript most often reaches for that the
+    /// vocabulary has no room for. It says where it was written, and
+    /// it leaves its prose behind.
     #[test]
-    fn lists_and_code_blocks_warn_and_keep_their_prose() {
-        let markdown = "\
-# C
-
-- one
-- two
-
-```
-code line
-```
-";
+    fn a_code_block_warns_and_keeps_its_prose() {
+        let markdown = "# C\n\n```\ncode line\n```\n";
         let (sections, warnings) = to_sections(
             markdown,
             "test.md",
@@ -1193,19 +1342,175 @@ code line
             .collect();
         assert_eq!(
             reported,
-            [
-                (
-                    "Lists are not supported. Falling back to one paragraph per item.",
-                    "test.md:3:1",
-                ),
-                (
-                    "Code blocks are not supported. Falling back to a plain paragraph.",
-                    "test.md:6:1",
-                ),
-            ],
+            [(
+                "Code blocks are not supported. Falling back to a plain paragraph.",
+                "test.md:3:1",
+            )],
         );
         let prose: Vec<String> = sections[0].blocks[1..].iter().map(text_of).collect();
-        assert_eq!(prose, ["one", "two", "code line\n"]);
+        assert_eq!(prose, ["code line\n"]);
+    }
+
+    /// The text of each item of a list, the lists nested in it left
+    /// out.
+    fn items_of(block: &Block) -> Vec<String> {
+        let Block::List { items, .. } = block else {
+            panic!("expected a list, got {block:?}");
+        };
+        items
+            .iter()
+            .map(|item| {
+                item.blocks
+                    .iter()
+                    .filter(|block| !matches!(block, Block::List { .. }))
+                    .map(text_of)
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Acceptance: a list is a list. Its items and their prose reach
+    /// the tree, and nothing warns.
+    #[test]
+    fn a_list_reads_into_items_and_warns_about_nothing() {
+        let (sections, warnings) = to_sections(
+            "# C\n\n- one\n- two *stressed*\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let list = &sections[0].blocks[1];
+        let Block::List {
+            ordered,
+            start,
+            tight,
+            items,
+            ..
+        } = list
+        else {
+            panic!("expected a list, got {list:?}");
+        };
+        assert_eq!((*ordered, *start, *tight), (false, 1, true));
+        assert_eq!(items_of(list), ["one", "two stressed"]);
+        let Block::Paragraph { inlines, .. } = &items[1].blocks[0] else {
+            panic!("an item holds a paragraph");
+        };
+        assert!(matches!(inlines[1], Inline::Emphasis { .. }), "{inlines:?}");
+    }
+
+    /// Acceptance: an ordered list counts from the number written on
+    /// its first item.
+    #[test]
+    fn an_ordered_list_counts_from_the_number_on_its_first_item() {
+        let sections = read("7. seven\n8. eight\n9. nine\n");
+        let list = &sections[0].blocks[0];
+        let Block::List { ordered, start, .. } = list else {
+            panic!("expected a list, got {list:?}");
+        };
+        assert_eq!((*ordered, *start), (true, 7));
+        assert_eq!(items_of(list), ["seven", "eight", "nine"]);
+    }
+
+    /// A blank line between two items makes the list loose, and an
+    /// item of a loose list holds as many paragraphs as were written
+    /// in it.
+    #[test]
+    fn a_blank_line_between_items_makes_the_list_loose() {
+        let tight = |block: &Block| matches!(block, Block::List { tight: true, .. });
+        let phrases = read("- one\n- two\n");
+        assert!(tight(&phrases[0].blocks[0]));
+        let paragraphs = read("- one\n\n- two\n");
+        assert!(!tight(&paragraphs[0].blocks[0]));
+        assert_eq!(items_of(&paragraphs[0].blocks[0]), ["one", "two"]);
+
+        let long = read("- one\n\n  more\n- two\n");
+        let Block::List { items, tight, .. } = &long[0].blocks[0] else {
+            panic!("expected a list");
+        };
+        assert!(!tight);
+        assert_eq!(items[0].blocks.len(), 2, "{:?}", items[0].blocks);
+    }
+
+    /// A list indented under an item is a block of that item, after
+    /// the item's own text.
+    #[test]
+    fn a_list_indented_under_an_item_nests_inside_it() {
+        let sections = read("- outer\n  - inner one\n  - inner two\n- after\n");
+        assert_eq!(sections[0].blocks.len(), 1, "{:?}", sections[0].blocks);
+        let list = &sections[0].blocks[0];
+        assert_eq!(items_of(list), ["outer", "after"]);
+        let Block::List { items, tight, .. } = list else {
+            panic!("expected a list");
+        };
+        assert!(tight);
+        assert!(
+            matches!(
+                items[0].blocks.as_slice(),
+                [Block::Paragraph { .. }, Block::List { .. }]
+            ),
+            "{:?}",
+            items[0].blocks,
+        );
+        assert_eq!(items_of(&items[0].blocks[1]), ["inner one", "inner two"]);
+    }
+
+    /// The line above a list names the list. The first item takes no
+    /// name from it.
+    #[test]
+    fn an_attribute_line_names_the_list_and_not_its_first_item() {
+        let (sections, warnings) = to_sections(
+            "# C\n\n{.steps}\n\n1. one\n2. two\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::List {
+            items, attributes, ..
+        } = &sections[0].blocks[1]
+        else {
+            panic!("expected a list, got {:?}", sections[0].blocks);
+        };
+        assert_eq!(attributes.classes, ["steps"]);
+        assert!(items[0].attributes.is_empty());
+        assert!(block_attributes(&items[0].blocks[0]).is_empty());
+    }
+
+    /// The paragraph of a tight item spans the words written in it,
+    /// and the item spans its marker as well.
+    #[test]
+    fn the_text_of_a_tight_item_spans_its_words_and_the_item_its_marker() {
+        let markdown = "- one\n- two\n";
+        let sections = read(markdown);
+        let covered = |span: Option<SourceSpan>| {
+            let span = span.expect("a parsed node was read from somewhere");
+            &markdown[span.start as usize..span.end as usize]
+        };
+        let Block::List { items, span, .. } = &sections[0].blocks[0] else {
+            panic!("expected a list");
+        };
+        assert_eq!(covered(*span), markdown);
+        assert_eq!(covered(items[1].span), "- two\n");
+        assert_eq!(covered(block_span(&items[1].blocks[0])), "two");
+    }
+
+    /// An image written in an item stays in the item.
+    #[test]
+    fn an_image_in_an_item_stays_in_the_item() {
+        let (sections, warnings) = to_sections(
+            "- ![a map](map.png)\n- two\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(sections[0].blocks.len(), 1);
+        let Block::List { items, .. } = &sections[0].blocks[0] else {
+            panic!("expected a list, got {:?}", sections[0].blocks);
+        };
+        assert!(
+            matches!(items[0].blocks.as_slice(), [Block::Image { url, .. }] if url == "map.png"),
+            "{:?}",
+            items[0].blocks,
+        );
     }
 
     /// The text of every cell of one row, from the leading edge.
@@ -1558,7 +1863,6 @@ Ordinary prose.
     #[test]
     fn every_frontend_warning_reads_as_a_sentence() {
         let markdown = "# C\n\n\
-             - one\n- two\n\n\
              ```\ncode\n```\n\n\
              | a | b |\n|---|---|\n| c | d |\n\n\
              ~~struck~~ and $x$ and <b>bold</b>\n\n\
@@ -1567,7 +1871,7 @@ Ordinary prose.
              [^1]: The note.\n\n\
              {key=value}\n";
         let (_, warnings) = to_sections(markdown, "test.md", &Options::default());
-        assert!(warnings.len() >= 8, "{warnings:?}");
+        assert!(warnings.len() >= 7, "{warnings:?}");
         for warning in &warnings {
             let message = &warning.message;
             assert!(

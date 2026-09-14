@@ -106,21 +106,21 @@ I had sent so many memorials and petitions for my liberty, that his majesty at l
 
 "Golbasto Momarem Evlame Gurdilo Shefin Mully Ully Gue, most mighty Emperor of Lilliput, delight and terror of the universe, whose dominions extend five thousand _blustrugs_ (about twelve miles in circumference) to the extremities of the globe; monarch of all monarchs, taller than the sons of men; whose feet press down to the centre, and whose head strikes against the sun; at whose nod the princes of the earth shake their knees; pleasant as the spring, comfortable as the summer, fruitful as autumn, dreadful as winter: his most sublime majesty proposes to the man-mountain, lately arrived at our celestial dominions, the following articles, which, by a solemn oath, he shall be obliged to perform:--
 
-"1st, The man-mountain shall not depart from our dominions, without our license under our great seal.
+1. The man-mountain shall not depart from our dominions, without our license under our great seal.
 
-"2d, He shall not presume to come into our metropolis, without our express order; at which time, the inhabitants shall have two hours warning to keep within doors.
+2. He shall not presume to come into our metropolis, without our express order; at which time, the inhabitants shall have two hours warning to keep within doors.
 
-"3d, The said man-mountain shall confine his walks to our principal high roads, and not offer to walk, or lie down, in a meadow or field of corn.
+3. The said man-mountain shall confine his walks to our principal high roads, and not offer to walk, or lie down, in a meadow or field of corn.
 
-"4th, As he walks the said roads, he shall take the utmost care not to trample upon the bodies of any of our loving subjects, their horses, or carriages, nor take any of our subjects into his hands without their own consent.
+4. As he walks the said roads, he shall take the utmost care not to trample upon the bodies of any of our loving subjects, their horses, or carriages, nor take any of our subjects into his hands without their own consent.
 
-"5th, If an express requires extraordinary despatch, the man-mountain shall be obliged to carry, in his pocket, the messenger and horse a six days journey, once in every moon, and return the said messenger back (if so required) safe to our imperial presence.
+5. If an express requires extraordinary despatch, the man-mountain shall be obliged to carry, in his pocket, the messenger and horse a six days journey, once in every moon, and return the said messenger back (if so required) safe to our imperial presence.
 
-"6th, He shall be our ally against our enemies in the island of Blefuscu, and do his utmost to destroy their fleet, which is now preparing to invade us.
+6. He shall be our ally against our enemies in the island of Blefuscu, and do his utmost to destroy their fleet, which is now preparing to invade us.
 
-"7th, That the said man-mountain shall, at his times of leisure, be aiding and assisting to our workmen, in helping to raise certain great stones, towards covering the wall of the principal park, and other our royal buildings.
+7. That the said man-mountain shall, at his times of leisure, be aiding and assisting to our workmen, in helping to raise certain great stones, towards covering the wall of the principal park, and other our royal buildings.
 
-"8th, That the said man-mountain shall, in two moons' time, deliver in an exact survey of the circumference of our dominions, by a computation of his own paces round the coast.
+8. That the said man-mountain shall, in two moons' time, deliver in an exact survey of the circumference of our dominions, by a computation of his own paces round the coast.
 
 "Lastly, That, upon his solemn oath to observe all the above articles, the said man-mountain shall have a daily allowance of meat and drink sufficient for the support of 1724 of our subjects, with free access to our royal person, and other marks of our favour.  Given at our palace at Belfaborac, the twelfth day of the ninety-first moon of our reign."
 

@@ -299,10 +299,12 @@ A friend at Smyrna
 | The *Hesper* | 3 March | Smyrna |
 | The *Ariel* | 9 March | Beirut |
 
-What the vocabulary has no room for is set as prose and reported:
+Marsh wrote down the two things he knew:
 
-1. a numbered list, one paragraph per item
-2. and its second item
+1. the *Hesper* sailed from Smyrna
+2. nobody saw her come in
+
+What the vocabulary has no room for is set as prose and reported:
 
 \`\`\`
 a code block, one paragraph

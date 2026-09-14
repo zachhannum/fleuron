@@ -27,7 +27,9 @@ pub use background::{
 pub use computed::ComputedStyle;
 
 pub(crate) use computed::computed_size;
-pub use counter::{Content, ContentPiece, CounterStyle, StringPiece, StringSet, Target};
+pub use counter::{
+    Content, ContentPiece, CounterStyle, ListStyleType, StringPiece, StringSet, Target,
+};
 pub use edges::{Border, BorderStyle, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
@@ -87,6 +89,7 @@ pub enum Declaration {
     Height(Option<Length>),
     MinHeight(Option<Length>),
     BorderCollapse(BorderCollapse),
+    ListStyleType(ListStyleType),
     BreakBefore(Break),
     BreakAfter(Break),
     BreakInside(Break),
@@ -182,6 +185,7 @@ impl Declaration {
             Declaration::Height(_) => "height",
             Declaration::MinHeight(_) => "min-height",
             Declaration::BorderCollapse(_) => "border-collapse",
+            Declaration::ListStyleType(_) => "list-style-type",
             Declaration::BreakBefore(_) => "break-before",
             Declaration::BreakAfter(_) => "break-after",
             Declaration::BreakInside(_) => "break-inside",

@@ -188,6 +188,47 @@ fn alpha(value: u32) -> Option<String> {
     Some(String::from_utf8(letters).expect("ascii letters"))
 }
 
+/// The marker a list item is set with, from `list-style-type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListStyleType {
+    /// `none`: the item has no marker.
+    None,
+    /// `disc`: a filled circle.
+    Disc,
+    /// `circle`: an open circle.
+    Circle,
+    /// `square`: a filled square.
+    Square,
+    /// The item's number, spelled as the style names.
+    Counter(CounterStyle),
+}
+
+impl ListStyleType {
+    /// The marker of the item numbered `number`, and the space after
+    /// it, as CSS writes a marker. Nothing for `none`.
+    pub fn marker(self, number: u32) -> Option<String> {
+        match self {
+            ListStyleType::None => None,
+            ListStyleType::Disc => Some("\u{2022} ".into()),
+            ListStyleType::Circle => Some("\u{25E6} ".into()),
+            ListStyleType::Square => Some("\u{25A0} ".into()),
+            ListStyleType::Counter(style) => Some(format!("{}. ", style.format(number))),
+        }
+    }
+
+    /// The CSS keyword.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            ListStyleType::None => "none",
+            ListStyleType::Disc => "disc",
+            ListStyleType::Circle => "circle",
+            ListStyleType::Square => "square",
+            ListStyleType::Counter(style) => style.keyword(),
+        }
+    }
+}
+
 /// One `string-set` entry: a named string, and what the element sets
 /// it to when the flow reaches it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
@@ -206,4 +247,29 @@ pub enum StringPiece {
     Content,
     /// A literal.
     Text(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A bullet is a glyph and a space. A number takes the counter
+    /// style's spelling, a period, and a space. `none` is no marker.
+    #[test]
+    fn a_marker_is_its_glyph_or_its_number_and_a_space() {
+        assert_eq!(ListStyleType::Disc.marker(3).as_deref(), Some("\u{2022} "));
+        assert_eq!(
+            ListStyleType::Counter(CounterStyle::Decimal)
+                .marker(7)
+                .as_deref(),
+            Some("7. ")
+        );
+        assert_eq!(
+            ListStyleType::Counter(CounterStyle::UpperRoman)
+                .marker(9)
+                .as_deref(),
+            Some("IX. ")
+        );
+        assert_eq!(ListStyleType::None.marker(1), None);
+    }
 }

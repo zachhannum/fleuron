@@ -37,6 +37,35 @@ blockquote {
   margin: 1em 2em;
 }
 
+/* A list has space above and below it. Its markers are in the
+   indent to the left of its items. */
+ul, ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+/* A list inside an item has no space above or below it, and its
+   markers are open circles. */
+li > :is(ul, ol) {
+  margin: 0;
+}
+
+li > ul {
+  list-style-type: circle;
+}
+
+/* An item of a loose list holds paragraphs, with space between them
+   and no indent. The items of a tight list have no space between
+   them. */
+li > p {
+  margin: 0.5em 0;
+  text-indent: 0;
+}
+
 /* A thematic break is a centered ornament. It belongs between
    paragraphs, so it never opens or closes a page. */
 hr {

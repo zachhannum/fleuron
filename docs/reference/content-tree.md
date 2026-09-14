@@ -77,7 +77,39 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
 | `image` | `url` and `alt`. The string in `url` is the name the image is matched under, and it does not have to be a real URL, since the engine neither resolves it nor decodes the image. `alt` is not laid out, reaches painters and accessibility tools unchanged, and is not optional. |
+| `list` | `ordered`, `start`, `tight` and `items`. See [Lists](#lists). |
 | `table` | `head` and `body`, each a list of rows. See [Tables](#tables). |
+
+## Lists
+
+A list holds items. An item holds blocks, as a blockquote does, so a list can be a block of an item of another list.
+
+```json
+{
+  "type": "list",
+  "ordered": true,
+  "start": 7,
+  "tight": true,
+  "items": [
+    {
+      "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "That he shall help our workmen." }] }]
+    },
+    {
+      "blocks": [{ "type": "paragraph", "inlines": [{ "type": "text", "value": "That he shall survey our dominions." }] }]
+    }
+  ]
+}
+```
+
+| field | |
+|---|---|
+| `ordered` | `true` for a list whose items are numbered. |
+| `start` | The number of the first item. A list that starts at 1 leaves the field out. |
+| `tight` | `true` where the source has no blank line between the items. A tight item has no `p` element in the stylesheet. |
+| `items` | The items, in reading order. |
+| `blocks` | The content of one item. An empty item has none. |
+
+An item takes an optional `position`, `span` and `attributes`, the same as a block.
 
 ## Tables
 

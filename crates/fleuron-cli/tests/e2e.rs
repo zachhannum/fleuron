@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "4de23d21bb47c372b7ffbd87689a25526ff53e06aa7091fdef4d9840cb34d047";
+    "57150b5b698b65f3e89f8cfe0a753274b4a849fcf8c4745c8c27f653a067102c";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -1855,7 +1855,7 @@ fn several_markdown_files_compose_in_argument_order() {
     );
     let second = write_source(
         "compose-two",
-        "# Chapter Two\n\nThe second chapter.\n\n- a list item\n",
+        "# Chapter Two\n\nThe second chapter.\n\n```\na line of code\n```\n",
     );
     let (pdf, stderr) = run("composed", &[&first, &second], &[]);
 
@@ -1866,7 +1866,7 @@ fn several_markdown_files_compose_in_argument_order() {
     assert_eq!(warnings.len(), 1, "{stderr}");
     assert!(
         warnings[0].contains("compose-two.md:5:1")
-            && warnings[0].contains("Lists are not supported"),
+            && warnings[0].contains("Code blocks are not supported"),
         "the diagnostic names the wrong source: {}",
         warnings[0],
     );
@@ -1877,7 +1877,10 @@ fn several_markdown_files_compose_in_argument_order() {
     let first_at = text.find("The first chapter").expect("chapter one is set");
     let second_at = text.find("The second chapter").expect("chapter two is set");
     assert!(first_at < second_at, "the files composed out of order");
-    assert!(text.contains("a list item"), "the list lost its prose");
+    assert!(
+        text.contains("a line of code"),
+        "the code block lost its prose"
+    );
 
     // Reversed on the command line, reversed on the page.
     let (pdf, _) = run("composed-reversed", &[&second, &first], &[]);
@@ -1951,7 +1954,7 @@ fn the_cli_reference_shows_warnings_the_run_prints() {
         .collect();
     assert_eq!(samples.len(), 2, "the page stopped showing two warnings");
 
-    let source = write_source("reference-sample", "# Chapter\n\n- one\n- two\n");
+    let source = write_source("reference-sample", "# Chapter\n\n```\none\n```\n");
     let sheet = write_sheet(
         "reference-sample",
         "p {\n  text-shadow: 0 0 2px black;\n}\n",
@@ -2210,12 +2213,14 @@ enum Laid {
 fn laid_out(book: &Book) -> Vec<Laid> {
     let mut laid = Vec::new();
     for section in &book.sections {
-        append_blocks(&section.blocks, &mut laid);
+        append_blocks(&section.blocks, &mut laid, false);
     }
     laid
 }
 
-fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
+/// `nested` is whether the blocks are inside an item of a list, where
+/// the built-in sheet marks the items of a list with open circles.
+fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
     for block in blocks {
         match block {
             Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
@@ -2223,7 +2228,25 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
                 append_inlines(inlines, &mut text);
                 laid.push(Laid::Prose(text));
             }
-            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid),
+            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid, nested),
+            // The marker of an item is set before the item's first
+            // line, to the left of it.
+            Block::List {
+                ordered,
+                start,
+                items,
+                ..
+            } => {
+                for (number, item) in (*start..).zip(items) {
+                    let marker = match (ordered, nested) {
+                        (true, _) => format!("{number}."),
+                        (false, false) => "\u{2022}".to_string(),
+                        (false, true) => "\u{25E6}".to_string(),
+                    };
+                    laid.push(Laid::Prose(marker));
+                    append_blocks(&item.blocks, laid, true);
+                }
+            }
             Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
             Block::Image { .. } => {}
             Block::Table { head, body, .. } => laid.push(Laid::Table {
@@ -2239,7 +2262,7 @@ fn row_text(row: &Row) -> String {
     let mut text = String::new();
     for cell in &row.cells {
         let mut inner = Vec::new();
-        append_blocks(&cell.blocks, &mut inner);
+        append_blocks(&cell.blocks, &mut inner, false);
         for part in inner {
             if let Laid::Prose(prose) = part {
                 text.push_str(&prose);
