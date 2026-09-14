@@ -1183,7 +1183,10 @@ mod tests {
         let element = NodeId::new(40);
         let after = element.generated(GeneratedBox::After);
         let moved = after.shifted(-3);
-        assert_eq!(moved.generated_box(), Some((NodeId::new(37), GeneratedBox::After)));
+        assert_eq!(
+            moved.generated_box(),
+            Some((NodeId::new(37), GeneratedBox::After))
+        );
         assert_eq!(element.shifted(-3).generated_box(), None);
     }
 

@@ -63,11 +63,29 @@ impl Paginator<'_> {
                         anchored,
                     ),
                     Block::Table { head, body, .. } => {
-                        walk(paginator, pseudo(GeneratedBox::Before), source, host, anchored);
+                        walk(
+                            paginator,
+                            pseudo(GeneratedBox::Before),
+                            source,
+                            host,
+                            anchored,
+                        );
                         for blocks in cell_blocks(head, body) {
-                            walk(paginator, blocks.iter().map(Child::Block), source, host, anchored);
+                            walk(
+                                paginator,
+                                blocks.iter().map(Child::Block),
+                                source,
+                                host,
+                                anchored,
+                            );
                         }
-                        walk(paginator, pseudo(GeneratedBox::After), source, host, anchored);
+                        walk(
+                            paginator,
+                            pseudo(GeneratedBox::After),
+                            source,
+                            host,
+                            anchored,
+                        );
                     }
                     // An image against the page is placed whole, with no
                     // children in it.
@@ -1141,6 +1159,171 @@ mod tests {
                 .any(|(_, runs)| (runs[0].0 - left).abs() < 1e-3),
             "no line under the block runs the full measure",
         );
+    }
+
+    /// An `h2` with the words `value`.
+    fn h2(value: &str) -> Block {
+        let Block::Heading { inlines, .. } = heading(value) else {
+            unreachable!("`heading` makes a heading");
+        };
+        Block::Heading {
+            id: NodeId::UNASSIGNED,
+            level: crate::content::HeadingLevel::H2,
+            inlines,
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        }
+    }
+
+    /// Whether two pages set the same lines, to the last thousandth of
+    /// a point.
+    fn same_lines(one: &[ContentLine<'_>], other: &[ContentLine<'_>]) -> bool {
+        one.len() == other.len()
+            && one.iter().zip(other).all(|((a, runs), (b, others))| {
+                (a - b).abs() < 1e-3
+                    && runs.len() == others.len()
+                    && runs
+                        .iter()
+                        .zip(others)
+                        .all(|(run, other)| (run.0 - other.0).abs() < 1e-3 && run.2 == other.2)
+            })
+    }
+
+    /// Acceptance: `h2::before { content: "\2766"; position: absolute;
+    /// top: 0; left: 0 }` puts an ornament at the top left of the
+    /// content box on each page an h2 lands on, and takes no height in
+    /// the flow.
+    #[test]
+    fn an_absolute_generated_box_sits_at_the_top_left_of_each_page_its_heading_lands_on() {
+        const FLEURON: &str = "\u{2766}";
+        let css = "h2::before { content: \"\\2766\"; position: absolute; top: 0; left: 0 }";
+        let book = || {
+            vec![
+                section(vec![h2("First"), paragraph("one")]),
+                section(vec![h2("Second"), paragraph("two")]),
+            ]
+        };
+        let bare = paginate_styled("", book());
+        let marked = paginate_styled(css, book());
+        assert_eq!(marked.len(), bare.len(), "the page count moved");
+
+        let mut carrying = 0;
+        for (page, plain) in marked.iter().zip(&bare) {
+            let lines = content_lines(page);
+            let ornaments: Vec<(f32, f32)> = lines
+                .iter()
+                .flat_map(|(baseline, runs)| {
+                    runs.iter()
+                        .filter(|run| run.2 == FLEURON)
+                        .map(move |run| (*baseline, run.0))
+                })
+                .collect();
+            // The ornament can share a baseline with the heading, so
+            // its runs come out of the lines rather than whole lines.
+            let prose: Vec<ContentLine<'_>> = lines
+                .iter()
+                .map(|(baseline, runs)| {
+                    let runs = runs.iter().filter(|run| run.2 != FLEURON).copied();
+                    (*baseline, runs.collect::<Vec<_>>())
+                })
+                .filter(|(_, runs)| !runs.is_empty())
+                .collect();
+            assert!(
+                same_lines(&prose, &content_lines(plain)),
+                "page {}: the ornament took room in the flow",
+                page.number,
+            );
+            let titled = prose
+                .iter()
+                .any(|(_, runs)| runs.iter().any(|run| run.2 == "First" || run.2 == "Second"));
+            if !titled {
+                assert!(ornaments.is_empty(), "page {}: {ornaments:?}", page.number);
+                continue;
+            }
+            carrying += 1;
+            let [(baseline, x)] = ornaments[..] else {
+                panic!("page {}: one ornament, not {ornaments:?}", page.number);
+            };
+            let (left, top) = master(Situation::First(page.side))
+                .geometry
+                .content_origin();
+            assert!(
+                (x - left).abs() < 1e-3,
+                "page {}: the ornament starts at {x}",
+                page.number
+            );
+            assert!(
+                baseline > top && baseline < top + 36.0,
+                "page {}: the ornament's baseline is {} under the top",
+                page.number,
+                baseline - top,
+            );
+        }
+        assert_eq!(carrying, 2, "each heading lands on a page of its own");
+    }
+
+    /// Acceptance: a generated box with `position: absolute` and
+    /// `wrap-flow: end` holds the prose off it, the same as a block
+    /// with those properties.
+    #[test]
+    fn prose_sets_beside_a_generated_box_as_it_does_beside_a_block() {
+        const PLACED: &str = "position: absolute; top: 0; left: 0; right: 50%; margin: 0; \
+                              wrap-flow: end; background-color: #eeeeee";
+        let words = "lilliputian ".repeat(40);
+        let block = paginate_styled(
+            &format!("p {{ text-indent: 0 }} p:first-child {{ {PLACED} }}"),
+            vec![section(
+                std::iter::once(paragraph(&words))
+                    .chain(long_prose(8))
+                    .collect(),
+            )],
+        );
+        let generated = paginate_styled(
+            &format!("p {{ text-indent: 0 }} section::before {{ content: \"{words}\"; {PLACED} }}"),
+            vec![section(long_prose(8))],
+        );
+        assert_eq!(generated.len(), block.len(), "the page count moved");
+
+        let page = &generated[0];
+        let boxes = rects(page);
+        let [(x, y, w, h, _)] = boxes.as_slice() else {
+            panic!("the generated box paints one box: {boxes:?}");
+        };
+        let [(bx, by, bw, bh, _)] = rects(&block[0])[..] else {
+            panic!("the block paints one box");
+        };
+        for (one, other) in [(*x, bx), (*y, by), (*w, bw), (*h, bh)] {
+            assert!(
+                (one - other).abs() < 1e-3,
+                "the generated box is at {:?}, the block at {:?}",
+                (x, y, w, h),
+                (bx, by, bw, bh),
+            );
+        }
+
+        let prose = |page| -> Vec<ContentLine<'_>> {
+            content_lines(page)
+                .into_iter()
+                .filter(|(_, runs)| !runs.iter().any(|run| run.2.contains("lilliputian")))
+                .collect()
+        };
+        assert!(
+            same_lines(&prose(page), &prose(&block[0])),
+            "the prose sets differently beside the generated box",
+        );
+        let beside: Vec<ContentLine<'_>> = prose(page)
+            .into_iter()
+            .filter(|(baseline, _)| *baseline > *y && *baseline < y + h)
+            .collect();
+        assert!(!beside.is_empty(), "no line is set beside the box");
+        for (baseline, runs) in beside {
+            assert!(
+                runs[0].0 >= x + w - 1e-3,
+                "the line at {baseline} starts at {}, over the box",
+                runs[0].0,
+            );
+        }
     }
 
     /// The baselines of the prose lines a page sets below `top`,

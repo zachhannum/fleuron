@@ -173,7 +173,7 @@ impl Session<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Attributes, Block, Inline, block_id};
+    use crate::content::{Attributes, Block, GeneratedBox, Inline, block_id};
     use crate::pages::Side;
     use crate::session::testing::{book, paragraph, prose, registry, section, sheets};
     use crate::style::Color;
@@ -403,6 +403,105 @@ mod tests {
         let mut session = chapter(PADDED, emphatic());
         assert_eq!(session.hit(0, 1.0, 1.0), None, "the corner of the page");
         assert_eq!(session.hit(9999, 100.0, 100.0), None, "no such page");
+    }
+
+    /// Part: a generated box records its border box under its own id.
+    /// Part: hit testing and inspection map the id of a generated box
+    /// to its element.
+    #[test]
+    fn a_generated_box_records_its_box_and_answers_for_its_element() {
+        let css = "p:first-child::after { content: \"Fin\"; padding: 6pt; \
+                   background-color: #eeddcc }";
+        let mut session = chapter(css, emphatic());
+        let node = block_id(&session.book().sections[0].blocks[0]);
+        let painted = tinted(&mut session);
+        let generated = session
+            .styles
+            .generated_box(node, GeneratedBox::After)
+            .expect("the paragraph generates a box");
+
+        let recorded: Vec<PageBox> = session
+            .boxes
+            .iter()
+            .filter(|(id, _)| *id == generated)
+            .map(|(_, area)| *area)
+            .collect();
+        assert_eq!(painted.len(), 1, "one background");
+        assert_eq!(recorded.len(), 1, "one box under the generated id");
+        assert!(
+            close(&recorded[0], &painted[0]),
+            "{:?} is not the background at {:?}",
+            recorded[0],
+            painted[0]
+        );
+
+        let area = recorded[0];
+        assert_eq!(
+            session.hit(0, area.x + 2.0, area.y + 2.0),
+            Some(node),
+            "the padding of the box answers for its paragraph"
+        );
+        let (x, y, origin) = session
+            .preview()
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Text {
+                    x, y, text, origin, ..
+                } if text == "Fin" => Some((*x, *y, origin.clone())),
+                _ => None,
+            })
+            .expect("the box sets its text");
+        assert_eq!(origin.map(|origin| origin.node), Some(generated));
+        assert_eq!(
+            session.hit(0, x + 1.0, y - 2.0),
+            Some(node),
+            "the text of the box answers for its paragraph"
+        );
+
+        let inspection = session.inspect(generated).expect("the paragraph");
+        assert_eq!(inspection.node, Some(node));
+        assert_eq!(inspection.element, "p");
+    }
+
+    /// Acceptance: a stylesheet edit that adds or removes a generated
+    /// box leaves the id of every content node unchanged.
+    #[test]
+    fn a_sheet_that_adds_or_removes_a_generated_box_keeps_every_node_id() {
+        let mut session = chapter("", emphatic());
+        let ids = |session: &mut Session<'_>| -> Vec<(u32, Option<std::ops::Range<u32>>)> {
+            session.preview();
+            let book = session.book();
+            let whole = book
+                .subtree(book.sections[0].id)
+                .expect("the chapter holds its nodes");
+            (whole.start..whole.end)
+                .map(|id| (id, book.subtree(NodeId::new(id))))
+                .collect()
+        };
+        let plain = ids(&mut session);
+        session.set_style(sheets(
+            "p::before { content: \"x\" } section::after { content: \"\"; height: 2pt }",
+        ));
+        assert_eq!(
+            ids(&mut session),
+            plain,
+            "adding generated boxes renumbered"
+        );
+        session.set_style(sheets(""));
+        assert_eq!(ids(&mut session), plain, "removing them renumbered");
+    }
+
+    /// Acceptance: two layouts of a book with generated boxes are
+    /// byte-identical.
+    #[test]
+    fn two_layouts_with_generated_boxes_are_byte_identical() {
+        let css = "p:first-child::before { content: \"\\201C\"; position: absolute; top: 0; \
+                   left: 0; wrap-flow: end } \
+                   p::after { content: \"\"; height: 2pt; background-color: #eeddcc }";
+        let bytes = || crate::wire::encode(chapter(css, emphatic()).preview()).expect("encodes");
+        assert_eq!(bytes(), bytes());
     }
 
     /// A session over a book read from JSON, under `css`.
