@@ -546,8 +546,11 @@ impl Flow<'_, '_> {
             // The profile is read against where the line sits, which
             // is where `place` is about to put it.
             let lead = if self.opening() { 0.0 } else { set[at].lead };
-            let top = self.cursor + lead + set[at].fixed;
             let from = if at == 0 { 0 } else { ends[at - 1] };
+            // A line set again keeps none of the gap it was broken
+            // with. That gap was the page it left.
+            let fixed = if from == 0 { original[0].fixed } else { 0.0 };
+            let top = self.cursor + lead + fixed;
             // The markers of the items the paragraph opens hang before
             // its first line, and keep clear of an image as it does.
             let hung = original[0]
@@ -580,7 +583,7 @@ impl Flow<'_, '_> {
                     &profile.gaps,
                     &reflow.setting.wrapped(from == 0, profile.letter),
                 );
-                carry_over(&mut fresh, &set[at..]);
+                carry_over(&mut fresh, &set[at..], fixed);
                 if from == 0
                     && let Some(first) = fresh.first_mut()
                 {
@@ -2495,6 +2498,44 @@ mod tests {
             order.len() > 8,
             "too few paragraphs to prove an order: {order:?}"
         );
+    }
+
+    /// A line that finds no room above a block at the foot of the first
+    /// column opens the second column at its head, not under the block.
+    #[test]
+    fn a_line_moved_past_a_block_at_the_foot_opens_the_next_column_at_its_head() {
+        let css = format!("{TWO_COLUMNS} {AT_THE_FOOT} p {{ text-indent: 0 }}");
+        let geometry = two_columns();
+        for count in 1..40 {
+            let pages = paginate_styled(
+                &css,
+                vec![section(
+                    std::iter::once(lifted_quote())
+                        .chain(
+                            std::iter::repeat_with(|| paragraph("my father had a small estate"))
+                                .take(count),
+                        )
+                        .collect(),
+                )],
+            );
+            let boxes = rects(&pages[0]);
+            let [(_, y, _, _, _)] = boxes.as_slice() else {
+                panic!("the block paints one box: {boxes:?}");
+            };
+            assert_eq!(
+                prose_below(&pages[0], *y),
+                Vec::<f32>::new(),
+                "{count} paragraphs: lines set under the block",
+            );
+            let second = baselines(&pages[0], geometry, 1);
+            let leading = 2.0 * body_size();
+            assert!(
+                second
+                    .first()
+                    .is_none_or(|first| *first < geometry.content_origin().1 + leading),
+                "{count} paragraphs: the second column opens at {second:?}",
+            );
+        }
     }
 
     /// Acceptance: nothing crosses a gutter, the exclusion included.
