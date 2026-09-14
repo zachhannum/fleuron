@@ -49,7 +49,7 @@ Every item names its own layer. `z-index` on a block sets that layer, and [the C
 
 ## `DrawItem`
 
-Four variants. A painter that handles all four can paint any page the engine produces.
+Five variants. A painter that handles all five can draw any page the engine produces.
 
 ### `Text`
 
@@ -93,7 +93,7 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 
 The text of a box that `::before` or `::after` adds to a block has an `origin`. See [ids of generated boxes](#ids-of-generated-boxes).
 
-`color` is what the run is filled with: three eight-bit channels, and no alpha. A sheet that names no color leaves it black.
+`color` is what the run is filled with: three eight-bit channels and an eight-bit alpha, where 255 is opaque. Where the stylesheet gives no color, the run is opaque black. The alpha includes the `opacity` of the blocks that the run is in.
 
 `features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
 
@@ -148,17 +148,19 @@ The following methods take the id of a generated box:
 Rect { x: f32, y: f32, w: f32, h: f32, color: Color, layer: i32 }
 ```
 
-A filled rectangle: rules, borders, backgrounds. `color` is the fill.
+A filled rectangle: rules, borders, backgrounds. `color` is the fill, and its alpha is how opaque the fill is.
 
 ### `Image`
 
 ```rust
-Image { x: f32, y: f32, w: f32, h: f32, asset: u32, layer: i32 }
+Image { x: f32, y: f32, w: f32, h: f32, asset: u32, alpha: u8, layer: i32 }
 ```
 
 A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter decodes the file.
 
 `w` and `h` are what layout decided, which is the intrinsic size at the header's own resolution unless the page had no room for it. A painter scales the image into that box, and does not read the header again.
+
+`alpha` is how opaque the image is, from 0 to 255. It is the `opacity` of the image and of the blocks around it. At 255 the image is opaque.
 
 ### `Background`
 
@@ -168,23 +170,66 @@ Background {
     y: f32,
     w: f32,
     h: f32,
+    radii: Corners,
     tile_x: f32,
     tile_y: f32,
     tile_w: f32,
     tile_h: f32,
     repeat: bool,
     asset: u32,
+    alpha: u8,
     layer: i32,
 }
 ```
 
 An image painted behind a box: the page's own box, or a block's border box. `asset` indexes `LayoutOutput::assets`, the same table `Image` indexes.
 
-`x`, `y`, `w`, and `h` are the box. A painter clips the image to it and paints nothing outside it.
+`x`, `y`, `w`, and `h` are the box, and `radii` rounds its corners. A painter clips the image to the rounded box and draws nothing outside it. `alpha` is how opaque the image is, as on `Image`.
 
 `tile_x`, `tile_y`, `tile_w`, and `tile_h` are where one copy of the image goes, which can reach outside the box. Layout resolved `background-size` and `background-position` into them.
 
 Where `repeat` is true, that copy tiles. A painter steps the tile by `tile_w` across and `tile_h` down, in both directions, until the box is covered.
+
+### `Rounded`
+
+```rust
+Rounded {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radii: Corners,
+    ring: Edges,
+    color: Color,
+    layer: i32,
+}
+```
+
+A filled box with rounded corners: the background or the border of a block that has a `border-radius`. A block with square corners draws `Rect` items instead.
+
+The outline is the box `x`, `y`, `w`, `h`, with each corner rounded by its radius in `radii`. Where `ring` is zero on all four edges, the whole outline is filled. That is a background.
+
+Otherwise the fill is the band between the outline and a second outline inside it. That is a border. The second outline is the box `ring.top` in from the top edge, `ring.right` in from the right edge, and so on. `Corners::inside` gives its corners: each radius loses the width of the edge it runs along, and no radius goes below zero.
+
+Where the edges of a border have one color, the border is one item. Where they have different colors, each edge is an item of its own, with a `ring` that is zero on the other three edges.
+
+### `Corners`
+
+```rust
+pub struct Corners {
+    pub top_left: Radius,
+    pub top_right: Radius,
+    pub bottom_right: Radius,
+    pub bottom_left: Radius,
+}
+
+pub struct Radius {
+    pub x: f32,
+    pub y: f32,
+}
+```
+
+A corner is a quarter ellipse. `x` is its radius along the top or bottom edge, and `y` is its radius along the left or right edge, both in points. A corner with a radius of zero is square. Layout resolved the percentages, and the radii of two corners on one edge never add up to more than the length of that edge.
 
 ## Writing a painter
 
@@ -196,6 +241,10 @@ A painter that cannot place glyphs by id, and draws characters instead, draws `t
 
 For an image, resolve `asset` through `LayoutOutput::assets` and draw the file that url stands for into the box the item gives. A url nothing can supply still takes up its box on the page.
 
-For a background, resolve `asset` the same way, clip to the box, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. For a url nothing can supply, paint nothing. A placeholder behind the text reads as part of the page.
+For a background, resolve `asset` the same way, clip to the box with its corners rounded by `radii`, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. For a url nothing can supply, draw nothing. A placeholder behind the text reads as part of the page.
+
+Fill every color at its alpha, and draw every image at its `alpha`. At 255 the fill or the image is opaque, and at 0 it does not show.
+
+For a rounded box, draw the outline with each corner as a quarter ellipse. Where `ring` is not zero, add the second outline to the same path and fill the path by the even-odd rule. The even-odd rule leaves the inside of the second outline empty.
 
 The SVG painter in `fleuron` is a worked example. See [the preview](../wasm/preview.mdx).
