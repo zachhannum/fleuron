@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::Warning;
 use crate::content::{
     Anchors, Block, Book, Inline, LinkTarget, NodeId, Row, Section, SourcePos, block_id, inline_id,
-    inline_position, origin, rows, text,
+    inline_position, item_blocks, origin, rows, text,
 };
 use crate::lines::{Generated, InlineStyles, ParagraphStyle};
 use crate::style::{ComputedStyle, Content, ContentPiece, StyleTree, Target};
@@ -195,6 +195,12 @@ fn texts_of(blocks: &[Block], anchors: &Anchors, texts: &mut BTreeMap<NodeId, St
                 inline_texts(inlines, anchors, texts)
             }
             Block::Blockquote { blocks, .. } => texts_of(blocks, anchors, texts),
+            Block::List { items, .. } => {
+                for item in items {
+                    claim(texts, anchors, item.id, || blocks_text(&item.blocks));
+                    texts_of(&item.blocks, anchors, texts);
+                }
+            }
             Block::Table { head, body, .. } => {
                 for row in rows(head, body) {
                     claim(texts, anchors, row.id, || row_text(row));
@@ -243,6 +249,10 @@ fn block_text(block: &Block) -> String {
         Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => text(inlines),
         Block::Image { alt, .. } => alt.clone(),
         Block::Blockquote { blocks, .. } => blocks_text(blocks),
+        Block::List { items, .. } => item_blocks(items)
+            .map(blocks_text)
+            .collect::<Vec<_>>()
+            .join(" "),
         Block::Table { head, body, .. } => {
             rows(head, body).map(row_text).collect::<Vec<_>>().join(" ")
         }
@@ -328,6 +338,13 @@ impl Named {
                     self.inlines(inlines, styles, references, source)
                 }
                 Block::Blockquote { blocks, .. } => self.blocks(blocks, styles, references, source),
+                Block::List { items, .. } => {
+                    for item in items {
+                        self.content(styles.before(item.id), None, references, source);
+                        self.blocks(&item.blocks, styles, references, source);
+                        self.content(styles.after(item.id), None, references, source);
+                    }
+                }
                 Block::Table { head, body, .. } => {
                     for cell in rows(head, body).flat_map(|row| &row.cells) {
                         self.blocks(&cell.blocks, styles, references, source);

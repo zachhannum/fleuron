@@ -458,6 +458,8 @@ mod tests {
                 {{"type": "blockquote", "blocks": [{{"type": "paragraph", "inlines": {inlines}}}]}},
                 {{"type": "thematic_break"}},
                 {{"type": "image", "url": "image.png", "alt": "alt"}},
+                {{"type": "list", "items": [{{"blocks": []}}]}},
+                {{"type": "list", "ordered": true, "items": [{{"blocks": []}}]}},
                 {{"type": "table",
                   "head": [{{"cells": [{{"blocks": []}}]}}],
                   "body": [{{"cells": [{{"blocks": []}}]}}]}}

@@ -326,7 +326,7 @@ impl Builder<'_, '_> {
     /// Records a node a link can reach. It lands on the first fragment
     /// the node emits, the way a string it sets does, so the page that
     /// fragment lands on is the page a reference to the node prints.
-    fn name(&mut self, node: NodeId) {
+    pub(super) fn name(&mut self, node: NodeId) {
         let marks = self.pending_marks.get_or_insert_with(Box::default);
         marks.targets.push(node);
     }
@@ -565,6 +565,13 @@ impl Builder<'_, '_> {
                     self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
+                Block::List {
+                    id,
+                    start,
+                    items,
+                    position,
+                    ..
+                } => self.list(*id, *start, items, *position, x, measure),
                 Block::Table {
                     id,
                     head,

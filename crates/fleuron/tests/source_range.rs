@@ -113,6 +113,11 @@ fn nodes(book: &Book) -> BTreeMap<u32, String> {
                     walk_inlines(inlines, out)
                 }
                 Block::Blockquote { blocks, .. } => walk_blocks(blocks, out),
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk_blocks(&item.blocks, out);
+                    }
+                }
                 Block::Table { head, body, .. } => {
                     for blocks in fleuron::content::cell_blocks(head, body) {
                         walk_blocks(blocks, out);

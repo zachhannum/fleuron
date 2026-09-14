@@ -61,6 +61,18 @@ fn hash_blocks(blocks: &[Block], hasher: &mut DefaultHasher) {
             }
             Block::ThematicBreak { .. } => "thematic_break".hash(hasher),
             Block::Image { url, alt, .. } => ("image", url, alt).hash(hasher),
+            Block::List {
+                ordered,
+                start,
+                tight,
+                items,
+                ..
+            } => {
+                ("list", ordered, start, tight, items.len()).hash(hasher);
+                for item in items {
+                    hash_blocks(&item.blocks, hasher);
+                }
+            }
             Block::Table { head, body, .. } => {
                 ("table", head.len()).hash(hasher);
                 for row in fleuron::content::rows(head, body) {
@@ -188,6 +200,18 @@ fn strip_blocks(blocks: &mut [Block]) {
             }
             Block::ThematicBreak { position, span, .. } | Block::Image { position, span, .. } => {
                 (*position, *span) = (None, None)
+            }
+            Block::List {
+                position,
+                span,
+                items,
+                ..
+            } => {
+                (*position, *span) = (None, None);
+                for item in items {
+                    (item.position, item.span) = (None, None);
+                    strip_blocks(&mut item.blocks);
+                }
             }
             Block::Table {
                 position,

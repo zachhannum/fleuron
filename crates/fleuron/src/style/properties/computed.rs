@@ -10,7 +10,7 @@ use super::Declaration;
 use super::background::{
     Background, BackgroundPosition, BackgroundSize, SizeSource, no_background,
 };
-use super::counter::{Content, StringSet};
+use super::counter::{Content, ListStyleType, StringSet};
 use super::edges::{Border, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
@@ -126,6 +126,9 @@ pub struct ComputedStyle {
     /// `border-collapse`.
     #[serde(skip_serializing_if = "separate")]
     pub border_collapse: BorderCollapse,
+    /// The marker a list item is set with, from `list-style-type`.
+    #[serde(skip_serializing_if = "disc")]
+    pub list_style_type: ListStyleType,
     /// Where a page break falls before this element.
     pub break_before: Break,
     /// Where one falls after it.
@@ -180,6 +183,7 @@ impl ComputedStyle {
             height: Width::Auto,
             min_height: Width::Auto,
             border_collapse: BorderCollapse::Separate,
+            list_style_type: ListStyleType::Disc,
             break_before: Break::Auto,
             break_after: Break::Auto,
             break_inside: Break::Auto,
@@ -307,6 +311,7 @@ impl ComputedStyle {
             Declaration::Height(height) => self.height = self.size(*height, root_size),
             Declaration::MinHeight(height) => self.min_height = self.size(*height, root_size),
             Declaration::BorderCollapse(value) => self.border_collapse = *value,
+            Declaration::ListStyleType(value) => self.list_style_type = *value,
             Declaration::BreakBefore(value) => self.break_before = *value,
             Declaration::BreakAfter(value) => self.break_after = *value,
             Declaration::BreakInside(value) => self.break_inside = *value,
@@ -451,6 +456,10 @@ fn auto_width(width: &Width) -> bool {
 
 fn separate(collapse: &BorderCollapse) -> bool {
     *collapse == BorderCollapse::Separate
+}
+
+fn disc(marker: &ListStyleType) -> bool {
+    *marker == ListStyleType::Disc
 }
 
 fn one_column(span: &ColumnSpan) -> bool {

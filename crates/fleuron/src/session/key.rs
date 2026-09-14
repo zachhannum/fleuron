@@ -120,6 +120,24 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 (4u8, url, alt, position).hash(h);
                 hash_node(*id, styles, h);
             }
+            Block::List {
+                id,
+                ordered,
+                start,
+                tight,
+                items,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (6u8, position, ordered, start, tight, items.len()).hash(h);
+                hash_node(*id, styles, h);
+                for item in items {
+                    item.position.hash(h);
+                    hash_node(item.id, styles, h);
+                    hash_blocks(&item.blocks, styles, h);
+                }
+            }
             Block::Table {
                 id,
                 head,
@@ -287,13 +305,14 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         height,
         min_height,
         border_collapse,
+        list_style_type,
         break_before,
         break_after,
         break_inside,
         // A spanning block breaks to the whole content box.
         column_span,
     } = style;
-    border_collapse.hash(h);
+    (border_collapse, list_style_type).hash(h);
     for size in [width, height, min_height] {
         match size {
             Width::Auto => 0u8.hash(h),

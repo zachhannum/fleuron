@@ -42,9 +42,9 @@ pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderStyle, BoxDecorationBreak, Break, Color, ColumnRule, ColumnSpan,
     Columns, ComputedStyle, Content, ContentPiece, Coord, CounterStyle, Edge, Edges, Family,
-    FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, MarginBox, PageGeometry,
-    Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target,
-    TextAlign, TextJustify, TextTransform, Url, Width, WrapFlow,
+    FontStyle, FontVariantCaps, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox,
+    PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece,
+    StringSet, Target, TextAlign, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -827,6 +827,16 @@ fn cascade(
         max_id = max_id.max(node.id.get());
     }
 
+    // A paragraph with no element of its own takes the style of an
+    // anonymous box inside its item: what the item passes on, and
+    // nothing of its own.
+    let mut anonymous = Vec::with_capacity(elements.anonymous().len());
+    for (id, item) in elements.anonymous() {
+        let inherited = styles[computed[*item] as usize].inherit();
+        anonymous.push((id.get() as usize, intern(&mut styles, inherited)));
+        max_id = max_id.max(id.get());
+    }
+
     let root = computed.first().copied().unwrap_or(0);
     let mut by_node = vec![root; max_id as usize + 1];
     let mut initial_by_node = vec![None; max_id as usize + 1];
@@ -840,6 +850,9 @@ fn cascade(
         first_line_by_node[id] = first_lines[index];
         before_by_node[id] = befores[index];
         after_by_node[id] = afters[index];
+    }
+    for (id, style) in anonymous {
+        by_node[id] = style;
     }
     by_node[0] = root;
     let generated = || {
@@ -918,6 +931,17 @@ fn named_blocks<'a>(
                 named_inlines(inlines, source, first, warnings)
             }
             Block::Blockquote { blocks, .. } => named_blocks(blocks, source, first, warnings),
+            Block::List { items, .. } => {
+                for item in items {
+                    claim(
+                        &item.attributes,
+                        origin(source, item.position),
+                        first,
+                        warnings,
+                    );
+                    named_blocks(&item.blocks, source, first, warnings);
+                }
+            }
             Block::Table { head, body, .. } => {
                 for row in rows(head, body) {
                     claim(

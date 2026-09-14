@@ -9,8 +9,9 @@ use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
     ColumnSpan, Content, ContentPiece, CounterStyle, Declaration, Edge, Family, FontStyle,
-    FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, Position, ShapeSource, SizeSource,
-    StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
+    FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType, Position,
+    ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform,
+    Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -151,6 +152,18 @@ pub(super) fn border_collapse(input: &mut Parser<'_, '_>) -> Option<BorderCollap
         "separate" => Some(BorderCollapse::Separate),
         "collapse" => Some(BorderCollapse::Collapse),
         _ => None,
+    }
+}
+
+/// `list-style-type`: one of the markers, a counter style, or `none`.
+pub(super) fn list_style_type(input: &mut Parser<'_, '_>) -> Option<ListStyleType> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(ListStyleType::None),
+        "disc" => Some(ListStyleType::Disc),
+        "circle" => Some(ListStyleType::Circle),
+        "square" => Some(ListStyleType::Square),
+        _ => CounterStyle::parse(&keyword).map(ListStyleType::Counter),
     }
 }
 

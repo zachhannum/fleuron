@@ -13,12 +13,12 @@
 //! # What the vocabulary cannot express
 //!
 //! The content tree is a book's vocabulary: headings, prose,
-//! blockquotes, scene breaks, images, tables. Markdown is wider than
-//! that. Constructs outside it degrade to prose and say so through
-//! the diagnostics channel, with the line and column they were
-//! written at. Text is never dropped, because a manuscript that
+//! blockquotes, scene breaks, images, lists, tables. Markdown is wider
+//! than that. Constructs outside it degrade to prose and say so
+//! through the diagnostics channel, with the line and column they
+//! were written at. Text is never dropped, because a manuscript that
 //! quietly loses a paragraph is worse than one that warns about a
-//! list.
+//! code block.
 //!
 //! # Dialects
 //!

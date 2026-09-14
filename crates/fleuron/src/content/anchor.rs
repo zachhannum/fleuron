@@ -252,6 +252,12 @@ impl Source {
                 }
                 Block::Paragraph { inlines, .. } => self.collect_inlines(inlines),
                 Block::Blockquote { blocks, .. } => self.collect(blocks),
+                Block::List { items, .. } => {
+                    for item in items {
+                        self.write(item.id, &item.attributes.id);
+                        self.collect(&item.blocks);
+                    }
+                }
                 Block::Table { head, body, .. } => {
                     for row in rows(head, body) {
                         self.write(row.id, &row.attributes.id);

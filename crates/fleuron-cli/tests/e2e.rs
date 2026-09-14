@@ -1855,7 +1855,7 @@ fn several_markdown_files_compose_in_argument_order() {
     );
     let second = write_source(
         "compose-two",
-        "# Chapter Two\n\nThe second chapter.\n\n- a list item\n",
+        "# Chapter Two\n\nThe second chapter.\n\n```\na line of code\n```\n",
     );
     let (pdf, stderr) = run("composed", &[&first, &second], &[]);
 
@@ -1866,7 +1866,7 @@ fn several_markdown_files_compose_in_argument_order() {
     assert_eq!(warnings.len(), 1, "{stderr}");
     assert!(
         warnings[0].contains("compose-two.md:5:1")
-            && warnings[0].contains("Lists are not supported"),
+            && warnings[0].contains("Code blocks are not supported"),
         "the diagnostic names the wrong source: {}",
         warnings[0],
     );
@@ -1877,7 +1877,10 @@ fn several_markdown_files_compose_in_argument_order() {
     let first_at = text.find("The first chapter").expect("chapter one is set");
     let second_at = text.find("The second chapter").expect("chapter two is set");
     assert!(first_at < second_at, "the files composed out of order");
-    assert!(text.contains("a list item"), "the list lost its prose");
+    assert!(
+        text.contains("a line of code"),
+        "the code block lost its prose"
+    );
 
     // Reversed on the command line, reversed on the page.
     let (pdf, _) = run("composed-reversed", &[&second, &first], &[]);
@@ -1951,7 +1954,7 @@ fn the_cli_reference_shows_warnings_the_run_prints() {
         .collect();
     assert_eq!(samples.len(), 2, "the page stopped showing two warnings");
 
-    let source = write_source("reference-sample", "# Chapter\n\n- one\n- two\n");
+    let source = write_source("reference-sample", "# Chapter\n\n```\none\n```\n");
     let sheet = write_sheet(
         "reference-sample",
         "p {\n  text-shadow: 0 0 2px black;\n}\n",
@@ -2224,6 +2227,11 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>) {
                 laid.push(Laid::Prose(text));
             }
             Block::Blockquote { blocks, .. } => append_blocks(blocks, laid),
+            Block::List { items, .. } => {
+                for item in items {
+                    append_blocks(&item.blocks, laid);
+                }
+            }
             Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
             Block::Image { .. } => {}
             Block::Table { head, body, .. } => laid.push(Laid::Table {

@@ -4,8 +4,9 @@
 //! content tree does not have, so compilation flattens the tree once
 //! into an arena that does. Element names are the markdown vocabulary
 //! spelled the way an author writes them in CSS: `book`, `section`,
-//! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `table`, `thead`,
-//! `tbody`, `tr`, `th`, `td`, `em`, `strong`, `code`, `a`.
+//! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `ul`, `ol`, `li`,
+//! `table`, `thead`, `tbody`, `tr`, `th`, `td`, `em`, `strong`,
+//! `code`, `a`.
 //!
 //! An element carries the classes and the id the content tree gave
 //! it alongside the name.
@@ -15,6 +16,12 @@
 //! own group. The two groups are elements with no content node behind
 //! them: they pass on what they inherit, and nothing else of theirs
 //! reaches layout.
+//!
+//! An item of a tight list holds its text directly, as HTML writes
+//! `<li>text</li>`. The paragraph that text is in has no element of
+//! its own: its inlines are children of the `li`, and it takes the
+//! style of an anonymous box inside it. So `li > p` reaches only the
+//! paragraphs of a loose list.
 //!
 //! Text runs are not elements, the same as in CSS: they have no style
 //! of their own and never count towards `:first-child`.
@@ -30,7 +37,7 @@ use selectors::matching::{ElementSelectorFlags, MatchingContext};
 use selectors::parser::{NonTSPseudoClass, PseudoElement as PseudoElementTrait, SelectorImpl};
 use selectors::{Element, OpaqueElement};
 
-use crate::content::{Alignment, Attributes, Block, Book, Inline, NodeId, Row};
+use crate::content::{Alignment, Attributes, Block, Book, Inline, ListItem, NodeId, Row};
 
 /// An interned CSS identifier: element name, class, id, namespace.
 ///
@@ -138,7 +145,7 @@ impl ToCss for PseudoElement {
 pub const INLINE_ELEMENTS: [&str; 4] = ["code", "em", "strong", "a"];
 
 /// The blocks that `::before` and `::after` generate a box inside.
-pub const BLOCK_ELEMENTS: [&str; 12] = [
+pub const BLOCK_ELEMENTS: [&str; 15] = [
     "section",
     "h1",
     "h2",
@@ -150,6 +157,9 @@ pub const BLOCK_ELEMENTS: [&str; 12] = [
     "blockquote",
     "hr",
     "img",
+    "ul",
+    "ol",
+    "li",
     "table",
 ];
 
@@ -177,7 +187,7 @@ impl SelectorImpl for Fleuron {
 /// Every element name the tree can hold, in the order the content
 /// tree introduces them. A selector names one of these or matches
 /// nothing.
-pub const ELEMENTS: [&str; 22] = [
+pub const ELEMENTS: [&str; 25] = [
     "book",
     "section",
     "h1",
@@ -190,6 +200,9 @@ pub const ELEMENTS: [&str; 22] = [
     "blockquote",
     "hr",
     "img",
+    "ul",
+    "ol",
+    "li",
     "table",
     "thead",
     "tbody",
@@ -228,6 +241,9 @@ pub struct ElementNode {
 #[derive(Debug, Default)]
 pub struct ElementTree {
     nodes: Vec<ElementNode>,
+    /// The paragraphs that have no element of their own, each with the
+    /// `li` whose anonymous box holds it.
+    anonymous: Vec<(NodeId, usize)>,
 }
 
 impl ElementTree {
@@ -265,6 +281,12 @@ impl ElementTree {
     /// Every element, in document order.
     pub fn nodes(&self) -> &[ElementNode] {
         &self.nodes
+    }
+
+    /// The paragraphs of tight list items, each with the index of the
+    /// item that holds it.
+    pub fn anonymous(&self) -> &[(NodeId, usize)] {
+        &self.anonymous
     }
 
     /// A handle onto one element, for matching.
@@ -326,6 +348,20 @@ impl ElementTree {
                 Block::Image { id, attributes, .. } => {
                     self.push("img", *id, attributes, Some(parent), false)
                 }
+                Block::List {
+                    id,
+                    ordered,
+                    tight,
+                    items,
+                    attributes,
+                    ..
+                } => {
+                    let name = if *ordered { "ol" } else { "ul" };
+                    let index = self.push(name, *id, attributes, Some(parent), false);
+                    let children = self.items(items, *tight, index);
+                    self.link(index, &children);
+                    index
+                }
                 Block::Table {
                     id,
                     head,
@@ -355,6 +391,35 @@ impl ElementTree {
                 }
             })
             .collect()
+    }
+
+    /// The `li` elements of one list. In a tight list, a paragraph an
+    /// item holds with no names of its own is not an element.
+    fn items(&mut self, items: &[ListItem], tight: bool, parent: usize) -> Vec<usize> {
+        let mut indices = Vec::with_capacity(items.len());
+        for item in items {
+            let index = self.push("li", item.id, &item.attributes, Some(parent), false);
+            let mut children = Vec::new();
+            for block in &item.blocks {
+                match block {
+                    Block::Paragraph {
+                        id,
+                        inlines,
+                        attributes,
+                        ..
+                    } if tight && attributes.is_empty() => {
+                        let (inline, has_text) = self.inlines(inlines, index);
+                        children.extend(inline);
+                        self.nodes[index].has_text |= has_text;
+                        self.anonymous.push((*id, index));
+                    }
+                    _ => children.extend(self.blocks(std::slice::from_ref(block), index)),
+                }
+            }
+            self.link(index, &children);
+            indices.push(index);
+        }
+        indices
     }
 
     /// The rows of one group of a table, each with its cells, which

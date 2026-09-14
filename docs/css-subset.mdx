@@ -322,8 +322,8 @@ h2 {
 The element names come from markdown:
 
 ```
-book section h1 h2 h3 h4 h5 h6 p blockquote hr img table
-thead tbody tr th td code em strong a
+book section h1 h2 h3 h4 h5 h6 p blockquote hr img ul ol li
+table thead tbody tr th td code em strong a
 ```
 
 {/* end generated */}
@@ -488,6 +488,7 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `orphans`, `widows` | `orphans: 3` |
 | `page` | `page: chapter` |
 | `border-collapse` | `border-collapse: collapse` |
+| `list-style-type` | `list-style-type: decimal` |
 
 ```css
 font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
@@ -508,6 +509,7 @@ orphans:             <integer>;
 widows:              <integer>;
 page:                auto | <name>;
 border-collapse:     separate | collapse;
+list-style-type:     disc | circle | square | decimal | lower-roman | upper-roman | lower-alpha | upper-alpha | none;
 ```
 
 {/* end generated */}
