@@ -244,16 +244,17 @@ impl LineLayout<'_> {
         self.shape_flat(flat, style, options, lead.extent)
     }
 
-    /// Breaks text that no node holds into lines of `measure`: what
-    /// `::before` and `::after` generate on a block.
+    /// Breaks the text of the generated box `node` into lines of
+    /// `measure`: what `::before` and `::after` generate on a block.
     pub(crate) fn layout_generated(
         &self,
         text: &str,
+        node: crate::content::NodeId,
         style: ParagraphStyle,
         measure: &Measure,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        let flat = self.flatten_generated(text, style);
+        let flat = self.flatten_generated(text, node, style);
         self.shape_flat(flat, style, options, None)
             .map(|shaped| self.break_shaped(&shaped, measure, 0, None).lines)
             .unwrap_or_default()

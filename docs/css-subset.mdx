@@ -426,6 +426,19 @@ blockquote::before {
 }
 ```
 
+`position: absolute` puts the box [against the page](#putting-a-block-against-the-page), the same as a block. The place of the box in its element decides the page. The box then takes up no room among the paragraphs. With `wrap-flow`, the text wraps around the box.
+
+The following example puts an ornament at the top left of the content box, on each page that an `h2` heading starts on:
+
+```css
+h2::before {
+  content: "\2766";
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+```
+
 A book, a table row, a table cell, `thead`, and `tbody` take no box. If a rule adds one to them, the engine warns and adds nothing.
 
 ## Declarations, values, and units
@@ -1247,7 +1260,7 @@ code { font-family: monospace }
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |
 | counters | any counter other than `page`, and `counter-increment` |
-| generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on a pseudo-element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
+| generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width`, and `border-radius` |

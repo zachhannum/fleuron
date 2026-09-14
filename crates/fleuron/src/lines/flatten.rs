@@ -368,15 +368,25 @@ impl LineLayout<'_> {
         flat
     }
 
-    /// Flattens text the sheet generated with no paragraph around it.
-    pub(super) fn flatten_generated(&self, text: &str, style: ParagraphStyle) -> FlatParagraph {
+    /// Flattens the text of the generated box `node`, as that box's
+    /// own text.
+    pub(super) fn flatten_generated(
+        &self,
+        text: &str,
+        node: NodeId,
+        style: ParagraphStyle,
+    ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
         let lead = Lead {
             style: None,
             extent: None,
             taken: 0,
         };
-        self.push_generated(&mut flat, Some((text.to_string(), style)), lead);
+        let value = text.replace('\n', " ");
+        if !value.is_empty() {
+            flat.open(Some(node), 0);
+            self.push_run(&mut flat, &value, style, lead);
+        }
         flat
     }
 
