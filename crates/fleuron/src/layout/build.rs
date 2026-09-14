@@ -906,10 +906,10 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
 mod tests {
     use crate::content::{Attributes, Block, NodeId, Section, SourcePos};
     use crate::layout::testing::{
-        assert_orphans_and_widows, book_of, chapter_size, content_lines, folio_size, heading,
-        long_prose, master, origin_of, ornament, paginate, paginate_styled, paragraph, png, prose,
-        quote, registry, right_edge, scene_break, section, small_caps_lines, styled, tagged_prose,
-        ua, under_h3,
+        assert_orphans_and_widows, book_of, broken_heading, chapter_size, content_lines,
+        folio_size, heading, long_prose, master, origin_of, ornament, paginate, paginate_styled,
+        paragraph, png, prose, quote, registry, right_edge, scene_break, section, small_caps_lines,
+        styled, tagged_prose, ua, under_h3,
     };
     use crate::layout::{BreakPoint, Fragment, Paginator, Piece, layout_book};
     use crate::pages::{DrawItem, Page, Side};
@@ -1537,6 +1537,75 @@ mod tests {
             }
         }
         assert_eq!(painted, 23, "every scene break paints exactly once");
+    }
+
+    /// Acceptance: `h1::first-line` styles the text before a hard
+    /// break in a heading, and the text after the break takes the
+    /// heading's own style.
+    #[test]
+    fn a_first_line_rule_styles_a_heading_as_far_as_its_break() {
+        let pages = paginate_styled(
+            "h1 { font-size: 14pt } h1::first-line { font-size: 24pt }",
+            vec![section(vec![
+                broken_heading("Chapter One", "The Voyage to Lilliput"),
+                paragraph("It began."),
+            ])],
+        );
+        let run = |words: &str| {
+            pages[0]
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { text, size, y, .. }
+                        if text.to_lowercase().contains(&words.to_lowercase()) =>
+                    {
+                        Some((*size, *y))
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{words:?} is not drawn"))
+        };
+        let (opening, top) = run("Chapter One");
+        let (rest, under) = run("The Voyage");
+        assert_eq!(opening, 24.0, "the text before the break");
+        assert_eq!(rest, 14.0, "the text after the break");
+        assert!(
+            under > top,
+            "the text after the break is not on a line under it"
+        );
+    }
+
+    /// Acceptance: a heading with a hard break reads as one heading to
+    /// `string-set`. The running head that prints it is one line, with
+    /// a space where the break was.
+    #[test]
+    fn a_heading_with_a_break_sets_one_running_head() {
+        let pages = paginate_styled(
+            "h1 { string-set: chapter content() }
+             @page :left { @top-left { content: string(chapter) } }
+             @page :right { @top-right { content: string(chapter) } }",
+            vec![section(vec![
+                broken_heading("Chapter One", "The Voyage to Lilliput"),
+                paragraph(&"my father had a small estate in nottinghamshire ".repeat(200)),
+            ])],
+        );
+        assert!(pages.len() > 1, "the chapter fits on one page");
+        let head: Vec<(String, f32)> = pages[1]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Text { text, y, .. } => Some((text.to_lowercase(), *y)),
+                _ => None,
+            })
+            .filter(|(text, _)| text.contains("chapter") || text.contains("voyage"))
+            .collect();
+        assert!(!head.is_empty(), "page 2 has no running head");
+        assert!(
+            head.iter().all(|(_, y)| *y == head[0].1),
+            "the running head is not one line: {head:?}",
+        );
+        let printed: String = head.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(printed, "chapter one the voyage to lilliput");
     }
 
     /// Acceptance: `h3 + p::first-line { font-variant-caps:

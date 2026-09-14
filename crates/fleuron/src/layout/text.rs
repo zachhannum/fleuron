@@ -52,6 +52,15 @@ impl Paginator<'_> {
     /// One string as a single shaped line: page furniture, and the
     /// ornaments and initial letters that are content but not prose.
     pub(super) fn line_of(&self, text: &str, style: ParagraphStyle) -> Option<Line> {
+        // One line holds no hard break: the newline a heading's break
+        // reads as is a word space here.
+        let spaced;
+        let text = if text.contains('\n') {
+            spaced = text.replace('\n', " ");
+            spaced.as_str()
+        } else {
+            text
+        };
         let runs = self.lines.shape(text, style)?;
         let box_ = self.lines.line_box(&runs, style);
         Some(Line::of(runs, box_))

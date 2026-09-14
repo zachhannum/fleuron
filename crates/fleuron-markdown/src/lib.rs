@@ -252,6 +252,23 @@ mod tests {
         (assemble(Metadata::default(), sections), warnings)
     }
 
+    /// Acceptance: a heading with a hard break is one heading to its
+    /// slug and to a link in text form, with the break read as a
+    /// space between the words.
+    #[test]
+    fn a_heading_with_a_break_has_one_slug() {
+        let (book, warnings) = composed(&[(
+            "one.md",
+            "Chapter One\\\nThe Voyage to Lilliput\n======================\n",
+        )]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let anchors = book.anchors();
+        let at = |url| anchors.resolve(url, Some("one.md"));
+        let heading = heading_in(&book, "one.md", 0);
+        assert_eq!(at("#chapter-one-the-voyage-to-lilliput"), heading);
+        assert_eq!(at("#Chapter One The Voyage to Lilliput"), heading);
+    }
+
     /// The `nth` heading read from `source`, counted from 0.
     fn heading_in(book: &Book, source: &str, nth: usize) -> LinkTarget {
         let node = book

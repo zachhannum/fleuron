@@ -191,9 +191,9 @@ fn newline_before(text: &str, end: usize) -> usize {
         return 2;
     }
     match before.chars().next_back() {
-        Some(separator @ ('\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}')) => {
-            separator.len_utf8()
-        }
+        Some(
+            separator @ ('\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'),
+        ) => separator.len_utf8(),
         _ => 0,
     }
 }

@@ -675,6 +675,62 @@ mod tests {
         );
     }
 
+    /// `target-text()` prints a heading with a hard break as the words
+    /// of one line, with a space where the break was. The reference
+    /// sits on the line of the paragraph it is generated in.
+    #[test]
+    fn target_text_prints_a_broken_heading_on_one_line() {
+        let voyage = Block::Heading {
+            id: NodeId::UNASSIGNED,
+            level: HeadingLevel::H1,
+            inlines: vec![
+                words("Chapter One"),
+                Inline::Break {
+                    id: NodeId::UNASSIGNED,
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                },
+                words("The Voyage"),
+            ],
+            attributes: Attributes {
+                id: Some("the-voyage".into()),
+                classes: Vec::new(),
+            },
+            position: None,
+            span: None,
+        };
+        let mut chapter = section(vec![
+            voyage,
+            paragraph_of(vec![
+                words("See "),
+                link("#the-voyage", "there", 12, &[]),
+                words(" for the rest."),
+            ]),
+        ]);
+        chapter.source = Some("one.md".into());
+        let book = book_of(vec![chapter]);
+        let css = "a::after { content: \" (\" target-text(attr(href url)) \")\" }";
+        let (pages, warnings, _) = lay_out(css, &book);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let page = page_with(&pages, "See there");
+        assert!(
+            page_words(page).contains("See there (Chapter One The Voyage) for the rest."),
+            "{}",
+            page_words(page),
+        );
+        let baseline = |words: &str| {
+            page.items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { text, y, .. } if text.contains(words) => Some(*y),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{words:?} is not drawn"))
+        };
+        assert_eq!(baseline("See"), baseline("Voyage)"));
+    }
+
     /// A one-chapter book whose only paragraph links to `url`,
     /// written at line 12 of `one.md`.
     fn linking_to(url: &str) -> Book {

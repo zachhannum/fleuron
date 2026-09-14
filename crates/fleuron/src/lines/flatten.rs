@@ -407,11 +407,16 @@ impl LineLayout<'_> {
         generated: Option<(String, ParagraphStyle)>,
         lead: Lead,
     ) {
-        let Some((value, style)) = generated else {
+        let Some((mut value, style)) = generated else {
             return;
         };
         if value.is_empty() {
             return;
+        }
+        // Generated text holds no hard break: the newline a heading's
+        // break reads as is a word space here.
+        if value.contains('\n') {
+            value = value.replace('\n', " ");
         }
         flat.open(None, 0);
         self.push_run(flat, &value, style, lead);

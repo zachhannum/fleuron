@@ -348,11 +348,7 @@ impl Breaker<'_> {
                 }
                 // Nothing fits and nothing is left to try: overflow
                 // the measure rather than drop the text.
-                candidates.push(
-                    overfull
-                        .or(stranded)
-                        .expect("a line was too long to set"),
-                );
+                candidates.push(overfull.or(stranded).expect("a line was too long to set"));
             }
             for candidate in candidates.drain(..) {
                 nodes.push(Node {

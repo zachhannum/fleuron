@@ -1535,10 +1535,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
         assert_eq!(json[1], serde_json::json!({"type": "break"}));
         let read: Vec<Inline> = serde_json::from_value(json).unwrap();
         assert_eq!(read, inlines);
-        assert_eq!(
-            super::text(&inlines),
-            "Chapter One\nThe Voyage to Lilliput"
-        );
+        assert_eq!(super::text(&inlines), "Chapter One\nThe Voyage to Lilliput");
     }
 
     /// A heading level is 1-6, and a level outside that is rejected
