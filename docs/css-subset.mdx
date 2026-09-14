@@ -493,7 +493,7 @@ A custom property inherits. A value set on `section` reaches every element insid
 
 If a custom property has no value, `var()` uses the fallback after the comma. `font-size: var(--size, 12pt)` gives 12pt where no rule declares `--size`. If there is no fallback, the property takes its inherited value if it inherits, or its initial value if it does not. The engine warns and names the line and column of the declaration.
 
-A custom property that depends on itself has no value, such as `--a: var(--b)` with `--b: var(--a)`. The engine warns about each custom property in the cycle. If the value that `var()` gives is not one the property takes, the engine warns about an unsupported value. The property then takes its inherited or initial value.
+A custom property that depends on itself, such as `--a: var(--b)` with `--b: var(--a)`, has no value. The engine warns about each custom property in the cycle. If the value that `var()` gives is not one the property takes, the engine warns about an unsupported value. The property then takes its inherited or initial value.
 
 `@page` and the margin boxes can use `var()`. There, `var()` uses the custom properties of the book, which a rule on `:root` or `book` declares.
 
