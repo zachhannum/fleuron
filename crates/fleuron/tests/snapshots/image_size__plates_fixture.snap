@@ -1,0 +1,33 @@
+---
+source: crates/fleuron/tests/image_size.rs
+expression: "described(&lay_out(FIXTURE, css))"
+---
+[
+  [
+    "text 54.00 72.98 18 \"The Plates\"",
+    "text 54.00 90.80 11 \"My father had a small estate in Nottinghamshire: I was the third of five sons.  He\"",
+    "text 54.00 106.20 11 \"sent me to Emanuel College in Cambridge at fourteen years old, where I resided\"",
+    "text 54.00 121.60 11 \"three years, and applied myself close to my studies; but the charge of maintaining\"",
+    "text 54.00 137.00 11 \"me, although I had a very scanty allowance, being too great for a narrow fortune,\"",
+    "text 54.00 152.40 11 \"I was bound apprentice to Mr. James Bates, an eminent surgeon in London,\"",
+    "text 54.00 167.80 11 \"with whom I continued four years.\"",
+    "image 54.00 171.60 126.76 216.00",
+    "text 54.00 399.20 11 \"Soon after my return from Leyden, I was recommended by my good master, Mr.\"",
+    "text 54.00 414.60 11 \"Bates, to be surgeon to the Swallow, Captain Abraham Pannel, commander;\"",
+    "text 54.00 430.00 11 \"with whom I continued three years and a half, making a voyage or two into the\"",
+    "text 54.00 445.40 11 \"Levant, and some other parts.\"",
+    "text 76.00 471.80 11 \"\\\"This is an exact inventory of what we found about the body of the\"",
+    "text 76.00 487.20 11 \"man-mountain, who used us with great civility, and due respect to\"",
+    "text 76.00 502.60 11 \"your majesty's commission.  Signed and sealed on the fourth day of\"",
+    "text 76.00 518.00 11 \"the eighty-ninth moon of your majesty's auspicious reign.\""
+  ],
+  [
+    "image 64.00 54.00 73.00 73.00",
+    "image 42.00 138.00 200.00 200.00",
+    "text 42.00 349.60 11 \"But my good master Bates dying in two years after, and I having few friends, my\"",
+    "text 42.00 365.00 11 \"business began to fail; for my conscience would not suffer me to imitate the bad\"",
+    "text 42.00 380.40 11 \"practice of too many among my brethren.  Having therefore consulted with my\"",
+    "text 42.00 395.80 11 \"wife, and some of my acquaintance, I determined to go again to sea.\"",
+    "text 213.84 624.19 9 \"2\""
+  ]
+]

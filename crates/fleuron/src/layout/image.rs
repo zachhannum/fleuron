@@ -11,7 +11,8 @@ pub(super) struct Plate {
     /// A `width` or a `height` the sheet asked for came out wider than
     /// the content box.
     pub(super) wide: bool,
-    /// The image came out taller than the content box.
+    /// The image came out taller than the content box, once it fit
+    /// the width.
     pub(super) tall: bool,
 }
 
@@ -58,6 +59,7 @@ pub(super) fn plate(
     }
     let asked = asked.0.is_some() || asked.1.is_some();
     let wide = asked && width > measure;
+    let (width, height) = fit((width, height), measure, f32::INFINITY);
     let tall = height > room;
     let (width, height) = fit((width, height), measure, room);
     Plate {
@@ -192,14 +194,15 @@ mod tests {
 
         let tall = sized(|style| style.height = Width::Points(1200.0));
         assert_eq!(size(tall), (300.0, 150.0));
-        assert!(tall.wide && tall.tall);
+        assert!(tall.wide && !tall.tall);
 
-        let square = sized(|style| {
+        let narrow = sized(|style| {
             style.width = Width::Points(200.0);
             style.height = Width::Points(900.0);
         });
-        assert!((square.height - 600.0).abs() < 1e-3);
-        assert!((square.width - 200.0 * 600.0 / 900.0).abs() < 1e-3);
+        assert!((narrow.height - 600.0).abs() < 1e-3);
+        assert!((narrow.width - 200.0 * 600.0 / 900.0).abs() < 1e-3);
+        assert!(narrow.tall && !narrow.wide);
     }
 
     /// An image wider than the measure only because its file is wide is
