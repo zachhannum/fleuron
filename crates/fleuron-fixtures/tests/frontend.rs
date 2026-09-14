@@ -81,6 +81,7 @@ fn hash_inlines(inlines: &[Inline], hasher: &mut DefaultHasher) {
         match inline {
             Inline::Text { value, .. } => ("text", value).hash(hasher),
             Inline::Code { value, .. } => ("code", value).hash(hasher),
+            Inline::Break { .. } => "break".hash(hasher),
             Inline::Emphasis { children, .. } => {
                 "emphasis".hash(hasher);
                 hash_inlines(children, hasher);
@@ -211,9 +212,9 @@ fn strip_blocks(blocks: &mut [Block]) {
 fn strip_inlines(inlines: &mut [Inline]) {
     for inline in inlines {
         match inline {
-            Inline::Text { position, span, .. } | Inline::Code { position, span, .. } => {
-                (*position, *span) = (None, None)
-            }
+            Inline::Text { position, span, .. }
+            | Inline::Code { position, span, .. }
+            | Inline::Break { position, span, .. } => (*position, *span) = (None, None),
             Inline::Emphasis {
                 position,
                 span,

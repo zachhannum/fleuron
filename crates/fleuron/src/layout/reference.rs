@@ -319,7 +319,7 @@ impl Named {
     ) {
         for inline in inlines {
             let (href, children) = match inline {
-                Inline::Text { .. } => continue,
+                Inline::Text { .. } | Inline::Break { .. } => continue,
                 Inline::Code { .. } => (None, None),
                 Inline::Emphasis { children, .. } | Inline::Strong { children, .. } => {
                     (None, Some(children))

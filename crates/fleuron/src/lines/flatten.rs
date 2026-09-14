@@ -379,6 +379,7 @@ impl LineLayout<'_> {
         for inline in inlines {
             match inline {
                 Inline::Text { id, value, .. } => self.push_text(flat, *id, value, style, lead),
+                Inline::Break { .. } => self.push_break(flat, style, lead),
                 Inline::Code { id, value, .. } => {
                     let generated = styles.generated(inline);
                     self.push_generated(flat, generated.before, lead);
@@ -414,6 +415,18 @@ impl LineLayout<'_> {
         }
         flat.open(None, 0);
         self.push_run(flat, &value, style, lead);
+    }
+
+    /// Appends a hard break as the newline the breaker ends a line
+    /// at. No node's text holds the newline, and a drop cap passes
+    /// over it as it does any other byte.
+    fn push_break(&self, flat: &mut FlatParagraph, style: ParagraphStyle, lead: Lead) {
+        if flat.skip > 0 {
+            flat.skip -= 1;
+            return;
+        }
+        flat.open(None, 0);
+        self.push_run(flat, "\n", style, lead);
     }
 
     /// Appends one node's text, in the opening style as far as it

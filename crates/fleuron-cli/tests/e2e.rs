@@ -2280,6 +2280,7 @@ fn append_inlines(inlines: &[Inline], text: &mut String) {
     for inline in inlines {
         match inline {
             Inline::Text { value, .. } | Inline::Code { value, .. } => text.push_str(value),
+            Inline::Break { .. } => text.push('\n'),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => append_inlines(children, text),

@@ -3,7 +3,7 @@
 //! The markdown frontend produces this; the element vocabulary is
 //! bounded by what a book needs — book/section, heading, paragraph,
 //! blockquote, thematic break, image, table, emphasis/strong/code,
-//! link.
+//! link, hard break.
 //!
 //! This module is the **input contract**: everything downstream (style,
 //! box construction, layout) consumes these types, and nothing widens
@@ -521,6 +521,22 @@ pub enum Inline {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// A hard line break: the line ends here, and what follows stays
+    /// in the same block. It holds no text.
+    Break {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// `*emphasis*`: italic, in the default sheet.
     Emphasis {
         /// Engine-assigned identity, for diagnostics; never serialized.
@@ -595,8 +611,8 @@ pub enum Inline {
 }
 
 /// The text of an inline tree, markup discarded: every inline run
-/// together, as `content()` reads an element and as a frontend reads
-/// alt text.
+/// together and a hard break as a newline, as `content()` reads an
+/// element and as a frontend reads alt text.
 pub fn text(inlines: &[Inline]) -> String {
     let mut out = String::new();
     push_text(inlines, &mut out);
@@ -607,6 +623,7 @@ fn push_text(inlines: &[Inline], out: &mut String) {
     for inline in inlines {
         match inline {
             Inline::Text { value, .. } | Inline::Code { value, .. } => out.push_str(value),
+            Inline::Break { .. } => out.push('\n'),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => push_text(children, out),
@@ -743,7 +760,7 @@ fn subtree_in_inlines(inlines: &[Inline], node: NodeId) -> Option<Range<u32>> {
             return Some(held);
         }
         return match inline {
-            Inline::Text { .. } | Inline::Code { .. } => None,
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => subtree_in_inlines(children, node),
@@ -802,7 +819,7 @@ fn subtree_in_rows<'a>(rows: impl Iterator<Item = &'a Row>, node: NodeId) -> Opt
 /// The same, for one inline.
 fn inline_nodes(inline: &Inline) -> u32 {
     1 + match inline {
-        Inline::Text { .. } | Inline::Code { .. } => 0,
+        Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => 0,
         Inline::Emphasis { children, .. }
         | Inline::Strong { children, .. }
         | Inline::Link { children, .. } => children.iter().map(inline_nodes).sum(),
@@ -867,7 +884,7 @@ fn node_in_inlines(inlines: &[Inline], byte: u32) -> Option<(NodeId, SourceSpan)
             continue;
         }
         let inner = match inline {
-            Inline::Text { .. } | Inline::Code { .. } => None,
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => node_in_inlines(children, byte),
@@ -905,7 +922,7 @@ fn span_in_inlines(inlines: &[Inline], node: NodeId) -> Option<SourceSpan> {
             return inline_span(inline);
         }
         let found = match inline {
-            Inline::Text { .. } | Inline::Code { .. } => None,
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. } => span_in_inlines(children, node),
@@ -975,6 +992,7 @@ pub fn inline_attributes(inline: &Inline) -> &Attributes {
     match inline {
         Inline::Text { attributes, .. }
         | Inline::Code { attributes, .. }
+        | Inline::Break { attributes, .. }
         | Inline::Emphasis { attributes, .. }
         | Inline::Strong { attributes, .. }
         | Inline::Link { attributes, .. } => attributes,
@@ -998,6 +1016,7 @@ pub fn inline_position(inline: &Inline) -> Option<SourcePos> {
     match inline {
         Inline::Text { position, .. }
         | Inline::Code { position, .. }
+        | Inline::Break { position, .. }
         | Inline::Emphasis { position, .. }
         | Inline::Strong { position, .. }
         | Inline::Link { position, .. } => *position,
@@ -1033,6 +1052,7 @@ pub fn inline_id(inline: &Inline) -> NodeId {
     match inline {
         Inline::Text { id, .. }
         | Inline::Code { id, .. }
+        | Inline::Break { id, .. }
         | Inline::Emphasis { id, .. }
         | Inline::Strong { id, .. }
         | Inline::Link { id, .. } => *id,
@@ -1044,6 +1064,7 @@ pub fn inline_span(inline: &Inline) -> Option<SourceSpan> {
     match inline {
         Inline::Text { span, .. }
         | Inline::Code { span, .. }
+        | Inline::Break { span, .. }
         | Inline::Emphasis { span, .. }
         | Inline::Strong { span, .. }
         | Inline::Link { span, .. } => *span,
@@ -1090,7 +1111,7 @@ fn assign_block(block: &mut Block, next: &mut u32) {
 
 fn assign_inline(inline: &mut Inline, next: &mut u32) {
     match inline {
-        Inline::Text { id, .. } | Inline::Code { id, .. } => {
+        Inline::Text { id, .. } | Inline::Code { id, .. } | Inline::Break { id, .. } => {
             *id = next_id(next);
         }
         Inline::Emphasis { id, children, .. }
@@ -1399,7 +1420,9 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
 
         fn walk_inline_ids(inline: &Inline) -> Vec<NodeId> {
             match inline {
-                Inline::Text { id, .. } | Inline::Code { id, .. } => vec![*id],
+                Inline::Text { id, .. } | Inline::Code { id, .. } | Inline::Break { id, .. } => {
+                    vec![*id]
+                }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
@@ -1483,6 +1506,38 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                 "position": {"line": 4, "column": 1},
                 "span": {"start": 40, "end": 58},
             }),
+        );
+    }
+
+    /// A hard break is a node of its own, with no text in it. It
+    /// serializes as its tag, reads back, and is a newline in the
+    /// text of the inlines around it.
+    #[test]
+    fn a_hard_break_is_an_inline_of_its_own() {
+        let words = |value: &str| Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: value.into(),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let inlines = vec![
+            words("Chapter One"),
+            Inline::Break {
+                id: NodeId::UNASSIGNED,
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+            words("The Voyage to Lilliput"),
+        ];
+        let json = serde_json::to_value(&inlines).unwrap();
+        assert_eq!(json[1], serde_json::json!({"type": "break"}));
+        let read: Vec<Inline> = serde_json::from_value(json).unwrap();
+        assert_eq!(read, inlines);
+        assert_eq!(
+            super::text(&inlines),
+            "Chapter One\nThe Voyage to Lilliput"
         );
     }
 
