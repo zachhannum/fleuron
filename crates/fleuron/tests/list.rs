@@ -364,9 +364,9 @@ fn two_layouts_of_the_fixture_are_byte_identical() {
 }
 
 /// A PNG header and nothing else, two inches square at 96dpi.
-struct Plate;
+struct Png;
 
-impl ImageLoader for Plate {
+impl ImageLoader for Png {
     fn load(&self, url: &str) -> Option<Vec<u8>> {
         (url == "image.png").then(|| {
             let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
@@ -386,11 +386,11 @@ fn beside_an_image(css: &str) -> (LayoutOutput, (f32, f32, f32, f32)) {
     let items: String = (1..=8)
         .map(|item| format!("- item {item} {}\n", "words to wrap ".repeat(6)))
         .collect();
-    let book = read(&format!("![a plate](image.png)\n\n{items}"));
+    let book = read(&format!("![an image](image.png)\n\n{items}"));
     let styles = styled(&book, css);
-    let assets = Assets::probe(&book, &styles, &Plate);
+    let assets = Assets::probe(&book, &styles, &Png);
     let output = layout_book(&book, &styles, registry(), &assets);
-    let plate = output.pages[0]
+    let image = output.pages[0]
         .items
         .iter()
         .find_map(|item| match item {
@@ -398,7 +398,7 @@ fn beside_an_image(css: &str) -> (LayoutOutput, (f32, f32, f32, f32)) {
             _ => None,
         })
         .expect("the first page paints the image");
-    (output, plate)
+    (output, image)
 }
 
 /// A marker beside an image that its item wraps around keeps clear of
