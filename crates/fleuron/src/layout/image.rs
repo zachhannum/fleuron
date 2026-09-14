@@ -2,10 +2,42 @@
 
 use crate::style::ComputedStyle;
 
-/// The size one block image is set at, and whether the page had to
+use super::Paginator;
+
+impl Paginator<'_> {
+    /// Sizes the image at `url` with `size`, and warns where the page
+    /// made it smaller than the image asked for.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn image_size(
+        &self,
+        style: &ComputedStyle,
+        url: &str,
+        intrinsic: (f32, f32),
+        within: (f32, f32),
+        measure: f32,
+        room: f32,
+        origin: Option<String>,
+    ) -> ImageSize {
+        let size = size(style, intrinsic, within, measure, room);
+        if size.tall {
+            self.warn(
+                format!("Image {url} is taller than the page. It is scaled to fit."),
+                origin,
+            );
+        } else if size.wide {
+            self.warn(
+                format!("Image {url} is wider than the content box. It is scaled to fit."),
+                origin,
+            );
+        }
+        size
+    }
+}
+
+/// The size one image is set at, and whether the page had to
 /// make it smaller than the size it asked for.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Plate {
+pub(super) struct ImageSize {
     pub(super) width: f32,
     pub(super) height: f32,
     /// A `width` or a `height` the sheet asked for came out wider than
@@ -23,13 +55,13 @@ pub(super) struct Plate {
 /// `measure` and `room` are the content box that has to hold the
 /// image. They are the page's limit rather than a default, so they
 /// apply over any size the sheet asked for.
-pub(super) fn plate(
+pub(super) fn size(
     style: &ComputedStyle,
     intrinsic: (f32, f32),
     (within, tall_within): (f32, f32),
     measure: f32,
     room: f32,
-) -> Plate {
+) -> ImageSize {
     let (own_width, own_height) = intrinsic;
     let ratio = (own_width > 0.0 && own_height > 0.0).then(|| own_width / own_height);
     let asked = (
@@ -62,7 +94,7 @@ pub(super) fn plate(
     let (width, height) = fit((width, height), measure, f32::INFINITY);
     let tall = height > room;
     let (width, height) = fit((width, height), measure, room);
-    Plate {
+    ImageSize {
         width,
         height,
         wide,
@@ -93,33 +125,33 @@ mod tests {
     use super::*;
     use crate::style::Width;
 
-    /// A plate 80 by 40 points, in a content box 300 wide and 600 tall.
-    fn sized(set: impl FnOnce(&mut ComputedStyle)) -> Plate {
+    /// An image 80 by 40 points, in a content box 300 wide and 600 tall.
+    fn sized(set: impl FnOnce(&mut ComputedStyle)) -> ImageSize {
         let mut style = ComputedStyle::initial();
         set(&mut style);
-        plate(&style, (80.0, 40.0), (300.0, 600.0), 300.0, 600.0)
+        size(&style, (80.0, 40.0), (300.0, 600.0), 300.0, 600.0)
     }
 
-    fn size(plate: Plate) -> (f32, f32) {
-        (plate.width, plate.height)
+    fn pair(size: ImageSize) -> (f32, f32) {
+        (size.width, size.height)
     }
 
     /// Part: with no size of its own, an image keeps its intrinsic
     /// size.
     #[test]
     fn an_unsized_image_keeps_its_intrinsic_size() {
-        assert_eq!(size(sized(|_| {})), (80.0, 40.0));
+        assert_eq!(pair(sized(|_| {})), (80.0, 40.0));
     }
 
     /// Part: one side given, the other follows the intrinsic ratio.
     #[test]
     fn one_side_given_the_other_follows_the_ratio() {
         assert_eq!(
-            size(sized(|style| style.width = Width::Points(200.0))),
+            pair(sized(|style| style.width = Width::Points(200.0))),
             (200.0, 100.0)
         );
         assert_eq!(
-            size(sized(|style| style.height = Width::Points(20.0))),
+            pair(sized(|style| style.height = Width::Points(20.0))),
             (40.0, 20.0)
         );
     }
@@ -128,7 +160,7 @@ mod tests {
     #[test]
     fn both_sides_given_the_ratio_is_the_authors() {
         assert_eq!(
-            size(sized(|style| {
+            pair(sized(|style| {
                 style.width = Width::Points(100.0);
                 style.height = Width::Points(100.0);
             })),
@@ -141,11 +173,11 @@ mod tests {
     #[test]
     fn percentages_resolve_against_their_own_axis() {
         assert_eq!(
-            size(sized(|style| style.width = Width::Percent(50.0))),
+            pair(sized(|style| style.width = Width::Percent(50.0))),
             (150.0, 75.0)
         );
         assert_eq!(
-            size(sized(|style| style.height = Width::Percent(10.0))),
+            pair(sized(|style| style.height = Width::Percent(10.0))),
             (120.0, 60.0)
         );
     }
@@ -155,18 +187,18 @@ mod tests {
     #[test]
     fn a_ceiling_lowers_the_size_in_proportion() {
         assert_eq!(
-            size(sized(|style| style.max_width = Width::Points(40.0))),
+            pair(sized(|style| style.max_width = Width::Points(40.0))),
             (40.0, 20.0)
         );
         assert_eq!(
-            size(sized(|style| {
+            pair(sized(|style| {
                 style.width = Width::Points(200.0);
                 style.max_height = Width::Percent(10.0);
             })),
             (120.0, 60.0)
         );
         assert_eq!(
-            size(sized(|style| style.max_width = Width::Points(400.0))),
+            pair(sized(|style| style.max_width = Width::Points(400.0))),
             (80.0, 40.0)
         );
     }
@@ -175,7 +207,7 @@ mod tests {
     #[test]
     fn with_both_sides_given_each_side_meets_its_own_ceiling() {
         assert_eq!(
-            size(sized(|style| {
+            pair(sized(|style| {
                 style.width = Width::Points(100.0);
                 style.height = Width::Points(100.0);
                 style.max_width = Width::Points(50.0);
@@ -189,11 +221,11 @@ mod tests {
     #[test]
     fn the_content_box_limits_an_explicit_size() {
         let wide = sized(|style| style.width = Width::Points(600.0));
-        assert_eq!(size(wide), (300.0, 150.0));
+        assert_eq!(pair(wide), (300.0, 150.0));
         assert!(wide.wide && !wide.tall);
 
         let tall = sized(|style| style.height = Width::Points(1200.0));
-        assert_eq!(size(tall), (300.0, 150.0));
+        assert_eq!(pair(tall), (300.0, 150.0));
         assert!(tall.wide && !tall.tall);
 
         let narrow = sized(|style| {
@@ -210,8 +242,8 @@ mod tests {
     #[test]
     fn an_intrinsic_size_wider_than_the_measure_is_not_flagged() {
         let style = ComputedStyle::initial();
-        let wide = plate(&style, (800.0, 400.0), (300.0, 600.0), 300.0, 600.0);
-        assert_eq!(size(wide), (300.0, 150.0));
+        let wide = size(&style, (800.0, 400.0), (300.0, 600.0), 300.0, 600.0);
+        assert_eq!(pair(wide), (300.0, 150.0));
         assert!(!wide.wide && !wide.tall);
     }
 }

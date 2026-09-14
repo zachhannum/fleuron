@@ -141,9 +141,8 @@ impl Paginator<'_> {
     /// One image anchored to the page, which lands on the page `node`
     /// lands on.
     ///
-    /// Its size follows CSS 2.1 for a replaced element with no width
-    /// or height of its own: its intrinsic size, scaled down where
-    /// that does not fit the page area.
+    /// It is sized as a block image is, with a percentage measuring
+    /// the page area, and scaled down where that does not fit it.
     fn anchored_image(
         &self,
         node: NodeId,
@@ -158,10 +157,14 @@ impl Paginator<'_> {
         };
         let (available, room) = self.styles.default_page().geometry.content_size();
         let margin = style.margin;
-        let (width, height) = super::image::fit(
+        let super::image::ImageSize { width, height, .. } = self.image_size(
+            style,
+            url,
             intrinsic.size(),
+            (available, room),
             (available - margin.inline()).max(0.0),
             (room - margin.top - margin.bottom).max(0.0),
+            (!origin.is_empty()).then_some(origin),
         );
         Some(Anchored {
             node,
@@ -1434,6 +1437,32 @@ mod tests {
             Vec::<f32>::new(),
             "lines set over the image",
         );
+    }
+
+    /// An anchored image takes the size the sheet gives it, and a
+    /// percentage measures the page area.
+    #[test]
+    fn an_anchored_image_takes_the_size_the_sheet_gives_it() {
+        let (width, height) = master(Situation::First(Side::Recto))
+            .geometry
+            .content_size();
+        let size = |css: &str| {
+            let output = with_image(
+                &format!("img {{ position: absolute; top: 0; left: 0; {css} }}"),
+                vec![section(
+                    std::iter::once(image()).chain(long_prose(2)).collect(),
+                )],
+            );
+            let images = painted(&output.pages[0]);
+            let [(_, _, w, h)] = images.as_slice() else {
+                panic!("the first page paints one image: {images:?}");
+            };
+            (*w, *h)
+        };
+        assert_eq!(size(""), (IMAGE, IMAGE));
+        assert_eq!(size("width: 72pt"), (72.0, 72.0));
+        assert_eq!(size("width: 50%; height: 20pt"), (width / 2.0, 20.0));
+        assert_eq!(size("max-height: 10%"), (height / 10.0, height / 10.0));
     }
 
     /// An image anchored inside an absolute block lands on the page

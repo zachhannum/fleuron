@@ -21,7 +21,7 @@ use super::flow::Painted;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decoration,
 };
-use super::image::{self, Plate};
+use super::image::ImageSize;
 use super::reference::Referring;
 
 impl Paginator<'_> {
@@ -808,24 +808,15 @@ impl Builder<'_, '_> {
             .geometry
             .content_size()
             .1;
-        let Plate {
-            width,
-            height,
-            wide,
-            tall,
-        } = image::plate(style, intrinsic.size(), within, measure, available);
-        let origin = (!origin.is_empty()).then_some(origin);
-        if tall {
-            self.paginator.warn(
-                format!("Image {url} is taller than the page. It is scaled to fit."),
-                origin,
-            );
-        } else if wide {
-            self.paginator.warn(
-                format!("Image {url} is wider than the content box. It is scaled to fit."),
-                origin,
-            );
-        }
+        let ImageSize { width, height, .. } = self.paginator.image_size(
+            style,
+            url,
+            intrinsic.size(),
+            within,
+            measure,
+            available,
+            (!origin.is_empty()).then_some(origin),
+        );
         let offset = align_offset(style.text_align, width, measure);
         self.emit_one(
             x + offset,
