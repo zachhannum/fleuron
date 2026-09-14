@@ -21,6 +21,7 @@ use super::flow::Painted;
 use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decoration,
 };
+use super::image::ImageSize;
 use super::reference::Referring;
 
 impl Paginator<'_> {
@@ -257,12 +258,7 @@ impl Builder<'_, '_> {
             self.fixed += border.top + style.padding.top;
         }
         if style.sized() {
-            let within = self
-                .tall
-                .iter()
-                .rev()
-                .find_map(|tall| tall.definite)
-                .unwrap_or_else(|| self.styles().default_page().geometry.content_size().1);
+            let within = self.tall_within();
             let definite = style.height.resolve(within);
             let least = style
                 .min_height
@@ -276,6 +272,16 @@ impl Builder<'_, '_> {
             });
         }
         start
+    }
+
+    /// The height a percentage height measures against: the nearest
+    /// definite `height` around the block, or the page's content box.
+    fn tall_within(&self) -> f32 {
+        self.tall
+            .iter()
+            .rev()
+            .find_map(|tall| tall.definite)
+            .unwrap_or_else(|| self.styles().default_page().geometry.content_size().1)
     }
 
     /// Commits space no margin collapses through. The margin a
@@ -558,12 +564,18 @@ impl Builder<'_, '_> {
                 }
                 Block::Image { id, url, .. } => {
                     let style = styles.style(*id).clone();
-                    let start = self.open(*id, &style, &[], x, measure);
+                    // The image takes its `height` itself. A scaled
+                    // image would otherwise leave the rest below it.
+                    let boxed = ComputedStyle {
+                        height: crate::style::Width::Auto,
+                        ..style.clone()
+                    };
+                    let start = self.open(*id, &boxed, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
                     self.pseudo(*id, GeneratedBox::Before, position, inner, narrowed);
                     self.image(&style, url, origin(self.source, position), x, measure);
                     self.pseudo(*id, GeneratedBox::After, position, inner, narrowed);
-                    self.close(&style, start);
+                    self.close(&boxed, start);
                 }
                 Block::List {
                     id,
@@ -779,14 +791,15 @@ impl Builder<'_, '_> {
         self.emit_one(x + offset, height, piece);
     }
 
-    /// A block image, sized as CSS 2.1 §10.4 sizes a replaced element
-    /// with no width or height of its own: its intrinsic size, scaled
-    /// down when that does not fit the page.
+    /// A block image, at the size its style and its file ask for,
+    /// scaled down when that does not fit the page. A percentage width
+    /// measures against `measure`, the width the image is laid out in.
     fn image(&mut self, style: &ComputedStyle, url: &str, origin: String, x: f32, measure: f32) {
         let Some((asset, intrinsic)) = self.paginator.assets.lookup(url) else {
             self.paginator.missing(url, origin);
             return;
         };
+        let within = (measure, self.tall_within());
         let (x, measure) = style.content_box(x, measure);
         let available = self
             .paginator
@@ -795,22 +808,15 @@ impl Builder<'_, '_> {
             .geometry
             .content_size()
             .1;
-        let (mut width, mut height) = intrinsic.size();
-        let scale = |value: f32, from: f32, to: f32| {
-            if from > 0.0 { value * to / from } else { value }
-        };
-        if width > measure {
-            height = scale(height, width, measure);
-            width = measure;
-        }
-        if height > available {
-            self.paginator.warn(
-                format!("Image {url} is taller than the page. It is scaled to fit."),
-                (!origin.is_empty()).then_some(origin),
-            );
-            width = scale(width, height, available);
-            height = available;
-        }
+        let ImageSize { width, height, .. } = self.paginator.image_size(
+            style,
+            url,
+            intrinsic.size(),
+            within,
+            measure,
+            available,
+            (!origin.is_empty()).then_some(origin),
+        );
         let offset = align_offset(style.text_align, width, measure);
         self.emit_one(
             x + offset,

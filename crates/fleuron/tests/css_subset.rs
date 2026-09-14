@@ -185,7 +185,7 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("counter-increment", "page"),
         ("font-variant", "small-caps"),
         ("font", "italic 11pt serif"),
-        ("max-height", "10em"),
+        ("min-width", "10em"),
         ("border-spacing", "2pt"),
         ("inset", "0"),
         ("clip-path", "circle()"),
@@ -514,6 +514,21 @@ fn pairs(heading: &str, code: bool, selectors: &[Selector]) -> String {
         out.push_str(&format!("\n| {name} | `{}` |", selector.example));
     }
     out
+}
+
+/// Acceptance: `width` no longer warns as unsupported, and neither do
+/// the other sizes an image takes.
+#[test]
+fn the_sizes_of_an_image_do_not_warn() {
+    for declaration in [
+        "width: 200pt",
+        "width: 50%",
+        "height: 3in",
+        "max-width: 80%",
+        "max-height: none",
+    ] {
+        parses(&rule("img:nth-child(2)", declaration));
+    }
 }
 
 fn names(selectors: &[Selector]) -> Vec<String> {

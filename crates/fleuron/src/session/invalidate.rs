@@ -70,7 +70,9 @@ impl Against {
 /// Whether any block asks for a height as a percentage of the page.
 fn percent_heights(styles: &StyleTree) -> bool {
     styles.styles().iter().any(|style| {
-        matches!(style.height, Width::Percent(_)) || matches!(style.min_height, Width::Percent(_))
+        [style.height, style.min_height, style.max_height]
+            .iter()
+            .any(|size| matches!(size, Width::Percent(_)))
     })
 }
 

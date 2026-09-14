@@ -607,6 +607,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
 | `shape-margin` | `shape-margin: 6pt` |
 | `width`, `height`, `min-height` | `width: 8em` |
+| `max-width`, `max-height` | `max-width: 4in` |
 | `margin` | `margin: 1em` |
 | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | `margin-top: 1em` |
 | `padding` | `padding: 12pt` |
@@ -641,6 +642,8 @@ shape-margin:         <length> | <percentage>;
 width:                auto | <length> | <percentage>;
 height:               auto | <length> | <percentage>;
 min-height:           auto | <length> | <percentage>;
+max-width:            none | <length> | <percentage>;
+max-height:           none | <length> | <percentage>;
 margin:               [ <length> | <percentage> ]{1,4};
 margin-top:           <length> | <percentage>;
 margin-right:         <length> | <percentage>;
@@ -715,6 +718,30 @@ The following example gives each chapter title a height of 3 inches. The text of
 ```css
 h2 {
   height: 3in;
+}
+```
+
+### Image size
+
+`width` and `height` give the size of an image. `max-width` and `max-height` give the largest size of an image. Each one takes a length or a percentage, and `max-width` and `max-height` also take `none`.
+
+If you give one side, the other side keeps the proportions of the image file. If you give both sides, the image takes both, and its proportions can change. If you give neither side, the image takes the size of its file.
+
+A percentage on `width` or `max-width` is a percentage of the width of the block the image is in. Inside a quotation, that is the width of the quotation. A percentage on `height` or `max-height` is a percentage of the height of the page's content box.
+
+An image is never wider than the block it is in or taller than the page's content box. If it does not fit, the engine makes it smaller and keeps its proportions. The engine warns when an image does not fit the height, or when a size you give does not fit the width.
+
+On an image, `height` is the height of the image. The engine leaves no space below an image that it makes smaller.
+
+The following example makes every image 200 points wide, and keeps each map under 3 inches tall:
+
+```css
+img {
+  width: 200pt;
+}
+
+img.map {
+  max-height: 3in;
 }
 ```
 
@@ -927,7 +954,7 @@ You can put an image against the page rather than among the paragraphs. The text
 
 `position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A percentage is a percentage of the width or the height of the content box. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
 
-The image keeps the size its own file gives it. If that size does not fit the content box, the engine makes the image smaller. Margins on the image add space between it and the text.
+The image takes its size the same way as an image among the paragraphs. See [Image size](#image-size). A percentage on `width` or `max-width` is a percentage of the width of the content box. If the image does not fit the content box, the engine makes it smaller. Margins on the image add space between it and the text.
 
 Use `wrap-flow` to choose the side of the image the text wraps on.
 
@@ -1315,11 +1342,11 @@ code { font-family: monospace }
 
 | area | not supported yet |
 |---|---|
-| layout | floats, grid, flexbox, transforms, `max-height`, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
+| layout | floats, grid, flexbox, transforms, `min-width`, `max-width` and `max-height` on anything but an image, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
 | lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
-| table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but a cell of the first row |
-| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned box |
+| table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
+| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned block |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | the `--name` syntax and `var()` |

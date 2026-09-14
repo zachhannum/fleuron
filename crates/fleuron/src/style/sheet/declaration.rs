@@ -12,11 +12,11 @@ use crate::style::properties::{BorderStyle, Declaration, Edge, Length, MEDIUM};
 use super::color::{background_color, border_color, color};
 use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
-    break_value, column_span, count, counter_reset, decoration_break, edges, families, font_style,
-    generated, hanging, hyphens, inset, keyword_or, length, letter_spacing, line_height,
-    line_style, line_width, list_style_type, page_name, positioning, property, shape_outside,
-    string_set, text_align, text_justify, text_transform, variant_caps, weight, width, wrap_flow,
-    z_index,
+    break_value, ceiling, column_span, count, counter_reset, decoration_break, edges, families,
+    font_style, generated, hanging, hyphens, inset, keyword_or, length, letter_spacing,
+    line_height, line_style, line_width, list_style_type, page_name, positioning, property,
+    shape_outside, string_set, text_align, text_justify, text_transform, variant_caps, weight,
+    width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, Written, position, warning};
@@ -560,6 +560,20 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "auto | <length> | <percentage>",
         examples: &["auto", "2in", "25%"],
         read: |name, input| longhand(name, input, width, Declaration::MinHeight),
+    },
+    Spec {
+        name: "max-width",
+        inherited: false,
+        syntax: "none | <length> | <percentage>",
+        examples: &["none", "4in", "50%"],
+        read: |name, input| longhand(name, input, ceiling, Declaration::MaxWidth),
+    },
+    Spec {
+        name: "max-height",
+        inherited: false,
+        syntax: "none | <length> | <percentage>",
+        examples: &["none", "3in", "40%"],
+        read: |name, input| longhand(name, input, ceiling, Declaration::MaxHeight),
     },
     Spec {
         name: "margin",

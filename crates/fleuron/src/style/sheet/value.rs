@@ -146,6 +146,17 @@ pub(super) fn width(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
     auto_or(input, length)
 }
 
+/// `max-width` and `max-height`, where `none` is no ceiling.
+pub(super) fn ceiling(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("none"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    length(input).map(Some)
+}
+
 pub(super) fn border_collapse(input: &mut Parser<'_, '_>) -> Option<BorderCollapse> {
     let keyword = input.expect_ident().ok()?.clone();
     match_ignore_ascii_case! { &keyword,
