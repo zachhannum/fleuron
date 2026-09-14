@@ -2656,10 +2656,14 @@ mod tests {
              h1::after { content: \"\"; height: 2pt }",
         );
         assert!(tree.warnings().is_empty(), "{:?}", tree.warnings());
-        let before = tree.before(id_of(&tree, "p")).expect("`p::before` generates");
+        let before = tree
+            .before(id_of(&tree, "p"))
+            .expect("`p::before` generates");
         assert_eq!(before.content, Content::Text("x".into()));
         assert_eq!(before.color, Color::rgb(0xff, 0, 0));
-        let after = tree.after(id_of(&tree, "h1")).expect("`h1::after` generates");
+        let after = tree
+            .after(id_of(&tree, "h1"))
+            .expect("`h1::after` generates");
         assert_eq!(after.content, Content::Text(String::new()));
         assert_eq!(after.height, Width::Points(2.0));
         assert!(tree.after(id_of(&tree, "p")).is_none());
@@ -2730,10 +2734,7 @@ mod tests {
                 "p::after { content: target-counter(\"#the-hunter\", page) }",
                 true,
             ),
-            (
-                "p::after { content: target-text(\"#the-hunter\") }",
-                false,
-            ),
+            ("p::after { content: target-text(\"#the-hunter\") }", false),
         ] {
             assert_eq!(compile(&book, css).counts_pages(), counts, "{css}");
         }

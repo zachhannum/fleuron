@@ -16,7 +16,7 @@ use crate::content::{Block, NodeId, Row, SourcePos, origin, rows};
 use crate::pages::DrawItem;
 use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
-use super::build::{Builder, Stacked, gather};
+use super::build::{Builder, Stacked, Which, gather};
 use super::flow::{Painted, shift, shift_boxes};
 use super::fragment::{BreakPoint, Decoration, Fragment, Marks, Piece, TableRow};
 
@@ -49,6 +49,7 @@ impl<'a> Builder<'a, '_> {
         };
         let start = self.open(id, &frame, &[], x, measure);
         let (left, width) = frame.content_box(x, measure);
+        self.generated(id, Which::Before, position, left, width);
         let rows: Vec<&Row> = rows(head, body).collect();
         let table = Table::new(styles, style, &rows, collapse);
         if table.columns > 0 {
@@ -65,6 +66,7 @@ impl<'a> Builder<'a, '_> {
                 self.row(&table, &grid, index, row, head.len(), &mut first);
             }
         }
+        self.generated(id, Which::After, position, left, width);
         self.close(&frame, start);
     }
 

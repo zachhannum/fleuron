@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::content::{
-    Block, Inline, NodeId, Section, block_attributes, block_id, inline_attributes, inline_id,
-    origin, text,
+    Block, Inline, NodeId, Section, SourcePos, block_attributes, block_id, block_position,
+    inline_attributes, inline_id, origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::pages::{DrawItem, PageBox};
@@ -40,6 +40,13 @@ impl Paginator<'_> {
         let start = builder.open(section.id, &style, &[], 0.0, measure);
         let column = style.content_box(0.0, measure);
         let whole = style.content_box(0.0, geometry.content_size().0);
+        builder.generated(
+            section.id,
+            Which::Before,
+            section.position,
+            column.0,
+            column.1,
+        );
         for block in &section.blocks {
             builder.spanning = self.styles.style(block_id(block)).column_span == ColumnSpan::All;
             let (x, measure) = if builder.spanning { whole } else { column };
@@ -56,6 +63,13 @@ impl Paginator<'_> {
             }
         }
         builder.spanning = false;
+        builder.generated(
+            section.id,
+            Which::After,
+            section.position,
+            column.0,
+            column.1,
+        );
         builder.close(&style, start);
         builder.fragments
     }
@@ -125,6 +139,16 @@ impl<'a, 'p> Builder<'a, 'p> {
             tall: Vec::new(),
         }
     }
+}
+
+/// Which of the two boxes `::before` and `::after` generate inside a
+/// block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Which {
+    /// The first child of the block.
+    Before,
+    /// The last child of the block.
+    After,
 }
 
 /// A block that asks for a height, while its fragments are still being
@@ -481,30 +505,37 @@ impl Builder<'_, '_> {
                 self.anchor(id);
                 continue;
             }
+            let position = block_position(block);
             match block {
                 Block::Heading { id, inlines, .. } | Block::Paragraph { id, inlines, .. } => {
                     self.name_inlines(inlines);
-                    self.paragraph(*id, inlines, x, measure);
+                    self.paragraph(*id, inlines, position, x, measure);
                 }
                 Block::Blockquote { id, blocks, .. } => {
                     let style = self.styles().style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
                     let (inner, narrowed) = style.content_box(x, measure);
+                    self.generated(*id, Which::Before, position, inner, narrowed);
                     self.blocks(blocks, inner, narrowed);
+                    self.generated(*id, Which::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::ThematicBreak { id, .. } => {
                     let style = self.styles().style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
+                    let (inner, narrowed) = style.content_box(x, measure);
+                    self.generated(*id, Which::Before, position, inner, narrowed);
                     self.ornament(&style, x, measure);
+                    self.generated(*id, Which::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
-                Block::Image {
-                    id, url, position, ..
-                } => {
+                Block::Image { id, url, .. } => {
                     let style = self.styles().style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
-                    self.image(&style, url, origin(self.source, *position), x, measure);
+                    let (inner, narrowed) = style.content_box(x, measure);
+                    self.generated(*id, Which::Before, position, inner, narrowed);
+                    self.image(&style, url, origin(self.source, position), x, measure);
+                    self.generated(*id, Which::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
                 Block::Table {
@@ -524,24 +555,21 @@ impl Builder<'_, '_> {
     ///
     /// `spec` is the profile the lines were broken to, and `gaps` the
     /// space above a band the profile had to move past an image.
-    fn paragraph(&mut self, id: NodeId, inlines: &[Inline], x: f32, measure: f32) {
+    fn paragraph(
+        &mut self,
+        id: NodeId,
+        inlines: &[Inline],
+        position: Option<SourcePos>,
+        x: f32,
+        measure: f32,
+    ) {
         let computed = self.styles().style(id).clone();
         let start = self.open(id, &computed, inlines, x, measure);
         let (x, measure) = computed.content_box(x, measure);
+        self.generated(id, Which::Before, position, x, measure);
 
         let style = computed.paragraph();
-        let hyphenate = computed.hyphens == Hyphens::Auto;
-        let options = LineBreakOptions {
-            hyphenate,
-            patterns: if hyphenate {
-                self.paginator.patterns()
-            } else {
-                Patterns::NONE
-            },
-            justify: computed.text_align == TextAlign::Justify,
-            inter_character: computed.text_justify == TextJustify::InterCharacter,
-            hanging: computed.hanging_punctuation,
-        };
+        let options = self.options(&computed);
         let cap = self.paginator.drop_cap(id, &computed, inlines);
         let full = Span::band(0.0, measure);
         let spec = match &cap {
@@ -598,7 +626,91 @@ impl Builder<'_, '_> {
             fragment.reflow = reflow.clone();
             self.emit(&mut first, fragment);
         }
+        self.generated(id, Which::After, position, x, measure);
         self.close(&computed, start);
+    }
+
+    /// How the lines of a block in `style` break.
+    fn options(&self, style: &ComputedStyle) -> LineBreakOptions {
+        let hyphenate = style.hyphens == Hyphens::Auto;
+        LineBreakOptions {
+            hyphenate,
+            patterns: if hyphenate {
+                self.paginator.patterns()
+            } else {
+                Patterns::NONE
+            },
+            justify: style.text_align == TextAlign::Justify,
+            inter_character: style.text_justify == TextJustify::InterCharacter,
+            hanging: style.hanging_punctuation,
+        }
+    }
+
+    /// The box `::before` or `::after` generates inside the block
+    /// `id`, across the content box at `x` and `measure`. It holds the
+    /// text of its `content`, or nothing. A page does not end between
+    /// the box and the rest of the block.
+    pub(super) fn generated(
+        &mut self,
+        id: NodeId,
+        which: Which,
+        position: Option<SourcePos>,
+        x: f32,
+        measure: f32,
+    ) {
+        let styles = self.styles();
+        let pseudo = match which {
+            Which::Before => styles.before(id),
+            Which::After => styles.after(id),
+        };
+        let Some(mut style) = pseudo.cloned() else {
+            return;
+        };
+        // A box with no layer of its own paints in the layer of its
+        // block.
+        let layer = self.layer;
+        if style.z_index == 0 {
+            style.z_index = layer;
+        }
+        if which == Which::After {
+            self.ask(Break::Avoid);
+        }
+        let start = self.open(NodeId::UNASSIGNED, &style, &[], x, measure);
+        let (x, measure) = style.content_box(x, measure);
+        let text = self
+            .paginator
+            .generate(&style.content, None, self.source, position)
+            .unwrap_or_default();
+        let spec = Measure::uniform(measure);
+        let lines = if text.is_empty() {
+            Vec::new()
+        } else {
+            let options = self.options(&style);
+            self.paginator
+                .lines
+                .layout_generated(&text, style.paragraph(), &spec, options)
+        };
+        if lines.is_empty() {
+            self.emit_one(x, 0.0, Piece::Blank);
+        } else {
+            let setting = Setting {
+                x,
+                align: style.text_align,
+                orphans: style.orphans as usize,
+                widows: style.widows as usize,
+                cap: None,
+                cap_x: 0.0,
+            };
+            let mut first = true;
+            for fragment in set_lines(self.paginator, lines, &spec, &[], &setting) {
+                self.emit(&mut first, fragment);
+            }
+        }
+        self.close(&style, start);
+        self.layer = layer;
+        if which == Which::Before {
+            self.ask(Break::Avoid);
+        }
     }
 
     /// A thematic break: the ornament the cascade named, or the space
@@ -917,16 +1029,16 @@ fn align_offset(align: TextAlign, width: f32, available: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::content::{Attributes, Block, NodeId, Section, SourcePos};
+    use crate::content::{Attributes, Block, HeadingLevel, NodeId, Section, SourcePos};
     use crate::layout::testing::{
         assert_orphans_and_widows, book_of, broken_heading, chapter_size, content_lines,
         folio_size, heading, long_prose, master, origin_of, ornament, paginate, paginate_styled,
-        paragraph, png, prose, quote, registry, right_edge, scene_break, section, small_caps_lines,
-        styled, tagged_prose, ua, under_h3,
+        paragraph, png, prose, quote, rects, registry, right_edge, scene_break, section,
+        small_caps_lines, styled, tagged_prose, ua, under_h3,
     };
     use crate::layout::{BreakPoint, Fragment, Paginator, Piece, layout_book};
     use crate::pages::{DrawItem, Page, Side};
-    use crate::style::Situation;
+    use crate::style::{Color, Situation};
 
     /// The baseline of the first line of the first page that opens
     /// with `token`.
@@ -1859,6 +1971,255 @@ mod tests {
                 assert!(
                     runs[0].1 != chapter_size(),
                     "page {}: a heading closed the page",
+                    page.number,
+                );
+            }
+        }
+    }
+
+    /// An `h4` with the words `value`.
+    fn h4(value: &str) -> Block {
+        let Block::Heading { inlines, .. } = heading(value) else {
+            unreachable!("`heading` makes a heading");
+        };
+        Block::Heading {
+            id: NodeId::UNASSIGNED,
+            level: HeadingLevel::H4,
+            inlines,
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        }
+    }
+
+    /// Each content line of a page as the text of its runs, with its
+    /// baseline, its leading edge and its size.
+    fn read_lines(page: &Page) -> Vec<(f32, f32, f32, String)> {
+        content_lines(page)
+            .into_iter()
+            .map(|(baseline, runs)| {
+                let text = runs.iter().map(|run| run.2).collect();
+                (baseline, runs[0].0, runs[0].1, text)
+            })
+            .collect()
+    }
+
+    /// The width of a line of text on the opening page of a chapter.
+    fn opening_measure() -> f32 {
+        master(Situation::First(Side::Recto)).geometry.measure()
+    }
+
+    /// Part: a generated box holds the value of `content`, which is a
+    /// string or nothing.
+    #[test]
+    fn a_generated_box_holds_its_string_or_nothing() {
+        let blocks = || vec![section(vec![paragraph("the paragraph itself")])];
+        let said = paginate_styled("p::before { content: \"Before it\" }", blocks());
+        let texts: Vec<String> = read_lines(&said[0])
+            .into_iter()
+            .map(|line| line.3)
+            .collect();
+        assert_eq!(texts, ["Before it", "the paragraph itself"]);
+
+        let bare = paginate(blocks());
+        let empty = paginate_styled("p::before { content: \"\" }", blocks());
+        assert_eq!(read_lines(&empty[0]), read_lines(&bare[0]));
+    }
+
+    /// Part: the generated box is a block in the flow, the first or
+    /// the last child of its element, across the element's content box
+    /// and in the element's style.
+    #[test]
+    fn a_generated_box_is_the_first_or_last_child_of_its_block() {
+        let pages = paginate_styled(
+            "blockquote { font-size: 10pt; margin: 0 20pt } \
+             blockquote::before { content: \"first\" } \
+             blockquote::after { content: \"last\" }",
+            vec![section(vec![
+                quote(vec![paragraph("inside one"), paragraph("inside two")]),
+                paragraph("outside"),
+            ])],
+        );
+        let lines = read_lines(&pages[0]);
+        let texts: Vec<&str> = lines.iter().map(|line| line.3.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["first", "inside one", "inside two", "last", "outside"]
+        );
+        let (left, _) = origin_of(&pages[0]);
+        for (_, x, size, text) in [&lines[0], &lines[3]] {
+            assert!((x - (left + 20.0)).abs() < 1e-3, "{text} starts at {x}");
+            assert_eq!(*size, 10.0, "{text} is not in the quotation's size");
+        }
+    }
+
+    /// Part: the generated box takes the box model. Its border box
+    /// holds its border, its padding and its height, inside its own
+    /// margins.
+    #[test]
+    fn a_generated_box_takes_the_box_model() {
+        const TINT: Color = Color::rgb(0xee, 0xee, 0xee);
+        const INK: Color = Color::rgb(0xd6, 0x07, 0x5e);
+        let blocks = || vec![section(vec![heading("Title"), paragraph("after")])];
+        let pages = paginate_styled(
+            "h1::after { content: \"\"; height: 2pt; padding: 3pt 0; \
+             border-top: 1pt solid #d6075e; margin: 0 12pt; background-color: #eeeeee }",
+            blocks(),
+        );
+        let (left, _) = origin_of(&pages[0]);
+        let measure = opening_measure();
+        let boxes = rects(&pages[0]);
+        let [(x, _, w, h, _)] = boxes
+            .iter()
+            .filter(|rect| rect.4 == TINT)
+            .collect::<Vec<_>>()[..]
+        else {
+            panic!("one background: {boxes:?}");
+        };
+        assert!((x - (left + 12.0)).abs() < 1e-3, "the box starts at {x}");
+        assert!((w - (measure - 24.0)).abs() < 1e-3, "the box is {w} wide");
+        assert!((h - 9.0).abs() < 1e-3, "the box is {h} tall");
+        assert!(
+            boxes
+                .iter()
+                .any(|rect| rect.4 == INK && (rect.3 - 1.0).abs() < 1e-3),
+            "no top border: {boxes:?}",
+        );
+        let moved = baseline_of(&pages, "after") - baseline_of(&paginate(blocks()), "after");
+        assert!((moved - 9.0).abs() < 1e-3, "the prose moved {moved}");
+    }
+
+    /// Acceptance: `h4::after { content: ""; height: 2pt;
+    /// background-color: #d6075e }` draws a rule under every h4, at
+    /// the width of the heading's content box.
+    #[test]
+    fn a_generated_rule_sits_under_every_h4_across_its_content_box() {
+        const INK: Color = Color::rgb(0xd6, 0x07, 0x5e);
+        let pages = paginate_styled(
+            "h4 { margin: 0 20pt; padding: 0 10pt } \
+             h4::after { content: \"\"; height: 2pt; background-color: #d6075e }",
+            vec![section(vec![
+                h4("First"),
+                paragraph("one"),
+                h4("Second"),
+                paragraph("two"),
+            ])],
+        );
+        let page = &pages[0];
+        let (left, _) = origin_of(page);
+        let measure = opening_measure();
+        let lines = read_lines(page);
+        let rules: Vec<_> = rects(page)
+            .into_iter()
+            .filter(|rect| rect.4 == INK)
+            .collect();
+        assert_eq!(rules.len(), 2, "{rules:?}");
+        for ((x, y, w, h, _), title) in rules.iter().zip(["First", "Second"]) {
+            assert!(
+                (x - (left + 30.0)).abs() < 1e-3,
+                "{title}: the rule starts at {x}"
+            );
+            assert!(
+                (w - (measure - 60.0)).abs() < 1e-3,
+                "{title}: the rule is {w} wide"
+            );
+            assert!((h - 2.0).abs() < 1e-3, "{title}: the rule is {h} tall");
+            let at = lines
+                .iter()
+                .position(|line| line.3 == title)
+                .expect("the heading is set");
+            assert!(*y > lines[at].0, "{title}: the rule is above the baseline");
+            assert!(
+                y + h <= lines[at + 1].0,
+                "{title}: the rule runs into the prose"
+            );
+        }
+    }
+
+    /// Acceptance: `blockquote::before { content: "\201C" }` sets an
+    /// opening quotation mark before the quote's first line.
+    #[test]
+    fn a_generated_quotation_mark_opens_the_quotation() {
+        let pages = paginate_styled(
+            "blockquote::before { content: \"\\201C\" }",
+            vec![section(vec![quote(vec![paragraph("quoted words")])])],
+        );
+        let lines = read_lines(&pages[0]);
+        let texts: Vec<&str> = lines.iter().map(|line| line.3.as_str()).collect();
+        assert_eq!(texts, ["\u{201C}", "quoted words"]);
+        let (left, _) = origin_of(&pages[0]);
+        assert!(
+            (lines[0].1 - (left + quote_indent())).abs() < 1e-3,
+            "the mark starts at {}",
+            lines[0].1,
+        );
+    }
+
+    /// Acceptance: a generated box takes height in the flow, and the
+    /// block under it moves down by that height.
+    #[test]
+    fn the_block_under_a_generated_box_moves_down_by_its_height() {
+        let blocks = || vec![section(vec![paragraph("one"), paragraph("two")])];
+        let bare = paginate(blocks());
+        let tall = paginate_styled("p::after { content: \"\"; height: 30pt }", blocks());
+        let moved = baseline_of(&tall, "two") - baseline_of(&bare, "two");
+        assert!((moved - 30.0).abs() < 1e-3, "the paragraph moved {moved}");
+    }
+
+    /// Acceptance: a page break falling on a generated box keeps it
+    /// with the element it belongs to. No page opens between a box and
+    /// its element, so no page opens on a box that `::after` made.
+    #[test]
+    fn a_page_break_keeps_a_generated_box_with_its_element() {
+        let book = book_of(vec![section(vec![paragraph(&"words ".repeat(60))])]);
+        let fragments = |css: &str| {
+            let styles = styled(css, &book);
+            Paginator::new(registry(), &styles).section_fragments(&book.sections[0])
+        };
+        let lines = |fragments: &[Fragment]| -> Vec<usize> {
+            fragments
+                .iter()
+                .enumerate()
+                .filter(|(_, fragment)| matches!(fragment.piece, Piece::Line { .. }))
+                .map(|(index, _)| index)
+                .collect()
+        };
+        let bare = fragments("");
+        assert_ne!(bare[lines(&bare)[0]].break_before, BreakPoint::Forbidden);
+
+        let boxed =
+            fragments("p::before { content: \"x\" } p::after { content: \"\"; height: 20pt }");
+        let at = lines(&boxed);
+        assert_eq!(
+            boxed[at[1]].break_before,
+            BreakPoint::Forbidden,
+            "the paragraph can leave the box before it",
+        );
+        let after = at.last().expect("the paragraph has lines") + 1;
+        assert!(
+            after < boxed.len(),
+            "the box after the paragraph is missing"
+        );
+        for fragment in &boxed[after..] {
+            assert_eq!(
+                fragment.break_before,
+                BreakPoint::Forbidden,
+                "the box after the paragraph can leave it",
+            );
+        }
+
+        let pages = paginate_styled(
+            "p { orphans: 1; widows: 1 } \
+             p::after { content: \"\"; height: 24pt; background-color: #eeeeee }",
+            vec![section(long_prose(40))],
+        );
+        assert!(pages.len() > 2, "the prose fills {} pages", pages.len());
+        for page in &pages {
+            let lines = content_lines(page);
+            for (_, y, ..) in rects(page) {
+                assert!(
+                    lines.first().is_some_and(|(baseline, _)| *baseline < y),
+                    "page {}: a generated box opens the page",
                     page.number,
                 );
             }

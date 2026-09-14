@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::Warning;
 use crate::content::{
-    Anchors, Block, Book, Inline, LinkTarget, NodeId, Row, Section, block_id, inline_id,
+    Anchors, Block, Book, Inline, LinkTarget, NodeId, Row, Section, SourcePos, block_id, inline_id,
     inline_position, origin, rows, text,
 };
 use crate::lines::{Generated, InlineStyles, ParagraphStyle};
@@ -283,8 +283,34 @@ impl Named {
     ) -> Named {
         let mut named = Named::default();
         let source = section.source.as_deref();
+        named.content(styles.before(section.id), None, references, source);
         named.blocks(&section.blocks, styles, references, source);
+        named.content(styles.after(section.id), None, references, source);
         named
+    }
+
+    /// What one pseudo-element's `content` reaches, on an element
+    /// whose `href` is `href`.
+    fn content(
+        &mut self,
+        pseudo: Option<&ComputedStyle>,
+        href: Option<&str>,
+        references: &References,
+        source: Option<&str>,
+    ) {
+        let Some(Content::Pieces(pieces)) = pseudo.map(|pseudo| &pseudo.content) else {
+            return;
+        };
+        for piece in pieces {
+            let (list, target) = match piece {
+                ContentPiece::Text(_) => continue,
+                ContentPiece::TargetCounter { target, .. } => (&mut self.pages, target),
+                ContentPiece::TargetText { target } => (&mut self.texts, target),
+            };
+            if let Ok(Some(node)) = references.target(target, href, source) {
+                list.push(node);
+            }
+        }
     }
 
     fn blocks(
@@ -295,6 +321,8 @@ impl Named {
         source: Option<&str>,
     ) {
         for block in blocks {
+            let id = block_id(block);
+            self.content(styles.before(id), None, references, source);
             match block {
                 Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
                     self.inlines(inlines, styles, references, source)
@@ -307,6 +335,7 @@ impl Named {
                 }
                 Block::ThematicBreak { .. } | Block::Image { .. } => {}
             }
+            self.content(styles.after(id), None, references, source);
         }
     }
 
@@ -327,21 +356,8 @@ impl Named {
                 Inline::Link { url, children, .. } => (Some(url.as_str()), Some(children)),
             };
             let id = inline_id(inline);
-            for pseudo in [styles.before(id), styles.after(id)].into_iter().flatten() {
-                let Content::Pieces(pieces) = &pseudo.content else {
-                    continue;
-                };
-                for piece in pieces {
-                    let (list, target) = match piece {
-                        ContentPiece::Text(_) => continue,
-                        ContentPiece::TargetCounter { target, .. } => (&mut self.pages, target),
-                        ContentPiece::TargetText { target } => (&mut self.texts, target),
-                    };
-                    if let Ok(Some(node)) = references.target(target, href, source) {
-                        list.push(node);
-                    }
-                }
-            }
+            self.content(styles.before(id), href, references, source);
+            self.content(styles.after(id), href, references, source);
             if let Some(children) = children {
                 self.inlines(children, styles, references, source);
             }
@@ -382,6 +398,32 @@ pub(crate) fn moved(
         .collect()
 }
 
+impl Paginator<'_> {
+    /// The text one `content` value generates on an element whose
+    /// `href` is `href`, written in `source` at `position`. `None`
+    /// where a reference in it reaches nothing, which warns unless the
+    /// url is outside the book.
+    pub(super) fn generate(
+        &self,
+        content: &Content,
+        href: Option<&str>,
+        source: Option<&str>,
+        position: Option<SourcePos>,
+    ) -> Option<String> {
+        let resolved = self.references.borrow().resolve(content, href, source);
+        match resolved {
+            Ok(text) => Some(text),
+            Err(unresolved) => {
+                if let Some(message) = unresolved.message() {
+                    let at = origin(source, position);
+                    self.warn(message, (!at.is_empty()).then_some(at));
+                }
+                None
+            }
+        }
+    }
+}
+
 /// The style tree, with the text each pseudo-element generates
 /// resolved against the book's references. Line layout asks this for
 /// the style of every inline of a paragraph.
@@ -406,21 +448,13 @@ impl InlineStyles for Referring<'_, '_> {
         };
         let text = |pseudo: Option<&ComputedStyle>| {
             let pseudo = pseudo?;
-            let resolved =
-                self.paginator
-                    .references
-                    .borrow()
-                    .resolve(&pseudo.content, href, self.source);
-            match resolved {
-                Ok(text) => Some((text, pseudo.paragraph())),
-                Err(unresolved) => {
-                    if let Some(message) = unresolved.message() {
-                        let at = origin(self.source, inline_position(inline));
-                        self.paginator.warn(message, (!at.is_empty()).then_some(at));
-                    }
-                    None
-                }
-            }
+            let text = self.paginator.generate(
+                &pseudo.content,
+                href,
+                self.source,
+                inline_position(inline),
+            )?;
+            Some((text, pseudo.paragraph()))
         };
         Generated {
             before: text(styles.before(id)),
