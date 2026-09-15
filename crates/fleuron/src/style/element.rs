@@ -332,6 +332,12 @@ impl ElementTree {
                 Block::ThematicBreak { id, attributes, .. } => {
                     self.push("hr", *id, attributes, Some(parent), false)
                 }
+                Block::PageBreak { id, attributes, .. } => {
+                    self.push("pagebreak", *id, attributes, Some(parent), false)
+                }
+                Block::ColumnBreak { id, attributes, .. } => {
+                    self.push("columnbreak", *id, attributes, Some(parent), false)
+                }
                 Block::Image { id, attributes, .. } => {
                     self.push("img", *id, attributes, Some(parent), false)
                 }

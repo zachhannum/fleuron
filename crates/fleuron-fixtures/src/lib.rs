@@ -73,7 +73,10 @@ pub fn shaped_texts(book: &fleuron::content::Book) -> Vec<String> {
                         walk(blocks, out);
                     }
                 }
-                Block::ThematicBreak { .. } | Block::Image { .. } => {}
+                Block::ThematicBreak { .. }
+                | Block::PageBreak { .. }
+                | Block::ColumnBreak { .. }
+                | Block::Image { .. } => {}
             }
         }
     }

@@ -2248,7 +2248,7 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
                 }
             }
             Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
-            Block::Image { .. } => {}
+            Block::Image { .. } | Block::PageBreak { .. } | Block::ColumnBreak { .. } => {}
             Block::Table { head, body, .. } => laid.push(Laid::Table {
                 head: head.iter().map(row_text).collect(),
                 body: body.iter().map(row_text).collect(),

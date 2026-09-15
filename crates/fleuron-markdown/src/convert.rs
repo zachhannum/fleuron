@@ -615,7 +615,9 @@ impl<'a> Converter<'a> {
     fn paragraph(&mut self, children: Vec<Inline>, read: Read) {
         if let Some(children) = self.brace_run(children, read) {
             self.displaced(&children);
-            if !children.is_empty() {
+            if let Some(forced) = self.forced_break(&children, read) {
+                self.push_block(forced);
+            } else if !children.is_empty() {
                 self.push_block(Block::Paragraph {
                     id: Default::default(),
                     inlines: children,
@@ -626,6 +628,38 @@ impl<'a> Converter<'a> {
             }
         }
         self.flush_deferred();
+    }
+
+    /// The break a paragraph is when its whole text is `\pagebreak`
+    /// or `\columnbreak`.
+    fn forced_break(&self, children: &[Inline], read: Read) -> Option<Block> {
+        if !self.options.dialect.breaks {
+            return None;
+        }
+        let mut written = String::new();
+        for inline in children {
+            let Inline::Text { value, .. } = inline else {
+                return None;
+            };
+            written.push_str(value);
+        }
+        let (id, attributes) = (Default::default(), Attributes::default());
+        let (position, span) = (Some(read.position), Some(read.span));
+        match written.trim() {
+            "\\pagebreak" => Some(Block::PageBreak {
+                id,
+                attributes,
+                position,
+                span,
+            }),
+            "\\columnbreak" => Some(Block::ColumnBreak {
+                id,
+                attributes,
+                position,
+                span,
+            }),
+            _ => None,
+        }
     }
 
     /// Whether the blocks arriving are directly inside a list item,
@@ -1010,6 +1044,12 @@ fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
         | Block::ThematicBreak {
             attributes, span, ..
         }
+        | Block::PageBreak {
+            attributes, span, ..
+        }
+        | Block::ColumnBreak {
+            attributes, span, ..
+        }
         | Block::Image {
             attributes, span, ..
         }
@@ -1287,6 +1327,93 @@ mod tests {
             panic!("expected a blockquote");
         };
         assert_eq!(blocks.len(), 2);
+    }
+
+    /// Acceptance: `\pagebreak` alone on a line is a page break, and
+    /// `\columnbreak` a column break, each read from its own line.
+    #[test]
+    fn a_break_line_is_a_break() {
+        let markdown = "# C\n\nBefore.\n\n\\pagebreak\n\nBetween.\n\n\\columnbreak\n\nAfter.\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let blocks = &sections[0].blocks;
+        assert!(matches!(blocks[2], Block::PageBreak { .. }), "{blocks:?}");
+        assert!(matches!(blocks[4], Block::ColumnBreak { .. }), "{blocks:?}");
+        assert_eq!(blocks.len(), 6, "{blocks:?}");
+        let span = block_span(&blocks[2]).expect("the break was read from somewhere");
+        assert_eq!(
+            markdown[span.start as usize..span.end as usize].trim_end(),
+            "\\pagebreak"
+        );
+    }
+
+    /// Acceptance: `\pagebreak` among other prose in a paragraph stays
+    /// prose and does not warn.
+    #[test]
+    fn a_break_among_prose_stays_prose() {
+        let markdown = "# C\n\nTurn the page \\pagebreak here.\n\n\\pagebreak now\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let blocks = &sections[0].blocks;
+        assert_eq!(blocks.len(), 3, "{blocks:?}");
+        assert_eq!(text_of(&blocks[1]), "Turn the page \\pagebreak here.");
+        assert_eq!(text_of(&blocks[2]), "\\pagebreak now");
+    }
+
+    /// Acceptance: an attribute line above a break names it.
+    #[test]
+    fn an_attribute_line_names_the_break_under_it() {
+        let sections = read("# C\n\nA.\n\n{.soft #turn}\n\n\\pagebreak\n\nB.\n");
+        let block = &sections[0].blocks[2];
+        assert!(
+            matches!(block, Block::PageBreak { .. }),
+            "{:?}",
+            sections[0].blocks
+        );
+        assert_eq!(
+            block_attributes(block),
+            &Attributes {
+                id: Some("turn".into()),
+                classes: vec!["soft".into()],
+            }
+        );
+    }
+
+    /// A break written in a blockquote or a list item is a block of
+    /// that quote or that item.
+    #[test]
+    fn a_break_in_a_quote_or_an_item_is_a_break_there() {
+        let sections = read("# C\n\n> A.\n>\n> \\pagebreak\n\n- one\n- \\columnbreak\n");
+        let Block::Blockquote { blocks, .. } = &sections[0].blocks[1] else {
+            panic!("expected a blockquote, got {:?}", sections[0].blocks);
+        };
+        assert!(
+            matches!(
+                blocks.as_slice(),
+                [Block::Paragraph { .. }, Block::PageBreak { .. }]
+            ),
+            "{blocks:?}"
+        );
+        let Block::List { items, .. } = &sections[0].blocks[2] else {
+            panic!("expected a list, got {:?}", sections[0].blocks);
+        };
+        assert!(
+            matches!(items[1].blocks.as_slice(), [Block::ColumnBreak { .. }]),
+            "{items:?}"
+        );
+    }
+
+    /// Acceptance: under `Dialect::common_mark()`, `\pagebreak` is
+    /// prose.
+    #[test]
+    fn under_common_mark_a_break_line_is_prose() {
+        let options = Options {
+            dialect: Dialect::common_mark(),
+            ..Options::default()
+        };
+        let (sections, warnings) = to_sections("# C\n\n\\pagebreak\n", "test.md", &options);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(text_of(&sections[0].blocks[1]), "\\pagebreak");
     }
 
     #[test]

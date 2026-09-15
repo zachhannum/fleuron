@@ -13,7 +13,8 @@
 //! # What the vocabulary cannot express
 //!
 //! The content tree is a book's vocabulary: headings, prose,
-//! blockquotes, scene breaks, images, lists, tables. Markdown is wider
+//! blockquotes, scene breaks, page and column breaks, images, lists,
+//! tables. Markdown is wider
 //! than that. Constructs outside it degrade to prose and say so
 //! through the diagnostics channel, with the line and column they
 //! were written at. Text is never dropped, because a manuscript that
@@ -100,6 +101,9 @@ pub struct Dialect {
     /// `--` and `"` become dashes and curly quotes at parse rather
     /// than in the manuscript.
     pub smart_punctuation: bool,
+    /// A line of nothing but `\pagebreak` or `\columnbreak` starts a
+    /// new page or the next column.
+    pub breaks: bool,
 }
 
 impl Default for Dialect {
@@ -109,9 +113,10 @@ impl Default for Dialect {
 }
 
 impl Dialect {
-    /// CommonMark, a frontmatter block, attribute lines and tables:
-    /// the markdown a manuscript for this engine is written in, and
-    /// what a source is read as unless the host says otherwise.
+    /// CommonMark, a frontmatter block, attribute lines, tables and
+    /// breaks: the markdown a manuscript for this engine is written
+    /// in, and what a source is read as unless the host says
+    /// otherwise.
     pub fn fleuron() -> Dialect {
         Dialect {
             frontmatter: true,
@@ -120,15 +125,17 @@ impl Dialect {
             gfm: false,
             wikilinks: false,
             smart_punctuation: false,
+            breaks: true,
         }
     }
 
     /// CommonMark, frontmatter included, and nothing besides. A brace
-    /// run and a table are prose here.
+    /// run, a table and `\pagebreak` are prose here.
     pub fn common_mark() -> Dialect {
         Dialect {
             attributes: false,
             tables: false,
+            breaks: false,
             ..Dialect::fleuron()
         }
     }

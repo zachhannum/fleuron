@@ -109,6 +109,24 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 (3u8, position).hash(h);
                 hash_node(*id, styles, h);
             }
+            Block::PageBreak {
+                id,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (7u8, position).hash(h);
+                hash_node(*id, styles, h);
+            }
+            Block::ColumnBreak {
+                id,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (8u8, position).hash(h);
+                hash_node(*id, styles, h);
+            }
             Block::Image {
                 id,
                 url,

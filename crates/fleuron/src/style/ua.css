@@ -76,6 +76,16 @@ hr {
   break-after: avoid;
 }
 
+/* A page break and a column break hold no text. The content after
+   one starts on a new page or in the next column. */
+pagebreak {
+  break-after: page;
+}
+
+columnbreak {
+  break-after: column;
+}
+
 /* A section's opening heading is its chapter title. Storing it as a
    named string lets a running head pick it up with
    string(chapter). */

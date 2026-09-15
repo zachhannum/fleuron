@@ -15,7 +15,7 @@ The editor below is a live playground running the fleuron engine.
 
 ## The defaults
 
-The engine includes a built-in stylesheet that defines a basic trade paperback style: a 6x9 inch page, mirrored margins, and page numbers centered at the bottom. It sets the text in the [bundled font](library/fonts.md) at 11 pt with a line height of 1.4, left-aligned and unhyphenated. It indents every paragraph after the first and centers an ornament on each thematic break.
+The engine includes a built-in stylesheet that defines a basic trade paperback style: a 6x9 inch page, mirrored margins, and page numbers centered at the bottom. It sets the text in the [bundled font](library/fonts.md) at 11 pt with a line height of 1.4, left-aligned and unhyphenated. It indents every paragraph after the first and centers an ornament on each thematic break. A page break in the manuscript starts a new page, and a column break starts the next column.
 
 The CSS for the built-in stylesheet is listed [at the bottom of this page](#the-built-in-stylesheet). Any additional CSS cascades over it regardless of specificity, so `p { text-indent: 0 }` overrides the built-in `p + p` rule.
 
@@ -904,7 +904,7 @@ Two layers are the engine's own. A stylesheet cannot name either one. The engine
 
 ### Breaking across pages
 
-`break-before` and `break-after` start a new page or column before or after a block. `break-inside: avoid` keeps a block from splitting.
+`break-before` and `break-after` start a new page or column before or after a block. `break-inside: avoid` keeps a block from splitting. To start a new page or column at one place in the text, write a [page or column break](reference/markdown.mdx#page-and-column-breaks) in the manuscript.
 
 | value | |
 |---|---|
@@ -1372,6 +1372,16 @@ hr {
   margin: 1em 0;
   break-before: avoid;
   break-after: avoid;
+}
+
+/* A page break and a column break hold no text. The content after
+   one starts on a new page or in the next column. */
+pagebreak {
+  break-after: page;
+}
+
+columnbreak {
+  break-after: column;
 }
 
 /* A section's opening heading is its chapter title. Storing it as a

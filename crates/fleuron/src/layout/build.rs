@@ -210,10 +210,12 @@ impl Builder<'_, '_> {
     /// Folds one `break-before` or `break-after` into what is already
     /// asked above the next fragment. A forced break outranks an
     /// avoided one, and either outranks `auto`. A page break outranks
-    /// a column break, being the same break carried further.
+    /// a column break, being the same break carried further, and a
+    /// break to one side outranks both.
     pub(super) fn ask(&mut self, wanted: Break) {
         self.pending = match (self.pending, wanted) {
-            (BreakPoint::Forced(Break::Column), Break::Page | Break::Side(_)) => {
+            (BreakPoint::Forced(Break::Column), Break::Page)
+            | (BreakPoint::Forced(Break::Column | Break::Page), Break::Side(_)) => {
                 BreakPoint::Forced(wanted)
             }
             (BreakPoint::Forced(forced), _) => BreakPoint::Forced(forced),
@@ -405,8 +407,9 @@ impl Builder<'_, '_> {
         }
         self.margin = self.margin.max(style.margin.bottom);
         // A block that emitted nothing settles nothing: what was
-        // asked above it is still asked above whatever comes next.
-        if self.fragments.len() > start {
+        // asked above it is still asked above whatever comes next. A
+        // forced break its last block asked for is asked after it too.
+        if self.fragments.len() > start && !matches!(self.pending, BreakPoint::Forced(_)) {
             self.pending = BreakPoint::Allowed;
         }
         self.ask(style.break_after);
@@ -581,6 +584,16 @@ impl Builder<'_, '_> {
                     let (inner, narrowed) = style.content_box(x, measure);
                     self.pseudo(*id, PseudoElement::Before, position, inner, narrowed);
                     self.ornament(&style, x, measure);
+                    self.pseudo(*id, PseudoElement::After, position, inner, narrowed);
+                    self.close(&style, start);
+                }
+                // A break emits nothing of its own, so what it asks
+                // for lands on whatever comes next.
+                Block::PageBreak { id, .. } | Block::ColumnBreak { id, .. } => {
+                    let style = styles.style(*id).clone();
+                    let start = self.open(*id, &style, &[], x, measure);
+                    let (inner, narrowed) = style.content_box(x, measure);
+                    self.pseudo(*id, PseudoElement::Before, position, inner, narrowed);
                     self.pseudo(*id, PseudoElement::After, position, inner, narrowed);
                     self.close(&style, start);
                 }
