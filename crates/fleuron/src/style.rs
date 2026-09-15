@@ -30,7 +30,7 @@ use serde::Serialize;
 
 use crate::Warning;
 use crate::content::{
-    Alignment, Attributes, Block, Book, GeneratedBox, Inline, NodeId, block_attributes,
+    Alignment, Attributes, Block, Book, Inline, NodeId, PseudoElement, block_attributes,
     block_position, inline_attributes, inline_position, origin, rows,
 };
 use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
@@ -50,7 +50,7 @@ pub use properties::{
 };
 pub use sheet::{Origin, Source};
 
-use element::{BLOCK_ELEMENTS, ElementTree, INLINE_ELEMENTS, PseudoElement};
+use element::{BLOCK_ELEMENTS, ElementTree, INLINE_ELEMENTS};
 use properties::{Custom, Declaration};
 use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
 
@@ -220,17 +220,15 @@ pub struct StyleTree {
 }
 
 impl StyleTree {
-    /// The computed style of one content node, or of the box that
-    /// `::before` or `::after` generates on a block. An id the tree
-    /// does not know — an unassigned one, or a node from another book —
-    /// gets the root style, which is the book's own defaults.
+    /// The computed style of one content node, or of one
+    /// pseudo-element. An id the tree does not know — an unassigned
+    /// one, or a node from another book — gets the root style, which
+    /// is the book's own defaults.
     pub fn style(&self, id: NodeId) -> &ComputedStyle {
-        if let Some((element, which)) = id.generated_box() {
-            let pseudo = match which {
-                GeneratedBox::Before => self.before(element),
-                GeneratedBox::After => self.after(element),
-            };
-            return pseudo.unwrap_or_else(|| self.style(NodeId::UNASSIGNED));
+        if let Some((element, which)) = id.pseudo_element() {
+            return self
+                .pseudo_style(element, which)
+                .unwrap_or_else(|| self.style(NodeId::UNASSIGNED));
         }
         let index = self
             .by_node
@@ -280,18 +278,24 @@ impl StyleTree {
         Some(&self.styles[index as usize])
     }
 
-    /// The id of the box `::before` or `::after` generates on the
-    /// block `element`, where it generates one. Only a block takes a
-    /// box, so this is not asked of an inline. The id comes from the
-    /// element and the pseudo-element alone, so it is the same in
-    /// every layout of the same book and sheets, and no content node
-    /// has it. `style` answers for it.
-    pub fn generated_box(&self, element: NodeId, which: GeneratedBox) -> Option<NodeId> {
-        let pseudo = match which {
-            GeneratedBox::Before => self.before(element),
-            GeneratedBox::After => self.after(element),
-        };
-        pseudo.map(|_| element.generated(which))
+    /// The id of one pseudo-element of `element`, where a rule styles
+    /// it. On a block, `::before` and `::after` are boxes. On an
+    /// inline element, they are text inside the line. The id comes
+    /// from the element and the pseudo-element alone, so it is the
+    /// same in every layout of the same book and sheets, and no
+    /// content node has it. `style` answers for it.
+    pub fn pseudo_element(&self, element: NodeId, which: PseudoElement) -> Option<NodeId> {
+        self.pseudo_style(element, which)
+            .map(|_| element.pseudo(which))
+    }
+
+    fn pseudo_style(&self, element: NodeId, which: PseudoElement) -> Option<&ComputedStyle> {
+        match which {
+            PseudoElement::Before => self.before(element),
+            PseudoElement::After => self.after(element),
+            PseudoElement::FirstLetter => self.first_letter(element),
+            PseudoElement::FirstLine => self.first_line(element),
+        }
     }
 
     /// Whether any generated text prints the page another element
@@ -2824,22 +2828,24 @@ mod tests {
         assert_eq!(first(&tree, "p").content, Content::None);
     }
 
-    /// Part: the style tree gives each generated box an id that no
-    /// content node can have, the same across compilations of the same
-    /// book and sheets.
+    /// Part: the style tree gives `::first-letter`, `::first-line`,
+    /// `::before` and `::after` an id that no content node can have.
+    /// The same book and stylesheet give the same ids.
     #[test]
-    fn a_generated_box_has_an_id_no_content_node_has() {
+    fn a_pseudo_element_has_an_id_no_content_node_has() {
         let book = linked();
-        let css = "p::before { content: \"x\" } h1::after { content: \"\"; height: 2pt }";
+        let css = "p::before { content: \"x\" } h1::after { content: \"\"; height: 2pt } \
+                   p::first-letter { initial-letter: 3 } \
+                   p::first-line { font-variant-caps: small-caps }";
         let tree = compile(&book, css);
         let p = id_of(&tree, "p");
         let before = tree
-            .generated_box(p, GeneratedBox::Before)
+            .pseudo_element(p, PseudoElement::Before)
             .expect("`p::before` generates");
-        assert_eq!(tree.generated_box(p, GeneratedBox::After), None);
-        assert_eq!(before.generated_box(), Some((p, GeneratedBox::Before)));
+        assert_eq!(tree.pseudo_element(p, PseudoElement::After), None);
+        assert_eq!(before.pseudo_element(), Some((p, PseudoElement::Before)));
         assert_eq!(before.element(), p);
-        assert_eq!(p.generated_box(), None);
+        assert_eq!(p.pseudo_element(), None);
         assert_eq!(p.element(), p);
         assert_eq!(book.subtree(before), None, "the book holds no such node");
         assert!(tree.nodes().iter().all(|node| node.id != before.get()));
@@ -2847,14 +2853,59 @@ mod tests {
 
         let h1 = id_of(&tree, "h1");
         let after = tree
-            .generated_box(h1, GeneratedBox::After)
+            .pseudo_element(h1, PseudoElement::After)
             .expect("`h1::after` generates");
         assert_ne!(after, before);
         assert_eq!(tree.style(after).height, Width::Points(2.0));
 
+        let letter = tree
+            .pseudo_element(p, PseudoElement::FirstLetter)
+            .expect("`p::first-letter` is styled");
+        let line = tree
+            .pseudo_element(p, PseudoElement::FirstLine)
+            .expect("`p::first-line` is styled");
+        assert_eq!(tree.pseudo_element(h1, PseudoElement::FirstLetter), None);
+        let ids = [before, after, letter, line];
+        for id in ids {
+            assert_eq!(ids.iter().filter(|other| **other == id).count(), 1);
+            assert_eq!(book.subtree(id), None, "the book holds no such node");
+            assert!(tree.nodes().iter().all(|node| node.id != id.get()));
+        }
+        assert_eq!(letter.element(), p);
+        assert_eq!(line.element(), p);
+        assert!(std::ptr::eq(
+            tree.style(letter),
+            tree.first_letter(p).unwrap()
+        ));
+        assert!(std::ptr::eq(tree.style(line), tree.first_line(p).unwrap()));
+
         let again = compile(&book, css);
-        assert_eq!(again.generated_box(p, GeneratedBox::Before), Some(before));
-        assert_eq!(again.generated_box(h1, GeneratedBox::After), Some(after));
+        assert_eq!(again.pseudo_element(p, PseudoElement::Before), Some(before));
+        assert_eq!(again.pseudo_element(h1, PseudoElement::After), Some(after));
+        assert_eq!(
+            again.pseudo_element(p, PseudoElement::FirstLetter),
+            Some(letter)
+        );
+        assert_eq!(
+            again.pseudo_element(p, PseudoElement::FirstLine),
+            Some(line)
+        );
+    }
+
+    /// Part: `::before` and `::after` on an inline element have an id,
+    /// the same as on a block.
+    #[test]
+    fn an_inline_pseudo_element_has_an_id_as_a_block_does() {
+        let book = linked();
+        let tree = compile(&book, "a::after { content: \" (link)\" }");
+        let a = id_of(&tree, "a");
+        let after = tree
+            .pseudo_element(a, PseudoElement::After)
+            .expect("`a::after` generates text");
+        assert_eq!(after.pseudo_element(), Some((a, PseudoElement::After)));
+        assert_eq!(after.element(), a);
+        assert_eq!(tree.pseudo_element(a, PseudoElement::Before), None);
+        assert_eq!(tree.style(after).content, Content::Text(" (link)".into()));
     }
 
     /// An element with no box of its own takes no generated box. A

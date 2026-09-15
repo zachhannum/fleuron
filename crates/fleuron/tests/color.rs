@@ -183,6 +183,7 @@ fn described(item: &DrawItem) -> String {
             source,
             source_map,
             origin,
+            pseudo_element,
             features,
             // Every other test here checks the colour; this one
             // checks everything else.
@@ -190,6 +191,9 @@ fn described(item: &DrawItem) -> String {
             glyphs,
             layer,
         } => {
+            let pseudo = pseudo_element
+                .map(|id| format!(" pseudo {}", id.get()))
+                .unwrap_or_default();
             let placed: Vec<String> = glyphs
                 .iter()
                 .map(|glyph| {
@@ -210,7 +214,7 @@ fn described(item: &DrawItem) -> String {
             };
             format!(
                 "text {x:?} {y:?} font {font_id} at {size:?}pt {text:?} source {source:?} {source_map:?} \
-                 written {written} small-caps {} glyphs {}{}",
+                 written {written}{pseudo} small-caps {} glyphs {}{}",
                 features.small_caps,
                 placed.join(" "),
                 layered(*layer)

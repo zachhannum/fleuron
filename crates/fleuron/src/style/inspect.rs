@@ -31,13 +31,18 @@ mod css;
 /// What one element, or one page margin box, answers with.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Inspection {
-    /// The content node the answer is about: the element asked about,
-    /// or the element that holds the text node asked about. `None`
-    /// for a page margin box.
+    /// The node the answer is about: the element or pseudo-element
+    /// asked about, or the element that holds the text node asked
+    /// about. `None` for a page margin box.
     pub node: Option<NodeId>,
     /// The element name selectors match, or the margin box's at-rule,
-    /// as `@top-left`.
+    /// as `@top-left`. For a pseudo-element, the element it belongs
+    /// to.
     pub element: String,
+    /// For a pseudo-element, its name as CSS writes it, as
+    /// `::first-letter`.
+    #[serde(rename = "pseudoElement", skip_serializing_if = "Option::is_none")]
+    pub pseudo_element: Option<String>,
     /// The id a selector reaches the element by.
     pub id: Option<String>,
     /// The classes a selector reaches the element by.
@@ -111,29 +116,34 @@ impl Stylesheets {
     /// `tree` is, compiled from these sheets. A text node answers for
     /// the element that holds it.
     ///
-    /// The id of a box that `::before` or `::after` generates answers
-    /// for the element the box belongs to.
+    /// The id of a pseudo-element answers for the pseudo-element: the
+    /// rules that match it and the style it computed to.
     ///
-    /// `None` for a node the book does not hold, and for the id the
-    /// engine writes its own text under. The boxes are left empty,
-    /// since only a laid-out book has them.
+    /// `None` for a node the book does not hold, for a pseudo-element
+    /// no rule styles, and for the id the engine writes its own text
+    /// under. The boxes are left empty, since only a laid-out book has
+    /// them.
     pub fn inspect(&self, book: &Book, tree: &StyleTree, node: NodeId) -> Option<Inspection> {
-        let node = node.element();
-        book.subtree(node)?;
+        let pseudo = node.pseudo_element();
+        if let Some((element, which)) = pseudo {
+            tree.pseudo_element(element, which)?;
+        }
+        let which = pseudo.map(|(_, which)| which);
+        book.subtree(node.element())?;
         let elements = ElementTree::build(book);
-        let index = owner(&elements, book, node)?;
+        let index = owner(&elements, book, node.element())?;
         let nodes = elements.nodes();
         let element = &nodes[index];
 
         let mut caches = SelectorCaches::default();
-        let matched = applicable(&self.sheets, &elements, index, &mut caches, None);
+        let matched = applicable(&self.sheets, &elements, index, &mut caches, which.as_ref());
         let declaration = |(sheet, rule, order): (usize, usize, usize)| {
             &self.sheets[sheet].rules[rule].declarations[order].0
         };
 
         // The winner of each longhand, where `None` is the alignment
         // a table cell's column wrote, which no rule holds.
-        let mut hint = element.align.map(align_hint);
+        let mut hint = element.align.filter(|_| which.is_none()).map(align_hint);
         let mut winners: HashMap<String, Option<(usize, usize, usize)>> = HashMap::new();
         for (level, _, sheet, rule, order) in &matched {
             if *level > 0
@@ -189,15 +199,18 @@ impl Stylesheets {
         }
         ancestors.reverse();
 
+        let styled = if which.is_some() { node } else { element.id };
+        let computed = css::computed(tree.style(styled));
         Some(Inspection {
-            node: Some(element.id),
+            node: Some(styled),
             element: element.name.to_string(),
+            pseudo_element: which.map(|which| which.to_css_string()),
             id: element.attributes.id.clone(),
             classes: element.attributes.classes.clone(),
             ancestors,
             page: None,
             rules,
-            computed: css::computed(tree.style(element.id)),
+            computed,
             boxes: Vec::new(),
         })
     }
@@ -281,6 +294,7 @@ impl Stylesheets {
         Some(Inspection {
             node: None,
             element: format!("@{}", which.keyword()),
+            pseudo_element: None,
             id: None,
             classes: Vec::new(),
             ancestors: Vec::new(),

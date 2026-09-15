@@ -160,6 +160,7 @@ impl Paginator<'_> {
                     source: run.source.clone(),
                     source_map: run.source_map.clone(),
                     origin: run.origin.clone(),
+                    pseudo_element: run.pseudo_element,
                     features: run.features,
                     color: run.color,
                     glyphs,

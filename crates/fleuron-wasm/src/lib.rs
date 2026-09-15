@@ -437,7 +437,8 @@ impl Session {
     /// matched it in cascade order with the declarations that won, the
     /// computed value of every property, and its border box on each
     /// page it reaches. A text node answers for the element that holds
-    /// it.
+    /// it. A pseudo-element answers for itself, and `pseudoElement`
+    /// names it.
     ///
     /// The engine runs the cascade again for the one element, over the
     /// sheets it laid the book out with, so a host matches no selector
@@ -472,7 +473,8 @@ impl Session {
     /// The innermost element at a point on one page, in points from the
     /// page's top-left corner: the element that holds the text there,
     /// or else the innermost block whose border box holds the point.
-    /// The page counts from 0.
+    /// A point on a pseudo-element answers with the id of the
+    /// pseudo-element. The page counts from 0.
     ///
     /// `undefined` outside every box, and for a page the book does not
     /// have.

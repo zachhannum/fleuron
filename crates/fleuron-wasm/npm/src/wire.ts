@@ -9,7 +9,7 @@
  */
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 13;
+export const WIRE_VERSION = 14;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -90,6 +90,13 @@ export interface TextItem {
    * ornament.
    */
   origin: SourceRange | null;
+  /**
+   * The id of the pseudo-element the run was cut from: a drop cap,
+   * the line a paragraph opens on, or the text of `::before` or
+   * `::after`. `origin` still names the text it stands for. Null on
+   * every other run.
+   */
+  pseudoElement: number | null;
   /**
    * The OpenType features the run was shaped with. A painter that
    * draws characters asks the face for these, or the browser picks
@@ -511,6 +518,7 @@ function item(r: Reader): DrawItem {
         source: r.string(),
         sourceMap: r.seq(() => r.varint()),
         origin: r.option(() => sourceRange(r)),
+        pseudoElement: r.option(() => r.varint()),
         features: { smallCaps: r.bool() },
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),

@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use crate::content::{Inline, NodeId, SourceRange};
+use crate::content::{Inline, NodeId, PseudoElement, SourceRange};
 use crate::fonts::Features;
 use crate::style::{Color, FontVariantCaps, TextTransform};
 
@@ -41,6 +41,9 @@ pub(super) struct FlatParagraph {
     /// Bytes of the source still to be passed over before anything
     /// is written: what a drop cap took out of the paragraph.
     skip: usize,
+    /// The id of the paragraph's `::first-line`, and how far into the
+    /// shaped text its style reaches.
+    first_line: Option<(NodeId, usize)>,
 }
 
 /// One stretch of the paragraph's source, and the node it was
@@ -205,6 +208,23 @@ impl FlatParagraph {
         })
     }
 
+    /// The pseudo-element a run that starts at `from` and stands for
+    /// `origin` was cut from: the `::before` or `::after` that
+    /// generated its text, or else the `::first-line` whose style
+    /// reaches it.
+    pub(super) fn pseudo_element_of(
+        &self,
+        origin: Option<&SourceRange>,
+        from: usize,
+    ) -> Option<NodeId> {
+        if let Some(origin) = origin.filter(|origin| origin.node.pseudo_element().is_some()) {
+            return Some(origin.node);
+        }
+        self.first_line
+            .filter(|(_, reach)| from < *reach)
+            .map(|(id, _)| id)
+    }
+
     /// Starts keeping the source text, backfilling what has been
     /// written so far, all of which stood as it was written.
     fn start_mapping(&mut self) {
@@ -364,6 +384,7 @@ impl LineLayout<'_> {
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
         flat.skip = lead.taken;
+        flat.first_line = lead.pseudo_element.map(|id| (id, lead.reach()));
         self.walk_inlines(inlines, style, styles, lead, &mut flat);
         flat
     }
@@ -377,11 +398,7 @@ impl LineLayout<'_> {
         style: ParagraphStyle,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
-        let lead = Lead {
-            style: None,
-            extent: None,
-            taken: 0,
-        };
+        let lead = Lead::default();
         let value = text.replace('\n', " ");
         if !value.is_empty() {
             flat.open(Some(node), 0);
@@ -404,29 +421,31 @@ impl LineLayout<'_> {
                 Inline::Break { .. } => self.push_break(flat, style, lead),
                 Inline::Code { id, value, .. } => {
                     let generated = styles.generated(inline);
-                    self.push_generated(flat, generated.before, lead);
+                    self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     self.push_text(flat, *id, value, styles.style(*id, style), lead);
-                    self.push_generated(flat, generated.after, lead);
+                    self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
                     let generated = styles.generated(inline);
-                    self.push_generated(flat, generated.before, lead);
+                    self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     self.walk_inlines(children, styles.style(*id, style), styles, lead, flat);
-                    self.push_generated(flat, generated.after, lead);
+                    self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                 }
             }
         }
     }
 
-    /// Appends text the sheet generated. No node holds it, so the
-    /// runs it lands in name none, and a drop cap passes over none of
-    /// it.
+    /// Appends text the sheet generated as `which` of `element`. No
+    /// content node holds it, so the runs it lands in name the
+    /// pseudo-element, and a drop cap passes over none of it.
     fn push_generated(
         &self,
         flat: &mut FlatParagraph,
         generated: Option<(String, ParagraphStyle)>,
+        element: NodeId,
+        which: PseudoElement,
         lead: Lead,
     ) {
         let Some((mut value, style)) = generated else {
@@ -440,7 +459,7 @@ impl LineLayout<'_> {
         if value.contains('\n') {
             value = value.replace('\n', " ");
         }
-        flat.open(None, 0);
+        flat.open(Some(element.pseudo(which)), 0);
         self.push_run(flat, &value, style, lead);
     }
 

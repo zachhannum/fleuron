@@ -206,6 +206,13 @@ impl LineLayout<'_> {
             style: opening.first_line,
             extent: None,
             taken: opening.taken,
+            pseudo_element: (opening.first_line.is_some()
+                && opening.node != crate::content::NodeId::UNASSIGNED)
+                .then(|| {
+                    opening
+                        .node
+                        .pseudo(crate::content::PseudoElement::FirstLine)
+                }),
         };
         let once = |lead| {
             let shaped = self.shaped(inlines, style, styles, options, lead);
@@ -582,7 +589,7 @@ mod tests {
                     LineBreakOptions::default(),
                     Opening {
                         first_line,
-                        taken: 0,
+                        ..Opening::default()
                     },
                 )
                 .1

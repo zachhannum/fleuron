@@ -12,7 +12,7 @@
 //! rule under itself, and the first row the rule over it too, so a
 //! header row carries the rule under it wherever it is set again.
 
-use crate::content::{Block, GeneratedBox, NodeId, Row, SourcePos, origin, rows};
+use crate::content::{Block, NodeId, PseudoElement, Row, SourcePos, origin, rows};
 use crate::pages::DrawItem;
 use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
@@ -49,7 +49,7 @@ impl<'a> Builder<'a, '_> {
         };
         let start = self.open(id, &frame, &[], x, measure);
         let (left, width) = frame.content_box(x, measure);
-        self.pseudo(id, GeneratedBox::Before, position, left, width);
+        self.pseudo(id, PseudoElement::Before, position, left, width);
         let rows: Vec<&Row> = rows(head, body).collect();
         let table = Table::new(styles, style, &rows, collapse);
         if table.columns > 0 {
@@ -66,7 +66,7 @@ impl<'a> Builder<'a, '_> {
                 self.row(&table, &grid, index, row, head.len(), &mut first);
             }
         }
-        self.pseudo(id, GeneratedBox::After, position, left, width);
+        self.pseudo(id, PseudoElement::After, position, left, width);
         self.close(&frame, start);
     }
 

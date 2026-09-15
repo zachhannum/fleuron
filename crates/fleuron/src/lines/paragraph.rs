@@ -72,6 +72,9 @@ pub struct Opening {
     /// are neither shaped nor broken here; the cap carries the range
     /// they cover.
     pub taken: usize,
+    /// The paragraph. The runs its `::first-line` style reaches carry
+    /// the id of that pseudo-element.
+    pub node: NodeId,
 }
 
 /// What one pass of the breaker is told about the paragraph's
@@ -86,6 +89,8 @@ pub(super) struct Lead {
     pub(super) extent: Option<usize>,
     /// Bytes of the source the paragraph starts past.
     pub(super) taken: usize,
+    /// The id of the `::first-line` the style comes from.
+    pub(super) pseudo_element: Option<NodeId>,
 }
 
 impl Lead {

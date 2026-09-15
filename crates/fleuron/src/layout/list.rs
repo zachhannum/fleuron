@@ -2,7 +2,7 @@
 //! marker of each item to the left of it, on the baseline of the
 //! item's first line.
 
-use crate::content::{GeneratedBox, ListItem, NodeId, SourcePos};
+use crate::content::{ListItem, NodeId, PseudoElement, SourcePos};
 use crate::style::{Break, ComputedStyle};
 
 use super::build::{Builder, children};
@@ -24,7 +24,7 @@ impl Builder<'_, '_> {
         let style = styles.style(id).clone();
         let open = self.open(id, &style, &[], x, measure);
         let (inner, narrowed) = style.content_box(x, measure);
-        self.pseudo(id, GeneratedBox::Before, position, inner, narrowed);
+        self.pseudo(id, PseudoElement::Before, position, inner, narrowed);
         let last = items.len().saturating_sub(1);
         for (index, item) in items.iter().enumerate() {
             // A page does not end after the first item or before the
@@ -34,7 +34,7 @@ impl Builder<'_, '_> {
             }
             self.item(item, start.saturating_add(index as u32), inner, narrowed);
         }
-        self.pseudo(id, GeneratedBox::After, position, inner, narrowed);
+        self.pseudo(id, PseudoElement::After, position, inner, narrowed);
         self.close(&style, open);
     }
 

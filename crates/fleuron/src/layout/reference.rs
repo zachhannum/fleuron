@@ -483,7 +483,7 @@ impl InlineStyles for Referring<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{Attributes, HeadingLevel, SourcePos};
+    use crate::content::{Attributes, HeadingLevel, PseudoElement, SourcePos};
     use crate::layout::testing::{book_of, heading, long_prose, registry, section, styled};
     use crate::layout::{layout_book, no_assets};
     use crate::pages::{DrawItem, Page};
@@ -635,27 +635,45 @@ mod tests {
         }
     }
 
-    /// Generated text is text the engine wrote. Its runs name no node,
-    /// and they are set in the pseudo-element's own style.
+    /// Generated text is text the engine wrote. Its runs name the
+    /// pseudo-element that generated it, and they are set in the
+    /// pseudo-element's own style.
     #[test]
-    fn generated_text_names_no_node_and_takes_its_own_style() {
+    fn generated_text_names_its_pseudo_element_and_takes_its_own_style() {
         let book = cross_referenced();
         let css = format!("{PAGE_REFERENCE} a::after {{ font-size: 7pt }}");
         let (pages, ..) = lay_out(&css, &book);
-        let generated: Vec<(&str, f32, bool)> = pages
+        let generated: Vec<(&str, f32, Option<NodeId>, Option<NodeId>)> = pages
             .iter()
             .flat_map(|page| &page.items)
             .filter_map(|item| match item {
                 DrawItem::Text {
-                    text, size, origin, ..
-                } if text.contains("(page") => Some((text.as_str(), *size, origin.is_some())),
+                    text,
+                    size,
+                    origin,
+                    pseudo_element,
+                    ..
+                } if text.contains("(page") => Some((
+                    text.as_str(),
+                    *size,
+                    origin.as_ref().map(|origin| origin.node),
+                    *pseudo_element,
+                )),
                 _ => None,
             })
             .collect();
         assert_eq!(generated.len(), 3, "{generated:?}");
-        for (text, size, named) in generated {
+        for (text, size, named, pseudo) in generated {
             assert_eq!(size, 7.0, "{text:?} is not in the pseudo-element's size");
-            assert!(!named, "{text:?} names a node");
+            let which = named
+                .and_then(NodeId::pseudo_element)
+                .map(|(_, which)| which);
+            assert_eq!(
+                which,
+                Some(PseudoElement::After),
+                "{text:?} names no `::after`"
+            );
+            assert_eq!(pseudo, named, "{text:?} carries another pseudo-element");
         }
     }
 

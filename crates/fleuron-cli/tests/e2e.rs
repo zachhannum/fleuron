@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "b5d8104884c749374b94a2c5ecc49a87ea52abd2cf544023142010bb676fb15b";
+    "cd1aa8196972e9c15b8fe34c98972267e9441b040fdc0a483eaf1459ad09d600";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {

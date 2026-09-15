@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crate::content::{Block, Book, GeneratedBox, NodeId, block_position, cell_blocks, origin};
+use crate::content::{Block, Book, NodeId, PseudoElement, block_position, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::{DrawItem, PageBox};
 use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
@@ -66,7 +66,7 @@ impl Paginator<'_> {
                 let position = block_position(block);
                 let pseudo = |which| {
                     styles
-                        .generated_box(id, which)
+                        .pseudo_element(id, which)
                         .map(|id| Child::Generated(id, position))
                 };
                 match block {
@@ -80,7 +80,7 @@ impl Paginator<'_> {
                     Block::List { items, .. } => {
                         walk(
                             paginator,
-                            pseudo(GeneratedBox::Before),
+                            pseudo(PseudoElement::Before),
                             source,
                             host,
                             anchored,
@@ -96,7 +96,7 @@ impl Paginator<'_> {
                         }
                         walk(
                             paginator,
-                            pseudo(GeneratedBox::After),
+                            pseudo(PseudoElement::After),
                             source,
                             host,
                             anchored,
@@ -105,7 +105,7 @@ impl Paginator<'_> {
                     Block::Table { head, body, .. } => {
                         walk(
                             paginator,
-                            pseudo(GeneratedBox::Before),
+                            pseudo(PseudoElement::Before),
                             source,
                             host,
                             anchored,
@@ -121,7 +121,7 @@ impl Paginator<'_> {
                         }
                         walk(
                             paginator,
-                            pseudo(GeneratedBox::After),
+                            pseudo(PseudoElement::After),
                             source,
                             host,
                             anchored,

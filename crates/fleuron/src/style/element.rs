@@ -113,20 +113,7 @@ impl NonTSPseudoClass for PseudoClass {
     }
 }
 
-/// The pseudo-elements the engine styles: the initial letter a drop
-/// cap is set from, the line a chapter opens on, and the text the
-/// sheet sets before and after an inline element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PseudoElement {
-    /// `::first-letter`
-    FirstLetter,
-    /// `::first-line`
-    FirstLine,
-    /// `::before`
-    Before,
-    /// `::after`
-    After,
-}
+pub use crate::content::PseudoElement;
 
 impl ToCss for PseudoElement {
     fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {

@@ -45,7 +45,7 @@
 
 use std::borrow::Cow;
 
-use crate::content::{Book, NodeId};
+use crate::content::{Book, NodeId, SourceRange};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::layout::{Fragment, PageInfo, Piece, References, no_assets};
@@ -197,11 +197,12 @@ impl Cached {
                 }
                 for item in &mut row.items {
                     if let crate::pages::DrawItem::Text {
-                        origin: Some(origin),
+                        origin,
+                        pseudo_element,
                         ..
                     } = item
                     {
-                        origin.node = origin.node.shifted(step);
+                        shift_run(origin, pseudo_element, step);
                     }
                 }
                 continue;
@@ -211,11 +212,21 @@ impl Cached {
             };
             let caps = cap.iter_mut().map(|cap| &mut cap.line);
             for line in std::iter::once(line).chain(caps) {
-                for origin in line.runs.iter_mut().filter_map(|run| run.origin.as_mut()) {
-                    origin.node = origin.node.shifted(step);
+                for run in &mut line.runs {
+                    shift_run(&mut run.origin, &mut run.pseudo_element, step);
                 }
             }
         }
+    }
+}
+
+/// Moves the ids one run names by `step`.
+fn shift_run(origin: &mut Option<SourceRange>, pseudo_element: &mut Option<NodeId>, step: i64) {
+    if let Some(origin) = origin {
+        origin.node = origin.node.shifted(step);
+    }
+    if let Some(node) = pseudo_element {
+        *node = node.shifted(step);
     }
 }
 

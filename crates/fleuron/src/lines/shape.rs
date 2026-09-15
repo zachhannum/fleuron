@@ -142,6 +142,7 @@ impl LineLayout<'_> {
                 source_map: Vec::new(),
                 text_start: ending,
                 origin: None,
+                pseudo_element: None,
                 features: Features::NONE,
                 color,
                 glyphs: vec![ShapedGlyph {

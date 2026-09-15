@@ -1,7 +1,7 @@
 //! The initial letter a paragraph opens with, sunk beside the lines
 //! that follow it.
 
-use crate::content::{Inline, NodeId, SourceRange};
+use crate::content::{Inline, NodeId, PseudoElement, SourceRange};
 use crate::lines::{Line, ParagraphStyle};
 use crate::style::ComputedStyle;
 
@@ -44,6 +44,7 @@ impl Paginator<'_> {
         // cursor on the manuscript's first word lands on it.
         if let Some(run) = line.runs.first_mut() {
             run.origin = Some(initial.origin);
+            run.pseudo_element = Some(id.pseudo(PseudoElement::FirstLetter));
         }
         // A word space of the body text separates the cap from the
         // lines it is sunk into.

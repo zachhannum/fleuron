@@ -97,55 +97,64 @@ impl NodeId {
         if self == NodeId::UNASSIGNED {
             return self;
         }
-        if let Some((element, which)) = self.generated_box() {
-            return element.shifted(step).generated(which);
+        if let Some((element, which)) = self.pseudo_element() {
+            return element.shifted(step).pseudo(which);
         }
         NodeId((self.0 as i64 + step).max(0) as u32)
     }
 
-    /// The id of the box `::before` or `::after` generates inside this
-    /// element. No content node has it.
-    pub(crate) fn generated(self, which: GeneratedBox) -> NodeId {
-        let after = match which {
-            GeneratedBox::Before => 0,
-            GeneratedBox::After => 1,
+    /// The id of one pseudo-element of this element. No content node
+    /// has it.
+    pub(crate) fn pseudo(self, which: PseudoElement) -> NodeId {
+        let kind = match which {
+            PseudoElement::Before => 0,
+            PseudoElement::After => 1,
+            PseudoElement::FirstLetter => 2,
+            PseudoElement::FirstLine => 3,
         };
-        NodeId(GENERATED | (self.0 << 1) | after)
+        NodeId(PSEUDO | (self.0 << 2) | kind)
     }
 
-    /// The element and the pseudo-element a generated box belongs to,
-    /// where this id names one. Nothing for the id of a content node.
-    pub fn generated_box(self) -> Option<(NodeId, GeneratedBox)> {
-        if self.0 & GENERATED == 0 {
+    /// The element and the pseudo-element this id names, where it
+    /// names one. Nothing for the id of a content node.
+    pub fn pseudo_element(self) -> Option<(NodeId, PseudoElement)> {
+        if self.0 & PSEUDO == 0 {
             return None;
         }
-        let which = if self.0 & 1 == 0 {
-            GeneratedBox::Before
-        } else {
-            GeneratedBox::After
+        let which = match self.0 & 3 {
+            0 => PseudoElement::Before,
+            1 => PseudoElement::After,
+            2 => PseudoElement::FirstLetter,
+            _ => PseudoElement::FirstLine,
         };
-        Some((NodeId((self.0 & !GENERATED) >> 1), which))
+        Some((NodeId((self.0 & !PSEUDO) >> 2), which))
     }
 
-    /// The element this id stands for: the element a generated box
+    /// The element this id stands for: the element a pseudo-element
     /// belongs to, or the node itself.
     pub fn element(self) -> NodeId {
-        self.generated_box().map_or(self, |(element, _)| element)
+        self.pseudo_element().map_or(self, |(element, _)| element)
     }
 }
 
-/// The ids at and above this one name generated boxes. Content ids
-/// count up from 1 and stay below it.
-const GENERATED: u32 = 1 << 31;
+/// The ids at and above this one name pseudo-elements. Content ids
+/// count up from 1 and stay below 2^29, so the element and two bits
+/// for the kind fit under it.
+const PSEUDO: u32 = 1 << 31;
 
-/// Which of the two boxes `::before` and `::after` generate inside a
-/// block.
+/// The pseudo-elements the engine styles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum GeneratedBox {
-    /// The box `::before` generates, the first child of the block.
+pub enum PseudoElement {
+    /// `::before`: on a block, a box that is its first child. On an
+    /// inline element, text before its own.
     Before,
-    /// The box `::after` generates, the last child of the block.
+    /// `::after`: on a block, a box that is its last child. On an
+    /// inline element, text after its own.
     After,
+    /// `::first-letter`: the initial letter a drop cap is set from.
+    FirstLetter,
+    /// `::first-line`: the line a paragraph opens on.
+    FirstLine,
 }
 
 /// A stretch of one node's text: the node it was written in, and
@@ -1296,18 +1305,32 @@ fn assign_inline(inline: &mut Inline, next: &mut u32) {
 mod tests {
     use super::*;
 
-    /// A renumbered section moves a generated box with its element,
+    /// Part: `NodeId::element` still maps a pseudo-element id to its
+    /// element. A renumbered section moves the id with its element,
     /// and the id stays one no content node has.
     #[test]
-    fn a_generated_box_moves_with_its_element() {
+    fn a_pseudo_element_maps_to_its_element_and_moves_with_it() {
         let element = NodeId::new(40);
-        let after = element.generated(GeneratedBox::After);
-        let moved = after.shifted(-3);
-        assert_eq!(
-            moved.generated_box(),
-            Some((NodeId::new(37), GeneratedBox::After))
-        );
-        assert_eq!(element.shifted(-3).generated_box(), None);
+        let kinds = [
+            PseudoElement::Before,
+            PseudoElement::After,
+            PseudoElement::FirstLetter,
+            PseudoElement::FirstLine,
+        ];
+        let ids: Vec<NodeId> = kinds.iter().map(|which| element.pseudo(*which)).collect();
+        for (id, which) in ids.iter().zip(kinds) {
+            assert_eq!(id.pseudo_element(), Some((element, which)));
+            assert_eq!(id.element(), element);
+            assert!(id.get() >= 1 << 31, "{id:?} is in the range of content ids");
+            assert_eq!(
+                id.shifted(-3).pseudo_element(),
+                Some((NodeId::new(37), which))
+            );
+            assert_eq!(ids.iter().filter(|other| *other == id).count(), 1);
+        }
+        assert_eq!(element.pseudo_element(), None);
+        assert_eq!(element.element(), element);
+        assert_eq!(element.shifted(-3).pseudo_element(), None);
     }
 
     /// The markdown the sample tree was read from, so that its spans

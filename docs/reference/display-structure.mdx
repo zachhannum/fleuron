@@ -63,6 +63,7 @@ Text {
     source: String,
     source_map: Vec<u32>,
     origin: Option<SourceRange>,
+    pseudo_element: Option<NodeId>,
     features: Features,
     color: Color,
     glyphs: Vec<Glyph>,
@@ -89,9 +90,10 @@ One run of shaped glyphs sharing a font, a size and a baseline. `y` is the basel
 - A scene break's ornament.
 - A table's header row where it repeats on a later page.
 - The marker of a list item.
-- The text of `::before` and `::after` on an inline element.
 
-The text of a box that `::before` or `::after` adds to a block has an `origin`. See [ids of generated boxes](#ids-of-generated-boxes).
+The text of `::before` and `::after` has an `origin`. See [ids of pseudo-elements](#ids-of-pseudo-elements).
+
+`pseudo_element` is the id of the pseudo-element that the run belongs to. The run is then a drop cap, part of the first line of a paragraph, or the text of `::before` or `::after`. It is `None` on every other run. The `origin` of a drop cap or of a first line names the manuscript text that the run stands for.
 
 `color` is what the run is filled with: three eight-bit channels and an eight-bit alpha, where 255 is opaque. Where the stylesheet gives no color, the run is opaque black. The alpha includes the `opacity` of the blocks that the run is in.
 
@@ -126,21 +128,34 @@ A host maps a glyph back to the manuscript in two steps: the glyph's `range` thr
 
 A node id is the engine's own name for a place in the book, and a host that handed over markdown has a file and a byte of it instead. [The content tree](content-tree.md#where-a-node-was-read-from) turns one into the other: the node one byte of a source was read into, and the source one node was read from. A cursor becomes a node, and the runs that name it are on the page the cursor is set on; a run under the pointer becomes a place in the manuscript.
 
-### Ids of generated boxes
+### Ids of pseudo-elements
 
-`::before` and `::after` on a block add a box that is not in the manuscript. [The CSS subset](../css-subset.mdx) describes these boxes under Pseudo-elements. Each box has an id of its own. The `origin` of the text in the box has that id as its `node`, and `range` indexes the text of the box.
+`::first-letter`, `::first-line`, `::before`, and `::after` style parts of a page that are not nodes of the content tree. [The CSS subset](../css-subset.mdx) describes them under Pseudo-elements. Each pseudo-element of an element has an id of its own.
 
-No content node has the id of a generated box. The id of a content node is less than 2147483648 (2^31), and the id of a generated box is 2147483648 or more. The id comes from the element and the pseudo-element. The same book and stylesheets give the same id. A stylesheet edit that adds or removes a box does not change the id of a content node.
+No content node has the id of a pseudo-element. The id of a content node is less than 536870912 (2^29), and the id of a pseudo-element is 2147483648 (2^31) or more. The id comes from the element and the pseudo-element. The same book and stylesheets give the same id. A stylesheet edit that adds or removes a pseudo-element does not change the id of a content node.
 
-The following methods take the id of a generated box:
+The runs of a pseudo-element have its id in `pseudo_element`:
+
+| pseudo-element | runs | `origin` |
+|---|---|---|
+| `::first-letter` | The drop cap. | The letter in the manuscript. |
+| `::first-line` | The first line of the paragraph, after the drop cap. | The text in the manuscript. |
+| `::before`, `::after` | The text that the pseudo-element adds. On a block, the text is in a box. | The id of the pseudo-element, and a range in the text that it adds. |
+
+A host maps a glyph of a drop cap or a first line to the manuscript in the same way as a glyph of any other run.
+
+The following methods take the id of a pseudo-element:
 
 | method | result |
 |---|---|
-| `NodeId::generated_box` | The element and the pseudo-element that the box belongs to. |
-| `NodeId::element` | The element that the box belongs to. |
-| `Session::hit` | The element, for a point in the box or on its text. |
-| `Session::inspect` | The inspection of the element. |
-| `Book::source_of` | Nothing, because no source contains the box. |
+| `NodeId::pseudo_element` | The element and the pseudo-element. |
+| `NodeId::element` | The element that the pseudo-element belongs to. |
+| `Session::inspect` | The rules that match the pseudo-element, its computed style, and its boxes. |
+| `Book::source_of` | Nothing, because no source contains the pseudo-element. |
+
+`Session::hit` returns the id of a pseudo-element for a point on its text or in its box. An inline element on a first line is inside `::first-line`. A point on the text of that inline element returns the inline element.
+
+The inspection of a pseudo-element names the element in `element` and the pseudo-element in `pseudo_element`, as `::first-letter`. The boxes of `::before` and `::after` on a block are the boxes of the block that they add. The boxes of the other pseudo-elements are the area that their text covers on each page. For a drop cap, that area is the rectangle of the letter.
 
 ### `Rect`
 
