@@ -179,11 +179,11 @@ fn cap_height(metrics: crate::fonts::FontMetricsTable) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use crate::content::{Attributes, Inline, NodeId};
     use crate::layout::testing::{
         ContentLine, body_size, content_lines, master, origin_of, paginate_styled, paragraph,
         registry, section, small_caps_lines, ua, under_h3,
     };
-    use crate::content::{Attributes, Inline, NodeId};
     use crate::pages::DrawItem;
     use crate::style::Situation;
 

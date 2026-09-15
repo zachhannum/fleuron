@@ -738,7 +738,11 @@ mod tests {
             let at = glyphs[glyph].range.start;
             origin.range.start + source_map.get(at as usize).copied().unwrap_or(at)
         };
-        assert_eq!(byte(0), 0, "the quotation mark is the paragraph's first byte");
+        assert_eq!(
+            byte(0),
+            0,
+            "the quotation mark is the paragraph's first byte"
+        );
         assert_eq!(byte(1), "\u{201C}".len() as u32, "the letter follows it");
     }
 
