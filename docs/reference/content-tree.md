@@ -49,7 +49,7 @@ The dump, abridged:
 
 ## `metadata`
 
-`title` and `author` are the two the engine reads: the title for running heads, both for the PDF's document information. `extra` is a string map the frontend owns: language, ISBN, subtitle, anything. `language` is the one key layout reads, for the hyphenation patterns. The rest is opaque to the engine, and style may read it.
+`title` and `author` are the two the engine reads: the title for running heads, both for the PDF's document information. `extra` is a string map the frontend owns: language, ISBN, subtitle, anything. `language` is the one key layout reads, for the hyphenation patterns. The engine does not read the rest. A stylesheet can read it.
 
 All three are optional. A book with no metadata lays out.
 
@@ -72,10 +72,12 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 
 | type | |
 |---|---|
-| `heading` | `level` is 1 to 6, the range markdown defines; a level outside that is rejected at parse. `inlines` is the heading's text. |
+| `heading` | `level` is 1 to 6, the range markdown defines. The parser rejects a level outside that range. `inlines` is the heading's text. |
 | `paragraph` | `inlines`. The unit line layout breaks. |
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
+| `page_break` | `\pagebreak`. The content after it starts on a new page. It holds no text. |
+| `column_break` | `\columnbreak`. The content after it starts in the next column. It holds no text. |
 | `image` | `url` and `alt`. The string in `url` is the name the image is matched under, and it does not have to be a real URL, since the engine neither resolves it nor decodes the image. `alt` is not laid out, reaches painters and accessibility tools unchanged, and is not optional. |
 | `list` | `ordered`, `start`, `tight` and `items`. See [Lists](#lists). |
 | `table` | `head` and `body`, each a list of rows. See [Tables](#tables). |
@@ -161,11 +163,11 @@ A row and a cell each take an optional `position`, `span` and `attributes`, the 
 
 | type | |
 |---|---|
-| `text` | `value`. Plain Unicode; the frontend has already decoded entities. |
+| `text` | `value`. Plain Unicode, with the entities decoded by the frontend. |
 | `emphasis` | `children`. Italic, in the built-in sheet. |
 | `strong` | `children`. Bold, in the built-in sheet. |
 | `code` | `value`. Literal, with no markup inside, monospace and never hyphenated. |
-| `link` | `url` and `children`. The text lays out; the url reaches painters that can express one. |
+| `link` | `url` and `children`. The engine lays out the text. The url reaches the painters that can express one. |
 | `break` | No fields of its own. The line ends at the break, and the text after it stays in the same block. |
 
 Text runs are not elements as far as CSS is concerned. They take the style of the inline or block around them, and never count towards `:first-child`. A break is not an element either.
@@ -182,7 +184,7 @@ Where the engine reads an inline tree as one string, a break is a newline. `stri
 
 Specificity counts them in buckets of their own: `.map` outranks `img`, and `#frontispiece` outranks `.map`.
 
-The frontend reads them from an [attribute line](markdown.mdx); a host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
+The frontend reads them from an [attribute line](markdown.mdx). A host with a structured source of its own sets them on the tree it builds. An id on two nodes warns naming both, and both still match.
 
 A text run has the field like every other node, and a sheet reaches nothing through it.
 

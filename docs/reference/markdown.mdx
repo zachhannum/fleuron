@@ -99,6 +99,8 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | a paragraph | `paragraph` |
 | `> …` | `blockquote`, nesting |
 | `---` | `thematic_break` |
+| `\pagebreak` on a line of its own | `page_break` |
+| `\columnbreak` on a line of its own | `column_break` |
 | `![alt](url)` | `image`, as a block |
 | `- item` or `1. item` | `list`, with an item for each marker |
 | a table | `table`, with a row for each line and a cell for each column |
@@ -137,6 +139,34 @@ A table in markdown becomes a `table` in the tree. The row above the delimiter r
 The delimiter row gives each column an alignment: `:---` is left, `:---:` is center, and `---:` is right. Every cell of the column carries it as `align`. The engine applies it to the cell as `text-align`, and a `text-align` rule in a stylesheet takes priority over it.
 
 A row with fewer cells than the header row gets empty cells at its end. A table has no syntax for a cell that spans two columns or two rows.
+
+## Page and column breaks
+
+A line with nothing but `\pagebreak` on it starts a new page. A line with nothing but `\columnbreak` on it starts the next column. The following example starts a new page between two scenes:
+
+```markdown
+The door closed behind him, and the house was quiet.
+
+\pagebreak
+
+Three weeks passed before the next letter came.
+```
+
+A stylesheet reaches the two breaks as `pagebreak` and `columnbreak`. The built-in stylesheet gives them `break-after: page` and `break-after: column`, and a rule in a stylesheet can change either one. An attribute line names one break, so a rule can reach that break and no other. The following example keeps a break with the class `draft` from starting a new page:
+
+```markdown
+{.draft}
+
+\pagebreak
+```
+
+```css
+pagebreak.draft { break-after: auto }
+```
+
+The line must hold nothing else. `\pagebreak` in a paragraph of prose is prose. Two breaks with nothing between them start one new page. On a page of one column, a column break starts a new page.
+
+A break at the end of a chapter does not change the page that the next chapter starts on. Under the built-in stylesheet, the next chapter still starts on a right-hand page.
 
 ## Naming a block
 
@@ -321,8 +351,9 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | `gfm` | Strikethrough and task lists. |
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
+| `breaks` | A line of nothing but `\pagebreak` or `\columnbreak` starts a new page or the next column. On by default. |
 
-`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run and a table are prose.
+`Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run, a table, and `\pagebreak` are prose.
 
 A switch that is off turns its syntax into prose rather than an error. `[[Another Note]]` without `wikilinks` is four brackets and a title.
 

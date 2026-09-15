@@ -392,6 +392,38 @@ pub enum Block {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// `\pagebreak`: what follows it starts a new page. It holds no
+    /// text and takes no height.
+    PageBreak {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
+    /// `\columnbreak`: what follows it starts the next column. It
+    /// holds no text and takes no height.
+    ColumnBreak {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// A block-level image.
     Image {
         /// Engine-assigned identity, for diagnostics; never serialized.
@@ -863,7 +895,10 @@ fn subtree_in_blocks(blocks: &[Block], node: NodeId) -> Option<Range<u32>> {
             Block::Blockquote { blocks, .. } => subtree_in_blocks(blocks, node),
             Block::List { items, .. } => subtree_in_items(items, node),
             Block::Table { head, body, .. } => subtree_in_rows(rows(head, body), node),
-            Block::ThematicBreak { .. } | Block::Image { .. } => None,
+            Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => None,
         };
     }
     None
@@ -915,7 +950,10 @@ fn block_nodes(block: &Block) -> u32 {
         Block::Blockquote { blocks, .. } => blocks.iter().map(block_nodes).sum(),
         Block::List { items, .. } => items.iter().map(item_nodes).sum(),
         Block::Table { head, body, .. } => rows(head, body).map(row_nodes).sum(),
-        Block::ThematicBreak { .. } | Block::Image { .. } => 0,
+        Block::ThematicBreak { .. }
+        | Block::PageBreak { .. }
+        | Block::ColumnBreak { .. }
+        | Block::Image { .. } => 0,
     }
 }
 
@@ -1000,7 +1038,10 @@ fn node_in_blocks(blocks: &[Block], byte: u32) -> Option<(NodeId, SourceSpan)> {
             Block::Blockquote { blocks, .. } => node_in_blocks(blocks, byte),
             Block::List { items, .. } => node_in_items(items, byte),
             Block::Table { head, body, .. } => node_in_rows(rows(head, body), byte),
-            Block::ThematicBreak { .. } | Block::Image { .. } => None,
+            Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => None,
         };
         let hit = narrowest((block_id(block), span), inner);
         if found.is_none_or(|found| hit.1.width() < found.1.width()) {
@@ -1046,7 +1087,10 @@ fn span_in_blocks(blocks: &[Block], node: NodeId) -> Option<SourceSpan> {
             Block::Blockquote { blocks, .. } => span_in_blocks(blocks, node),
             Block::List { items, .. } => span_in_items(items, node),
             Block::Table { head, body, .. } => span_in_rows(rows(head, body), node),
-            Block::ThematicBreak { .. } | Block::Image { .. } => None,
+            Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => None,
         };
         if found.is_some() {
             return found;
@@ -1145,6 +1189,8 @@ pub fn block_attributes(block: &Block) -> &Attributes {
         | Block::Paragraph { attributes, .. }
         | Block::Blockquote { attributes, .. }
         | Block::ThematicBreak { attributes, .. }
+        | Block::PageBreak { attributes, .. }
+        | Block::ColumnBreak { attributes, .. }
         | Block::Image { attributes, .. }
         | Block::List { attributes, .. }
         | Block::Table { attributes, .. } => attributes,
@@ -1170,6 +1216,8 @@ pub fn block_position(block: &Block) -> Option<SourcePos> {
         | Block::Paragraph { position, .. }
         | Block::Blockquote { position, .. }
         | Block::ThematicBreak { position, .. }
+        | Block::PageBreak { position, .. }
+        | Block::ColumnBreak { position, .. }
         | Block::Image { position, .. }
         | Block::List { position, .. }
         | Block::Table { position, .. } => *position,
@@ -1195,6 +1243,8 @@ pub fn block_id(block: &Block) -> NodeId {
         | Block::Paragraph { id, .. }
         | Block::Blockquote { id, .. }
         | Block::ThematicBreak { id, .. }
+        | Block::PageBreak { id, .. }
+        | Block::ColumnBreak { id, .. }
         | Block::Image { id, .. }
         | Block::List { id, .. }
         | Block::Table { id, .. } => *id,
@@ -1208,6 +1258,8 @@ pub fn block_span(block: &Block) -> Option<SourceSpan> {
         | Block::Paragraph { span, .. }
         | Block::Blockquote { span, .. }
         | Block::ThematicBreak { span, .. }
+        | Block::PageBreak { span, .. }
+        | Block::ColumnBreak { span, .. }
         | Block::Image { span, .. }
         | Block::List { span, .. }
         | Block::Table { span, .. } => *span,
@@ -1258,7 +1310,10 @@ fn assign_block(block: &mut Block, next: &mut u32) {
                 assign_block(nested, next);
             }
         }
-        Block::ThematicBreak { id, .. } | Block::Image { id, .. } => {
+        Block::ThematicBreak { id, .. }
+        | Block::PageBreak { id, .. }
+        | Block::ColumnBreak { id, .. }
+        | Block::Image { id, .. } => {
             *id = next_id(next);
         }
         Block::List { id, items, .. } => {
@@ -1713,7 +1768,10 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         walk_block(ids, nested);
                     }
                 }
-                Block::ThematicBreak { id, .. } | Block::Image { id, .. } => ids.push(*id),
+                Block::ThematicBreak { id, .. }
+                | Block::PageBreak { id, .. }
+                | Block::ColumnBreak { id, .. }
+                | Block::Image { id, .. } => ids.push(*id),
                 Block::List { id, items, .. } => {
                     ids.push(*id);
                     for item in items {
@@ -2100,6 +2158,32 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
             panic!("the second block is a paragraph");
         };
         inlines
+    }
+
+    /// Acceptance: a page break and a column break serialize under
+    /// tags of their own.
+    #[test]
+    fn a_break_serializes_under_its_own_tag() {
+        let page = Block::PageBreak {
+            id: NodeId::UNASSIGNED,
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        let column = Block::ColumnBreak {
+            id: NodeId::UNASSIGNED,
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&page).expect("a break serializes"),
+            serde_json::json!({ "type": "page_break" })
+        );
+        assert_eq!(
+            serde_json::to_value(&column).expect("a break serializes"),
+            serde_json::json!({ "type": "column_break" })
+        );
     }
 
     /// File + position in all four presence combinations.

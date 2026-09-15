@@ -60,6 +60,8 @@ fn hash_blocks(blocks: &[Block], hasher: &mut DefaultHasher) {
                 hash_blocks(blocks, hasher);
             }
             Block::ThematicBreak { .. } => "thematic_break".hash(hasher),
+            Block::PageBreak { .. } => "page_break".hash(hasher),
+            Block::ColumnBreak { .. } => "column_break".hash(hasher),
             Block::Image { url, alt, .. } => ("image", url, alt).hash(hasher),
             Block::List {
                 ordered,
@@ -198,9 +200,10 @@ fn strip_blocks(blocks: &mut [Block]) {
                 (*position, *span) = (None, None);
                 strip_blocks(blocks);
             }
-            Block::ThematicBreak { position, span, .. } | Block::Image { position, span, .. } => {
-                (*position, *span) = (None, None)
-            }
+            Block::ThematicBreak { position, span, .. }
+            | Block::PageBreak { position, span, .. }
+            | Block::ColumnBreak { position, span, .. }
+            | Block::Image { position, span, .. } => (*position, *span) = (None, None),
             Block::List {
                 position,
                 span,

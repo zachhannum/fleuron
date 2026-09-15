@@ -123,7 +123,10 @@ fn nodes(book: &Book) -> BTreeMap<u32, String> {
                         walk_blocks(blocks, out);
                     }
                 }
-                Block::ThematicBreak { .. } | Block::Image { .. } => {}
+                Block::ThematicBreak { .. }
+                | Block::PageBreak { .. }
+                | Block::ColumnBreak { .. }
+                | Block::Image { .. } => {}
             }
         }
     }

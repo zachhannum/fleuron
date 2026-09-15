@@ -210,7 +210,10 @@ fn texts_of(blocks: &[Block], anchors: &Anchors, texts: &mut BTreeMap<NodeId, St
                     }
                 }
             }
-            Block::ThematicBreak { .. } | Block::Image { .. } => {}
+            Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => {}
         }
     }
 }
@@ -256,7 +259,9 @@ fn block_text(block: &Block) -> String {
         Block::Table { head, body, .. } => {
             rows(head, body).map(row_text).collect::<Vec<_>>().join(" ")
         }
-        Block::ThematicBreak { .. } => String::new(),
+        Block::ThematicBreak { .. } | Block::PageBreak { .. } | Block::ColumnBreak { .. } => {
+            String::new()
+        }
     }
 }
 
@@ -350,7 +355,10 @@ impl Named {
                         self.blocks(&cell.blocks, styles, references, source);
                     }
                 }
-                Block::ThematicBreak { .. } | Block::Image { .. } => {}
+                Block::ThematicBreak { .. }
+                | Block::PageBreak { .. }
+                | Block::ColumnBreak { .. }
+                | Block::Image { .. } => {}
             }
             self.content(styles.after(id), None, references, source);
         }
