@@ -54,8 +54,9 @@ pub(crate) use exclusion::AnchoredBoxes;
 pub(crate) use flow::{PageInfo, Paged};
 pub(crate) use reference::{Named, References, landed, moved};
 
+use std::borrow::Cow;
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::content::{Book, Metadata};
 use crate::fonts::FontRegistry;
@@ -221,8 +222,8 @@ impl Paginator<'_> {
         self.warnings.borrow().clone()
     }
 
-    /// How many times the flow set a paragraph again beside an image.
-    /// A book that anchors nothing never does.
+    /// How many times the flow that paints set a paragraph again
+    /// beside an image. A book that anchors nothing never does.
     pub fn rebreaks(&self) -> u32 {
         self.rebreaks.get()
     }
@@ -326,22 +327,14 @@ impl Paginator<'_> {
     /// One pass over the whole book, stopping short of the furniture.
     fn pass(&self, book: &Book) -> Paged {
         let anchored = self.anchored_boxes(book);
-        // The pass that answers where the anchors land keeps no
-        // fragments either. It builds a section, flows it, and drops
-        // it, the same way the pass that keeps the pages does.
-        let bare = AnchoredBoxes::default();
-        let anchors = if anchored.is_empty() {
-            BTreeMap::new()
+        let anchored = if anchored.is_empty() {
+            AnchoredBoxes::default()
         } else {
-            let mut flow = Flow::settling(self, &bare);
-            for section in &book.sections {
-                let fragments = self.section_fragments(section);
-                flow.section(section, &fragments);
-            }
-            flow.finish().anchors
+            self.settle(book, anchored, |index| {
+                Cow::Owned(self.section_fragments(&book.sections[index]))
+            })
         };
-        let anchored = AnchoredBoxes::on(anchored, &anchors);
-        let mut flow = Flow::new(self, &anchored);
+        let mut flow = Flow::new(self, anchored);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
@@ -367,17 +360,12 @@ impl Paginator<'_> {
     ) -> Paged {
         let sections: Vec<&[Fragment]> = sections.into_iter().collect();
         let anchored = self.anchored_boxes(book);
-        let bare = AnchoredBoxes::default();
         let anchored = if anchored.is_empty() {
             AnchoredBoxes::default()
         } else {
-            let mut flow = Flow::settling(self, &bare);
-            for (section, fragments) in book.sections.iter().zip(&sections) {
-                flow.section(section, fragments);
-            }
-            AnchoredBoxes::on(anchored, &flow.finish().anchors)
+            self.settle(book, anchored, |index| Cow::Borrowed(sections[index]))
         };
-        let mut flow = Flow::new(self, &anchored);
+        let mut flow = Flow::new(self, anchored);
         for (section, fragments) in book.sections.iter().zip(&sections) {
             flow.section(section, fragments);
         }

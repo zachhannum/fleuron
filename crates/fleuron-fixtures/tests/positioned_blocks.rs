@@ -32,15 +32,15 @@ fn a_novel_of_positioned_blocks_lays_out_the_same_way_twice() {
         "a novel sets {} pages",
         once.pages.len()
     );
+    let encode = |output: &fleuron::LayoutOutput| {
+        fleuron::wire::encode(output).expect("a display structure encodes")
+    };
     assert_ne!(
-        once.pages.len(),
-        bare.pages.len(),
+        encode(&once),
+        encode(&bare),
         "the lifted paragraphs changed nothing, so nothing is proved",
     );
     assert!(once.warnings.is_empty(), "{:?}", once.warnings);
     assert_eq!(once.pages.len(), twice.pages.len());
-    assert_eq!(
-        fleuron::wire::encode(&once).expect("a display structure encodes"),
-        fleuron::wire::encode(&twice).expect("a display structure encodes"),
-    );
+    assert_eq!(encode(&once), encode(&twice));
 }
