@@ -32,11 +32,11 @@ use fleuron_markdown::Options;
 
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
-const EXPECTED_PAGES: usize = 24;
+const EXPECTED_PAGES: usize = 25;
 
 /// Pages the fixture book sets under `fixtures/styled.css`: a smaller
 /// trim and a larger body, so more of them.
-const STYLED_PAGES: usize = 37;
+const STYLED_PAGES: usize = 38;
 
 /// The trim `fixtures/styled.css` asks for, in points, as `pdfinfo`
 /// reports it.
@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "cd1aa8196972e9c15b8fe34c98972267e9441b040fdc0a483eaf1459ad09d600";
+    "4d8d6d2b3118d2354a7e96ddb18170dba7dc5fe1969045ad5abbcab274a401cc";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -709,8 +709,9 @@ fn the_part_title_is_lifted_and_the_chapter_titles_are_raised() {
 /// The sheet gives every chapter title a height of at least 0.75in, so
 /// the rule under each title sits one fixed distance further down than
 /// it does without the height. The book ends a few lines into its last
-/// page, and the sheet centers those lines. Every other page ends full
-/// and stays where it is, and so does the folio of the last page.
+/// page, and the page break before chapter II ends its page a few
+/// lines in too. The sheet centers the lines of both. Every other page
+/// ends full and stays where it is, and so do the folios of the two.
 #[test]
 fn the_chapter_titles_take_their_height_and_the_last_page_is_centered() {
     let rule = Color::rgb(0x8a, 0x7a, 0x5c);
@@ -762,27 +763,37 @@ fn the_chapter_titles_take_their_height_and_the_last_page_is_centered() {
     };
     let top = styled_pages_with("@page { align-content: start }");
     assert_eq!(pages.len(), top.len(), "centering moved a page break");
-    let last = pages.len() - 1;
-    for (page, was) in pages[..last].iter().zip(&top) {
-        assert_eq!(runs(page), runs(was), "page {} moved", page.number);
-    }
-    let (now, was) = (runs(&pages[last]), runs(&top[last]));
-    assert_eq!(now.len(), was.len());
-    let moves: Vec<f32> = now
+    let broken = pages
         .iter()
-        .zip(&was)
-        .map(|(now, was)| now.1 - was.1)
-        .collect();
-    let down = moves.iter().copied().fold(0.0f32, f32::max);
-    assert!(down > 12.0, "the last page moved {down}");
-    let still = moves.iter().filter(|moved| moved.abs() < 1e-3).count();
-    assert_eq!(still, 1, "only the folio stays: {moves:?}");
-    assert!(
-        moves
+        .position(|page| runs(page).iter().any(|run| run.2.contains("CHAPTER II.")))
+        .expect("chapter II is set")
+        - 1;
+    let last = pages.len() - 1;
+    for (index, (page, was)) in pages.iter().zip(&top).enumerate() {
+        if index != broken && index != last {
+            assert_eq!(runs(page), runs(was), "page {} moved", page.number);
+        }
+    }
+    for index in [broken, last] {
+        let (now, was) = (runs(&pages[index]), runs(&top[index]));
+        let number = pages[index].number;
+        assert_eq!(now.len(), was.len());
+        let moves: Vec<f32> = now
             .iter()
-            .all(|moved| moved.abs() < 1e-3 || (moved - down).abs() < 1e-3),
-        "the lines of the last page moved apart: {moves:?}",
-    );
+            .zip(&was)
+            .map(|(now, was)| now.1 - was.1)
+            .collect();
+        let down = moves.iter().copied().fold(0.0f32, f32::max);
+        assert!(down > 12.0, "page {number} moved {down}");
+        let still = moves.iter().filter(|moved| moved.abs() < 1e-3).count();
+        assert_eq!(still, 1, "page {number}: only the folio stays: {moves:?}");
+        assert!(
+            moves
+                .iter()
+                .all(|moved| moved.abs() < 1e-3 || (moved - down).abs() < 1e-3),
+            "the lines of page {number} moved apart: {moves:?}",
+        );
+    }
 }
 
 /// The prose beside the ornament wraps to the shape the ornament's
@@ -1125,7 +1136,7 @@ fn the_document_info_names_the_fixture_book() {
 const COLUMNS_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n";
 
 /// Pages the fixture book sets in two columns.
-const COLUMN_PAGES: usize = 27;
+const COLUMN_PAGES: usize = 28;
 
 /// The fixture book in two columns: structurally sound, every word of
 /// it still there, and the page count the layout settled.
@@ -1357,7 +1368,7 @@ fn a_two_column_wrapped_page_paints_the_same_in_the_preview_and_the_pdf() {
 /// The column sheet with the chapters run together, so a chapter
 /// heading falls partway down a page, and the headings and the table
 /// set across both columns.
-const COLUMNS_SPANNING_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n\nsection { break-before: auto }\n\nh2, h3, table { column-span: all }\n";
+const COLUMNS_SPANNING_CSS: &str = "@page {\n  column-count: 2;\n  column-gap: 18pt;\n  column-rule-style: solid;\n  column-rule-width: 0.5pt;\n}\n\nsection { break-before: auto }\n\npagebreak { break-after: auto }\n\nh2, h3, table { column-span: all }\n";
 
 /// The fixture book with its headings and its table across both
 /// columns: structurally sound, every word of it still there, and
@@ -1805,6 +1816,10 @@ fn dump_tree_emits_a_stable_tree() {
     assert!(
         blocks.iter().any(|block| block["type"] == "thematic_break"),
         "the scene break is not in the tree",
+    );
+    assert!(
+        blocks.iter().any(|block| block["type"] == "page_break"),
+        "the page break is not in the tree",
     );
     assert!(
         blocks.iter().any(|block| block["type"] == "table"),
