@@ -1,6 +1,8 @@
 //! The initial letter a paragraph opens with, sunk beside the lines
 //! that follow it.
 
+use unicode_general_category::get_general_category;
+
 use crate::content::{Inline, NodeId, PseudoElement, SourceRange};
 use crate::lines::{Line, ParagraphStyle};
 use crate::style::ComputedStyle;
@@ -39,7 +41,7 @@ impl Paginator<'_> {
             size: sunk * cap_metrics.units_per_em as f32 / cap_units,
             ..cap_style.paragraph()
         };
-        let mut line = self.line_of(&initial.letter.to_string(), style)?;
+        let mut line = self.line_of(&initial.text, style)?;
         // The cap stands for the letter it was taken from, so a
         // cursor on the manuscript's first word lands on it.
         if let Some(run) = line.runs.first_mut() {
@@ -78,51 +80,91 @@ pub(super) struct Cap {
     pub(super) lines: usize,
 }
 
-/// The letter a drop cap is set from, where it was written, and how
-/// far into the paragraph the rest of the prose starts.
+/// The text a drop cap is set from, where it was written, and how far
+/// into the paragraph the rest of the prose starts.
 struct Initial {
-    letter: char,
-    /// The node the letter came out of, and the bytes of it the cap
-    /// holds: the letter and whatever space stood before it.
+    /// The first letter with the punctuation on either side of it.
+    text: String,
+    /// The node the cap starts in, and the bytes of it the cap holds:
+    /// its text and whatever space stood before it.
     origin: SourceRange,
     /// Bytes of the paragraph's text the cap holds.
     taken: usize,
 }
 
-/// The first character of a run of inlines, wherever the markup has
-/// put it: a paragraph opening in italic still opens with a letter.
+/// The first letter of a run of inlines and the punctuation next to
+/// it, wherever the markup has put them: a paragraph opening in
+/// italic still opens with a letter.
 fn take_initial(inlines: &[Inline]) -> Option<Initial> {
-    fn walk(inlines: &[Inline], before: &mut usize) -> Option<Initial> {
+    fn texts<'a>(inlines: &'a [Inline], out: &mut Vec<(Option<NodeId>, &'a str)>) {
         for inline in inlines {
             match inline {
                 Inline::Text { id, value, .. } | Inline::Code { id, value, .. } => {
-                    let space = value.len() - value.trim_start().len();
-                    if let Some(letter) = value[space..].chars().next() {
-                        let held = (space + letter.len_utf8()) as u32;
-                        return Some(Initial {
-                            letter,
-                            origin: SourceRange {
-                                node: *id,
-                                range: 0..held,
-                            },
-                            taken: *before + held as usize,
-                        });
-                    }
-                    *before += value.len();
+                    out.push((Some(*id), value))
                 }
-                Inline::Break { .. } => *before += '\n'.len_utf8(),
+                Inline::Break { .. } => out.push((None, "\n")),
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => {
-                    if let Some(initial) = walk(children, before) {
-                        return Some(initial);
-                    }
-                }
+                | Inline::Link { children, .. } => texts(children, out),
             }
         }
-        None
     }
-    walk(inlines, &mut 0)
+    let mut pieces = Vec::new();
+    texts(inlines, &mut pieces);
+
+    let mut text = String::new();
+    let mut origin: Option<SourceRange> = None;
+    let mut lettered = false;
+    let mut taken = 0;
+    let mut before = 0;
+    'pieces: for (node, value) in pieces {
+        for (at, character) in value.char_indices() {
+            if text.is_empty() && character.is_whitespace() {
+                continue;
+            }
+            let joins = match Kind::of(character) {
+                Kind::Punctuation => true,
+                Kind::Letter => !std::mem::replace(&mut lettered, true),
+                Kind::Other => false,
+            };
+            let Some(node) = node.filter(|_| joins) else {
+                break 'pieces;
+            };
+            let end = (at + character.len_utf8()) as u32;
+            let origin = origin.get_or_insert(SourceRange { node, range: 0..0 });
+            if origin.node == node {
+                origin.range.end = end;
+            }
+            text.push(character);
+            taken = before + end as usize;
+        }
+        before += value.len();
+    }
+    Some(Initial {
+        text,
+        origin: origin.filter(|_| lettered)?,
+        taken,
+    })
+}
+
+/// What a character is to `::first-letter`.
+enum Kind {
+    /// Opening, closing, quotation, and other punctuation. Dashes and
+    /// connectors are not in it.
+    Punctuation,
+    /// A letter, a number, or a symbol.
+    Letter,
+    Other,
+}
+
+impl Kind {
+    fn of(character: char) -> Kind {
+        match get_general_category(character).abbreviation().as_bytes() {
+            [b'P', b's' | b'e' | b'i' | b'f' | b'o'] => Kind::Punctuation,
+            [b'L' | b'N' | b'S', _] => Kind::Letter,
+            _ => Kind::Other,
+        }
+    }
 }
 
 /// A face's cap height, falling back to its ascender when the file
@@ -141,8 +183,88 @@ mod tests {
         ContentLine, body_size, content_lines, master, origin_of, paginate_styled, paragraph,
         registry, section, small_caps_lines, ua, under_h3,
     };
+    use crate::content::{Attributes, Inline, NodeId};
     use crate::pages::DrawItem;
     use crate::style::Situation;
+
+    use super::take_initial;
+
+    fn words(id: u32, value: &str) -> Inline {
+        Inline::Text {
+            id: NodeId::new(id),
+            value: value.into(),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        }
+    }
+
+    /// Acceptance: punctuation before the first letter joins the drop
+    /// cap, and the first line opens after the letter.
+    #[test]
+    fn punctuation_before_the_first_letter_joins_the_drop_cap() {
+        let prose = format!(
+            "\u{201C}Sir,\u{201D} said he, {}",
+            "my father had a small estate in nottinghamshire ".repeat(12)
+        );
+        let pages = paginate_styled(
+            "p::first-letter { initial-letter: 3 }",
+            vec![section(vec![paragraph(&prose)])],
+        );
+        let lines = content_lines(&pages[0]);
+        let cap: Vec<&str> = lines
+            .iter()
+            .flat_map(|(_, runs)| runs)
+            .filter(|(_, size, _)| *size > body_size())
+            .map(|(_, _, text)| *text)
+            .collect();
+        assert_eq!(cap, ["\u{201C}S"]);
+        assert!(
+            lines[0].1[0].2.starts_with("ir,"),
+            "the first line does not open after the letter: {:?}",
+            lines[0].1,
+        );
+    }
+
+    /// Acceptance: punctuation right after the first letter joins the
+    /// drop cap.
+    #[test]
+    fn punctuation_right_after_the_first_letter_joins_the_drop_cap() {
+        let initial = take_initial(&[words(1, "A. Gulliver")]).expect("a letter");
+        assert_eq!(initial.text, "A.");
+        assert_eq!(initial.taken, 2);
+    }
+
+    /// Acceptance: the drop cap takes punctuation and its letter across
+    /// an inline boundary. Its origin is where the punctuation was
+    /// written.
+    #[test]
+    fn the_drop_cap_takes_punctuation_and_its_letter_across_an_inline_boundary() {
+        let inlines = [
+            words(1, "\u{201C}"),
+            Inline::Emphasis {
+                id: NodeId::new(2),
+                children: vec![words(3, "Sir, he said")],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+        ];
+        let initial = take_initial(&inlines).expect("a letter");
+        assert_eq!(initial.text, "\u{201C}S");
+        assert_eq!(initial.origin.node, NodeId::new(1));
+        assert_eq!(initial.origin.range, 0..3);
+        assert_eq!(initial.taken, 4);
+    }
+
+    /// Acceptance: a paragraph with punctuation and no letter gets no
+    /// drop cap.
+    #[test]
+    fn a_paragraph_with_punctuation_and_no_letter_gets_no_drop_cap() {
+        assert!(take_initial(&[words(1, "\u{201C} \u{2026}")]).is_none());
+        assert!(take_initial(&[words(1, "\u{2014}yes")]).is_none());
+        assert!(take_initial(&[words(1, "  ")]).is_none());
+    }
 
     /// Acceptance: a drop cap and an indent do not stack. The cap's
     /// reserved measure is what offsets its line; the indent the

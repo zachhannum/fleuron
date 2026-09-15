@@ -489,13 +489,21 @@ mod tests {
     /// A chapter under an `h2`: a paragraph long enough to sink a drop
     /// cap into, with a link near its end.
     fn under_h2(css: &str) -> Session<'static> {
+        under_h2_opening(css, "")
+    }
+
+    /// The same, with `opens` written before the paragraph's prose.
+    fn under_h2_opening(css: &str, opens: &str) -> Session<'static> {
         let text = |value: &str| format!(r#"{{"type": "text", "value": "{value}"}}"#);
         let blocks = format!(
             r#"{{"type": "heading", "level": 2, "inlines": [{}]}},
                {{"type": "paragraph", "inlines": [{}, {{"type": "link",
                  "url": "https://example.com", "children": [{}]}}, {}]}}"#,
             text("A Voyage"),
-            text(&"my father had a small estate in nottinghamshire ".repeat(6)),
+            text(&format!(
+                "{opens}{}",
+                "my father had a small estate in nottinghamshire ".repeat(6)
+            )),
             text("Lilliput"),
             text(" and more."),
         );
@@ -704,6 +712,34 @@ mod tests {
         let plain = first_byte("", "my father");
         assert_eq!(first_byte(DROP_CAP, "m"), plain);
         assert_eq!(plain.1, 0, "the paragraph opens at its first byte");
+    }
+
+    /// Acceptance: a glyph of a drop cap that opens with punctuation
+    /// maps to the manuscript byte of that punctuation.
+    #[test]
+    fn a_glyph_of_a_quoted_drop_cap_maps_to_the_byte_of_its_punctuation() {
+        let mut session = under_h2_opening(DROP_CAP, "\u{201C}");
+        let (_, text, _) = opening(&session);
+        let (item, _) = run_where(
+            &mut session,
+            |item| matches!(item, DrawItem::Text { text, .. } if text == "\u{201C}m"),
+        );
+        let DrawItem::Text {
+            origin: Some(origin),
+            source_map,
+            glyphs,
+            ..
+        } = item
+        else {
+            unreachable!("the run names a node");
+        };
+        assert_eq!(origin.node, text);
+        let byte = |glyph: usize| {
+            let at = glyphs[glyph].range.start;
+            origin.range.start + source_map.get(at as usize).copied().unwrap_or(at)
+        };
+        assert_eq!(byte(0), 0, "the quotation mark is the paragraph's first byte");
+        assert_eq!(byte(1), "\u{201C}".len() as u32, "the letter follows it");
     }
 
     /// Part: a run cut from a pseudo-element carries its id, and its

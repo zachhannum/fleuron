@@ -17,6 +17,7 @@ harfrust.workspace = true
 skrifa.workspace = true
 unicode-linebreak.workspace = true
 unicode-bidi.workspace = true
+unicode-general-category.workspace = true
 hypher.workspace = true
 icu_segmenter.workspace = true
 thiserror.workspace = true
