@@ -2,7 +2,8 @@
 //! prose around one is set in.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::content::{Block, Book, NodeId, PseudoElement, block_position, cell_blocks, origin};
 use crate::lines::{Measure, Span};
@@ -12,10 +13,65 @@ use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOut
 use super::Paginator;
 use super::build::{Builder, Child, Reflow, carry_over, children, set_lines};
 use super::cap::Cap;
-use super::flow::{Flow, shift, shift_boxes};
+use super::flow::{Checkpoint, Flow, Placed, shift, shift_boxes};
 use super::fragment::Fragment;
 
 impl Paginator<'_> {
+    /// The page each of `all` lands on, found by a flow that paints
+    /// nothing. `fragments` gives the fragments of the section at an
+    /// index of `book.sections`.
+    ///
+    /// The flow puts a box on a page when a page closes with the
+    /// anchor of that box on it. A page that a box changes is laid out
+    /// again, from the item that was being placed when that page
+    /// opened. A box that pushes its own anchor off its page goes on
+    /// the next page instead, and moves no more.
+    ///
+    /// A section stays in hand while a page that opened in it can
+    /// still be laid out again.
+    pub(super) fn settle<'f>(
+        &self,
+        book: &Book,
+        all: Vec<Anchored>,
+        mut fragments: impl FnMut(usize) -> Cow<'f, [Fragment]>,
+    ) -> AnchoredBoxes {
+        let mut flow = Flow::settling(
+            self,
+            AnchoredBoxes {
+                all,
+                by_page: BTreeMap::new(),
+            },
+        );
+        let mut held: BTreeMap<usize, Cow<'f, [Fragment]>> = BTreeMap::new();
+        let (mut section, mut item, mut opened) = (0, 0, false);
+        loop {
+            if let Some((at, from)) = flow.again() {
+                (section, item, opened) = (at, from, true);
+            }
+            let Some(content) = book.sections.get(section) else {
+                flow.close_book();
+                if flow.settling.as_ref().is_some_and(|s| s.redo.is_some()) {
+                    continue;
+                }
+                break;
+            };
+            let oldest = flow.oldest_section().unwrap_or(section);
+            held.retain(|index, _| *index >= oldest);
+            let built = held.entry(section).or_insert_with(|| fragments(section));
+            if !opened {
+                flow.open_section(content);
+                opened = true;
+            }
+            if item >= built.len() {
+                (section, item, opened) = (section + 1, 0, false);
+                continue;
+            }
+            flow.mark(section, item);
+            item = flow.item(built, item);
+        }
+        flow.anchored
+    }
+
     /// The images and blocks the sheet anchored to the page, in
     /// document order.
     ///
@@ -481,31 +537,20 @@ impl Anchored {
 /// landed on.
 ///
 /// The flow gives the page that a box falls on. The sheet gives the
-/// place of the box on that page. The engine runs the flow once with
-/// no box in the way, and keeps the page it gives each box. A box then
-/// narrows the lines of that page, but its page does not change.
+/// place of the box on that page. [`Paginator::settle`] finds the
+/// pages, and the flow that paints keeps them.
 #[derive(Debug, Default)]
 pub(crate) struct AnchoredBoxes {
     pub(super) all: Vec<Anchored>,
-    /// Which boxes a page carries, by page index.
+    /// Which boxes a page carries, by page index, each list in
+    /// document order.
     pub(super) by_page: BTreeMap<usize, Vec<usize>>,
 }
 
 impl AnchoredBoxes {
-    /// The boxes of a book, on the pages the anchor pass gave them.
-    pub(super) fn on(all: Vec<Anchored>, anchors: &BTreeMap<NodeId, usize>) -> AnchoredBoxes {
-        let mut by_page: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for (index, anchored) in all.iter().enumerate() {
-            let Some(page) = anchors.get(&anchored.node) else {
-                continue;
-            };
-            by_page.entry(*page).or_default().push(index);
-        }
-        AnchoredBoxes { all, by_page }
-    }
-
+    /// Whether the book anchors nothing.
     pub(super) fn is_empty(&self) -> bool {
-        self.by_page.is_empty()
+        self.all.is_empty()
     }
 
     /// Whether the prose of the page at `index` wraps around a box.
@@ -516,7 +561,134 @@ impl AnchoredBoxes {
     }
 }
 
+/// Where one box stands while the flow finds its page.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Landing {
+    /// No page closed with its anchor on it yet.
+    Waiting,
+    /// On the page that closed with its anchor on it.
+    On(usize),
+    /// It pushed its own anchor off its page. It goes on the first
+    /// page from `from` that closes once its anchor has passed.
+    Pushed { from: usize, passed: bool },
+    /// On a page it does not leave.
+    Settled(usize),
+}
+
+/// What the flow that finds the page of each box keeps to lay a page
+/// out again.
+pub(super) struct Settling {
+    /// Where each box stands, by its index in `AnchoredBoxes::all`.
+    landings: Vec<Landing>,
+    /// The flow before the item being placed.
+    before: Option<Rc<Checkpoint>>,
+    /// The flow before the item that opened the page being built.
+    page: Option<Rc<Checkpoint>>,
+    /// Where to start again, once the item being placed is done.
+    pub(super) redo: Option<Rc<Checkpoint>>,
+}
+
+impl Settling {
+    pub(super) fn new(anchored: &AnchoredBoxes) -> Settling {
+        Settling {
+            landings: vec![Landing::Waiting; anchored.all.len()],
+            before: None,
+            page: None,
+            redo: None,
+        }
+    }
+
+    /// Records that a page opened during the item being placed.
+    pub(super) fn opened(&mut self) {
+        self.page.clone_from(&self.before);
+    }
+}
+
 impl Flow<'_, '_> {
+    /// Keeps the flow as it stands before the item at `item` of the
+    /// section at `section` is placed.
+    pub(super) fn mark(&mut self, section: usize, item: usize) {
+        if self.settling.is_none() {
+            return;
+        }
+        let checkpoint = Rc::new(self.checkpoint(section, item));
+        let Some(settling) = self.settling.as_mut() else {
+            return;
+        };
+        settling.page.get_or_insert_with(|| checkpoint.clone());
+        settling.before = Some(checkpoint);
+    }
+
+    /// The section that a page can be laid out again from.
+    pub(super) fn oldest_section(&self) -> Option<usize> {
+        let settling = self.settling.as_ref()?;
+        settling.page.as_ref().map(|page| page.section)
+    }
+
+    /// Puts the flow back where a page that a box changed opened, and
+    /// answers the item to place from there.
+    pub(super) fn again(&mut self) -> Option<(usize, usize)> {
+        let checkpoint = self.settling.as_mut()?.redo.take()?;
+        self.restore(&checkpoint);
+        let settling = self.settling.as_mut()?;
+        settling.page = Some(checkpoint.clone());
+        settling.before = Some(checkpoint.clone());
+        Some((checkpoint.section, checkpoint.item))
+    }
+
+    /// Moves boxes onto the page that is closing with `placed` on it,
+    /// and off it, and asks for the page again where that changes a
+    /// line.
+    ///
+    /// A box goes on the page that closes with its anchor on it. A box
+    /// on this page whose anchor is not on it pushed that anchor to a
+    /// later page, so it comes off. Once a page is asked for again,
+    /// nothing moves until the flow is back at that page.
+    pub(super) fn land(&mut self, placed: &[Placed]) {
+        let index = self.pages.len();
+        let Some(settling) = self.settling.as_mut() else {
+            return;
+        };
+        if settling.redo.is_some() {
+            return;
+        }
+        let bound: BTreeSet<NodeId> = placed
+            .iter()
+            .flat_map(|placed| placed.anchors.iter().copied())
+            .collect();
+        let mut again = false;
+        for (at, anchored) in self.anchored.all.iter().enumerate() {
+            let here = bound.contains(&anchored.node);
+            let landing = match settling.landings[at] {
+                Landing::Waiting if here => Landing::On(index),
+                Landing::On(page) if page == index && !here => Landing::Pushed {
+                    from: index + 1,
+                    passed: false,
+                },
+                Landing::Pushed { from, passed } if index >= from && (passed || here) => {
+                    Landing::Settled(index)
+                }
+                Landing::Pushed { from, .. } if here => Landing::Pushed { from, passed: true },
+                landing => landing,
+            };
+            let before = std::mem::replace(&mut settling.landings[at], landing);
+            let boxes = self.anchored.by_page.entry(index).or_default();
+            match (before, landing) {
+                (Landing::On(_), Landing::Pushed { .. }) => boxes.retain(|other| *other != at),
+                (_, Landing::On(_) | Landing::Settled(_)) if before != landing => {
+                    let slot = boxes.partition_point(|other| *other < at);
+                    boxes.insert(slot, at);
+                }
+                _ => continue,
+            }
+            again |= anchored.wrap != WrapFlow::Auto;
+        }
+        self.anchored.by_page.retain(|_, boxes| !boxes.is_empty());
+        if again {
+            settling.redo.clone_from(&settling.page);
+        }
+    }
+
     /// Places one paragraph, and breaks it again where an image
     /// narrows the bands it is set in.
     ///
@@ -569,7 +741,9 @@ impl Flow<'_, '_> {
                 narrowed = profile.is_some();
                 let profile = profile.unwrap_or_else(|| Profile::plain(reflow, from == 0));
                 let paginator = self.paginator;
-                paginator.rebreaks.set(paginator.rebreaks.get() + 1);
+                if self.paints {
+                    paginator.rebreaks.set(paginator.rebreaks.get() + 1);
+                }
                 let broken = paginator
                     .lines
                     .rebreak(&reflow.shaped, &profile.measure, from);
@@ -1606,6 +1780,170 @@ mod tests {
         assert_eq!(images, vec![at], "the image did not land with its block");
     }
 
+    /// The page that paints the image `width` points wide.
+    fn page_of_image(pages: &[Page], width: f32) -> Option<usize> {
+        pages.iter().position(|page| {
+            painted(page)
+                .iter()
+                .any(|(_, _, w, _)| (w - width).abs() < 1e-3)
+        })
+    }
+
+    /// The page where the paragraph tagged `tag` starts.
+    fn page_of_paragraph(pages: &[Page], tag: &str) -> Option<usize> {
+        pages
+            .iter()
+            .position(|page| tagged_lines(page).iter().any(|line| line == tag))
+    }
+
+    /// The images of the illustrated book, by url.
+    struct Files(Vec<(String, Vec<u8>)>);
+
+    impl crate::images::ImageLoader for Files {
+        fn load(&self, url: &str) -> Option<Vec<u8>> {
+            self.0
+                .iter()
+                .find(|(name, _)| name == url)
+                .map(|(_, bytes)| bytes.clone())
+        }
+    }
+
+    /// A book of 60 paragraphs with an image above every third one.
+    /// Each image is 4px wider than the one before it, so a page tells
+    /// them apart. Each pair is the paragraph under an image and the
+    /// width of that image in points.
+    fn illustrated_book() -> (Book, Files, Vec<(usize, f32)>) {
+        let under: Vec<usize> = (1..60).step_by(3).collect();
+        let sides: Vec<u32> = (0..under.len() as u32).map(|at| 192 + 4 * at).collect();
+        let mut blocks = tagged_prose(60);
+        for (at, index) in under.iter().enumerate().rev() {
+            blocks.insert(*index, image_of(&format!("{at}.png"), Vec::new()));
+        }
+        let files = Files(
+            sides
+                .iter()
+                .enumerate()
+                .map(|(at, side)| (format!("{at}.png"), png(*side, *side)))
+                .collect(),
+        );
+        let widths = under
+            .into_iter()
+            .zip(sides.iter().map(|side| *side as f32 * 0.75))
+            .collect();
+        (book_of(vec![section(blocks)]), files, widths)
+    }
+
+    /// The illustrated book laid out under `css`, and how many times
+    /// the flow that paints set a paragraph again.
+    fn paginate_illustrated(css: &str, book: &Book, files: &Files) -> (Vec<Page>, u32) {
+        let styles = styled(css, book);
+        let assets = crate::images::Assets::probe(book, &styles, files);
+        let paginator = Paginator::with_assets(registry(), &styles, &assets);
+        let pages = paginator.paginate(book);
+        (pages, paginator.rebreaks())
+    }
+
+    /// The sheet that sets the prose of the illustrated book beside
+    /// its images.
+    const BESIDE: &str =
+        "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end }";
+
+    /// Acceptance: in a book with an image above every third
+    /// paragraph, each image lands on the page where its paragraph
+    /// starts, or on the next page where it pushed that paragraph off.
+    #[test]
+    fn every_image_in_an_illustrated_book_lands_with_its_paragraph() {
+        let (book, files, images) = illustrated_book();
+        let (pages, _) = paginate_illustrated(BESIDE, &book, &files);
+        for (index, width) in images {
+            let image = page_of_image(&pages, width).expect("every image is painted");
+            let paragraph =
+                page_of_paragraph(&pages, &format!("p{index:02}")).expect("every paragraph is set");
+            assert!(
+                image == paragraph || image == paragraph + 1,
+                "the image {width}pt wide is on page {image}, and its paragraph starts on \
+                 page {paragraph}",
+            );
+        }
+    }
+
+    /// Acceptance: a book whose boxes all have `wrap-flow: auto` breaks
+    /// its lines as often as it did before. No paragraph is set again,
+    /// and every page sets the lines of the same book with no image in
+    /// it.
+    #[test]
+    fn a_book_of_boxes_that_wrap_nothing_sets_no_paragraph_again() {
+        let css =
+            "p { text-indent: 0 } img { position: absolute; top: 0; left: 0; wrap-flow: auto }";
+        let (book, files, _) = illustrated_book();
+        let (pages, rebreaks) = paginate_illustrated(css, &book, &files);
+        assert_eq!(rebreaks, 0, "a paragraph was set again");
+        let bare = paginate_styled(css, vec![section(tagged_prose(60))]);
+        assert_eq!(pages.len(), bare.len(), "the page count moved");
+        for (page, plain) in pages.iter().zip(&bare) {
+            assert!(
+                same_lines(&content_lines(page), &content_lines(plain)),
+                "page {} sets other lines",
+                page.number,
+            );
+        }
+    }
+
+    /// Acceptance: an illustrated book with many wrapping images lays
+    /// out the same way twice.
+    #[test]
+    fn a_book_with_many_wrapping_images_lays_out_the_same_way_twice() {
+        let (book, files, _) = illustrated_book();
+        let (once, _) = paginate_illustrated(BESIDE, &book, &files);
+        let (twice, _) = paginate_illustrated(BESIDE, &book, &files);
+        assert_eq!(
+            serde_json::to_string(&once).expect("the pages encode"),
+            serde_json::to_string(&twice).expect("the pages encode"),
+        );
+    }
+
+    /// Acceptance: a box that pushes its own anchor onto the next page
+    /// lands on that next page, and the layout ends. The paragraph
+    /// starts where it starts with no box in the book.
+    #[test]
+    fn an_image_that_pushes_its_paragraph_off_its_page_lands_on_the_next_page() {
+        let css = "p { text-indent: 0 }";
+        let bare = paginate_styled(css, vec![section(tagged_prose(30))]);
+        // The image covers the whole measure for 144pt, which is more
+        // lines than the paragraph starts from the foot.
+        let (page, tag) = bare
+            .iter()
+            .enumerate()
+            .find_map(|(page, content)| {
+                let lines = tagged_lines(content);
+                (1..lines.len())
+                    .find(|at| lines[*at] != lines[at - 1] && lines.len() - at <= 4)
+                    .map(|at| (page, lines[at].clone()))
+            })
+            .expect("a paragraph starts in the last lines of a page");
+        let index: usize = tag
+            .trim_start_matches('p')
+            .parse()
+            .expect("the tag counts the paragraph");
+        let mut blocks = tagged_prose(30);
+        blocks.insert(index, image());
+        let measure = master(Situation::First(Side::Recto)).geometry.measure();
+        let output = with_image(
+            &format!(
+                "{css} img {{ position: absolute; top: 0; left: 0; margin-right: {}pt; \
+                 wrap-flow: end }}",
+                measure - IMAGE,
+            ),
+            vec![section(blocks)],
+        );
+        assert_eq!(
+            page_of_paragraph(&output.pages, &tag),
+            Some(page),
+            "the paragraph moved"
+        );
+        assert_eq!(page_of_image(&output.pages, IMAGE), Some(page + 1));
+    }
+
     /// An RGBA PNG two inches square at 96dpi, opaque where
     /// `covered` says so.
     fn alpha_png(covered: impl Fn(u32, u32) -> bool) -> Vec<u8> {
@@ -2029,39 +2367,6 @@ mod tests {
             (letter.0 - left).abs() < 1e-3,
             "the initial letter is at {} rather than {left}",
             letter.0,
-        );
-    }
-
-    /// Acceptance: the anchor map is settled with nothing in the way
-    /// and then held. An image that narrows its own page can push the
-    /// paragraph it hangs from onto the next page. The image stays
-    /// where the settle put it.
-    #[test]
-    fn the_anchor_map_is_settled_once_and_held() {
-        let css = |wrap| {
-            format!(
-                "img {{ position: absolute; top: 0; left: 0; margin-right: 12pt; \
-                 wrap-flow: {wrap} }}"
-            )
-        };
-        let mut blocks = tagged_prose(30);
-        // Anchored on a page the image then narrows, so the
-        // paragraph under the anchor moves and the image does not.
-        blocks.insert(4, image());
-        let settled = with_image(&css("auto"), vec![section(blocks.clone())]);
-        let wrapped = with_image(&css("end"), vec![section(blocks)]);
-
-        let page_of = |output: &LayoutOutput| {
-            output
-                .pages
-                .iter()
-                .position(|page| !painted(page).is_empty())
-                .expect("the image is painted")
-        };
-        assert_eq!(page_of(&settled), page_of(&wrapped));
-        assert!(
-            tagged_lines(&wrapped.pages[0]).len() < tagged_lines(&settled.pages[0]).len(),
-            "the image did not narrow the page it landed on",
         );
     }
 

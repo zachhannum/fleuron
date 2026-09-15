@@ -10,7 +10,7 @@ use crate::style::{AlignContent, Break, Color, Edges, PageQuery, Situation};
 
 use super::Paginator;
 use super::build::Reflow;
-use super::exclusion::AnchoredBoxes;
+use super::exclusion::{AnchoredBoxes, Settling};
 use super::fragment::{BreakPoint, Decoration, Decorations, Fragment, Marks, Piece};
 use super::furniture::Strings;
 
@@ -55,8 +55,6 @@ pub(crate) struct PageInfo {
 pub(crate) struct Paged {
     pub(crate) pages: Vec<Page>,
     pub(crate) infos: Vec<PageInfo>,
-    /// The page each anchor landed on, by the node it was written at.
-    pub(crate) anchors: BTreeMap<NodeId, usize>,
     /// The page each id landed on: the page of the first fragment of
     /// the first element that carries it.
     pub(crate) targets: BTreeMap<NodeId, usize>,
@@ -66,6 +64,7 @@ pub(crate) struct Paged {
 }
 
 /// One fragment placed on the page being built.
+#[derive(Clone)]
 pub(super) struct Placed {
     /// The section its content came out of. The fragment records it, so
     /// a fragment moved onto the next page counts toward the page it
@@ -96,6 +95,31 @@ pub(super) struct Placed {
     /// The border boxes inside it, already positioned on this page: a
     /// table row's own, its cells', and their blocks'.
     boxes: Vec<(NodeId, PageBox)>,
+}
+
+/// The flow as it stood before one item of the book was placed, and
+/// where that item is. Laying a page out again starts from one.
+pub(super) struct Checkpoint {
+    /// The index of the section the item is in.
+    pub(super) section: usize,
+    /// Where the item starts in that section's fragments.
+    pub(super) item: usize,
+    pages: usize,
+    boxes: usize,
+    placed: Vec<Placed>,
+    slot: PageSlot,
+    strings: Strings,
+    pending_slot: Option<PageSlot>,
+    node: NodeId,
+    cursor: f32,
+    height: f32,
+    column: u32,
+    columns: u32,
+    column_start: usize,
+    tiers: Vec<Tier>,
+    carried: Vec<Decoration>,
+    pending_anchors: Vec<NodeId>,
+    header: Vec<(f32, Vec<DrawItem>)>,
 }
 
 /// Why the page being built ends.
@@ -169,19 +193,19 @@ pub(super) struct Flow<'a, 'p> {
     /// The decorated blocks the page being built opened with,
     /// outermost first: a block the page before it did not finish.
     carried: Vec<Decoration>,
-    /// The images to place, and the page each one landed on. Empty
-    /// on the pass that answers where they land.
-    pub(super) anchored: &'p AnchoredBoxes,
-    /// Where each anchor landed, filled in as pages close.
-    anchors: BTreeMap<NodeId, usize>,
+    /// The images and blocks to place, and the page each one is on.
+    pub(super) anchored: AnchoredBoxes,
+    /// What the flow that finds the page of each box keeps to lay a
+    /// page out again. The flow that paints has none.
+    pub(super) settling: Option<Settling>,
     /// Anchors waiting for the fragment whose page they take.
     pub(super) pending_anchors: Vec<NodeId>,
     /// Where each id landed, filled in as pages close.
     targets: BTreeMap<NodeId, usize>,
-    /// Whether what is placed is painted. The pass that settles where
-    /// the anchors land keeps no pages, so it paints nothing: which
-    /// page a fragment falls on is a question about heights.
-    paints: bool,
+    /// Whether what is placed is painted. The flow that finds the page
+    /// of each box paints nothing: which page a fragment falls on is a
+    /// question about heights.
+    pub(super) paints: bool,
     /// The header rows of the table being placed, each with its
     /// height, to set again where the table continues onto a new page
     /// or column.
@@ -191,7 +215,7 @@ pub(super) struct Flow<'a, 'p> {
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
-    pub(super) fn new(paginator: &'p Paginator<'a>, anchored: &'p AnchoredBoxes) -> Flow<'a, 'p> {
+    pub(super) fn new(paginator: &'p Paginator<'a>, anchored: AnchoredBoxes) -> Flow<'a, 'p> {
         let slot = PageSlot {
             name: None,
             first: true,
@@ -215,7 +239,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             tiers: vec![Tier::head(false)],
             carried: Vec::new(),
             anchored,
-            anchors: BTreeMap::new(),
+            settling: None,
             pending_anchors: Vec::new(),
             targets: BTreeMap::new(),
             paints: true,
@@ -224,18 +248,29 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// A flow that answers where the anchors land and nothing else.
-    pub(super) fn settling(paginator: &'p Paginator<'a>, bare: &'p AnchoredBoxes) -> Flow<'a, 'p> {
+    /// A flow that finds the page of each box and paints nothing.
+    pub(super) fn settling(paginator: &'p Paginator<'a>, anchored: AnchoredBoxes) -> Flow<'a, 'p> {
+        let settling = Settling::new(&anchored);
         Flow {
             paints: false,
-            ..Flow::new(paginator, bare)
+            settling: Some(settling),
+            ..Flow::new(paginator, anchored)
         }
     }
 
-    /// Flows one section. Its page name and `@page :first` master are
+    /// Flows one section.
+    pub(super) fn section(&mut self, section: &Section, fragments: &[Fragment]) {
+        self.open_section(section);
+        let mut index = 0;
+        while index < fragments.len() {
+            index = self.item(fragments, index);
+        }
+    }
+
+    /// Starts one section. Its page name and `@page :first` master are
     /// claimed by the page it opens — when it opens one at all: a
     /// section that breaks `auto` continues where the last left off.
-    pub(super) fn section(&mut self, section: &Section, fragments: &[Fragment]) {
+    pub(super) fn open_section(&mut self, section: &Section) {
         let style = self.paginator.styles.style(section.id);
         self.section = section.id;
         self.pending_slot = Some(PageSlot {
@@ -243,24 +278,77 @@ impl<'a, 'p> Flow<'a, 'p> {
             first: true,
             blank: false,
         });
-        // A book with nothing anchored places one fragment at a time.
-        // One with an image on the page places a paragraph at a time,
-        // because an image narrows the bands the paragraph is set in.
-        // The whole of it is then broken again.
-        let mut index = 0;
-        while index < fragments.len() {
-            index = match fragments[index].reflow.as_ref() {
-                Some(reflow) if !self.anchored.is_empty() => {
-                    let end = paragraph_end(fragments, index, reflow);
-                    self.paragraph(&fragments[index..end], reflow);
-                    end
-                }
-                _ => {
-                    self.place(&fragments[index]);
-                    index + 1
-                }
-            };
+    }
+
+    /// Places the item of `fragments` that starts at `index`, and
+    /// answers where the next one starts.
+    ///
+    /// A book with nothing anchored places one fragment at a time.
+    /// One with an image on the page places a paragraph at a time,
+    /// because an image narrows the bands the paragraph is set in.
+    /// The whole of it is then broken again.
+    pub(super) fn item(&mut self, fragments: &[Fragment], index: usize) -> usize {
+        match fragments[index].reflow.as_ref() {
+            Some(reflow) if !self.anchored.is_empty() => {
+                let end = paragraph_end(fragments, index, reflow);
+                self.paragraph(&fragments[index..end], reflow);
+                end
+            }
+            _ => {
+                self.place(&fragments[index]);
+                index + 1
+            }
         }
+    }
+
+    /// The flow as it stands before the item at `item` of the section
+    /// at `section` is placed.
+    pub(super) fn checkpoint(&self, section: usize, item: usize) -> Checkpoint {
+        Checkpoint {
+            section,
+            item,
+            pages: self.pages.len(),
+            boxes: self.boxes.len(),
+            placed: self.placed.clone(),
+            slot: self.slot.clone(),
+            strings: self.strings.clone(),
+            pending_slot: self.pending_slot.clone(),
+            node: self.section,
+            cursor: self.cursor,
+            height: self.height,
+            column: self.column,
+            columns: self.columns,
+            column_start: self.column_start,
+            tiers: self.tiers.clone(),
+            carried: self.carried.clone(),
+            pending_anchors: self.pending_anchors.clone(),
+            header: self.header.clone(),
+        }
+    }
+
+    /// Puts the flow back as it stood at `checkpoint`. The pages that
+    /// closed after it are dropped. The page of each box is not
+    /// part of the checkpoint, so it stays as it is.
+    pub(super) fn restore(&mut self, checkpoint: &Checkpoint) {
+        let pages = checkpoint.pages;
+        self.pages.truncate(pages);
+        self.infos.truncate(pages);
+        self.boxes.truncate(checkpoint.boxes);
+        self.targets.retain(|_, page| *page < pages);
+        self.placed.clone_from(&checkpoint.placed);
+        self.slot = checkpoint.slot.clone();
+        self.strings.clone_from(&checkpoint.strings);
+        self.pending_slot = checkpoint.pending_slot.clone();
+        self.section = checkpoint.node;
+        self.cursor = checkpoint.cursor;
+        self.height = checkpoint.height;
+        self.column = checkpoint.column;
+        self.columns = checkpoint.columns;
+        self.column_start = checkpoint.column_start;
+        self.tiers.clone_from(&checkpoint.tiers);
+        self.carried.clone_from(&checkpoint.carried);
+        self.pending_anchors.clone_from(&checkpoint.pending_anchors);
+        self.header.clone_from(&checkpoint.header);
     }
 
     /// Places one fragment, ending columns and pages as its break
@@ -587,6 +675,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let mut placed = std::mem::take(&mut self.placed);
+        self.land(&placed);
         if self.paints && ending == Ending::Short {
             self.align(&mut placed);
         }
@@ -610,9 +699,6 @@ impl<'a, 'p> Flow<'a, 'p> {
         for placed in placed {
             if sections.last() != Some(&placed.section) {
                 sections.push(placed.section);
-            }
-            for node in placed.anchors {
-                self.anchors.insert(node, index);
             }
             for (node, area) in placed.boxes {
                 let page = index as u32;
@@ -651,6 +737,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.column_start = 0;
         self.tiers = vec![Tier::head(self.tier().spanning)];
         self.remaster();
+        if let Some(settling) = self.settling.as_mut() {
+            settling.opened();
+        }
     }
 
     /// Moves what the page being closed holds down its content box, as
@@ -923,18 +1012,20 @@ impl<'a, 'p> Flow<'a, 'p> {
         items
     }
 
+    /// Closes the last page of the book. An anchor with nothing after
+    /// it is on that page.
+    pub(super) fn close_book(&mut self) {
+        if let Some(last) = self.placed.last_mut() {
+            last.anchors.append(&mut self.pending_anchors);
+        }
+        self.close(Ending::Short);
+    }
+
     pub(super) fn finish(mut self) -> Paged {
         self.close(Ending::Short);
-        // An anchor with nothing after it lands on the last page the
-        // book reached.
-        let last = self.pages.len().saturating_sub(1);
-        for node in std::mem::take(&mut self.pending_anchors) {
-            self.anchors.insert(node, last);
-        }
         Paged {
             pages: self.pages,
             infos: self.infos,
-            anchors: self.anchors,
             targets: self.targets,
             boxes: self.boxes,
         }
