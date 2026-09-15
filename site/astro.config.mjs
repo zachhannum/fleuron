@@ -155,6 +155,7 @@ export default defineConfig({
             '/library/diagnostics/',
             '/reference/display-structure/',
             '/reference/markdown/',
+            '/reference/markdown/**',
             '/wasm/preview/',
             '/wasm/preview/**',
           ],
