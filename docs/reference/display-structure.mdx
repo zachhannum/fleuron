@@ -15,6 +15,7 @@ pub struct LayoutOutput {
     pub fonts: Vec<FontRefEntry>,
     pub assets: Vec<Asset>,
     pub warnings: Vec<Warning>,
+    pub navigation: Navigation,
 }
 ```
 
@@ -23,6 +24,42 @@ pub struct LayoutOutput {
 `assets` is the table that `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read.
 
 `warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
+
+`navigation` holds the links on the pages and the outline of the headings. The PDF writer reads it. [The wire](../wasm/wire.md) does not carry it.
+
+## `Navigation`
+
+```rust
+pub struct Navigation {
+    pub links: Vec<Link>,
+    pub outline: Vec<OutlineEntry>,
+}
+
+pub struct Link {
+    pub area: PageBox,
+    pub to: LinkTo,
+}
+
+pub enum LinkTo {
+    Place(PageBox),
+    Uri(String),
+}
+
+pub struct OutlineEntry {
+    pub title: String,
+    pub level: u8,
+    pub place: PageBox,
+    pub children: Vec<OutlineEntry>,
+}
+```
+
+A `PageBox` is a box on one page. `page` is the index of the page in the book, from 0. `x`, `y`, `width`, and `height` are in points.
+
+`links` has one `Link` for each line of each link in the book, in the order of the pages. `area` is the area that the text of the link covers on that line. It runs from the first glyph to the end of the last glyph, and from the ascent to the descent of the font. The text of `::before` and `::after` on the link is part of the area.
+
+`to` is where the link goes. `Place` is the box of the element that the link names, on the page where that element starts. The box is as wide as the column. `Uri` is a url outside the book, such as `https://example.com`. A link that names nothing in the book has no `Link`, and the run warns.
+
+`outline` has the headings of the book in reading order, nested by level. `level` is from 1 to 6. `children` has the headings after the entry that have a higher level, up to the next heading whose level is the same or less. `title` is the text of the heading on one line, and `place` is the box of the heading on its page. A heading in a quotation, a list, or a table is not in the outline.
 
 ## `Page`
 

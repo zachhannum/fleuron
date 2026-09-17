@@ -282,7 +282,9 @@ A slug and the text of a heading are not CSS ids. A stylesheet cannot select a h
 
 ### A link that names nothing in the book
 
-A link to a web address, such as `https://example.com`, names nothing in the book. `target-counter()` and `target-text()` print nothing for it, and the engine does not warn. A link to a source or a heading that the book does not have also prints nothing. For that link, the engine warns with the line and column where the link is.
+A link to a web address, such as `https://example.com`, names nothing in the book. `target-counter()` and `target-text()` print nothing for it, and the engine does not warn. In the PDF, the link opens the address.
+
+A link to a source or a heading that the book does not have also prints nothing. In the PDF, its text is not a link. For that link, the engine warns with the line and column where the link is.
 
 ## Inlines
 
