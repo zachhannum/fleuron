@@ -1,5 +1,5 @@
-//! Navigation: the area each link covers on its pages, where it goes,
-//! and the outline of the book's headings.
+//! Navigation: the links on each page, with the area each covers and
+//! where it goes, and the outline of the book's headings.
 //!
 //! Both read the destination table the flow built. A link's area is
 //! read off the runs its text was set in, one area for each line, so a
@@ -32,12 +32,13 @@ struct Heading {
     title: String,
 }
 
-/// The navigation of one laid-out book, and what it had to complain
-/// about: a link whose url names nothing in the book is set as text,
-/// and says so.
+/// Puts the links of one laid-out book on its pages, and returns the
+/// outline of its headings and what the links had to complain about:
+/// a link whose url names nothing in the book is set as text, and says
+/// so.
 pub(crate) fn navigation(
     book: &Book,
-    pages: &[Page],
+    pages: &mut [Page],
     targets: &BTreeMap<NodeId, PageBox>,
     registry: &FontRegistry,
 ) -> (Navigation, Vec<Warning>) {
@@ -59,9 +60,7 @@ pub(crate) fn navigation(
         links_in_blocks(&section.blocks, section.source.as_deref(), &mut written);
     }
     let mut warnings = Vec::new();
-    let links = if written.is_empty() {
-        Vec::new()
-    } else {
+    if !written.is_empty() {
         let anchors = book.anchors();
         let places: Vec<Option<LinkTo>> = written
             .iter()
@@ -92,10 +91,10 @@ pub(crate) fn navigation(
                 to.ok()
             })
             .collect();
-        areas(pages, &written, &places, registry)
-    };
+        place_links(pages, &written, &places, registry);
+    }
     let outline = outline(&headings, targets);
-    (Navigation { links, outline }, warnings)
+    (Navigation { outline }, warnings)
 }
 
 /// Where one link goes, or why it goes nowhere: the element it names
@@ -109,8 +108,10 @@ fn place(
         LinkTarget::Outside => Ok(LinkTo::Uri(link.url.to_string())),
         LinkTarget::Node(node) => targets
             .get(&node)
-            .copied()
-            .map(LinkTo::Place)
+            .map(|place| LinkTo::Place {
+                node,
+                place: *place,
+            })
             .ok_or(Some(node)),
         LinkTarget::Missing => Err(None),
     }
@@ -175,19 +176,19 @@ fn links_in_inlines<'b>(
     }
 }
 
-/// The area each link covers, one for each line, page by page.
+/// Puts on each page the links set on it, with one area for each line.
 ///
 /// Runs of one link on one baseline that meet, or nearly meet, are one
 /// area. A link that runs to the foot of one column and on at the head
-/// of the next is two.
-fn areas(
-    pages: &[Page],
+/// of the next is two areas. A link that runs on to the next page is on
+/// both pages.
+fn place_links(
+    pages: &mut [Page],
     written: &[Written<'_>],
     places: &[Option<LinkTo>],
     registry: &FontRegistry,
-) -> Vec<Link> {
-    let mut links = Vec::new();
-    for (index, page) in pages.iter().enumerate() {
+) {
+    for (index, page) in pages.iter_mut().enumerate() {
         // Each area with the link it belongs to, the baseline it is on,
         // and the size of its face, which is how near two runs have to
         // be to meet.
@@ -226,16 +227,23 @@ fn areas(
                 None => open.push((which, *y, *size, area)),
             }
         }
-        links.extend(open.into_iter().map(|(which, _, _, area)| {
-            Link {
-                area,
-                to: places[which]
-                    .clone()
-                    .expect("only a link that goes somewhere is open"),
+        let mut links: Vec<(usize, Link)> = Vec::new();
+        for (which, _, _, area) in open {
+            match links.iter_mut().find(|(link, _)| *link == which) {
+                Some((_, link)) => link.areas.push(area),
+                None => links.push((
+                    which,
+                    Link {
+                        areas: vec![area],
+                        to: places[which]
+                            .clone()
+                            .expect("only a link that goes somewhere is open"),
+                    },
+                )),
             }
-        }));
+        }
+        page.links = links.into_iter().map(|(_, link)| link).collect();
     }
-    links
 }
 
 /// The smallest box that holds both.

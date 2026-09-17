@@ -53,6 +53,9 @@ pub struct Page {
     /// What to paint, in paint order: by layer, and inside one layer
     /// in the order the blocks are written.
     pub items: Vec<DrawItem>,
+    /// The links set on this page, in the order their text is painted.
+    /// Empty on a page with no link.
+    pub links: Vec<Link>,
 }
 
 impl Page {
@@ -386,46 +389,57 @@ pub struct Glyph {
     pub range: Range<u32>,
 }
 
-/// What a reader of the book on a screen follows: the links on its
-/// pages and the outline of its headings.
+/// What a reader of the book on a screen follows beyond the links on
+/// its pages: the outline of its headings.
 ///
-/// A painter that can express a link or an outline reads this. One
-/// that cannot paints the pages alone, and loses nothing a printed
-/// page shows.
+/// A painter that can express an outline reads this. One that cannot
+/// paints the pages alone, and loses nothing a printed page shows.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Navigation {
-    /// Every link in the book, one for each line it is set on, in the
-    /// order of the pages.
-    pub links: Vec<Link>,
     /// The book's headings, nested by level. Empty for a book with no
     /// heading.
     pub outline: Vec<OutlineEntry>,
 }
 
 impl Navigation {
-    /// Whether the book has no link and no heading.
+    /// Whether the book has no heading.
     pub fn is_empty(&self) -> bool {
-        self.links.is_empty() && self.outline.is_empty()
+        self.outline.is_empty()
     }
 }
 
-/// One line of one link: the area its text covers on that line, and
+/// One link on one page: the area its text covers on each line, and
 /// where it goes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
-    /// The area of the link's text on one line: its glyphs across,
-    /// and the ascent and descent of its face down.
-    pub area: PageBox,
+    /// One area for each line the link is set on in this page, in the
+    /// order the lines are painted. Each runs across the link's glyphs
+    /// on that line, the text of its `::before` and `::after` included,
+    /// and down from the ascent to the descent of the face.
+    pub areas: Vec<PageBox>,
     /// Where the link goes.
     pub to: LinkTo,
+}
+
+impl Link {
+    /// Whether a point on the link's page falls inside one of its areas.
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        self.areas.iter().any(|area| area.contains(x, y))
+    }
 }
 
 /// Where a link goes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LinkTo {
-    /// A place in the book: the box of the element the link names, on
-    /// the page that element opens on.
-    Place(PageBox),
+    /// A place in the book.
+    Place {
+        /// The element the link names.
+        node: NodeId,
+        /// The box of that element on the page it opens on. `page` is
+        /// that page's place in the book, counting from 0, which is
+        /// the number a host fetches the page by.
+        place: PageBox,
+    },
     /// Something outside the book, by its url.
     Uri(String),
 }

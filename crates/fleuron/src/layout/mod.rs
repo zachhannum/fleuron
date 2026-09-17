@@ -396,6 +396,7 @@ impl Paginator<'_> {
             height: geometry.height,
             sections: Vec::new(),
             items: Vec::new(),
+            links: Vec::new(),
         }
     }
 }

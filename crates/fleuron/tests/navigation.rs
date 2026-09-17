@@ -7,12 +7,13 @@
 
 use fleuron::LayoutOutput;
 use fleuron::Warning;
-use fleuron::content::Book;
+use fleuron::content::{Book, LinkTarget};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::images::Assets;
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Link, LinkTo, Navigation, OutlineEntry, PageBox};
 use fleuron::style::{Source, Stylesheets};
+use fleuron::wire;
 use fleuron_markdown::Options;
 
 fn registry() -> &'static FontRegistry {
@@ -64,6 +65,19 @@ fn runs_of(output: &LayoutOutput, words: &str) -> Vec<(usize, f32, f32)> {
         .collect()
 }
 
+/// Every link in the book, page by page.
+fn links(output: &LayoutOutput) -> Vec<&Link> {
+    output.pages.iter().flat_map(|page| &page.links).collect()
+}
+
+/// Every area of every link, page by page.
+fn areas(output: &LayoutOutput) -> Vec<PageBox> {
+    links(output)
+        .into_iter()
+        .flat_map(|link| link.areas.iter().copied())
+        .collect()
+}
+
 /// The page a heading's words are set on.
 fn page_of(output: &LayoutOutput, words: &str) -> u32 {
     runs_of(output, words)
@@ -88,12 +102,16 @@ fn a_link_goes_to_its_target_or_its_uri() {
     let hunter = page_of(&output, "The Hunter");
     assert!(hunter > 0, "the target is on a later page");
 
-    let links = &output.navigation.links;
+    let links = links(&output);
     assert_eq!(links.len(), 2, "{links:?}");
-    let LinkTo::Place(place) = links[0].to else {
+    let LinkTo::Place { node, place } = links[0].to else {
         panic!("the cross-reference goes to {:?}", links[0].to);
     };
     assert_eq!(place.page, hunter);
+    assert_eq!(
+        book.anchors().resolve("#the-hunter", Some("book.md")),
+        LinkTarget::Node(node)
+    );
     let (_, x, y) = runs_of(&output, "The Hunter")[0];
     assert!(
         place.contains(x, y),
@@ -121,7 +139,8 @@ fn a_link_broken_across_two_lines_is_an_area_on_each() {
     );
     let book = read(&markdown);
     let output = lay_out(&book, "");
-    let areas: Vec<PageBox> = output.navigation.links.iter().map(|l| l.area).collect();
+    assert_eq!(links(&output).len(), 1, "the link is not one link");
+    let areas = areas(&output);
     assert_eq!(areas.len(), 2, "the link is not on two lines: {areas:?}");
     let (first, second) = (areas[0], areas[1]);
     assert!(
@@ -152,7 +171,7 @@ fn a_link_broken_across_two_lines_is_an_area_on_each() {
 fn a_link_with_emphasis_inside_is_one_area_on_one_line() {
     let book = read("# One\n\nSee [the *very* end](#one) here.\n");
     let output = lay_out(&book, "");
-    assert_eq!(output.navigation.links.len(), 1, "{:?}", output.navigation);
+    assert_eq!(areas(&output).len(), 1, "{:?}", links(&output));
 }
 
 /// Acceptance: a link whose target nothing carries is set as text and
@@ -161,7 +180,7 @@ fn a_link_with_emphasis_inside_is_one_area_on_one_line() {
 fn a_link_to_nothing_warns_and_is_set_as_text() {
     let book = read("# One\n\nSee\n[elsewhere](#nowhere) for the rest.\n");
     let output = lay_out(&book, "");
-    assert!(output.navigation.links.is_empty());
+    assert!(links(&output).is_empty());
     assert_eq!(
         output.warnings,
         [Warning {
@@ -228,7 +247,7 @@ fn a_book_with_no_heading_writes_no_outline() {
     ));
     let output = lay_out(&book, "");
     assert!(output.navigation.outline.is_empty());
-    assert_eq!(output.navigation.links.len(), 1);
+    assert_eq!(links(&output).len(), 1);
     assert!(!latin1(&pdf(&book, &output)).contains("/Outlines"));
 }
 
@@ -262,9 +281,106 @@ fn a_page_reference_after_a_link_is_part_of_it() {
     let css = "a::after { content: \" (page \" target-counter(attr(href url), page) \")\" }";
     let bare = lay_out(&book, "");
     let referred = lay_out(&book, css);
-    let width = |links: &[Link]| links[0].area.width;
+    let width = |output: &LayoutOutput| areas(output)[0].width;
     assert!(
-        width(&referred.navigation.links) > width(&bare.navigation.links),
+        width(&referred) > width(&bare),
         "the page number is outside the link"
     );
+}
+
+/// Acceptance: a link with no text of its own is followed from the
+/// text of its `::after`, which is how a contents entry prints its page
+/// number.
+#[test]
+fn a_link_with_no_text_is_followed_from_its_after() {
+    let markdown = format!(
+        "# Contents\n\nThe Hunter [](#the-hunter)\n\n{}# The Hunter\n\nThe hunt began at dawn.\n",
+        prose(30)
+    );
+    let book = read(&markdown);
+    let css = "a::after { content: target-counter(attr(href url), page) }";
+    let output = lay_out(&book, css);
+    assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    let links = links(&output);
+    assert_eq!(links.len(), 1, "{links:?}");
+    let number = (page_of(&output, "The hunt began") + 1).to_string();
+    let printed = output.pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Text {
+                text,
+                x,
+                y,
+                pseudo_element: Some(_),
+                ..
+            } if *text == number => Some((*x, *y)),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("page {number} is not printed"));
+    assert_eq!(links[0].areas.len(), 1);
+    assert!(
+        links[0].contains(printed.0 + 0.5, printed.1 - 1.0),
+        "the printed page number at {printed:?} is outside {:?}",
+        links[0].areas
+    );
+    let (_, x, y) = runs_of(&output, "The Hunter")[0];
+    assert!(
+        !links[0].contains(x + 0.5, y - 1.0),
+        "the words outside the link are in it"
+    );
+}
+
+/// Acceptance: two links to one target nothing carries warn once, and
+/// neither is on a page.
+#[test]
+fn links_to_one_missing_target_warn_once() {
+    let book = read("# One\n\n[here](#nowhere) and [there](#nowhere).\n");
+    let output = lay_out(&book, "");
+    assert!(links(&output).is_empty());
+    assert_eq!(output.warnings.len(), 1, "{:?}", output.warnings);
+}
+
+/// Acceptance: a book with no link has no link on any page.
+#[test]
+fn a_book_with_no_link_has_no_link_on_any_page() {
+    let book = read(&format!("# One\n\n{}", prose(40)));
+    let output = lay_out(&book, "");
+    assert!(output.pages.len() > 1);
+    assert!(output.pages.iter().all(|page| page.links.is_empty()));
+}
+
+/// The links a page carries cross the wire with it, and two runs write
+/// the same bytes.
+#[test]
+fn links_cross_the_wire_and_two_runs_write_the_same_bytes() {
+    let markdown = format!(
+        "# One\n\nSee [the end](#two) or [the society](https://example.com).\n\n{}# Two\n\nThe end.\n",
+        prose(30)
+    );
+    let book = read(&markdown);
+    let once = wire::encode(&lay_out(&book, "")).expect("encodes");
+    let twice = wire::encode(&lay_out(&book, "")).expect("encodes");
+    assert_eq!(once, twice);
+    let read = wire::decode(&once).expect("decodes");
+    assert_eq!(read.pages[0].links.len(), 2);
+}
+
+/// Snapshot: the links of one page, with a cross-reference, an external
+/// link and a link broken across two lines.
+#[test]
+fn the_links_of_a_page_snapshot() {
+    let words = "the long and winding account of the voyage to the island of the giants";
+    let markdown = format!(
+        "# One\n\nSee [the society](https://example.com/society) first. It was the custom of \
+         the island that a stranger be kept at the gate, and so the reader turns to \
+         [{words}](#two) before any other part.\n\n{}# Two\n\nThe end.\n",
+        prose(30)
+    );
+    let book = read(&markdown);
+    let output = lay_out(&book, "");
+    let page = &output.pages[0];
+    assert_eq!(page.links.len(), 2);
+    assert_eq!(page.links[1].areas.len(), 2, "{:?}", page.links[1]);
+    insta::assert_json_snapshot!(page.links);
 }
