@@ -1049,7 +1049,10 @@ fn named_blocks<'a>(
                     }
                 }
             }
-            Block::ThematicBreak { .. } | Block::Image { .. } => {}
+            Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => {}
         }
     }
 }
