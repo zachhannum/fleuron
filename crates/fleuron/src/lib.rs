@@ -44,4 +44,8 @@ pub struct LayoutOutput {
     pub assets: Vec<images::Asset>,
     /// Everything the run had to complain about.
     pub warnings: Vec<Warning>,
+    /// The links a reader follows and the outline of the headings.
+    /// The PDF writer reads it. The wire does not carry it.
+    #[serde(default)]
+    pub navigation: pages::Navigation,
 }

@@ -9,12 +9,20 @@
 //! positions from advances would disagree with the preview. The text
 //! each run was shaped from travels with it, so the writer can build
 //! the glyph-to-character map that makes the text selectable.
+//!
+//! Links and the outline are layout's too: each link arrives with the
+//! area it covers and the place it goes, and each outline entry with
+//! the place of its heading.
 
+use krilla::action::LinkAction;
+use krilla::annotation::{Annotation, LinkAnnotation, Target};
 use krilla::color::rgb;
+use krilla::destination::XyzDestination;
 use krilla::geom::{PathBuilder, Point, Rect, Size, Transform};
 use krilla::image::Image;
 use krilla::metadata::{DateTime, Metadata as PdfMetadata};
 use krilla::num::NormalizedF32;
+use krilla::outline::{Outline, OutlineNode};
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, FillRule};
 use krilla::surface::Surface;
@@ -25,7 +33,7 @@ use crate::LayoutOutput;
 use crate::content::Metadata;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::pages::{Corners, DrawItem, Glyph, Page};
+use crate::pages::{Corners, DrawItem, Glyph, Link, LinkTo, OutlineEntry, Page, PageBox};
 use crate::style::Color;
 
 /// What can go wrong turning the display structure into a PDF.
@@ -85,18 +93,57 @@ fn write_with(
     let images = embed_images(assets)?;
     let mut document = Document::new_with(settings);
     document.set_metadata(document_metadata(metadata));
-    for page in &output.pages {
+    let mut links = output.navigation.links.iter().peekable();
+    for (index, page) in output.pages.iter().enumerate() {
         let mut pdf_page = document.start_page_with(PageSettings::new(page.width, page.height));
         let mut surface = pdf_page.surface();
         for item in &page.items {
             paint(&mut surface, item, page, &fonts, &images, registry)?;
         }
         surface.finish();
+        while let Some(link) = links.next_if(|link| link.area.page as usize <= index) {
+            if let Some(annotation) = annotation(link) {
+                pdf_page.add_annotation(annotation);
+            }
+        }
         pdf_page.finish();
+    }
+    if !output.navigation.outline.is_empty() {
+        let mut outline = Outline::new();
+        for entry in &output.navigation.outline {
+            outline.push_child(outline_node(entry));
+        }
+        document.set_outline(outline);
     }
     document
         .finish()
         .map_err(|e| PdfError::Serialize(format!("{e:?}")))
+}
+
+/// One line of a link as the annotation a viewer follows. A link whose
+/// area is empty is none.
+fn annotation(link: &Link) -> Option<Annotation> {
+    let area = link.area;
+    let rect = Rect::from_xywh(area.x, area.y, area.width, area.height)?;
+    let target = match &link.to {
+        LinkTo::Place(place) => Target::Destination(destination(place).into()),
+        LinkTo::Uri(uri) => Target::Action(LinkAction::new(uri.clone()).into()),
+    };
+    Some(LinkAnnotation::new(rect, target).into())
+}
+
+/// The top left corner of a box, on its page.
+fn destination(place: &PageBox) -> XyzDestination {
+    XyzDestination::new(place.page as usize, Point::from_xy(place.x, place.y))
+}
+
+/// One heading of the outline, and the headings under it.
+fn outline_node(entry: &OutlineEntry) -> OutlineNode {
+    let mut node = OutlineNode::new(entry.title.clone(), destination(&entry.place));
+    for child in &entry.children {
+        node.push_child(outline_node(child));
+    }
+    node
 }
 
 /// Every asset as a krilla image, indexed as the display structure
@@ -733,6 +780,7 @@ mod tests {
             fonts: registry().font_ref(0).cloned().into_iter().collect(),
             assets: Vec::new(),
             warnings: Vec::new(),
+            navigation: Default::default(),
         }
     }
 

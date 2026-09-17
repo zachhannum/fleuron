@@ -284,6 +284,9 @@ pub struct Session<'a> {
     /// What that pass had to complain about: its own sections, and
     /// every element it set on another page than the pass before.
     settle_warnings: Vec<Warning>,
+    /// What the links had to complain about: a url that names nothing
+    /// in the book.
+    link_warnings: Vec<Warning>,
     infos: Vec<PageInfo>,
     /// The border box of each block, on each page it reaches.
     boxes: Vec<(NodeId, PageBox)>,
@@ -331,6 +334,7 @@ impl<'a> Session<'a> {
             references: References::default(),
             settled: Vec::new(),
             settle_warnings: Vec::new(),
+            link_warnings: Vec::new(),
             infos: Vec::new(),
             boxes: Vec::new(),
             output: None,
@@ -384,6 +388,7 @@ impl<'a> Session<'a> {
             references: References::default(),
             settled: Vec::new(),
             settle_warnings: Vec::new(),
+            link_warnings: Vec::new(),
             infos: Vec::new(),
             boxes: Vec::new(),
             output: None,

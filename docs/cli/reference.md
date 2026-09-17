@@ -76,6 +76,14 @@ fleuron: 2 warnings. The PDF was written anyway.
 
 The origin is either a CSS sheet with a line and column, or a markdown file and the position the frontend read the node from. [Diagnostics](../library/diagnostics.mdx) covers what warns and why.
 
+## What the PDF holds
+
+The PDF holds the pages of the book, the fonts and images that the pages use, and the document information from `--title`, `--author`, and `--meta language`. It also holds links and an outline, which a reader uses on a screen.
+
+Each link in the book is a link in the PDF. A link to a heading or an id in the book goes to the page where that element is. A link to a web address, such as `https://example.com`, opens that address. A link that breaks across two lines is a link on each line. The space between the lines is not part of the link. If a link names nothing in the book, its text is not a link, and the run warns.
+
+The outline is the list of the headings of the book. A PDF viewer shows it beside the pages, and each entry goes to the page of its heading. A level 2 heading is under the level 1 heading before it. A heading in a quotation, a list, or a table is not in the outline. A book with no headings has no outline.
+
 ## Fonts and images on the command line
 
 `@font-face` and image urls are treated as file paths. Each is tried against the directory of every manuscript and of every stylesheet given with `-c`, in order, and then against the working directory. The engine opens nothing itself, so this resolution belongs to the binary. A library embedding fleuron supplies its own.

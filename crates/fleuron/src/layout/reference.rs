@@ -396,7 +396,7 @@ pub(crate) fn landed(paged: &Paged) -> BTreeMap<NodeId, u32> {
     paged
         .targets
         .iter()
-        .map(|(node, index)| (*node, numbers[*index]))
+        .map(|(node, area)| (*node, numbers[area.page as usize]))
         .collect()
 }
 
@@ -1031,6 +1031,35 @@ mod tests {
             .flat_map(|page| &page.items)
             .any(|item| matches!(item, DrawItem::Text { size, .. } if *size == 30.0));
         assert!(!large, "a heading took the size");
+    }
+
+    /// The destination table holds a box as well as a page. A heading's
+    /// box is on the page the heading is set on, and holds the line its
+    /// words are set on.
+    #[test]
+    fn a_target_lands_with_the_box_it_takes() {
+        let book = cross_referenced();
+        let styles = styled("", &book);
+        let paginator = Paginator::new(registry(), &styles);
+        paginator.refer(References::of(&book));
+        let paged = paginator.pass(&book);
+        for (at, title) in [(0, "The Voyage"), (2, "The Hunter")] {
+            let node = block_id(&book.sections[at].blocks[0]);
+            let area = paged.targets[&node];
+            let page = &paged.pages[area.page as usize];
+            let (x, y) = page
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    DrawItem::Text { text, x, y, .. } if text.contains(title) => Some((*x, *y)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{title} is not on page {}", area.page));
+            assert!(
+                area.contains(x, y),
+                "{title} is set at ({x}, {y}), outside {area:?}"
+            );
+        }
     }
 
     /// The second pass ships. A node a reference prints the page of
