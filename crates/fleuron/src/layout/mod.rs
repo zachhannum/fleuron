@@ -35,6 +35,7 @@ mod fragment;
 mod furniture;
 mod image;
 mod list;
+mod navigation;
 mod reference;
 mod table;
 mod text;
@@ -52,6 +53,7 @@ use background::Backdrop;
 
 pub(crate) use exclusion::AnchoredBoxes;
 pub(crate) use flow::{PageInfo, Paged};
+pub(crate) use navigation::{navigation, run_area};
 pub(crate) use reference::{Named, References, landed, moved};
 
 use std::borrow::Cow;
@@ -299,6 +301,11 @@ impl Paginator<'_> {
     /// A book whose references print pages is laid out twice: once to
     /// find the page each element lands on, and once to print it.
     pub fn paginate(&self, book: &Book) -> Vec<Page> {
+        self.paginated(book).pages
+    }
+
+    /// The same, with where each id landed and the box of each block.
+    pub(crate) fn paginated(&self, book: &Book) -> Paged {
         self.language(&book.metadata);
         if self.styles.refers() {
             self.refer(References::of(book));
@@ -321,7 +328,7 @@ impl Paginator<'_> {
             }
         }
         self.paint(&mut paged.pages, &paged.infos);
-        paged.pages
+        paged
     }
 
     /// One pass over the whole book, stopping short of the furniture.

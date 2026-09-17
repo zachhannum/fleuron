@@ -993,7 +993,7 @@ fn subtree_in_rows<'a>(rows: impl Iterator<Item = &'a Row>, node: NodeId) -> Opt
 }
 
 /// The same, for one inline.
-fn inline_nodes(inline: &Inline) -> u32 {
+pub(crate) fn inline_nodes(inline: &Inline) -> u32 {
     1 + match inline {
         Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => 0,
         Inline::Emphasis { children, .. }

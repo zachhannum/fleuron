@@ -8,7 +8,7 @@ use crate::content::NodeId;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::layout::font_table;
-use crate::pages::{DrawItem, Folios};
+use crate::pages::{DrawItem, Folios, Navigation};
 use crate::pdf::{self, PdfError};
 
 use super::Session;
@@ -108,6 +108,7 @@ pub(super) fn blank_output(registry: &FontRegistry, assets: &Assets) -> LayoutOu
         fonts: font_table(registry),
         assets: assets.assets().to_vec(),
         warnings: Vec::new(),
+        navigation: Navigation::default(),
     }
 }
 

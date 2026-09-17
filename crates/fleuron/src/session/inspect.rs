@@ -2,7 +2,7 @@
 //! where it landed, and what is under a point.
 
 use crate::content::{NodeId, PseudoElement};
-use crate::layout::Paginator;
+use crate::layout::{Paginator, run_area};
 use crate::pages::{DrawItem, PageBox};
 use crate::style::{Inspection, MarginBox, element_of};
 
@@ -151,41 +151,9 @@ impl Session<'_> {
     }
 
     /// The node a run of text was written in, the pseudo-element it
-    /// was cut from, and the area the run covers: its glyphs across,
-    /// and its face's ascent and descent down. Nothing for text the
-    /// engine wrote itself.
+    /// was cut from, and the area the run covers.
     fn run_box(&self, index: usize, item: &DrawItem) -> Option<(NodeId, Option<NodeId>, PageBox)> {
-        let DrawItem::Text {
-            y,
-            font_id,
-            size,
-            glyphs,
-            origin: Some(origin),
-            pseudo_element,
-            ..
-        } = item
-        else {
-            return None;
-        };
-        let registry = self.registry.get();
-        let metrics = registry.metrics(*font_id)?;
-        let scale = size / metrics.units_per_em as f32;
-        let (first, last) = (glyphs.first()?, glyphs.last()?);
-        let advance = registry.advance_width(*font_id, last.id).unwrap_or(0) as f32 * scale;
-        let (left, right) = (first.x.min(last.x), first.x.max(last.x + advance));
-        let top = y - metrics.ascender as f32 * scale;
-        let bottom = y - metrics.descender as f32 * scale;
-        Some((
-            origin.node,
-            *pseudo_element,
-            PageBox {
-                page: index as u32,
-                x: left,
-                y: top,
-                width: right - left,
-                height: bottom - top,
-            },
-        ))
+        run_area(self.registry.get(), index, item)
     }
 }
 

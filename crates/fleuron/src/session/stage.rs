@@ -1,10 +1,12 @@
 //! The stages themselves, and how far down an edit reaches.
 
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::Warning;
-use crate::layout::{Named, Paged, Paginator, References, landed, moved};
+use crate::content::NodeId;
+use crate::layout::{Named, Paged, Paginator, References, landed, moved, navigation};
+use crate::pages::{Page, PageBox};
 
 use super::invalidate::{Against, Prints, hyphenation, section_local};
 use super::key::{section_key, settled_key};
@@ -149,10 +151,20 @@ impl Session<'_> {
         }
         self.infos = paged.infos;
         self.boxes = paged.boxes;
+        self.place(paged.pages, &paged.targets);
+    }
+
+    /// Takes the pages of a flow, with the links on them and the
+    /// outline of the book's headings.
+    fn place(&mut self, pages: Vec<Page>, targets: &BTreeMap<NodeId, PageBox>) {
         let (registry, assets) = (self.registry.get(), self.assets.get());
-        self.output
-            .get_or_insert_with(|| blank_output(registry, assets))
-            .pages = paged.pages;
+        let (navigation, warnings) = navigation(&self.book, &pages, targets, registry);
+        self.link_warnings = warnings;
+        let output = self
+            .output
+            .get_or_insert_with(|| blank_output(registry, assets));
+        output.pages = pages;
+        output.navigation = navigation;
     }
 
     /// Fragments the book over each section's lines: the lines of the
@@ -255,24 +267,20 @@ impl Session<'_> {
 
     /// The whole pipeline, one section's lines alive at a time.
     fn run_once(&mut self) {
-        let registry = self.registry.get();
-        let assets = self.assets.get();
         let paginator = Paginator::with_contours(
             self.registry.get(),
             &self.styles,
             self.assets.get(),
             &self.contours,
         );
-        let pages = paginator.paginate(&self.book);
+        let paged = paginator.paginated(&self.book);
         let passes = 1 + paginator.settles();
         self.stages.lines += self.book.sections.len() as u32 * passes;
         self.stages.flow += passes;
         self.stages.settle += paginator.settles();
         self.stages.paint += 1;
         self.flow_warnings = paginator.warnings();
-        self.output
-            .get_or_insert_with(|| blank_output(registry, assets))
-            .pages = pages;
+        self.place(paged.pages, &paged.targets);
     }
 
     /// Everything the run has to complain about, in the order the
@@ -283,7 +291,7 @@ impl Session<'_> {
         warnings.extend(self.assets.get().warnings().iter().cloned());
         warnings.extend(self.contours.warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
-        for warning in &self.settle_warnings {
+        for warning in self.settle_warnings.iter().chain(&self.link_warnings) {
             if !warnings.iter().any(|seen| seen.message == warning.message) {
                 warnings.push(warning.clone());
             }

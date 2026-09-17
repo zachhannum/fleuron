@@ -385,3 +385,62 @@ pub struct Glyph {
     /// several glyphs on one range.
     pub range: Range<u32>,
 }
+
+/// What a reader of the book on a screen follows: the links on its
+/// pages and the outline of its headings.
+///
+/// A painter that can express a link or an outline reads this. One
+/// that cannot paints the pages alone, and loses nothing a printed
+/// page shows.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Navigation {
+    /// Every link in the book, one for each line it is set on, in the
+    /// order of the pages.
+    pub links: Vec<Link>,
+    /// The book's headings, nested by level. Empty for a book with no
+    /// heading.
+    pub outline: Vec<OutlineEntry>,
+}
+
+impl Navigation {
+    /// Whether the book has no link and no heading.
+    pub fn is_empty(&self) -> bool {
+        self.links.is_empty() && self.outline.is_empty()
+    }
+}
+
+/// One line of one link: the area its text covers on that line, and
+/// where it goes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Link {
+    /// The area of the link's text on one line: its glyphs across,
+    /// and the ascent and descent of its face down.
+    pub area: PageBox,
+    /// Where the link goes.
+    pub to: LinkTo,
+}
+
+/// Where a link goes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LinkTo {
+    /// A place in the book: the box of the element the link names, on
+    /// the page that element opens on.
+    Place(PageBox),
+    /// Something outside the book, by its url.
+    Uri(String),
+}
+
+/// One heading in the outline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OutlineEntry {
+    /// The heading's words, markup discarded and a line break as a
+    /// space.
+    pub title: String,
+    /// The heading's level, from 1 to 6.
+    pub level: u8,
+    /// The box of the heading, on the page it is set on.
+    pub place: PageBox,
+    /// The headings after this one and deeper than it, up to the next
+    /// heading at its level or above.
+    pub children: Vec<OutlineEntry>,
+}

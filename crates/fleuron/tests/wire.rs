@@ -214,6 +214,7 @@ fn as_output(reply: wire::Reply) -> LayoutOutput {
         fonts: reply.fonts,
         assets: reply.assets,
         warnings: reply.warnings,
+        navigation: Default::default(),
     }
 }
 
@@ -228,6 +229,7 @@ fn output() -> impl Strategy<Value = LayoutOutput> {
             fonts: Vec::new(),
             assets,
             warnings,
+            navigation: Default::default(),
         })
 }
 

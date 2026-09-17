@@ -232,6 +232,7 @@ mod tests {
                 message: "a table became prose".into(),
                 origin: Some("ch01.md:12:1".into()),
             }],
+            navigation: Default::default(),
         }
     }
 
@@ -244,6 +245,7 @@ mod tests {
             fonts: reply.fonts,
             assets: reply.assets,
             warnings: reply.warnings,
+            navigation: Default::default(),
         }
     }
 

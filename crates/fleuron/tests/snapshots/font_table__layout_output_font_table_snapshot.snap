@@ -148,7 +148,11 @@ expression: "(output, generics)"
       }
     ],
     "assets": [],
-    "warnings": []
+    "warnings": [],
+    "navigation": {
+      "links": [],
+      "outline": []
+    }
   },
   [
     [

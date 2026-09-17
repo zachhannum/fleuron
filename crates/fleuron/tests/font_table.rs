@@ -15,6 +15,7 @@ fn layout_output_font_table_snapshot() {
         fonts,
         assets: vec![],
         warnings: vec![],
+        navigation: Default::default(),
     };
     let generics: Vec<_> = [
         GenericFamily::Serif,
