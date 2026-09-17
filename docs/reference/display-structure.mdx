@@ -25,24 +25,13 @@ pub struct LayoutOutput {
 
 `warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 
-`navigation` holds the links on the pages and the outline of the headings. The PDF writer reads it. [The wire](../wasm/wire.md) does not carry it.
+`navigation` holds the outline of the headings. The PDF writer reads it. [The wire](../wasm/wire.md) does not carry it. The links are on the pages.
 
 ## `Navigation`
 
 ```rust
 pub struct Navigation {
-    pub links: Vec<Link>,
     pub outline: Vec<OutlineEntry>,
-}
-
-pub struct Link {
-    pub area: PageBox,
-    pub to: LinkTo,
-}
-
-pub enum LinkTo {
-    Place(PageBox),
-    Uri(String),
 }
 
 pub struct OutlineEntry {
@@ -54,10 +43,6 @@ pub struct OutlineEntry {
 ```
 
 A `PageBox` is a box on one page. `page` is the index of the page in the book, from 0. `x`, `y`, `width`, and `height` are in points.
-
-`links` has one `Link` for each line of each link in the book, in the order of the pages. `area` is the area that the text of the link covers on that line. It runs from the first glyph to the end of the last glyph, and from the ascent to the descent of the font. The text of `::before` and `::after` on the link is part of the area.
-
-`to` is where the link goes. `Place` is the box of the element that the link names, on the page where that element starts. The box is as wide as the column. `Uri` is a url outside the book, such as `https://example.com`. A link that names nothing in the book has no `Link`, and the run warns.
 
 `outline` has the headings of the book in reading order, nested by level. `level` is from 1 to 6. `children` has the headings after the entry that have a higher level, up to the next heading whose level is the same or less. `title` is the text of the heading on one line, and `place` is the box of the heading on its page. A heading in a quotation, a list, or a table is not in the outline.
 
@@ -71,6 +56,7 @@ pub struct Page {
     pub height: f32,
     pub sections: Vec<NodeId>,
     pub items: Vec<DrawItem>,
+    pub links: Vec<Link>,
 }
 ```
 
@@ -83,6 +69,28 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 `items` is in paint order: by layer, and inside one layer in the order the blocks are written. A painter walks the list from the start and paints each item over the ones before it. A painter does not sort.
 
 Every item names its own layer. `z-index` on a block sets that layer, and [the CSS subset](../css-subset.mdx) describes it under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the background of a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
+
+## `Link`
+
+```rust
+pub struct Link {
+    pub areas: Vec<PageBox>,
+    pub to: LinkTo,
+}
+
+pub enum LinkTo {
+    Place { node: NodeId, place: PageBox },
+    Uri(String),
+}
+```
+
+`links` on a `Page` has one `Link` for each link on that page, in the order of the draw items. A page with no link has an empty `links`. A link that continues on the next page has a `Link` on each of the two pages.
+
+`areas` has one box for each line of the link on the page. A box runs from the first glyph to the end of the last glyph, and from the ascent to the descent of the font. The text of `::before` and `::after` on the link is in the box. So a link with no text of its own has a box around the text of its `::after`. The space between two lines is in no box. The PDF writer writes each box as one link annotation, so the preview and the PDF have the same links.
+
+`to` is where the link goes. `Place` is a place in the book. `node` is the element that the link names. `place` is the box of that element on the page where the element starts, and the box is as wide as the column. `place.page` is the index of that page in the book, so a host can fetch the page from the link alone. `Uri` is a url outside the book, such as `https://example.com`.
+
+A link that names nothing in the book is on no page, and the run warns once for each url.
 
 ## `DrawItem`
 

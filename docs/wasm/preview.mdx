@@ -99,6 +99,8 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `next()`, `previous()` | the same, one page at a time |
 | `zoom` | points to CSS pixels |
 | `warnings` | [what the run warned about](../library/diagnostics.mdx) |
+| `onLink` | the function that a click on a link calls, and assigning to it replaces the function |
+| `follow(link)` | follows a link the same way a click does |
 | `svg(page?)` | the markup for a fetched page, painted but not mounted; empty for one that is not |
 | `exportPdf()` | the same run as PDF bytes |
 | `destroy()` | closes the worker and empties the element |
@@ -176,7 +178,7 @@ import { Preview } from 'fleuron-react';
 <Preview markdown={markdown} css={css} page={page} zoom={1.5} />;
 ```
 
-The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `images` is a prop too, so one that arrives after the book does still reaches the page. `fonts` is a prop in the same way, keyed by the `@font-face` url. `onMount` hands back the underlying preview, for the page count and the PDF export.
+The manuscript and the stylesheet are props, so an edit is a re-render and the engine is handed the one input that changed. `onLink` is a prop, and a new function on a re-render replaces the old one. `images` is a prop too, so one that arrives after the book does still reaches the page. `fonts` is a prop in the same way, keyed by the `@font-face` url. `onMount` hands back the underlying preview, for the page count and the PDF export.
 
 React is not a dependency of `fleuron`. The wrapper contains no engine logic, so a host that does not use React downloads none of it, and deleting the wrapper leaves a preview a plain page can still mount.
 
@@ -203,6 +205,7 @@ The second argument is all optional:
 | `ink` | `'#000000'` | The fill for a run or a rule the sheet left black. A colored run takes its own color instead. `ink` reaches the preview only: the export prints black wherever the sheet named no color. |
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
+| `links` | `true` | Whether each line of each link gets a transparent mark. `false` leaves the marks out, for a host that marks links itself. See [links without the preview](#links-without-the-preview). |
 
 Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into `output.assets`. `asset` turns that entry back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` when there is nothing to supply. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
 
@@ -223,6 +226,73 @@ A drag over the page selects text from the invisible layer, one `<text>` per lin
 Copy answers from that layer's own selection rather than the browser's default serialization across it: a selection spanning several lines joins them in reading order, with nothing duplicated or dropped.
 
 A selection stays within one page: there is no boundary between two of them to drag across.
+
+## Links
+
+A click on a link follows it. A link to a place in the book turns the preview to the page of that place. A link to a url opens the url in a new window.
+
+`onLink` lets the host decide what a click does. The preview calls it with the link and the click event, before it follows the link. If `onLink` returns `false`, the preview does not turn the page. If the host gives an `onLink`, the preview opens no url, and the host decides what to do with the url.
+
+The following example opens a url in a browser tab that the host controls, and turns the page for a link in the book:
+
+```js
+const preview = await Preview.mount(element, {
+  onLink: (link) => {
+    if (link.to.kind === 'uri') {
+      openTab(link.to.url);
+    }
+  },
+});
+```
+
+The following example shows the target of a link in an editor and keeps the page on screen:
+
+```js
+preview.onLink = (link) => {
+  if (link.to.kind === 'place') {
+    editor.reveal(link.to.node);
+    return false;
+  }
+};
+```
+
+A click at the end of a drag selects text and follows no link. A click whose default the host already prevented follows no link either. `follow(link)` follows a link the same way a click does.
+
+### Links without the preview
+
+Each page has `links`. A link has `areas`, one box for each line of the link on the page, in points. It also has `to`, which is one of these:
+
+```ts
+{ kind: 'place', node, place }
+{ kind: 'uri', url }
+```
+
+`node` is the element that the link names, and `place` is its box on the page where it starts. `place.page` is the index of that page in the book, counting from 0. It is the `first` of the range that fetches the page. So a host that holds only some pages can follow a link to any page. [The display structure](../reference/display-structure.mdx) describes the boxes.
+
+`paintPage` puts a transparent `<rect>` over each box, above the selection layer. Its `data-link` is the index of the link in `page.links`. The rectangle takes no pointer events and is not an `<a>`. A drag still selects the text under it, and a click does only what the host decides.
+
+`linkAt(page, x, y)` gives the link at a point in page points, or `null`. It reads the boxes and not the DOM, so the order of the layers in the SVG does not change the answer. The following example follows a click on a page that the host drew, to a page that the host did not fetch yet:
+
+```js
+import { linkAt, paintPage } from 'fleuron';
+
+frame.innerHTML = paintPage(page, { fonts: output.fonts });
+const svg = frame.querySelector('svg');
+
+svg.addEventListener('click', async (event) => {
+  const box = svg.getBoundingClientRect();
+  const x = ((event.clientX - box.left) * page.width) / box.width;
+  const y = ((event.clientY - box.top) * page.height) / box.height;
+  const link = linkAt(page, x, y);
+  if (link?.to.kind === 'place') {
+    event.preventDefault();
+    const reply = await client.preview([], { first: link.to.place.page, count: 1 });
+    if (reply !== null) {
+      frame.innerHTML = paintPage(reply.pages[0], { fonts: reply.fonts });
+    }
+  }
+});
+```
 
 ## Fonts
 
