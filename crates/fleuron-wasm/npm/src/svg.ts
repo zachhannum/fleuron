@@ -21,6 +21,12 @@
  * selection highlights lines up with what is on screen, and what
  * copy yields is what the author wrote, in reading order, the pdf.js
  * pattern over glyphs rather than a canvas.
+ *
+ * Over that layer is one transparent `<rect>` for each line of each
+ * link, marked with the link's index in `page.links`. A mark takes no
+ * pointer events and follows nothing, so a drag still selects the text
+ * under it and a click does what the host decides. A host finds the
+ * link under the pointer with `linkAt`, not with the element under it.
  */
 
 import type {
@@ -61,6 +67,12 @@ export interface PaintOptions {
    * nothing without the table it indexes.
    */
   asset?: (asset: Asset, index: number) => string | null | undefined;
+  /**
+   * Whether each line of each link is marked with a transparent
+   * `rect[data-link]`. On unless `false`, which a host that marks or hit
+   * tests links on its own passes.
+   */
+  links?: boolean;
 }
 
 /**
@@ -89,6 +101,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   let next = 0;
   const body = page.items.map((item) => paint(item, options, () => (next += 1))).join('');
   const overlay = selectionOverlay(page.items);
+  const marks = options.links === false ? '' : linkMarks(page);
   const ground =
     paper === null
       ? ''
@@ -99,7 +112,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
     ` width="${num(page.width * zoom)}" height="${num(page.height * zoom)}"` +
     ` fill="${escape(options.ink ?? '#000000')}"` +
     ` data-page="${page.number}" data-side="${page.side}">` +
-    `${ground}${body}${overlay}</svg>`
+    `${ground}${body}${overlay}${marks}</svg>`
   );
 }
 
@@ -509,6 +522,23 @@ function selectionLine(runs: TextItem[]): string {
     ` fill="transparent" style="pointer-events: all; white-space: pre" xml:space="preserve"` +
     ` data-selection-line="true">${escape(text)}</text>`
   );
+}
+
+/**
+ * One transparent mark for each line of each link, over the selection
+ * layer. `data-link` is the index of the link in `page.links`.
+ */
+function linkMarks(page: Page): string {
+  const body = page.links
+    .flatMap((link, index) =>
+      link.areas.map(
+        (area) =>
+          `<rect x="${num(area.x)}" y="${num(area.y)}" width="${num(area.width)}" height="${num(area.height)}"` +
+          ` fill="transparent" style="pointer-events: none" data-link="${index}"/>`,
+      ),
+    )
+    .join('');
+  return body === '' ? '' : `<g data-link-layer="true">${body}</g>`;
 }
 
 /**
