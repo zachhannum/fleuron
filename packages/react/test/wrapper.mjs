@@ -45,6 +45,11 @@ check(
   /\.addFont\(\s*bytes,\s*url\s*\)/.test(built) && /\bfonts\b/.test(built),
 );
 
+check(
+  'it hands the link handler to the preview as it changes',
+  /\.onLink\s*=\s*onLink\b/.test(built),
+);
+
 const engine = ['postcard', 'decodeDisplayList', 'Worker', 'Client', 'paintPage', 'wire'];
 const found = engine.filter((word) => built.includes(word));
 check('and names none of the words the engine is built out of', found.length === 0, found.join(', '));

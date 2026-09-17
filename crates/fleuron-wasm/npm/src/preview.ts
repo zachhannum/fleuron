@@ -28,7 +28,15 @@ import {
   type Source,
 } from './protocol.js';
 import { faceFamily, paintPage } from './svg.js';
-import type { Asset, FontRefEntry, LayoutOutput, Page, Warning } from './wire.js';
+import {
+  linkAt,
+  type Asset,
+  type FontRefEntry,
+  type LayoutOutput,
+  type Link,
+  type Page,
+  type Warning,
+} from './wire.js';
 
 /**
  * How many pages either side of the one on screen a preview keeps
@@ -103,6 +111,15 @@ export interface PreviewOptions {
    * the whole run's regardless.
    */
   onRender?: (output: LayoutOutput) => void;
+  /**
+   * Called when a click lands on a link, before the preview follows
+   * it. The preview follows a link to a place in the book by turning to
+   * the page of that place, unless this returns `false`. It follows a
+   * link to a url only when there is no `onLink`: the url then opens in
+   * a new window. A click whose default a host already prevented is not
+   * followed.
+   */
+  onLink?: (link: Link, event: MouseEvent) => boolean | void;
 }
 
 /**
@@ -170,6 +187,7 @@ export class Preview {
   private bookPages = 0;
   private showing: number;
   private scale: number;
+  private linkHandler: PreviewOptions['onLink'];
 
   private constructor(element: Element, worker: Worker, options: PreviewOptions) {
     this.element = element;
@@ -177,6 +195,7 @@ export class Preview {
     this.options = options;
     this.showing = options.page ?? 1;
     this.scale = options.zoom ?? 1;
+    this.linkHandler = options.onLink;
     this.frame = element.ownerDocument.createElement('div');
     this.frame.setAttribute('data-fleuron', 'preview');
     element.replaceChildren(this.frame);
@@ -188,6 +207,8 @@ export class Preview {
       this.client.receive((event as MessageEvent<Response>).data),
     );
     this.element.addEventListener('copy', this.onCopy);
+    this.frame.addEventListener('click', this.onClick);
+    this.frame.addEventListener('pointermove', this.onPointerMove);
   }
 
   /**
@@ -396,6 +417,31 @@ export class Preview {
     this.paint();
   }
 
+  /** What a click on a link calls. See {@link PreviewOptions.onLink}. */
+  get onLink(): PreviewOptions['onLink'] {
+    return this.linkHandler;
+  }
+
+  set onLink(handler: PreviewOptions['onLink']) {
+    this.linkHandler = handler;
+  }
+
+  /**
+   * Follows a link the way a click on it does: calls
+   * {@link PreviewOptions.onLink}, then turns to the page of a place in
+   * the book, or opens a url in a new window when there is no `onLink`.
+   */
+  follow(link: Link, event: MouseEvent = new MouseEvent('click')): void {
+    const handled = this.linkHandler?.(link, event);
+    if (link.to.kind === 'place') {
+      if (handled !== false) {
+        this.page = link.to.place.page + 1;
+      }
+    } else if (this.linkHandler === undefined) {
+      this.element.ownerDocument.defaultView?.open(link.to.url, '_blank', 'noopener');
+    }
+  }
+
   /** The next page, if the book has one. */
   next(): void {
     this.page = this.showing + 1;
@@ -431,6 +477,8 @@ export class Preview {
   /** Closes the worker and gives the element back. */
   destroy(): void {
     this.element.removeEventListener('copy', this.onCopy);
+    this.frame.removeEventListener('click', this.onClick);
+    this.frame.removeEventListener('pointermove', this.onPointerMove);
     for (const face of this.faces.values()) {
       this.element.ownerDocument.fonts.delete(face);
     }
@@ -622,6 +670,47 @@ export class Preview {
   private paint(): void {
     this.frame.innerHTML = this.svg();
   }
+
+  /**
+   * The link under a pointer event on the page on screen. A click that
+   * ends a drag over some text selects that text, and follows nothing.
+   */
+  private linkUnder(event: MouseEvent): Link | null {
+    const page = this.held.get(this.showing);
+    const svg = this.frame.querySelector('svg');
+    if (page === undefined || svg === null) {
+      return null;
+    }
+    const box = svg.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) {
+      return null;
+    }
+    const x = ((event.clientX - box.left) * page.width) / box.width;
+    const y = ((event.clientY - box.top) * page.height) / box.height;
+    return linkAt(page, x, y);
+  }
+
+  private readonly onClick = (event: Event): void => {
+    const click = event as MouseEvent;
+    if (click.defaultPrevented || click.button !== 0) {
+      return;
+    }
+    const selection = this.element.ownerDocument.getSelection();
+    if (selection !== null && !selection.isCollapsed) {
+      return;
+    }
+    const link = this.linkUnder(click);
+    if (link === null) {
+      return;
+    }
+    click.preventDefault();
+    this.follow(link, click);
+  };
+
+  private readonly onPointerMove = (event: Event): void => {
+    const over = this.linkUnder(event as MouseEvent) !== null;
+    (this.frame as HTMLElement).style.cursor = over ? 'pointer' : '';
+  };
 
   /**
    * Copies the selection layer's own text, reconstructed from the

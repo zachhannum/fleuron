@@ -50,8 +50,20 @@ export interface PreviewProps extends PreviewOptions {
  * that changed.
  */
 export function Preview(props: PreviewProps): React.ReactElement {
-  const { markdown, css, name, page, zoom, images, fonts, className, style, onMount, ...options } =
-    props;
+  const {
+    markdown,
+    css,
+    name,
+    page,
+    zoom,
+    images,
+    fonts,
+    className,
+    style,
+    onMount,
+    onLink,
+    ...options
+  } = props;
   const element = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<Mounted | null>(null);
 
@@ -92,6 +104,14 @@ export function Preview(props: PreviewProps): React.ReactElement {
       preview.page = page;
     }
   }, [preview, page]);
+
+  // A new handler on every render is the usual shape of this prop, so
+  // it is handed over as it changes rather than fixed at mount.
+  useEffect(() => {
+    if (preview !== null) {
+      preview.onLink = onLink;
+    }
+  }, [preview, onLink]);
 
   useEffect(() => {
     if (preview !== null && zoom !== undefined) {

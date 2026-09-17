@@ -16,9 +16,21 @@ const folio = document.getElementById('folio');
 const beside = document.getElementById('beside');
 const exported = document.getElementById('export');
 
+/** The links a reader followed, most recent last. */
+const followed = [];
+
 const preview = await Preview.mount(document.getElementById('preview'), {
   zoom: Number(document.getElementById('zoom').value),
   onRender: () => report(),
+  // A link into the book turns the page after this returns. A link out
+  // of it opens nothing, because this handler is here: the harness
+  // names the url in the footer.
+  onLink: (link) => {
+    followed.push(link);
+    if (link.to.kind === 'uri') {
+      status.textContent = `a link to ${link.to.url}`;
+    }
+  },
 });
 
 /** What the file inputs replace, and what the page opens on. */
@@ -120,4 +132,5 @@ async function showPdf() {
 // What a driver pages through. The harness is also the browser end
 // of the test suite, and this is the handle it drives.
 globalThis.preview = preview;
+globalThis.followed = followed;
 document.body.dataset['ready'] = 'yes';

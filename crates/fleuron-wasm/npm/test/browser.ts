@@ -109,6 +109,53 @@ await page.evaluate(() => {
   };
 });
 
+
+/**
+ * The centre of one line of a link on screen, and points beside it, in
+ * the viewport's pixels: `mark` is the mark's order among the marks
+ * of the link at index `link`.
+ */
+async function markOnScreen(
+  link: number,
+  mark = 0,
+): Promise<{ x: number; y: number; left: number; right: number; top: number; bottom: number } | null> {
+  const handle = (await page.$$(`#preview svg rect[data-link="${link}"]`))[mark];
+  if (handle === undefined) {
+    return null;
+  }
+  await handle.scrollIntoViewIfNeeded();
+  const box = await handle.boundingBox();
+  return box === null
+    ? null
+    : {
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2,
+        left: box.x,
+        right: box.x + box.width,
+        top: box.y,
+        bottom: box.y + box.height,
+      };
+}
+
+/** The page on screen after a click at a point, once any turn it asked for lands. */
+async function clickAt(x: number, y: number): Promise<number> {
+  await page.evaluate(() => {
+    globalThis.followed.length = 0;
+  });
+  await page.mouse.click(x, y);
+  for (let waited = 0; waited < 200; waited += 1) {
+    const landed = await page.evaluate(
+      () =>
+        document.querySelector('#preview svg')?.getAttribute('data-page') ===
+        String(globalThis.preview.page),
+    );
+    if (landed) {
+      break;
+    }
+  }
+  return page.evaluate(() => globalThis.preview.page);
+}
+
 const pages = await page.evaluate(() => globalThis.preview.pages as number);
 console.log(`  the harness sets the fixture book in ${pages} pages\n`);
 check('the fixture book reaches the browser', pages > 0);
@@ -368,6 +415,83 @@ check(
   (assetCache.createdAfterReturn ?? 0) > 0 && (assetCache.drawnAgain ?? 0) > 0,
   JSON.stringify(assetCache),
 );
+
+// Links. A click on a cross-reference turns the preview to the page
+// its target opens on, and `onLink` hears of it first. Under this
+// sheet the target of the fixture book's cross-reference opens on the
+// page of the link, and the contents book further down turns to
+// another page.
+const crossReference = await page.evaluate(async (count: number) => {
+  const preview = globalThis.preview;
+  for (let number = 1; number <= count; number += 1) {
+    preview.page = number;
+    await globalThis.__settledOnPage(number);
+    if (document.querySelector('#preview svg rect[data-link]') !== null) {
+      const line = [...document.querySelectorAll('#preview svg text[data-selection-line]')].find(
+        (text) => (text.textContent ?? '').includes('chapter III'),
+      );
+      return { number, line: line?.textContent ?? null };
+    }
+  }
+  return null;
+}, pages);
+check('the fixture book has a link on a page', crossReference !== null);
+if (crossReference !== null) {
+  const on = await markOnScreen(0);
+  const landed = on === null ? 0 : await clickAt(on.x, on.y);
+  const followed = await page.evaluate(() => globalThis.followed.map((link) => link.to));
+  const to = followed[0];
+  check(
+    'a click on the cross-reference in the fixture book turns the preview to the page of its target',
+    to?.kind === 'place' && landed === to.place.page + 1,
+    `on page ${crossReference.number}, followed ${JSON.stringify(followed)}, landed on ${landed}`,
+  );
+
+  // The line the link is set on still selects and copies as it did:
+  // a drag across the link selects the words under it and turns no
+  // page, and copy yields the line.
+  await page.evaluate(async (number: number) => {
+    globalThis.preview.page = number;
+    await globalThis.__settledOnPage(number);
+  }, crossReference.number);
+  const mark = await markOnScreen(0);
+  const line = await page.evaluate(() => {
+    const text = [...document.querySelectorAll('#preview svg text[data-selection-line]')].find(
+      (element) => (element.textContent ?? '').includes('chapter III'),
+    ) as SVGTextElement | undefined;
+    const box = text?.getBoundingClientRect();
+    return box === undefined ? null : { left: box.left, right: box.right };
+  });
+  let copied: string | null = null;
+  let stayed = false;
+  if (mark !== null && line !== null) {
+    await page.evaluate(() => {
+      globalThis.followed.length = 0;
+    });
+    await page.mouse.move(line.left + 1, mark.y);
+    await page.mouse.down();
+    await page.mouse.move(line.right - 1, mark.y, { steps: 8 });
+    await page.mouse.up();
+    copied = await page.evaluate(() => {
+      const frame = document.querySelector('[data-fleuron="preview"]');
+      const data = new DataTransfer();
+      const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+      frame?.dispatchEvent(event);
+      return event.defaultPrevented ? data.getData('text/plain') : null;
+    });
+    stayed = await page.evaluate(
+      (number: number) => globalThis.preview.page === number && globalThis.followed.length === 0,
+      crossReference.number,
+    );
+    await page.evaluate(() => document.getSelection()?.removeAllRanges());
+  }
+  check(
+    'a drag across a line with a link selects and copies it, and follows nothing',
+    stayed && copied !== null && copied.includes('chapter III') && crossReference.line !== null &&
+      crossReference.line.includes(copied.trim()),
+    `copied ${JSON.stringify(copied)} from ${JSON.stringify(crossReference.line)}`,
+  );
+}
 
 /**
  * One page compared with the export: the preview photographed in the
@@ -702,6 +826,109 @@ check(
   `${shrunk.before} pages showing page ${shrunk.before}, then ${shrunk.after} pages, landed on ${shrunk.landed}`,
 );
 
+// Links in a book written for them: a contents entry that prints only
+// its page number, a link broken across two lines, and a link out of
+// the book.
+const contents = await page.evaluate(async () => {
+  const prose =
+    'It was the custom of the island that a stranger be kept at the gate until the ' +
+    "emperor's council had heard of him, and the council sat but twice a month.\n\n";
+  await globalThis.preview.setStyle('a::after { content: target-counter(attr(href url), page) }');
+  await globalThis.preview.setMarkdown(
+    '# Contents\n\nThe Hunter [](#the-hunter)\n\nIt was the custom of the island that a stranger be ' +
+      'kept at the gate, and so the reader turns to [the long and winding account of the voyage to ' +
+      'the island of the giants and the hunter](#the-hunter) before any other part.\n\n' +
+      prose.repeat(30) +
+      '# The Hunter\n\nThe hunt began at dawn.\n',
+    'links.md',
+  );
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  return {
+    pages: globalThis.preview.pages,
+    marks: [...document.querySelectorAll('#preview svg rect[data-link]')].map((mark) =>
+      mark.getAttribute('data-link'),
+    ),
+  };
+});
+const target = contents.pages;
+const printed = await markOnScreen(0);
+check(
+  'a contents entry with no text of its own is marked on its printed page number',
+  printed !== null && contents.marks.length === 3,
+  JSON.stringify(contents),
+);
+if (printed !== null) {
+  const landed = await clickAt(printed.x, printed.y);
+  check('and a click on the number turns to the page it prints', landed === target, `landed on ${landed} of ${target}`);
+}
+await page.evaluate(async () => {
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+});
+const first = await markOnScreen(1, 0);
+const second = await markOnScreen(1, 1);
+if (first === null || second === null) {
+  check('a link broken across two lines is marked on both', false);
+} else {
+  const turns: number[] = [];
+  for (const [x, y] of [
+    [first.x, first.y],
+    [second.x, second.y],
+  ] as [number, number][]) {
+    turns.push(await clickAt(x, y));
+    await page.evaluate(async () => {
+      globalThis.preview.page = 1;
+      await globalThis.__settledOnPage(1);
+    });
+  }
+  check(
+    'a link broken across two lines is followed from both lines',
+    turns.every((landed) => landed === target),
+    turns.join(', '),
+  );
+  const misses: number[] = [];
+  const between: [number, number][] = [
+    [first.left - 6, first.y],
+    [second.right + 6, second.y],
+  ];
+  if (second.top - first.bottom > 1) {
+    between.push([first.x, (first.bottom + second.top) / 2]);
+  }
+  for (const [x, y] of between) {
+    misses.push(await clickAt(x, y));
+  }
+  check(
+    'and from nowhere between them',
+    misses.every((landed) => landed === 1),
+    `${between.length} clicks landed on ${misses.join(', ')}`,
+  );
+}
+
+const outward = await page.evaluate(async () => {
+  await globalThis.preview.setStyle('');
+  await globalThis.preview.setMarkdown(
+    '# Elsewhere\n\nSee [the society](https://example.com/society) for the rest.\n',
+    'links.md',
+  );
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  return globalThis.preview.pages;
+});
+const society = await markOnScreen(0);
+const stayedOn = society === null ? 0 : await clickAt(society.x, society.y);
+const heard = await page.evaluate(() => globalThis.followed.map((link) => link.to));
+check(
+  'an external link calls onLink with its url and turns no page',
+  outward >= 1 &&
+    stayedOn === 1 &&
+    heard.length === 1 &&
+    heard[0]?.kind === 'uri' &&
+    heard[0].url === 'https://example.com/society' &&
+    (await page.context().pages()).length === 1,
+  JSON.stringify(heard),
+);
+
 check('nothing threw on the page', broke.length === 0, broke.slice(0, 2).join('; '));
 
 await browser.close();
@@ -720,6 +947,8 @@ declare global {
     setStyle(css: string | { name: string; css: string }[]): Promise<void>;
     setMarkdown(text: string, name?: string): Promise<void>;
   };
+  /** The links the harness's `onLink` heard of, most recent last. */
+  var followed: { to: { kind: 'place'; node: number; place: { page: number } } | { kind: 'uri'; url: string } }[];
   /** Waits until `#preview svg`'s `data-page` reads `folio`, or gives up after `limit` ticks. */
   var __settledOnPage: (folio: number, limit?: number) => Promise<void>;
 }
