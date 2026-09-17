@@ -55,9 +55,10 @@ pub(crate) struct PageInfo {
 pub(crate) struct Paged {
     pub(crate) pages: Vec<Page>,
     pub(crate) infos: Vec<PageInfo>,
-    /// The page each id landed on: the page of the first fragment of
-    /// the first element that carries it.
-    pub(crate) targets: BTreeMap<NodeId, usize>,
+    /// Where each id landed: the box of the first fragment of the
+    /// first element that carries it, as wide as the column it is in.
+    /// The box names the page.
+    pub(crate) targets: BTreeMap<NodeId, PageBox>,
     /// The border box of each block in the flow, one for each page and
     /// column it reaches, in the order the pages closed.
     pub(crate) boxes: Vec<(NodeId, PageBox)>,
@@ -201,7 +202,7 @@ pub(super) struct Flow<'a, 'p> {
     /// Anchors waiting for the fragment whose page they take.
     pub(super) pending_anchors: Vec<NodeId>,
     /// Where each id landed, filled in as pages close.
-    targets: BTreeMap<NodeId, usize>,
+    targets: BTreeMap<NodeId, PageBox>,
     /// Whether what is placed is painted. The flow that finds the page
     /// of each box paints nothing: which page a fragment falls on is a
     /// question about heights.
@@ -334,7 +335,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.pages.truncate(pages);
         self.infos.truncate(pages);
         self.boxes.truncate(checkpoint.boxes);
-        self.targets.retain(|_, page| *page < pages);
+        self.targets.retain(|_, area| (area.page as usize) < pages);
         self.placed.clone_from(&checkpoint.placed);
         self.slot = checkpoint.slot.clone();
         self.strings.clone_from(&checkpoint.strings);
@@ -700,6 +701,11 @@ impl<'a, 'p> Flow<'a, 'p> {
             if sections.last() != Some(&placed.section) {
                 sections.push(placed.section);
             }
+            let landed = placed
+                .marks
+                .as_ref()
+                .is_some_and(|marks| !marks.targets.is_empty())
+                .then(|| self.area(&placed, index));
             for (node, area) in placed.boxes {
                 let page = index as u32;
                 self.boxes.push((node, PageBox { page, ..area }));
@@ -709,8 +715,10 @@ impl<'a, 'p> Flow<'a, 'p> {
                     self.strings.insert(name, value);
                 }
                 reset = reset.or(marks.page_number);
-                for id in marks.targets {
-                    self.targets.entry(id).or_insert(index);
+                if let Some(area) = landed {
+                    for id in marks.targets {
+                        self.targets.entry(id).or_insert(area);
+                    }
                 }
             }
             items.extend(placed.items);
@@ -811,6 +819,25 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// The column being filled, in page coordinates.
     fn origin(&self) -> (f32, f32) {
         self.column_origin(self.column)
+    }
+
+    /// The box one placed fragment takes on the page at `index`: its
+    /// own top and height, across the column it is in, or across the
+    /// content box where its tier spans the columns.
+    fn area(&self, placed: &Placed, index: usize) -> PageBox {
+        let geometry = self.paginator.master(index, &self.slot).geometry;
+        let (x, y) = geometry.column_origin(placed.column);
+        let width = match self.tiers.get(placed.tier) {
+            Some(tier) if tier.spanning => geometry.content_size().0,
+            _ => geometry.measure(),
+        };
+        PageBox {
+            page: index as u32,
+            x,
+            y: y + placed.top,
+            width,
+            height: placed.height,
+        }
     }
 
     /// One column of the page being built, in page coordinates.
