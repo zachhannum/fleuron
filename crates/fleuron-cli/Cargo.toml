@@ -25,3 +25,6 @@ sha2 = "0.10"
 # The digest is taken over the display structure alone, so the e2e
 # encodes it rather than reading the version off the front of a buffer.
 postcard.workspace = true
+# The links and the outline of the fixture PDF are read back through
+# `qpdf --json`.
+serde_json = "1"

@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "4d8d6d2b3118d2354a7e96ddb18170dba7dc5fe1969045ad5abbcab274a401cc";
+    "99127bc74c0162f9332034bf7802ef6508f8768ebfe6a7a68ad3841225cda65d";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -860,6 +860,58 @@ fn channel(value: u8) -> String {
     format!("{}", (f64::from(value) / 255.0) as f32)
 }
 
+/// A PDF as `qpdf --json` reads it: its pages, its outline and its
+/// objects. `None` when `qpdf` is not installed.
+fn qpdf_json(pdf: &Path) -> Option<serde_json::Value> {
+    let run = tool(
+        "qpdf",
+        &[
+            "--json=2".as_ref(),
+            "--json-key=pages".as_ref(),
+            "--json-key=outlines".as_ref(),
+            "--json-key=qpdf".as_ref(),
+            pdf.as_os_str(),
+        ],
+    )?;
+    assert!(run.status.success(), "qpdf --json failed");
+    Some(serde_json::from_slice(&run.stdout).expect("qpdf writes JSON"))
+}
+
+/// Every link annotation that goes to a page of the PDF: the page it is
+/// on and the page it goes to, both counted from 0.
+fn link_annotations(json: &serde_json::Value) -> Vec<(usize, usize)> {
+    let objects = &json["qpdf"][1];
+    let object = |reference: &serde_json::Value| {
+        let key = format!("obj:{}", reference.as_str().unwrap_or_default());
+        objects[key]["value"].clone()
+    };
+    let pages: Vec<&str> = json["pages"]
+        .as_array()
+        .expect("the PDF has pages")
+        .iter()
+        .map(|page| page["object"].as_str().expect("a page is an object"))
+        .collect();
+    let mut links = Vec::new();
+    for (at, page) in pages.iter().enumerate() {
+        let annotations = object(&serde_json::Value::from(*page))["/Annots"].clone();
+        for annotation in annotations.as_array().into_iter().flatten() {
+            let annotation = object(annotation);
+            if annotation["/Subtype"] != "/Link" {
+                continue;
+            }
+            let mut destination = annotation["/Dest"].clone();
+            if destination.is_string() {
+                destination = object(&destination);
+            }
+            let target = destination[0].as_str().unwrap_or_default();
+            if let Some(to) = pages.iter().position(|page| *page == target) {
+                links.push((at, to));
+            }
+        }
+    }
+    links
+}
+
 /// A PDF's content streams, uncompressed, or `None` when `qpdf` is
 /// not installed.
 fn content_streams(pdf: &Path) -> Option<String> {
@@ -971,6 +1023,69 @@ fn a_link_prints_the_page_its_chapter_opens_on() {
         squeeze(&text).contains(&format!("chapterIII(page{folio})")),
         "the PDF does not read back the page the link names:\n{text}",
     );
+}
+
+/// Acceptance: the cross-reference in the fixture book is a link a
+/// viewer follows, and it lands on the page chapter III opens on.
+#[test]
+fn the_cross_reference_lands_on_its_chapter() {
+    let (pdf, _) = render("link", &[]);
+    let (Some(text), Some(json)) = (extract_text(&pdf), qpdf_json(&pdf)) else {
+        return;
+    };
+    let pages = pages_of(&text);
+    let on = |words: &str| {
+        pages
+            .iter()
+            .position(|page| page.contains(words))
+            .unwrap_or_else(|| panic!("{words:?} is not set"))
+    };
+    let links = link_annotations(&json);
+    assert_eq!(links.len(), 1, "{links:?}");
+    let (from, to) = links[0];
+    assert_eq!(from, on("chapter III"), "the link is not on its own page");
+    assert_eq!(to, on("CHAPTER III."), "the link lands elsewhere");
+}
+
+/// Acceptance: the outline of the fixture book holds its part and its
+/// chapters, nested by heading level, and each entry jumps to the page
+/// its heading is set on.
+#[test]
+fn the_outline_holds_the_chapters_nested_by_level() {
+    let (pdf, _) = render("outline", &[]);
+    let (Some(text), Some(json)) = (extract_text(&pdf), qpdf_json(&pdf)) else {
+        return;
+    };
+    let pages = pages_of(&text);
+    let entry = |value: &serde_json::Value| {
+        let title = value["title"].as_str().expect("an entry has a title");
+        let at = value["destpageposfrom1"]
+            .as_u64()
+            .expect("an entry has a page") as usize;
+        assert!(
+            pages[at - 1].contains(title.split_whitespace().next().unwrap_or_default()),
+            "{title} jumps to page {at}, which does not hold it",
+        );
+        title.to_string()
+    };
+    let outline = json["outlines"].as_array().expect("the PDF has an outline");
+    assert_eq!(outline.len(), 1, "{outline:?}");
+    assert_eq!(entry(&outline[0]), "PART I. A VOYAGE TO LILLIPUT.");
+    let chapters: Vec<String> = outline[0]["kids"]
+        .as_array()
+        .expect("the part holds its chapters")
+        .iter()
+        .map(|kid| {
+            let title = entry(kid);
+            let at = kid["destpageposfrom1"].as_u64().unwrap_or_default() as usize;
+            assert!(
+                pages[at - 1].contains(&title),
+                "{title} is not on page {at}"
+            );
+            title
+        })
+        .collect();
+    assert_eq!(chapters, ["CHAPTER I.", "CHAPTER II.", "CHAPTER III."]);
 }
 
 /// The styled book is a different book on the page: more of them, and
