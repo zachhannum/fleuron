@@ -382,6 +382,71 @@ fn a_stanza_of_verse_reads_back_as_its_lines() {
     }
 }
 
+/// Acceptance: `pdftotext` round-trips a code block's lines as lines.
+/// `fixtures/code.md` is an excerpt of a build manual with a fenced
+/// block, an indented block, and a listing longer than a page. Every
+/// line of every block comes back as a line of its own, in the order it
+/// was written, and every word of the book comes back in order.
+#[test]
+fn a_code_block_reads_back_as_its_lines() {
+    let source = fixtures().join("code.md");
+    let (pdf, _) = run("code", &[source.as_path()], &[]);
+
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}{}",
+            String::from_utf8_lossy(&check.stdout),
+            String::from_utf8_lossy(&check.stderr),
+        );
+    }
+
+    let book = {
+        let markdown = std::fs::read_to_string(&source).expect("the fixture is checked in");
+        let name = source.display().to_string();
+        let (sections, warnings) =
+            fleuron_markdown::to_sections(&markdown, &name, &Options::default());
+        assert!(warnings.is_empty(), "the fixture is clean: {warnings:?}");
+        fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections)
+    };
+    let mut written = Vec::new();
+    for block in book.sections.iter().flat_map(|section| &section.blocks) {
+        let Block::CodeBlock { text, .. } = block else {
+            continue;
+        };
+        written.extend(
+            text.split('\n')
+                .map(str::trim_end)
+                .filter(|line| !line.is_empty())
+                .map(String::from),
+        );
+    }
+    assert!(
+        written.len() > 50,
+        "the fixture's blocks are too short to cross a page: {}",
+        written.len(),
+    );
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    // pdftotext leaves the indentation of a line to the viewer, so the
+    // lines are compared without it. The display structure is where
+    // indentation is checked, in `crates/fleuron/tests/code.rs`.
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let mut from = 0;
+    for line in &written {
+        let at = lines[from..]
+            .iter()
+            .position(|read| *read == line.trim())
+            .unwrap_or_else(|| panic!("pdftotext does not read {line:?} back as a line:\n{text}"));
+        from += at + 1;
+    }
+    if let Err(difference) = holds(&book, &strip_furniture(&text, None), squeeze, true) {
+        panic!("the PDF's prose is not the book's: {difference}");
+    }
+}
+
 /// Art behind the page and behind a block, through the fixture book:
 /// `fixtures/styled.css` puts a scan behind every chapter opening at
 /// `background-size: cover`, and tiles the ornament behind the
@@ -2076,7 +2141,7 @@ fn several_markdown_files_compose_in_argument_order() {
     );
     let second = write_source(
         "compose-two",
-        "# Chapter Two\n\nThe second chapter.\n\n```\na line of code\n```\n",
+        "# Chapter Two\n\nThe second chapter.\n\n{key=value}\n",
     );
     let (pdf, stderr) = run("composed", &[&first, &second], &[]);
 
@@ -2086,8 +2151,7 @@ fn several_markdown_files_compose_in_argument_order() {
         .collect();
     assert_eq!(warnings.len(), 1, "{stderr}");
     assert!(
-        warnings[0].contains("compose-two.md:5:1")
-            && warnings[0].contains("Code blocks are not supported"),
+        warnings[0].contains("compose-two.md:5:1") && warnings[0].contains("Unsupported attribute"),
         "the diagnostic names the wrong source: {}",
         warnings[0],
     );
@@ -2098,10 +2162,7 @@ fn several_markdown_files_compose_in_argument_order() {
     let first_at = text.find("The first chapter").expect("chapter one is set");
     let second_at = text.find("The second chapter").expect("chapter two is set");
     assert!(first_at < second_at, "the files composed out of order");
-    assert!(
-        text.contains("a line of code"),
-        "the code block lost its prose"
-    );
+    assert!(text.contains("{key=value}"), "the run lost its prose");
 
     // Reversed on the command line, reversed on the page.
     let (pdf, _) = run("composed-reversed", &[&second, &first], &[]);
@@ -2175,7 +2236,7 @@ fn the_cli_reference_shows_warnings_the_run_prints() {
         .collect();
     assert_eq!(samples.len(), 2, "the page stopped showing two warnings");
 
-    let source = write_source("reference-sample", "# Chapter\n\n```\none\n```\n");
+    let source = write_source("reference-sample", "# Chapter\n\n{key=value}\n");
     let sheet = write_sheet(
         "reference-sample",
         "p {\n  text-shadow: 0 0 2px black;\n}\n",
@@ -2467,6 +2528,11 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
                     laid.push(Laid::Prose(marker));
                     append_blocks(&item.blocks, laid, true);
                 }
+            }
+            // A code block sets as its own lines, so each of them
+            // is prose of its own.
+            Block::CodeBlock { text, .. } => {
+                laid.extend(text.split('\n').map(|line| Laid::Prose(line.to_string())))
             }
             Block::ThematicBreak { .. } => laid.push(Laid::Prose(ORNAMENT.to_string())),
             Block::Image { .. } | Block::PageBreak { .. } | Block::ColumnBreak { .. } => {}

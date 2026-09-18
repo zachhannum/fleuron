@@ -197,6 +197,10 @@ pub struct LineBreakOptions {
     pub inter_character: bool,
     /// Which marks hang past the measure.
     pub hanging: HangingPunctuation,
+    /// Whether the text is preformatted: it breaks at its own
+    /// newlines and nowhere else, and its spaces stand where they
+    /// were written. A code block is set this way.
+    pub preformatted: bool,
 }
 
 /// Which marks may hang past the measure, from

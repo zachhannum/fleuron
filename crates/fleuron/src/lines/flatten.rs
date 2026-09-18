@@ -49,6 +49,10 @@ pub(super) struct FlatParagraph {
     /// The id of the paragraph's `::first-line`, and how far into the
     /// shaped text its style reaches.
     first_line: Option<(NodeId, usize)>,
+    /// Stretches of the shaped text that are set as they were
+    /// written, so no hyphen is put inside one. An inline code span
+    /// is one.
+    pub(super) literal: Vec<Range<usize>>,
 }
 
 /// One stretch of the paragraph's source, and the node it was
@@ -460,6 +464,22 @@ impl LineLayout<'_> {
         flat
     }
 
+    /// Flattens preformatted text as the text of `node`: its newlines
+    /// and its spaces stand as the author wrote them.
+    pub(super) fn flatten_preformatted(
+        &self,
+        text: &str,
+        node: NodeId,
+        style: ParagraphStyle,
+    ) -> FlatParagraph {
+        let mut flat = FlatParagraph::new();
+        if !text.is_empty() {
+            flat.open(Some(node), 0);
+            self.push_run(&mut flat, text, style, Lead::default());
+        }
+        flat
+    }
+
     fn walk_inlines(
         &self,
         inlines: &[Inline],
@@ -476,7 +496,9 @@ impl LineLayout<'_> {
                     let generated = styles.generated(inline);
                     let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
+                    let from = flat.text.len();
                     self.push_text(flat, *id, value, styles.style(*id, style), lead);
+                    flat.literal.push(from..flat.text.len());
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                     flat.close_inline(open);
                 }

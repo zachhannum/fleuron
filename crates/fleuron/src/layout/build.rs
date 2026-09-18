@@ -599,6 +599,9 @@ impl Builder<'_, '_> {
                     self.blocks(children(styles, *id, blocks, position), inner, narrowed);
                     self.close(&style, start);
                 }
+                Block::CodeBlock { id, text, .. } => {
+                    self.code_block(*id, text, position, x, measure)
+                }
                 Block::ThematicBreak { id, .. } => {
                     let style = styles.style(*id).clone();
                     let start = self.open(*id, &style, &[], x, measure);
@@ -746,7 +749,70 @@ impl Builder<'_, '_> {
             justify: style.text_align == TextAlign::Justify,
             inter_character: style.text_justify == TextJustify::InterCharacter,
             hanging: style.hanging_punctuation,
+            preformatted: false,
         }
+    }
+
+    /// One code block's lines as fragments.
+    ///
+    /// The text breaks at its own newlines and nowhere else. Nothing
+    /// in it hyphenates, no line of it is justified, no mark of it
+    /// hangs past the measure, and its first line carries no indent,
+    /// whatever the cascade asked for around it. A character the
+    /// author did not put where the reader finds it changes what the
+    /// code says.
+    fn code_block(
+        &mut self,
+        id: NodeId,
+        text: &str,
+        position: Option<SourcePos>,
+        x: f32,
+        measure: f32,
+    ) {
+        let computed = self.styles().style(id).clone();
+        let start = self.open(id, &computed, &[], x, measure);
+        let (x, measure) = computed.content_box(x, measure);
+        self.pseudo(id, PseudoElement::Before, position, x, measure);
+
+        let style = computed.paragraph();
+        let options = LineBreakOptions {
+            preformatted: true,
+            ..LineBreakOptions::default()
+        };
+        let spec = Measure::uniform(measure);
+        let lines = self
+            .paginator
+            .lines
+            .layout_preformatted(text, id, style, &spec, options);
+        let over = lines
+            .iter()
+            .any(|line| self.paginator.line_width(line) > measure);
+        if over {
+            let at = origin(self.source, position);
+            let message = concat!(
+                "A line of a code block is wider than the measure. It runs past it, ",
+                "because a code block breaks only where its own text does.",
+            );
+            self.paginator
+                .warn(message.to_string(), (!at.is_empty()).then_some(at));
+        }
+        let setting = Setting {
+            x,
+            align: computed.text_align,
+            orphans: computed.orphans as usize,
+            widows: computed.widows as usize,
+            cap: None,
+            cap_x: 0.0,
+        };
+        if lines.is_empty() {
+            self.emit_one(x, 0.0, Piece::Blank);
+        }
+        let mut first = true;
+        for fragment in set_lines(self.paginator, lines, &spec, &[], &setting) {
+            self.emit(&mut first, fragment);
+        }
+        self.pseudo(id, PseudoElement::After, position, x, measure);
+        self.close(&computed, start);
     }
 
     /// The children of the block `element` that `::before` or

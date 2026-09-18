@@ -4,9 +4,13 @@
 //! content tree does not have, so compilation flattens the tree once
 //! into an arena that does. Element names are the markdown vocabulary
 //! spelled the way an author writes them in CSS: `book`, `section`,
-//! `h1`…`h6`, `p`, `blockquote`, `hr`, `img`, `ul`, `ol`, `li`,
-//! `table`, `thead`, `tbody`, `tr`, `th`, `td`, `em`, `strong`,
+//! `h1`…`h6`, `p`, `blockquote`, `pre`, `hr`, `img`, `ul`, `ol`,
+//! `li`, `table`, `thead`, `tbody`, `tr`, `th`, `td`, `em`, `strong`,
 //! `code`, `a`.
+//!
+//! A code block is a `pre` element. It holds text rather than
+//! inlines, so there is no `code` element inside it; `code` is an
+//! inline code span.
 //!
 //! An element carries the classes and the id the content tree gave
 //! it alongside the name.
@@ -132,7 +136,7 @@ impl ToCss for PseudoElement {
 pub const INLINE_ELEMENTS: [&str; 5] = ["code", "em", "strong", "a", "span"];
 
 /// The blocks that `::before` and `::after` generate a box inside.
-pub const BLOCK_ELEMENTS: [&str; 15] = [
+pub const BLOCK_ELEMENTS: [&str; 16] = [
     "section",
     "h1",
     "h2",
@@ -142,6 +146,7 @@ pub const BLOCK_ELEMENTS: [&str; 15] = [
     "h6",
     "p",
     "blockquote",
+    "pre",
     "hr",
     "img",
     "ul",
@@ -174,7 +179,7 @@ impl SelectorImpl for Fleuron {
 /// Every element name the tree can hold, in the order the content
 /// tree introduces them. A selector names one of these or matches
 /// nothing.
-pub const ELEMENTS: [&str; 26] = [
+pub const ELEMENTS: [&str; 27] = [
     "book",
     "section",
     "h1",
@@ -185,6 +190,7 @@ pub const ELEMENTS: [&str; 26] = [
     "h6",
     "p",
     "blockquote",
+    "pre",
     "hr",
     "img",
     "ul",
@@ -330,6 +336,12 @@ impl ElementTree {
                     self.link(index, &children);
                     index
                 }
+                Block::CodeBlock {
+                    id,
+                    text,
+                    attributes,
+                    ..
+                } => self.push("pre", *id, attributes, Some(parent), !text.is_empty()),
                 Block::ThematicBreak { id, attributes, .. } => {
                     self.push("hr", *id, attributes, Some(parent), false)
                 }

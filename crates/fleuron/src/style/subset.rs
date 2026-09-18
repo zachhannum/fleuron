@@ -467,6 +467,7 @@ mod tests {
                 {},
                 {{"type": "paragraph", "inlines": {inlines}}},
                 {{"type": "blockquote", "blocks": [{{"type": "paragraph", "inlines": {inlines}}}]}},
+                {{"type": "code_block", "text": "fn main() {{}}"}},
                 {{"type": "thematic_break"}},
                 {{"type": "image", "url": "image.png", "alt": "alt"}},
                 {{"type": "list", "items": [{{"blocks": []}}]}},

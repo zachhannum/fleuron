@@ -151,6 +151,7 @@ export default defineConfig({
           exclude: [
             '/api/**',
             '/css-subset/',
+            '/css-subset/**',
             '/cli/quickstart/',
             '/library/diagnostics/',
             '/reference/display-structure/',

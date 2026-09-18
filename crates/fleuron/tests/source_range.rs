@@ -124,6 +124,9 @@ fn nodes(book: &Book) -> BTreeMap<u32, String> {
                         walk_blocks(blocks, out);
                     }
                 }
+                Block::CodeBlock { id, text, .. } => {
+                    out.insert(id.get(), text.clone());
+                }
                 Block::ThematicBreak { .. }
                 | Block::PageBreak { .. }
                 | Block::ColumnBreak { .. }

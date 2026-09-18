@@ -35,6 +35,7 @@ const SETTINGS: [(&str, LineBreakOptions); 2] = [
             justify: false,
             inter_character: false,
             hanging: HangingPunctuation::NONE,
+            preformatted: false,
         },
     ),
     (
@@ -45,6 +46,7 @@ const SETTINGS: [(&str, LineBreakOptions); 2] = [
             justify: true,
             inter_character: false,
             hanging: HangingPunctuation::NONE,
+            preformatted: false,
         },
     ),
 ];

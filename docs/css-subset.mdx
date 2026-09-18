@@ -322,8 +322,8 @@ h2 {
 The element names come from markdown:
 
 ```
-book section h1 h2 h3 h4 h5 h6 p blockquote hr img ul ol li
-table thead tbody tr th td code em strong a span
+book section h1 h2 h3 h4 h5 h6 p blockquote pre hr img ul ol
+li table thead tbody tr th td code em strong a span
 ```
 
 {/* end generated */}
@@ -578,6 +578,8 @@ Lines break the same way under all four. When justifying, `text-justify: inter-c
 `hyphens: auto` lets a line break inside a word at a syllable boundary. Each such break costs extra, and more again directly after another one, so no more than two lines in a row end in a hyphen. `none` and `manual` add no syllable breaks.
 
 The syllable patterns come from the book's language. `extra["language"]` in the [metadata](reference/markdown.mdx) names it as a BCP 47 tag, read by its primary subtag, so `fr-CA` is French. The engine hyphenates a book that declares no language as English. A language it has no patterns for leaves every word whole and warns, naming the tag. The language belongs to the book, so one book is hyphenated in one language.
+
+An inline `code` span and a `pre` take no hyphen, whatever `hyphens` asks for around them. A break the author did not write changes what the code says.
 
 The following example justifies the text, hyphenates it, and hangs punctuation into the margins:
 
@@ -966,6 +968,32 @@ hr {
   margin: 1.5em 0;
 }
 ```
+
+### Code blocks
+
+A code block in the manuscript becomes a `pre`. The block is preformatted: it breaks its lines at its own newlines and nowhere else, its spaces stand where the author wrote them, nothing in it hyphenates, no line of it is justified, no mark of it hangs past the measure, and its first line carries no indent. No declaration turns any of that off. `white-space` is not in the subset, and a `pre` is preformatted whether or not a stylesheet says so.
+
+In the built-in stylesheet, a code block has a monospace family and space above and below it.
+
+The following example puts a rule above and below a code block and tints it:
+
+```css
+pre {
+  margin: 1.5em 0;
+  padding: 0.5em;
+  border-top: thin solid;
+  border-bottom: thin solid;
+  background-color: #f2f0eb;
+}
+```
+
+A code block holds text rather than an inline `code`, so `pre code` selects nothing. `code` is the inline code span, and a rule on it reaches code written among prose.
+
+A line wider than the measure runs past the measure, because a code block has nowhere else to break. The engine warns and names the line and column of the block. To keep a listing inside the measure, set a smaller `font-size` on `pre`, or break the line in the manuscript.
+
+A code block breaks across pages between two of its lines, and each line keeps its own indentation on the page it lands on. `orphans` and `widows` hold lines together at each end, and `break-inside: avoid` keeps the whole block on one page.
+
+The engine does no syntax highlighting. The word after the opening fence reaches the content tree as `info`, for a painter that reads it. See [the markdown mapping](reference/markdown.mdx#code-blocks).
 
 ### Tables
 
@@ -1388,6 +1416,14 @@ blockquote {
   margin: 1em 2em;
 }
 
+/* A code block has space above and below it, and a monospace family.
+   The bundled family is the only face a book gets without
+   @font-face, so a book that wants a monospace face declares one. */
+pre {
+  font-family: monospace;
+  margin: 1em 0;
+}
+
 /* A list has space above and below it. Its markers are in the
    indent to the left of its items. */
 ul, ol {
@@ -1511,6 +1547,7 @@ code { font-family: monospace }
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, a width or a height on a positioned block, and `position`, `z-index` or `opacity` on an inline element |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
+| code blocks | `white-space`, `tab-size`, and syntax highlighting |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
 | counters | any counter other than `page`, and `counter-increment` |

@@ -28,9 +28,9 @@ library, so it builds for any target Rust does.
 ## Scope
 
 fleuron handles book-shaped documents: flowing prose with headings,
-block quotes, scene breaks, drop caps, images, lists, tables, running
-heads, multi-column pages, and page furniture like recto and verso,
-page counters and named pages.
+block quotes, scene breaks, drop caps, images, lists, tables, code
+blocks, running heads, multi-column pages, and page furniture like
+recto and verso, page counters and named pages.
 
 It is not a browser engine. There is no float layout, no grid or
 flexbox, no transforms. CSS the engine does not support is reported

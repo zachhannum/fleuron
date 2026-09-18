@@ -210,7 +210,8 @@ fn texts_of(blocks: &[Block], anchors: &Anchors, texts: &mut BTreeMap<NodeId, St
                     }
                 }
             }
-            Block::ThematicBreak { .. }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
             | Block::PageBreak { .. }
             | Block::ColumnBreak { .. }
             | Block::Image { .. } => {}
@@ -252,6 +253,7 @@ fn block_text(block: &Block) -> String {
     match block {
         Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => text(inlines),
         Block::Image { alt, .. } => alt.clone(),
+        Block::CodeBlock { text: code, .. } => code.clone(),
         Block::Blockquote { blocks, .. } => blocks_text(blocks),
         Block::List { items, .. } => item_blocks(items)
             .map(blocks_text)
@@ -356,7 +358,8 @@ impl Named {
                         self.blocks(&cell.blocks, styles, references, source);
                     }
                 }
-                Block::ThematicBreak { .. }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
                 | Block::PageBreak { .. }
                 | Block::ColumnBreak { .. }
                 | Block::Image { .. } => {}

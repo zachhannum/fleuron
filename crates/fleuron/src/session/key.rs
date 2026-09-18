@@ -138,6 +138,17 @@ fn hash_blocks(blocks: &[Block], styles: &StyleTree, h: &mut DefaultHasher) {
                 (4u8, url, alt, position).hash(h);
                 hash_node(*id, styles, h);
             }
+            Block::CodeBlock {
+                id,
+                info,
+                text,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (9u8, info, text, position).hash(h);
+                hash_node(*id, styles, h);
+            }
             Block::List {
                 id,
                 ordered,

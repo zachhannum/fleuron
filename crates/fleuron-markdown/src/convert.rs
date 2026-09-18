@@ -14,7 +14,7 @@ use fleuron::content::{
     SourceSpan, block_position, block_span, inline_position, inline_span, origin,
     text as inline_text,
 };
-use pulldown_cmark::{Event, Options as ParserOptions, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, Options as ParserOptions, Parser, Tag, TagEnd};
 
 use crate::{Options, Sections};
 
@@ -192,6 +192,14 @@ struct TableFrame {
     row: Option<(Vec<Cell>, Read)>,
 }
 
+/// A code block while its text is still arriving.
+struct CodeFrame {
+    read: Read,
+    /// The word after the opening fence, where one was written.
+    info: Option<String>,
+    text: String,
+}
+
 struct Converter<'a> {
     /// The markdown being read, for the constructs whose shape is in
     /// the source rather than in the events.
@@ -222,6 +230,8 @@ struct Converter<'a> {
     /// The table being read. A cell holds only inlines, so tables do
     /// not nest.
     table: Option<TableFrame>,
+    /// The code block being read. Code blocks do not nest.
+    code: Option<CodeFrame>,
     /// Depth of metadata blocks, whose text is not content.
     metadata: u32,
 }
@@ -242,6 +252,7 @@ impl<'a> Converter<'a> {
             quoted: Vec::new(),
             lists: Vec::new(),
             table: None,
+            code: None,
             metadata: 0,
         }
     }
@@ -375,13 +386,14 @@ impl<'a> Converter<'a> {
                 }
             }
             Event::End(TagEnd::Table) => self.close_table(),
-            Event::Start(Tag::CodeBlock(_)) => {
-                self.warn(
-                    "Code blocks are not supported. Falling back to a plain paragraph.",
-                    at,
-                );
-                self.push_inlines(InlineFor::Paragraph, read)
+            Event::Start(Tag::CodeBlock(kind)) => {
+                self.code = Some(CodeFrame {
+                    read,
+                    info: fence_info(&kind),
+                    text: String::new(),
+                })
             }
+            Event::End(TagEnd::CodeBlock) => self.close_code(),
             Event::Start(Tag::FootnoteDefinition(_)) => self.warn(
                 "Footnotes are not supported. The note is kept where it was written.",
                 at,
@@ -399,7 +411,6 @@ impl<'a> Converter<'a> {
 
             Event::End(
                 TagEnd::Paragraph
-                | TagEnd::CodeBlock
                 | TagEnd::TableCell
                 | TagEnd::DefinitionListTitle
                 | TagEnd::DefinitionListDefinition
@@ -414,7 +425,10 @@ impl<'a> Converter<'a> {
             ) => self.close_inlines(),
             Event::End(TagEnd::BlockQuote(_)) => self.close_blockquote(read),
 
-            Event::Text(text) => self.text(&text, read),
+            Event::Text(text) => match self.code.as_mut() {
+                Some(code) => code.text.push_str(&text),
+                None => self.text(&text, read),
+            },
             Event::Code(code) => self.inline(Inline::Code {
                 id: Default::default(),
                 value: code.into_string(),
@@ -628,6 +642,22 @@ impl<'a> Converter<'a> {
                 self.paragraph(children, read)
             }
         }
+    }
+
+    /// Files the code block whose text has all arrived.
+    fn close_code(&mut self) {
+        let Some(code) = self.code.take() else {
+            return;
+        };
+        let text = code.text.strip_suffix('\n').unwrap_or(&code.text);
+        self.push_block(Block::CodeBlock {
+            id: Default::default(),
+            info: code.info,
+            text: expand_tabs(text),
+            attributes: Attributes::default(),
+            position: Some(code.read.position),
+            span: Some(code.read.span),
+        });
     }
 
     /// Files a paragraph whose inlines have all arrived.
@@ -1162,10 +1192,51 @@ fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
         | Block::List {
             attributes, span, ..
         }
+        | Block::CodeBlock {
+            attributes, span, ..
+        }
         | Block::Table {
             attributes, span, ..
         } => (attributes, span),
     }
+}
+
+/// The word after the opening fence, where a fence was written and
+/// carried one. An indented block has none.
+fn fence_info(kind: &CodeBlockKind<'_>) -> Option<String> {
+    let CodeBlockKind::Fenced(info) = kind else {
+        return None;
+    };
+    info.split_whitespace().next().map(str::to_string)
+}
+
+/// Tabs replaced by the spaces that reach the next four-column stop.
+/// The engine has no tab stops, so a tab left in the text would set as
+/// one glyph of no stated width.
+fn expand_tabs(text: &str) -> String {
+    if !text.contains('\t') {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut column = 0;
+    for letter in text.chars() {
+        match letter {
+            '\t' => {
+                let stop = 4 - column % 4;
+                out.extend(std::iter::repeat_n(' ', stop));
+                column += stop;
+            }
+            '\n' => {
+                out.push('\n');
+                column = 0;
+            }
+            _ => {
+                out.push(letter);
+                column += 1;
+            }
+        }
+    }
+    out
 }
 
 /// The inside of a brace run, when the whole of an inline sequence
@@ -1578,33 +1649,65 @@ mod tests {
         assert_eq!(sections[0].id, fleuron::content::NodeId::UNASSIGNED);
     }
 
-    /// The construct a manuscript most often reaches for that the
-    /// vocabulary has no room for. It says where it was written, and
-    /// it leaves its prose behind.
+    /// Part: a fenced block becomes a code block. Its lines stay
+    /// lines, the word after the fence is carried, and nothing warns.
     #[test]
-    fn a_code_block_warns_and_keeps_its_prose() {
-        let markdown = "# C\n\n```\ncode line\n```\n";
-        let (sections, warnings) = to_sections(
-            markdown,
-            "test.md",
-            &Options {
-                dialect: Dialect::gfm(),
-                ..Options::default()
-            },
-        );
-        let reported: Vec<(&str, &str)> = warnings
-            .iter()
-            .map(|w| (w.message.as_str(), w.origin.as_deref().unwrap()))
-            .collect();
+    fn a_fenced_block_becomes_a_code_block() {
+        let markdown = "# C\n\n```rust\nfn main() {\n    go();\n}\n```\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::CodeBlock {
+            info,
+            text,
+            position,
+            ..
+        } = &sections[0].blocks[1]
+        else {
+            panic!("expected a code block, got {:?}", sections[0].blocks[1]);
+        };
+        assert_eq!(info.as_deref(), Some("rust"));
+        assert_eq!(text, "fn main() {\n    go();\n}");
+        assert_eq!(*position, Some(SourcePos { line: 3, column: 1 }));
+    }
+
+    /// Part: an indented block becomes the same node, with no info
+    /// word, and nothing warns.
+    #[test]
+    fn an_indented_block_becomes_a_code_block() {
+        let markdown = "# C\n\n    one\n      two\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::CodeBlock { info, text, .. } = &sections[0].blocks[1] else {
+            panic!("expected a code block, got {:?}", sections[0].blocks[1]);
+        };
+        assert_eq!(*info, None);
+        assert_eq!(text, "one\n  two");
+    }
+
+    /// Acceptance: indentation is preserved to the character, and a
+    /// tab reaches the next four-column stop.
+    #[test]
+    fn indentation_is_preserved_to_the_character() {
+        let markdown = "# C\n\n```\n    four\n\tone tab\nab\tto eight\n```\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::CodeBlock { text, .. } = &sections[0].blocks[1] else {
+            panic!("expected a code block, got {:?}", sections[0].blocks[1]);
+        };
+        assert_eq!(text, "    four\n    one tab\nab  to eight");
+    }
+
+    /// An attribute line above a code block names it, as it names
+    /// every other block.
+    #[test]
+    fn an_attribute_line_names_a_code_block() {
+        let markdown = "# C\n\n{.listing}\n```\ncode\n```\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(
-            reported,
-            [(
-                "Code blocks are not supported. Falling back to a plain paragraph.",
-                "test.md:3:1",
-            )],
+            block_attributes(&sections[0].blocks[1]).classes,
+            ["listing"]
         );
-        let prose: Vec<String> = sections[0].blocks[1..].iter().map(text_of).collect();
-        assert_eq!(prose, ["code line\n"]);
     }
 
     /// The text of each item of a list, the lists nested in it left
@@ -2119,7 +2222,6 @@ Ordinary prose.
     #[test]
     fn every_frontend_warning_reads_as_a_sentence() {
         let markdown = "# C\n\n\
-             ```\ncode\n```\n\n\
              | a | b |\n|---|---|\n| c | d |\n\n\
              ~~struck~~ and $x$ and <b>bold</b>\n\n\
              <div>block</div>\n\n\
@@ -2127,7 +2229,7 @@ Ordinary prose.
              [^1]: The note.\n\n\
              {key=value}\n";
         let (_, warnings) = to_sections(markdown, "test.md", &Options::default());
-        assert!(warnings.len() >= 7, "{warnings:?}");
+        assert!(warnings.len() >= 6, "{warnings:?}");
         for warning in &warnings {
             let message = &warning.message;
             assert!(

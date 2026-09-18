@@ -142,7 +142,8 @@ fn links_in_blocks<'b>(blocks: &'b [Block], source: Option<&'b str>, out: &mut V
                     links_in_blocks(blocks, source, out);
                 }
             }
-            Block::ThematicBreak { .. }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
             | Block::PageBreak { .. }
             | Block::ColumnBreak { .. }
             | Block::Image { .. } => {}

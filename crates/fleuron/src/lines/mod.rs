@@ -268,6 +268,25 @@ impl LineLayout<'_> {
             .unwrap_or_default()
     }
 
+    /// Breaks the preformatted text of `node` into lines: one line per
+    /// newline the author wrote, whatever the measure.
+    ///
+    /// A line wider than the measure runs past it, because there is
+    /// nowhere else for it to end.
+    pub(crate) fn layout_preformatted(
+        &self,
+        text: &str,
+        node: crate::content::NodeId,
+        style: ParagraphStyle,
+        measure: &Measure,
+        options: LineBreakOptions,
+    ) -> Vec<Line> {
+        let flat = self.flatten_preformatted(text, node, style);
+        self.shape_flat(flat, style, options, None)
+            .map(|shaped| self.break_shaped(&shaped, measure, 0, None).lines)
+            .unwrap_or_default()
+    }
+
     /// One flattened paragraph shaped. `opening` is where the line the
     /// paragraph opens on has to end.
     fn shape_flat(
@@ -387,6 +406,17 @@ impl LineLayout<'_> {
             let hard = at.forced && fit.at != breaker.end();
             if !span.ends_band && !hard {
                 continue;
+            }
+            // A blank line of preformatted text takes a line of its
+            // own, so what the author wrote under it stays where it
+            // was written.
+            if band.is_none() && options.preformatted && hard {
+                spans.push(LineSpan {
+                    runs: 0..0,
+                    offset: 0.0,
+                    width: 0,
+                });
+                band = Some((Line::empty(), span.origin));
             }
             let Some((mut line, _)) = band.take() else {
                 continue;
