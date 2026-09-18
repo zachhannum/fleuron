@@ -9,11 +9,14 @@
 use fleuron::content::Book;
 use fleuron_markdown::{Options, assemble, to_sections};
 
-/// Every way of naming a block in one manuscript: the line above a
+/// Every way of naming a node in one manuscript: the line above a
 /// quote, a heading's trailing run, the run after an image alone on
-/// its line, and the line above a scene break.
+/// its line, the line above a scene break, and a bracketed run
+/// inside prose.
 const MANUSCRIPT: &str = "\
 # Chapter One {#opening .grand}
+
+A [named run]{.number #first} and [another]{.title} in one paragraph.
 
 {.epigraph}
 > Man is the only animal that blushes.

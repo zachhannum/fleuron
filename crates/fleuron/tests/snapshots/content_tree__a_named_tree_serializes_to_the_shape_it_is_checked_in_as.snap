@@ -41,6 +41,116 @@ expression: json
           }
         },
         {
+          "type": "paragraph",
+          "inlines": [
+            {
+              "type": "text",
+              "value": "A ",
+              "position": {
+                "line": 3,
+                "column": 1
+              },
+              "span": {
+                "start": 33,
+                "end": 35
+              }
+            },
+            {
+              "type": "span",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "named run",
+                  "position": {
+                    "line": 3,
+                    "column": 4
+                  },
+                  "span": {
+                    "start": 36,
+                    "end": 45
+                  }
+                }
+              ],
+              "attributes": {
+                "id": "first",
+                "classes": [
+                  "number"
+                ]
+              },
+              "position": {
+                "line": 3,
+                "column": 3
+              },
+              "span": {
+                "start": 35,
+                "end": 62
+              }
+            },
+            {
+              "type": "text",
+              "value": " and ",
+              "position": {
+                "line": 3,
+                "column": 30
+              },
+              "span": {
+                "start": 62,
+                "end": 67
+              }
+            },
+            {
+              "type": "span",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "another",
+                  "position": {
+                    "line": 3,
+                    "column": 36
+                  },
+                  "span": {
+                    "start": 68,
+                    "end": 75
+                  }
+                }
+              ],
+              "attributes": {
+                "classes": [
+                  "title"
+                ]
+              },
+              "position": {
+                "line": 3,
+                "column": 35
+              },
+              "span": {
+                "start": 67,
+                "end": 84
+              }
+            },
+            {
+              "type": "text",
+              "value": " in one paragraph.",
+              "position": {
+                "line": 3,
+                "column": 52
+              },
+              "span": {
+                "start": 84,
+                "end": 102
+              }
+            }
+          ],
+          "position": {
+            "line": 3,
+            "column": 1
+          },
+          "span": {
+            "start": 33,
+            "end": 103
+          }
+        },
+        {
           "type": "blockquote",
           "blocks": [
             {
@@ -50,22 +160,22 @@ expression: json
                   "type": "text",
                   "value": "Man is the only animal that blushes.",
                   "position": {
-                    "line": 4,
+                    "line": 6,
                     "column": 3
                   },
                   "span": {
-                    "start": 47,
-                    "end": 83
+                    "start": 118,
+                    "end": 154
                   }
                 }
               ],
               "position": {
-                "line": 4,
+                "line": 6,
                 "column": 3
               },
               "span": {
-                "start": 47,
-                "end": 84
+                "start": 118,
+                "end": 155
               }
             }
           ],
@@ -75,12 +185,12 @@ expression: json
             ]
           },
           "position": {
-            "line": 4,
+            "line": 6,
             "column": 1
           },
           "span": {
-            "start": 33,
-            "end": 84
+            "start": 104,
+            "end": 155
           }
         },
         {
@@ -94,12 +204,12 @@ expression: json
             ]
           },
           "position": {
-            "line": 6,
+            "line": 8,
             "column": 1
           },
           "span": {
-            "start": 85,
-            "end": 137
+            "start": 156,
+            "end": 208
           }
         },
         {
@@ -110,12 +220,12 @@ expression: json
             ]
           },
           "position": {
-            "line": 9,
+            "line": 11,
             "column": 1
           },
           "span": {
-            "start": 138,
-            "end": 154
+            "start": 209,
+            "end": 225
           }
         },
         {
@@ -125,22 +235,22 @@ expression: json
               "type": "text",
               "value": "Plain prose carries nothing.",
               "position": {
-                "line": 11,
+                "line": 13,
                 "column": 1
               },
               "span": {
-                "start": 155,
-                "end": 183
+                "start": 226,
+                "end": 254
               }
             }
           ],
           "position": {
-            "line": 11,
+            "line": 13,
             "column": 1
           },
           "span": {
-            "start": 155,
-            "end": 184
+            "start": 226,
+            "end": 255
           }
         }
       ],
@@ -150,7 +260,7 @@ expression: json
       },
       "span": {
         "start": 0,
-        "end": 184
+        "end": 255
       }
     }
   ]

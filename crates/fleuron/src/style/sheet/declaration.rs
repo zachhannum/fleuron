@@ -474,7 +474,7 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "string-set",
         inherited: false,
-        syntax: "none | [ <name> [ content() | <string> ]+ ]#",
+        syntax: "none | [ <name> [ content() | content(text) | <string> ]+ ]#",
         examples: &[
             "none",
             "chapter content()",

@@ -191,7 +191,7 @@ These parse but draw nothing:
 | `string(chapter)` | the current value of a named string |
 | `none` | nothing |
 
-`string-set` on an element stores a named string, updated each time the text reaches such an element. `content()` inside it means the element's own text, which only headings and paragraphs have. The built-in stylesheet already stores the `chapter` string from each section's opening heading, so a running head takes one rule.
+`string-set` on an element stores a named string, updated each time the text reaches such an element. `content()` inside it means the element's own text, which headings, paragraphs, and inline elements have. `content(text)` is another spelling of the same thing. The built-in stylesheet already stores the `chapter` string from each section's opening heading, so a running head takes one rule.
 
 The following example puts the current chapter title at the top of every right-hand page:
 
@@ -404,7 +404,7 @@ Each pseudo-element starts from the style of the element it belongs to, so a rul
 
 `::before` and `::after` add content to an element. The `content` property holds what they add. A rule with no `content`, or with `content: none`, adds nothing. See [Cross-references](#cross-references) for how to print the page number or the text of another element in `content`.
 
-On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, or code. The text properties style that text.
+On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, code, or a span. The text properties style that text.
 
 On a block or a section, `::before` adds a box as the first child, and `::after` adds a box as the last child. The box is as wide as the content box of the element. It takes the text properties of the element, and a rule on the pseudo-element overrides them.
 
@@ -634,7 +634,7 @@ How far a mark hangs depends on the mark: nearly all of a period or comma, less 
 
 ### Inline boxes
 
-An inline element is a link, emphasis, strong text, or code. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
+An inline element is a link, emphasis, strong text, code, or a span. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
 
 The engine paints one box per line the element reaches. Padding and a border on the left and the right are width. They move the text after them, and the line breaks against them. Padding and a border above and below the text leave the height of the line alone. A box deeper than the text reaches over the lines around it.
 
@@ -697,7 +697,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 
 ```css
 content:                    none | [ <string> | target-counter( <target> , page , <counter-style>? ) | target-text( <target> ) ]+;
-string-set:                 none | [ <name> [ content() | <string> ]+ ]#;
+string-set:                 none | [ <name> [ content() | content(text) | <string> ]+ ]#;
 counter-reset:              none | page <integer>?;
 initial-letter:             <integer>;
 position:                   static | relative | absolute;

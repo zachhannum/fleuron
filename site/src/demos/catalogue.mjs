@@ -276,7 +276,7 @@ p {
  * line that names one of them, and the ones the tree has no
  * counterpart for, which are set as prose.
  */
-export const MAPPING_MD = `## The Levant Papers
+export const MAPPING_MD = `## [The Levant Papers]{.title}
 
 The letter reached Marsh on a Tuesday, in *the second post*, and it was
 **not** what he had been waiting for. It began \`Dear sir\` and ended
