@@ -213,10 +213,15 @@ pub(super) struct Flow<'a, 'p> {
     header: Vec<(f32, Vec<DrawItem>)>,
     /// The border boxes of the blocks on the pages closed so far.
     boxes: Vec<(NodeId, PageBox)>,
+    /// Whether a box measures its insets from a block rather than from
+    /// the page area. The flow that settles resolves the border box of
+    /// every block it closes a page on for those boxes.
+    pub(super) nested: bool,
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
     pub(super) fn new(paginator: &'p Paginator<'a>, anchored: AnchoredBoxes) -> Flow<'a, 'p> {
+        let nested = anchored.nested();
         let slot = PageSlot {
             name: None,
             first: true,
@@ -246,6 +251,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             paints: true,
             header: Vec::new(),
             boxes: Vec::new(),
+            nested,
         }
     }
 
@@ -676,7 +682,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         let opened = self.strings.clone();
         let mut reset = None;
         let mut placed = std::mem::take(&mut self.placed);
-        self.land(&placed);
+        let within = self.containers(&placed);
+        self.land(&placed, within);
         if self.paints && ending == Ending::Short {
             self.align(&mut placed);
         }
@@ -902,14 +909,66 @@ impl<'a, 'p> Flow<'a, 'p> {
             .collect()
     }
 
+    /// The border box of each block on the page being closed, for the
+    /// boxes whose insets measure from one. The flow that paints
+    /// resolves the same boxes when it decorates the page.
+    ///
+    /// A block that reaches two columns of the page takes the box of
+    /// the first of them.
+    fn containers(&mut self, placed: &[Placed]) -> BTreeMap<NodeId, PageBox> {
+        let mut found = BTreeMap::new();
+        if !self.nested || self.settling.is_none() {
+            return found;
+        }
+        let page = self.pages.len() as u32;
+        for (column, painted) in self.resolve(placed) {
+            let origin = self.column_origin(column);
+            let (x, y, width, height) = painted.border_box(origin);
+            found.entry(painted.decoration.node).or_insert(PageBox {
+                page,
+                x,
+                y,
+                width,
+                height,
+            });
+        }
+        found
+    }
+
     /// Resolves the decorations over the page being closed into the
-    /// rects they paint there, column by column and tier by tier.
+    /// rects they paint there, and the border box each one takes.
+    fn decorate(&mut self, placed: &[Placed]) -> Vec<DrawItem> {
+        let page = self.pages.len() as u32;
+        let mut items = Vec::new();
+        for (column, painted) in self.resolve(placed) {
+            let origin = self.column_origin(column);
+            let (x, y, width, height) = painted.border_box(origin);
+            if height > 0.0 {
+                self.boxes.push((
+                    painted.decoration.node,
+                    PageBox {
+                        page,
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                ));
+            }
+            items.extend(painted.items(origin));
+        }
+        items
+    }
+
+    /// The border box every block on the page being closed takes
+    /// there, with the column it is in, column by column and tier by
+    /// tier.
     ///
     /// A column boundary cuts a block the way a page boundary does,
     /// so each column resolves on its own and what is still open at
     /// the foot of one carries into the next.
-    fn decorate(&mut self, placed: &[Placed]) -> Vec<DrawItem> {
-        let mut items = Vec::new();
+    fn resolve(&mut self, placed: &[Placed]) -> Vec<(u32, Painted)> {
+        let mut resolved = Vec::new();
         let mut start = 0;
         let region = |placed: &Placed| (placed.tier, placed.column);
         for index in 1..=placed.len() {
@@ -918,10 +977,14 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             let (tier, column) = region(&placed[start]);
             let top = self.tiers[tier].top;
-            items.extend(self.decorate_column(&placed[start..index], column, top));
+            resolved.extend(
+                self.resolve_column(&placed[start..index], top)
+                    .into_iter()
+                    .map(|painted| (column, painted)),
+            );
             start = index;
         }
-        items
+        resolved
     }
 
     /// The same over one column of one tier, whose top is `top`.
@@ -931,7 +994,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// ranges are contiguous, so a block with neither covers every
     /// fragment the column holds. What is still open when the column
     /// closes carries into the next.
-    fn decorate_column(&mut self, placed: &[Placed], column: u32, top: f32) -> Vec<DrawItem> {
+    fn resolve_column(&mut self, placed: &[Placed], top: f32) -> Vec<Painted> {
         let mut boxes: Vec<Painted> = Vec::new();
         let mut open: Vec<usize> = Vec::new();
         for decoration in self.carried.drain(..) {
@@ -972,26 +1035,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             boxes[index].bottom = last;
             self.carried.push(boxes[index].decoration.clone());
         }
-        let origin = self.column_origin(column);
-        let page = self.pages.len() as u32;
-        let mut items = Vec::new();
-        for painted in &boxes {
-            let (x, y, width, height) = painted.border_box(origin);
-            if height > 0.0 {
-                self.boxes.push((
-                    painted.decoration.node,
-                    PageBox {
-                        page,
-                        x,
-                        y,
-                        width,
-                        height,
-                    },
-                ));
-            }
-            items.extend(painted.items(origin));
-        }
-        items
+        boxes
     }
 
     /// The rules down the gutters of the page being closed: in each

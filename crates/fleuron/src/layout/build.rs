@@ -434,12 +434,15 @@ impl Builder<'_, '_> {
 
     /// Hands one block's decoration to the fragments at the ends of
     /// its range, which is where the paginator reads it back. A block
-    /// that emitted nothing has no range and paints nothing.
+    /// that emitted nothing has no range and paints nothing. The
+    /// boxes it wrote against the page are not fragments of it, so
+    /// its range ends at the last fragment the flow places.
     fn seal(&mut self, pending: Pending) {
-        let end = self.fragments.len();
-        if end == pending.start {
+        let placed = |fragment: &Fragment| !matches!(fragment.piece, Piece::Anchor(_));
+        let Some(last) = self.fragments[pending.start..].iter().rposition(placed) else {
             return;
-        }
+        };
+        let end = pending.start + last + 1;
         let mut decoration = pending.decoration;
         // Everything committed since the last fragment was emitted
         // lies inside the block that fragment was in.
@@ -495,7 +498,18 @@ impl Builder<'_, '_> {
     /// written. The fragment takes no space. The page the flow
     /// reaches when it passes here is the page that carries the
     /// image.
+    ///
+    /// A box against the page is no fragment of the block it was
+    /// written in. A block whose first fragment this would be starts
+    /// at the next fragment instead, so that its border box opens on
+    /// one the flow places.
     pub(super) fn anchor(&mut self, id: NodeId) {
+        let index = self.fragments.len();
+        for pending in &mut self.open {
+            if pending.start == index {
+                pending.start = index + 1;
+            }
+        }
         self.fragments
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
     }

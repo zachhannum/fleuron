@@ -333,20 +333,39 @@ impl Paginator<'_> {
 
     /// One pass over the whole book, stopping short of the furniture.
     fn pass(&self, book: &Book) -> Paged {
-        let anchored = self.anchored_boxes(book);
-        let anchored = if anchored.is_empty() {
-            AnchoredBoxes::default()
-        } else {
-            self.settle(book, anchored, |index| {
-                Cow::Owned(self.section_fragments(&book.sections[index]))
-            })
-        };
+        let anchored = self.anchored(book, |index| {
+            Cow::Owned(self.section_fragments(&book.sections[index]))
+        });
         let mut flow = Flow::new(self, anchored);
         for section in &book.sections {
             let fragments = self.section_fragments(section);
             flow.section(section, &fragments);
         }
         flow.finish()
+    }
+
+    /// The boxes the sheet anchors, each on the page its anchor
+    /// landed on and against the block its insets measure from.
+    ///
+    /// A box inside a positioned block is laid out a second time: the
+    /// first layout breaks its lines to what the page area leaves it,
+    /// and the settling pass answers which block they measure from and
+    /// how wide that block is.
+    fn anchored<'f>(
+        &self,
+        book: &Book,
+        mut fragments: impl FnMut(usize) -> Cow<'f, [Fragment]>,
+    ) -> AnchoredBoxes {
+        let boxes = self.anchored_boxes(book, &[]);
+        if boxes.is_empty() {
+            return AnchoredBoxes::default();
+        }
+        let mut settled = self.settle(book, boxes, &mut fragments);
+        if let Some(within) = settled.narrowed() {
+            let boxes = self.anchored_boxes(book, &within);
+            settled.relaid(boxes, within);
+        }
+        settled
     }
 
     /// Fragments in, numbered pages out: fragmentation and page
@@ -366,12 +385,7 @@ impl Paginator<'_> {
         sections: impl IntoIterator<Item = &'f [Fragment]>,
     ) -> Paged {
         let sections: Vec<&[Fragment]> = sections.into_iter().collect();
-        let anchored = self.anchored_boxes(book);
-        let anchored = if anchored.is_empty() {
-            AnchoredBoxes::default()
-        } else {
-            self.settle(book, anchored, |index| Cow::Borrowed(sections[index]))
-        };
+        let anchored = self.anchored(book, |index| Cow::Borrowed(sections[index]));
         let mut flow = Flow::new(self, anchored);
         for (section, fragments) in book.sections.iter().zip(&sections) {
             flow.section(section, fragments);
