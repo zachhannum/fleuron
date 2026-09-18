@@ -4,4 +4,4 @@
  * module was built from as well: the workspace and both packages
  * release together.
  */
-export const VERSION = '0.14.0';
+export const VERSION = '0.15.0';
