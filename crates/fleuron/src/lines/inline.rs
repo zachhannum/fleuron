@@ -144,3 +144,127 @@ fn covered(runs: &[ShapedRun], range: &Range<usize>) -> Option<(usize, usize)> {
     }
     first.map(|first| (first, last))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::content::NodeId;
+    use crate::lines::testing::{Boxed, bordered, code, emphasis, layout_boxed, one_run, padded};
+
+    /// The tag of the fixtures below.
+    fn tag() -> NodeId {
+        NodeId::new(7)
+    }
+
+    /// A paragraph of prose with a tagged run in the middle of it.
+    fn tagged() -> Vec<crate::content::Inline> {
+        let mut inlines = one_run("roll for ");
+        inlines.push(code(tag(), "2d6"));
+        inlines.extend(one_run(" and add the modifier"));
+        inlines
+    }
+
+    /// Part: horizontal padding and border widths are charged to the
+    /// breaker, so a paragraph that fits on one line without them
+    /// needs a wider measure with them.
+    #[test]
+    fn the_edges_of_a_box_are_width_the_breaker_measures() {
+        assert_eq!(
+            layout_boxed(&tagged(), 200.0, &Boxed(Vec::new())).len(),
+            1,
+            "the fixture did not fit on one line",
+        );
+        for box_ in [padded(4.0), bordered(4.0)] {
+            let styles = Boxed(vec![(tag(), box_)]);
+            let narrowest = |styles: &Boxed| -> f32 {
+                (400..1000)
+                    .map(|steps| steps as f32 * 0.25)
+                    .find(|measure| layout_boxed(&tagged(), *measure, styles).len() == 1)
+                    .expect("the paragraph sets in one line at some measure")
+            };
+            let grew = narrowest(&styles) - narrowest(&Boxed(Vec::new()));
+            assert!(
+                (grew - 8.0).abs() <= 0.25,
+                "the measure grew by {grew}pt, not by the two edges of the box",
+            );
+        }
+    }
+
+    /// Part: a line yields one border box per inline element it
+    /// covers, outermost first, and a line with no box on it yields
+    /// none.
+    #[test]
+    fn a_line_yields_one_box_per_inline_element() {
+        let outer = NodeId::new(3);
+        let inlines = vec![emphasis(outer, {
+            let mut children = one_run("roll ");
+            children.push(code(tag(), "2d6"));
+            children
+        })];
+        let styles = Boxed(vec![(outer, padded(2.0)), (tag(), padded(4.0))]);
+        let lines = layout_boxed(&inlines, 200.0, &styles);
+        assert_eq!(lines.len(), 1);
+        let boxes = &lines[0].boxes;
+        assert_eq!(
+            boxes.iter().map(|box_| box_.node).collect::<Vec<_>>(),
+            [outer, tag()],
+            "the boxes are not outermost first",
+        );
+        assert!(
+            boxes[0].x < boxes[1].x && boxes[0].width > boxes[1].width,
+            "the nested box is not inside the one around it: {boxes:?}",
+        );
+        assert!(boxes.iter().all(|box_| box_.opens && box_.closes));
+
+        assert!(
+            layout_boxed(&tagged(), 200.0, &Boxed(Vec::new()))[0]
+                .boxes
+                .is_empty(),
+            "a line with no box on it carries one",
+        );
+    }
+
+    /// Part: padding above and below a run is no part of the line's
+    /// own height, and a box deep enough reaches past the line.
+    #[test]
+    fn a_box_does_not_grow_the_line_it_is_on() {
+        let plain = layout_boxed(&tagged(), 200.0, &Boxed(Vec::new()));
+        let styles = Boxed(vec![(tag(), padded(8.0))]);
+        let padded = layout_boxed(&tagged(), 200.0, &styles);
+        assert_eq!(padded[0].box_, plain[0].box_, "the box grew the line");
+
+        let box_ = padded[0].boxes[0];
+        assert!(
+            box_.above > padded[0].box_.baseline,
+            "a box 8pt deep does not reach past the line above it: {box_:?}",
+        );
+    }
+
+    /// A box that a line break cuts opens on the first of its lines
+    /// and closes on the last, and `clone` closes both edges of both.
+    #[test]
+    fn a_split_box_opens_and_closes_where_the_break_left_it() {
+        let inlines = vec![code(tag(), "2d6 plus the modifier you wrote down")];
+        let sliced = layout_boxed(&inlines, 100.0, &Boxed(vec![(tag(), padded(4.0))]));
+        assert!(sliced.len() > 1, "the tag did not break");
+        let edges: Vec<(bool, bool)> = sliced
+            .iter()
+            .flat_map(|line| &line.boxes)
+            .map(|box_| (box_.opens, box_.closes))
+            .collect();
+        assert_eq!(edges.first().copied(), Some((true, false)));
+        assert_eq!(edges.last().copied(), Some((false, true)));
+
+        let cloned = crate::lines::InlineBox {
+            cloned: true,
+            ..padded(4.0)
+        };
+        let cloned = layout_boxed(&inlines, 100.0, &Boxed(vec![(tag(), cloned)]));
+        assert!(
+            cloned
+                .iter()
+                .flat_map(|line| &line.boxes)
+                .all(|box_| box_.opens && box_.closes),
+            "a cloned box left an edge open",
+        );
+    }
+}

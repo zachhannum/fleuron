@@ -633,6 +633,29 @@ mod tests {
         assert_eq!(line_text(&lines[0]), "body code");
     }
 
+    /// Part: a run knows the innermost inline element it came from,
+    /// and the runs of the paragraph's own text name none.
+    #[test]
+    fn a_run_knows_the_inline_element_it_came_from() {
+        use crate::lines::testing::{Boxed, code, emphasis, layout_boxed, one_run, padded};
+        let (outer, inner) = (NodeId::new(3), NodeId::new(7));
+        let mut children = one_run("roll ");
+        children.push(code(inner, "2d6"));
+        let mut inlines = one_run("you ");
+        inlines.push(emphasis(outer, children));
+        let lines = layout_boxed(&inlines, 200.0, &Boxed(vec![(inner, padded(2.0))]));
+        assert_eq!(
+            lines[0]
+                .runs
+                .iter()
+                .map(|run| run.inline)
+                .collect::<Vec<_>>(),
+            [None, Some(outer), Some(inner)],
+            "{:?}",
+            lines[0].runs,
+        );
+    }
+
     /// A paragraph of only spaces produces no lines.
     #[test]
     fn spaces_only_paragraph_is_empty() {

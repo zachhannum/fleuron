@@ -638,6 +638,36 @@ mod tests {
         assert_eq!(style.inherit().custom, style.custom);
     }
 
+    /// Part: `ComputedStyle` carries the properties of an inline
+    /// box. A style that paints nothing and takes no width has none,
+    /// and padding alone is enough for one, because padding is width.
+    #[test]
+    fn an_inline_box_is_the_padding_border_and_background_of_a_style() {
+        let initial = ComputedStyle::initial();
+        assert_eq!(initial.inline_box(), None);
+
+        let mut padded = initial.clone();
+        padded.padding = Edges::all(4.0);
+        let box_ = padded.inline_box().expect("padding alone makes a box");
+        assert_eq!((box_.leading(), box_.above()), (4.0, 4.0));
+        assert!(!box_.cloned);
+
+        let mut tinted = initial.clone();
+        tinted.background.color = Some(Color::BLACK);
+        assert!(tinted.inline_box().is_some());
+
+        let mut ruled = initial.clone();
+        ruled.border = Edges::all(Border {
+            style: super::super::edges::BorderStyle::Solid,
+            width: 1.0,
+            color: None,
+        });
+        ruled.box_decoration_break = BoxDecorationBreak::Clone;
+        let box_ = ruled.inline_box().expect("a border makes a box");
+        assert_eq!(box_.border, Edges::all(1.0));
+        assert!(box_.cloned);
+    }
+
     /// Folios spell out in every style the subset supports, and a
     /// value a style has no spelling for falls back to decimal.
     #[test]

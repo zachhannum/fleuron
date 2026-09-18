@@ -69,3 +69,46 @@ impl Paginator<'_> {
         items
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::layout::testing::{paginate_styled, quote, section, tagged_paragraph};
+    use crate::pages::DrawItem;
+    use crate::style::Color;
+
+    /// A quotation with a tint of its own, holding a paragraph with a
+    /// tinted tag in it.
+    const NESTED_CSS: &str = "blockquote { background-color: #f4f1ea; padding: 6pt } \
+                              code { background-color: #858585; padding: 2pt 4pt }";
+
+    /// Part: a box an inline element paints goes over the background
+    /// of the block around it and under the glyphs it sits behind.
+    #[test]
+    fn an_inline_box_paints_between_the_block_and_its_glyphs() {
+        let pages = paginate_styled(
+            NESTED_CSS,
+            vec![section(vec![quote(vec![tagged_paragraph(
+                "roll for ",
+                "2d6",
+                " and add the modifier",
+            )])])],
+        );
+        let items = &pages[0].items;
+        let rect = |ink: Color| {
+            items
+                .iter()
+                .position(|item| matches!(item, DrawItem::Rect { color, .. } if *color == ink))
+                .unwrap_or_else(|| panic!("nothing was painted in {}", ink.to_hex()))
+        };
+        let block = rect(Color::rgb(0xf4, 0xf1, 0xea));
+        let chip = rect(Color::rgb(0x85, 0x85, 0x85));
+        let tag = items
+            .iter()
+            .position(|item| matches!(item, DrawItem::Text { text, .. } if text == "2d6"))
+            .expect("the tag was set");
+        assert!(
+            block < chip && chip < tag,
+            "the order was block {block}, chip {chip}, tag {tag}",
+        );
+    }
+}

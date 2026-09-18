@@ -1224,6 +1224,56 @@ check(
   scanAt !== -1 && tintAt > scanAt,
   `scan at ${scanAt}, tint at ${tintAt}`,
 );
+// An inline box. A chip on an emphasis is a rounded box per line the
+// emphasis reaches, painted before the run it tints, and the painter
+// draws its corners as arcs.
+const chipped = await client.preview([
+  styleOp(
+    'em { background-color: #858585; color: #ffffff; padding: 2pt 4pt; border-radius: 3pt }',
+  ),
+]);
+const chipPage =
+  chipped?.pages.find((page) =>
+    page.items.some((item) => item.kind === 'rounded' && item.color === '#858585'),
+  ) ?? null;
+const chips = (chipPage?.items ?? []).filter(
+  (item) => item.kind === 'rounded' && item.color === '#858585',
+);
+const firstChip = chips[0];
+const lastChip = chips[chips.length - 1];
+check(
+  'an emphasis with a chip paints one rounded box per line it reaches',
+  chips.length > 1 &&
+    firstChip?.kind === 'rounded' &&
+    lastChip?.kind === 'rounded' &&
+    firstChip.radii.topLeft.x === 3 &&
+    firstChip.radii.topRight.x === 0 &&
+    lastChip.radii.topRight.x === 3 &&
+    lastChip.radii.topLeft.x === 0,
+  `${chips.length} chips: ${JSON.stringify(firstChip)} ${JSON.stringify(lastChip)}`,
+);
+check(
+  'and the display structure puts each chip before the run it tints',
+  chipPage !== null &&
+    firstChip !== undefined &&
+    chipPage.items.indexOf(firstChip) <
+      chipPage.items.findIndex((item) => item.kind === 'text' && item.color === '#ffffff'),
+  chipPage?.items.map((item) => item.kind).join(' ') ?? '',
+);
+const chipSvg =
+  chipPage === null
+    ? ''
+    : paintPage(chipPage, {
+        fonts: chipped?.fonts ?? [],
+        assets: chipped?.assets ?? [],
+        asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      });
+check(
+  'and the painter draws its corners as arcs',
+  /<path d="M[^"]*A3 3 0 0 1 [^"]*Z" fill-rule="evenodd" fill="#858585"\/>/.test(chipSvg),
+  chipSvg.slice(0, 400),
+);
+
 const fadedRuns =
   translucent?.pages
     .flatMap((page) => page.items)
