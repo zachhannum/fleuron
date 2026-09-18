@@ -304,14 +304,15 @@ Marsh wrote down the two things he knew:
 1. the *Hesper* sailed from Smyrna
 2. nobody saw her come in
 
-What the vocabulary has no room for is set as prose and reported:
-
+\`\`\`sh
+if [ -f manifest.toml ]; then
+    read-manifest manifest.toml
+fi
 \`\`\`
-a code block, one paragraph
-\`\`\`
 
-Marsh was ~~certain~~ almost certain, and wrote to the shipping office
-that afternoon.
+What the vocabulary has no room for is set as prose and reported. Marsh
+was ~~certain~~ almost certain, and wrote to the shipping office that
+afternoon.
 
 \\pagebreak
 `;

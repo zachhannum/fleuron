@@ -98,6 +98,7 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `#` … `######` | `heading`, at that level |
 | a paragraph | `paragraph` |
 | `> …` | `blockquote`, nesting |
+| a fenced or an indented block | `code_block` |
 | `---` | `thematic_break` |
 | `\pagebreak` on a line of its own | `page_break` |
 | `\columnbreak` on a line of its own | `column_break` |
@@ -139,6 +140,26 @@ A table in markdown becomes a `table` in the tree. The row above the delimiter r
 The delimiter row gives each column an alignment: `:---` is left, `:---:` is center, and `---:` is right. Every cell of the column carries it as `align`. The engine applies it to the cell as `text-align`, and a `text-align` rule in a stylesheet takes priority over it.
 
 A row with fewer cells than the header row gets empty cells at its end. A table has no syntax for a cell that spans two columns or two rows.
+
+## Code blocks
+
+A fenced block and an indented block both become a `code_block` in the tree. The block holds text rather than inlines, because a code block has no markup inside it. The word after the opening fence becomes `info`. The engine carries `info` for a painter that reads it and makes nothing of it, so there is no syntax highlighting.
+
+The text keeps the newlines and the spaces the author wrote. A code block breaks its lines at its own newlines and nowhere else. Nothing in it hyphenates and no line of it is justified. A line wider than the measure runs past the measure, and the engine warns with the line and column of the block.
+
+The following example sets three lines, with the second one indented by four spaces:
+
+````markdown
+```sh
+if [ -f build.toml ]; then
+    build build.toml
+fi
+```
+````
+
+The engine has no tab stops, so the frontend replaces a tab with the spaces that reach the next four-column stop.
+
+A stylesheet reaches a code block as `pre`. The block holds text rather than an inline `code`, so `pre code` selects nothing. `code` is the inline code span. The built-in stylesheet gives `pre` a monospace family and space above and below it. See [the CSS subset](../css-subset.mdx#code-blocks).
 
 ## Page and column breaks
 
@@ -359,7 +380,6 @@ These constructs have no counterpart in the content tree. The frontend lays them
 
 | construct | becomes |
 |---|---|
-| a code block | a paragraph |
 | a definition list | one paragraph per entry |
 | a footnote | prose where the definition was written |
 | strikethrough, superscript, subscript | plain text |

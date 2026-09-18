@@ -75,6 +75,7 @@ A section is a chapter or a file. It is the unit of markdown input and the unit 
 | `heading` | `level` is 1 to 6, the range markdown defines. The parser rejects a level outside that range. `inlines` is the heading's text. |
 | `paragraph` | `inlines`. The unit line layout breaks. |
 | `blockquote` | `blocks`, not inlines. Blockquotes nest. |
+| `code_block` | `text` and an optional `info`. `text` is the block's own text, with the newlines and the indentation the author wrote. `info` is the word after the opening fence, carried for a painter that reads it. |
 | `thematic_break` | `---`. A scene break, set as space or an ornament depending on the stylesheet. |
 | `page_break` | `\pagebreak`. The content after it starts on a new page. It holds no text. |
 | `column_break` | `\columnbreak`. The content after it starts in the next column. It holds no text. |

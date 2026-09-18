@@ -788,11 +788,12 @@ impl Builder<'_, '_> {
             .any(|line| self.paginator.line_width(line) > measure);
         if over {
             let at = origin(self.source, position);
-            self.paginator.warn(
-                "A line of a code block is wider than the measure. It runs past it, because a                  code block breaks only where its own text does."
-                    .to_string(),
-                (!at.is_empty()).then_some(at),
+            let message = concat!(
+                "A line of a code block is wider than the measure. It runs past it, ",
+                "because a code block breaks only where its own text does.",
             );
+            self.paginator
+                .warn(message.to_string(), (!at.is_empty()).then_some(at));
         }
         let setting = Setting {
             x,

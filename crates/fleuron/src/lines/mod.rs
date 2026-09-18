@@ -407,6 +407,17 @@ impl LineLayout<'_> {
             if !span.ends_band && !hard {
                 continue;
             }
+            // A blank line of preformatted text takes a line of its
+            // own, so what the author wrote under it stays where it
+            // was written.
+            if band.is_none() && options.preformatted && hard {
+                spans.push(LineSpan {
+                    runs: 0..0,
+                    offset: 0.0,
+                    width: 0,
+                });
+                band = Some((Line::empty(), span.origin));
+            }
             let Some((mut line, _)) = band.take() else {
                 continue;
             };

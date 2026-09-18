@@ -967,6 +967,32 @@ hr {
 }
 ```
 
+### Code blocks
+
+A code block in the manuscript becomes a `pre`. The block is preformatted: it breaks its lines at its own newlines and nowhere else, its spaces stand where the author wrote them, nothing in it hyphenates, and no line of it is justified. No declaration turns any of that off. `white-space` is not in the subset, and a `pre` is preformatted whether or not a stylesheet says so.
+
+In the built-in stylesheet, a code block has a monospace family and space above and below it.
+
+The following example puts a rule above and below a code block and tints it:
+
+```css
+pre {
+  margin: 1.5em 0;
+  padding: 0.5em;
+  border-top: thin solid;
+  border-bottom: thin solid;
+  background-color: #f2f0eb;
+}
+```
+
+A code block holds text rather than an inline `code`, so `pre code` selects nothing. `code` is the inline code span, and a rule on it reaches code written among prose.
+
+A line wider than the measure runs past the measure, because a code block has nowhere else to break. The engine warns and names the line and column of the block. To keep a listing inside the measure, set a smaller `font-size` on `pre`, or break the line in the manuscript.
+
+A code block breaks across pages between two of its lines, and each line keeps its own indentation on the page it lands on. `orphans` and `widows` hold lines together at each end, and `break-inside: avoid` keeps the whole block on one page.
+
+The engine does no syntax highlighting. The word after the opening fence reaches the content tree as `info`, for a painter that reads it. See [the markdown mapping](reference/markdown.mdx#code-blocks).
+
 ### Tables
 
 A table in the manuscript becomes a grid. In the built-in stylesheet, the header row is bold, a rule runs under it, and a rule runs above and below the table.
@@ -1519,6 +1545,7 @@ code { font-family: monospace }
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, a width or a height on a positioned block, and `position`, `z-index` or `opacity` on an inline element |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
+| code blocks | `white-space`, `tab-size`, and syntax highlighting |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
 | counters | any counter other than `page`, and `counter-increment` |
