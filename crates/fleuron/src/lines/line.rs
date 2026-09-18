@@ -234,6 +234,19 @@ pub(super) struct Widths {
     /// Tracking charged to the last cluster starting before byte `i`.
     /// Empty where nothing is tracked, which is most paragraphs.
     trailing: Vec<f32>,
+    /// The inline boxes a break inside closes and opens again: their
+    /// byte range, their leading edge and their trailing edge, in
+    /// font units. Empty for every paragraph with no cloned box in
+    /// it, which is nearly all of them.
+    cloned: Vec<Cloned>,
+}
+
+/// One inline box that paints all four of its edges on every line it
+/// reaches, from `box-decoration-break: clone`.
+struct Cloned {
+    range: Range<usize>,
+    leading: f32,
+    trailing: f32,
 }
 
 impl Widths {
@@ -252,6 +265,16 @@ impl Widths {
             } else {
                 Vec::new()
             },
+            cloned: flat
+                .boxes
+                .iter()
+                .filter(|span| span.box_.cloned && !span.range.is_empty())
+                .map(|span| Cloned {
+                    range: span.range.clone(),
+                    leading: span.box_.leading() * units,
+                    trailing: span.box_.trailing() * units,
+                })
+                .collect(),
         };
         let bytes = text.as_bytes();
         for span in shaped {
@@ -308,6 +331,26 @@ impl Widths {
             return 0.0;
         }
         self.text[to] - self.text[from] - self.trailing.get(to).copied().unwrap_or(0.0)
+    }
+
+    /// The same for a whole line, with the edges a cloned box closes
+    /// at the break and opens again after it.
+    ///
+    /// A box the line runs into the middle of paints its trailing
+    /// edge at the break, and one the line starts in the middle of
+    /// paints its leading edge at the line's own start. The edges at
+    /// the two true ends of the box are charged by `build`.
+    pub(super) fn line_advance(&self, from: usize, to: usize) -> f32 {
+        let mut width = self.advance(from, to);
+        for cloned in &self.cloned {
+            if from > cloned.range.start && from < cloned.range.end {
+                width += cloned.leading;
+            }
+            if to > cloned.range.start && to < cloned.range.end {
+                width += cloned.trailing;
+            }
+        }
+        width
     }
 }
 

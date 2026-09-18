@@ -239,6 +239,33 @@ mod tests {
         );
     }
 
+    /// A cloned box paints an edge at the break, and that edge is
+    /// width. The line under the break opens with a leading edge the
+    /// sliced box does not have, so the cloned tag asks for that much
+    /// more measure to stay in two lines.
+    #[test]
+    fn the_edges_a_cloned_box_adds_at_a_break_are_width_too() {
+        let inlines = vec![code(tag(), "2d6 plus the modifier you wrote down")];
+        let box_ = padded(4.0);
+        let cloned = crate::lines::InlineBox {
+            cloned: true,
+            ..box_
+        };
+        let lines =
+            |box_, measure| layout_boxed(&inlines, measure, &Boxed(vec![(tag(), box_)])).len();
+        let narrowest = |box_| -> f32 {
+            (200..1000)
+                .map(|steps| steps as f32 * 0.25)
+                .find(|measure| lines(box_, *measure) == 2)
+                .expect("the tag sets in two lines at some measure")
+        };
+        let grew = narrowest(cloned) - narrowest(box_);
+        assert!(
+            (grew - 4.0).abs() <= 0.25,
+            "the cloned tag asked for {grew}pt more, not for the edge at the break",
+        );
+    }
+
     /// A box that a line break cuts opens on the first of its lines
     /// and closes on the last, and `clone` closes both edges of both.
     #[test]

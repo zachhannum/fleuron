@@ -161,7 +161,7 @@ impl Breaker<'_> {
         let start = self.breaks[a].next;
         let end = self.breaks[b].content_end.max(start);
         let measure = self.units(span.width);
-        let text = self.widths.advance(start, end);
+        let text = self.widths.line_advance(start, end);
         let spaces = self.widths.spaces[end] - self.widths.spaces[start];
         let hyphen = if self.breaks[b].hyphen {
             self.hyphen
