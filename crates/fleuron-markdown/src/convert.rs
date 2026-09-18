@@ -2318,6 +2318,21 @@ Ordinary prose.
         assert!(spans(inlines).is_empty(), "{inlines:?}");
     }
 
+    /// An escaped bracket is the character the author wrote, not the
+    /// bracket a span opens.
+    #[test]
+    fn an_escaped_bracket_opens_no_span() {
+        let (sections, warnings) = to_sections(
+            "# C\n\nA \\[words\\]{.number} b.\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let inlines = inlines_of(&sections[0].blocks[1]);
+        assert_eq!(inline_text(inlines), "A [words]{.number} b.");
+        assert!(spans(inlines).is_empty(), "{inlines:?}");
+    }
+
     /// Acceptance: a run the syntax cannot hold stays prose and
     /// warns, the same as one written on a line of its own.
     #[test]
