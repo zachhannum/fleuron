@@ -54,8 +54,13 @@ impl Paginator<'_> {
                 border.right = 0.0;
                 (radii.top_right, radii.bottom_right) = (Radius::SQUARE, Radius::SQUARE);
             }
+            let offset = line
+                .spans
+                .get(fragment.span)
+                .map(|span| span.offset)
+                .unwrap_or_default();
             items.extend(box_items(
-                x + fragment.x,
+                x + offset + fragment.x,
                 baseline - fragment.above,
                 w,
                 h,

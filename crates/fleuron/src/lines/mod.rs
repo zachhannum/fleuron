@@ -367,14 +367,14 @@ impl LineLayout<'_> {
                 if at.hyphen {
                     self.hyphenate(&mut line.runs, style);
                 }
-                let offset = span.origin - *origin;
                 let mut boxes = self.inline_fragments(
                     flat,
                     &mut line.runs[first..],
-                    offset,
+                    spans.len(),
                     start..at.content_end,
                 );
                 line.boxes.append(&mut boxes);
+                let offset = span.origin - *origin;
                 let width = line.runs[first..].iter().map(|run| run.advance).sum();
                 spans.push(LineSpan {
                     runs: first..line.runs.len(),

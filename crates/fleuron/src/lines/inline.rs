@@ -35,15 +35,16 @@ impl LineLayout<'_> {
     /// The boxes the inline elements covering `runs` paint there,
     /// outermost first.
     ///
-    /// `runs` are the runs of one span of one line, `offset` is where
-    /// that span sits from the line's own leading edge, and `text` is
-    /// the bytes of the paragraph the span holds. Each run comes out
-    /// charged with the edges that fall on it.
+    /// `runs` are the runs of the span `span` of one line, and `text`
+    /// is the bytes of the paragraph that span holds. Each box is
+    /// placed from the span's own leading edge, so the offset
+    /// alignment gives the span later moves the box with the text.
+    /// Each run comes out charged with the edges that fall on it.
     pub(super) fn inline_fragments(
         &self,
         flat: &FlatParagraph,
         runs: &mut [ShapedRun],
-        offset: f32,
+        span: usize,
         text: Range<usize>,
     ) -> Vec<InlineFragment> {
         let covering: Vec<Covering<'_>> = flat
@@ -60,7 +61,7 @@ impl LineLayout<'_> {
         }
         let mut fragments: Vec<InlineFragment> = Vec::new();
         let mut open: Vec<Open<'_>> = Vec::new();
-        let mut x = offset;
+        let mut x = 0.0;
         for index in 0..runs.len() {
             for covering in covering.iter().filter(|covering| covering.first == index) {
                 let box_ = &covering.span.box_;
@@ -71,6 +72,7 @@ impl LineLayout<'_> {
                 let (above, below) = self.content_area(&runs[index..=covering.last]);
                 fragments.push(InlineFragment {
                     node: covering.span.node,
+                    span,
                     x,
                     width: 0.0,
                     above: above + box_.above(),
@@ -292,6 +294,39 @@ mod tests {
                 .flat_map(|line| &line.boxes)
                 .all(|box_| box_.opens && box_.closes),
             "a cloned box left an edge open",
+        );
+    }
+    /// A band set in two spans places a box from the leading edge
+    /// of the span it is in, and names that span. What moves the span
+    /// later, such as alignment, moves the box with the text.
+    #[test]
+    fn a_box_in_a_divided_band_is_placed_from_its_own_span() {
+        use crate::lines::testing::{body, divided_band, registry, span_text};
+        use crate::lines::{LineBreakOptions, LineLayout, Opening};
+
+        let mut inlines = one_run("roll for the modifier and then ");
+        inlines.push(code(tag(), "2d6"));
+        inlines.extend(one_run(" more"));
+        let lines = LineLayout::new(registry()).layout_styled(
+            &inlines,
+            body(),
+            &Boxed(vec![(tag(), padded(4.0))]),
+            &divided_band(100.0, 20.0),
+            LineBreakOptions::default(),
+            Opening::default(),
+        );
+        let line = &lines[0];
+        assert_eq!(line.spans.len(), 2, "the band was not divided");
+        assert!(
+            span_text(line, 1).contains("2d6"),
+            "the tag is not in the second span: {:?}",
+            span_text(line, 1),
+        );
+        let box_ = line.boxes[0];
+        assert_eq!(box_.span, 1, "the box does not name the span it is in");
+        assert!(
+            box_.x < line.spans[1].offset,
+            "the box carries the offset of its own span: {box_:?}",
         );
     }
 }

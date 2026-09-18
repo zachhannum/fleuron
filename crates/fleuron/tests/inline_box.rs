@@ -340,6 +340,40 @@ fn vertical_padding_does_not_move_the_lines() {
     );
 }
 
+/// Alignment moves the line, and the chip moves with it. The tint
+/// opens its padding before the tagged run and closes it after,
+/// whichever way the line is set.
+#[test]
+fn a_chip_moves_with_the_line_that_alignment_moves() {
+    let mut left_edges = Vec::new();
+    for align in ["left", "center", "right"] {
+        let css = format!("{CHIP_CSS}\np {{ text-align: {align} }}");
+        let pages = pages(&tagged(), &css);
+        let painted = rects(&pages[0]);
+        assert_eq!(painted.len(), 1, "{align}: one tint: {painted:?}");
+        let (x, _, w, _, _) = painted[0];
+        let runs = runs(&pages[0]);
+        let tag = run_named(&runs, "2d6");
+        let after = run_named(&runs, "and add the modifier");
+        assert!(
+            close(x, tag.1 - 4.0),
+            "{align}: the tint opens at {x} and the run at {}",
+            tag.1,
+        );
+        assert!(
+            close(x + w, after.1),
+            "{align}: the tint closes at {} and the prose opens at {}",
+            x + w,
+            after.1,
+        );
+        left_edges.push(x);
+    }
+    assert!(
+        left_edges[0] < left_edges[1] && left_edges[1] < left_edges[2],
+        "alignment did not move the line: {left_edges:?}",
+    );
+}
+
 /// The tint is painted before the run it sits behind: `DrawItem`
 /// order is paint order.
 #[test]

@@ -139,8 +139,13 @@ impl std::ops::DerefMut for Spans {
 pub struct InlineFragment {
     /// The inline element the box belongs to.
     pub node: NodeId,
-    /// Points from the line's own leading edge to the leading edge of
-    /// the border box.
+    /// Which span of the line the box is set in, as an index into
+    /// `Line::spans`. An element covering two spans of one band has a
+    /// box in each of them.
+    pub span: usize,
+    /// Points from the leading edge of that span to the leading edge
+    /// of the border box. The span's own offset moves the box with
+    /// the text, which is what alignment moves.
     pub x: f32,
     /// Width of the border box, in points.
     pub width: f32,
