@@ -788,6 +788,75 @@ mod tests {
         );
     }
 
+    /// Acceptance: with `h2 + p::first-letter { initial-letter: 3 }`,
+    /// the inspection of the paragraph's `::first-letter` names the
+    /// paragraph's id, and inspecting that id answers for the
+    /// paragraph.
+    #[test]
+    fn a_pseudo_element_names_the_element_it_belongs_to() {
+        let mut session = under_h2(DROP_CAP);
+        let (paragraph, ..) = opening(&session);
+        let letter = paragraph.pseudo(PseudoElement::FirstLetter);
+        let inspection = session.inspect(letter).expect("the drop cap");
+        assert_eq!(inspection.node, Some(letter));
+        assert_eq!(inspection.element_node, Some(paragraph));
+
+        let element = inspection.element_node.expect("the element it belongs to");
+        let inspection = session.inspect(element).expect("the paragraph");
+        assert_eq!(inspection.node, Some(paragraph));
+        assert_eq!(inspection.element, "p");
+        assert_eq!(inspection.pseudo_element, None);
+    }
+
+    /// Acceptance: the inspection of an element names the element
+    /// itself, the same id as `node`.
+    #[test]
+    fn an_element_names_itself() {
+        let mut session = under_h2(DROP_CAP);
+        let (paragraph, text, _) = opening(&session);
+        let inspection = session.inspect(paragraph).expect("the paragraph");
+        assert_eq!(inspection.element_node, inspection.node);
+        assert_eq!(inspection.element_node, Some(paragraph));
+
+        let held = session.inspect(text).expect("the text it holds");
+        assert_eq!(held.element_node, Some(paragraph));
+    }
+
+    /// Acceptance: the inspection of a margin box names no element.
+    #[test]
+    fn a_margin_box_names_no_element() {
+        let mut session = Session::new(registry());
+        session.set_content(book(vec![section("one.md", prose("alpha", 12))]));
+        session.set_style(sheets("@page :left { @top-left { content: \"Left\" } }"));
+        let index = session
+            .preview()
+            .pages
+            .iter()
+            .position(|page| page.side == Side::Verso)
+            .expect("a left page");
+        let inspection = session
+            .inspect_margin_box(index, MarginBox::TopLeft)
+            .expect("the left page names @top-left");
+        assert_eq!(inspection.element, "@top-left");
+        assert_eq!(inspection.element_node, None);
+    }
+
+    /// Acceptance: the JSON the wasm binding returns carries the
+    /// element.
+    #[test]
+    fn the_json_of_an_inspection_carries_the_element() {
+        let mut session = under_h2(DROP_CAP);
+        let (paragraph, ..) = opening(&session);
+        let letter = paragraph.pseudo(PseudoElement::FirstLetter);
+        let drop_cap = session.inspect(letter).expect("the drop cap");
+        let json = serde_json::to_value(&drop_cap).expect("serializes");
+        assert_eq!(json["elementNode"], paragraph.get());
+
+        let plain = session.inspect(paragraph).expect("the paragraph");
+        let json = serde_json::to_value(&plain).expect("serializes");
+        assert_eq!(json["elementNode"], paragraph.get());
+    }
+
     /// Acceptance: a stylesheet edit that adds or removes a
     /// pseudo-element leaves the id of every content node unchanged.
     #[test]

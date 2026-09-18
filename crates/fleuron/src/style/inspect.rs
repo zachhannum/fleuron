@@ -39,6 +39,11 @@ pub struct Inspection {
     /// as `@top-left`. For a pseudo-element, the element it belongs
     /// to.
     pub element: String,
+    /// That element, by its id: the same as `node` for an element, and
+    /// the element a pseudo-element belongs to. `None` for a page
+    /// margin box.
+    #[serde(rename = "elementNode")]
+    pub element_node: Option<NodeId>,
     /// For a pseudo-element, its name as CSS writes it, as
     /// `::first-letter`.
     #[serde(rename = "pseudoElement", skip_serializing_if = "Option::is_none")]
@@ -204,6 +209,7 @@ impl Stylesheets {
         Some(Inspection {
             node: Some(styled),
             element: element.name.to_string(),
+            element_node: (element.id != NodeId::UNASSIGNED).then_some(element.id),
             pseudo_element: which.map(|which| which.to_css_string()),
             id: element.attributes.id.clone(),
             classes: element.attributes.classes.clone(),
@@ -294,6 +300,7 @@ impl Stylesheets {
         Some(Inspection {
             node: None,
             element: format!("@{}", which.keyword()),
+            element_node: None,
             pseudo_element: None,
             id: None,
             classes: Vec::new(),
@@ -456,6 +463,7 @@ blockquote p { font-size: 9pt }";
 
         assert_eq!(inspection.node, Some(paragraph));
         assert_eq!(inspection.element, "p");
+        assert_eq!(inspection.element_node, Some(paragraph));
         assert_eq!(inspection.id.as_deref(), Some("motto"));
         assert_eq!(inspection.classes, ["quiet", "small"]);
         let names: Vec<&str> = inspection
@@ -473,6 +481,7 @@ blockquote p { font-size: 9pt }";
         let held = sheets.inspect(&book, &tree, text).expect("a text node");
         assert_eq!(held.node, Some(emphasis), "text answers for its element");
         assert_eq!(held.element, "em");
+        assert_eq!(held.element_node, Some(emphasis));
     }
 
     #[test]
@@ -603,6 +612,7 @@ blockquote p { font-size: 9pt }";
         assert_eq!(inspection.element, "@top-left");
         assert_eq!(inspection.page.as_deref(), Some("@page :left"));
         assert_eq!(inspection.node, None);
+        assert_eq!(inspection.element_node, None);
         type Seen<'a> = (&'a str, u32, [u32; 3], Vec<(&'a str, &'a str, bool)>);
         let rules: Vec<Seen<'_>> = author_rules(&inspection)
             .iter()
