@@ -287,6 +287,51 @@ fn a_block_longer_than_a_page_breaks_and_keeps_its_shape() {
     assert!(pages.windows(2).all(|pair| pair[0] <= pair[1]));
 }
 
+/// A code block sets as it was written, whatever the cascade asks of
+/// the prose around it: no indent on the first line, and no mark
+/// hanging past the measure.
+#[test]
+fn a_code_block_takes_neither_an_indent_nor_a_hanging_mark() {
+    let markdown = "# C\n\n```\nread(name),\nread(name),\n```\n";
+    let plain = lay_out(markdown, "");
+    let asked = lay_out(
+        markdown,
+        "book { text-indent: 2em; hanging-punctuation: first allow-end last }",
+    );
+    let set = |output: &LayoutOutput| -> Vec<String> {
+        all_runs(output)
+            .into_iter()
+            .filter(|(_, run)| run.text.starts_with("read("))
+            .map(|(_, run)| format!("{:.2} {:?}", run.x, run.text))
+            .collect()
+    };
+    assert_eq!(set(&plain).len(), 2, "the block did not set its two lines");
+    assert_eq!(set(&plain), set(&asked));
+}
+
+/// A block with no text keeps its box, so what a sheet paints around
+/// an empty fence still reaches the page.
+#[test]
+fn an_empty_code_block_keeps_its_box() {
+    let output = lay_out(
+        "# C\n\n```\n```\n",
+        "pre { padding: 6pt; background-color: #eeeeee }",
+    );
+    let tints: Vec<(f32, f32)> = output.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Rect { w, h, color, .. } if color.to_hex() == "#eeeeee" => Some((*w, *h)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tints.len(), 1, "the empty block lost its box: {tints:?}");
+    assert!(
+        tints[0].1 >= 12.0,
+        "the padding is not in the box: {tints:?}"
+    );
+}
+
 /// Part: a line wider than the measure runs past it, and the engine
 /// warns naming the line and column the block was written at.
 #[test]

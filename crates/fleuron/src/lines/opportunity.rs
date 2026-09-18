@@ -107,10 +107,7 @@ impl LineLayout<'_> {
                 let mut offset = start;
                 for syllable in syllables.iter().take(syllables.len().saturating_sub(1)) {
                     offset += syllable.len();
-                    // A syllable boundary inside a ligature is not a
-                    // place a line can end: the glyph belongs to
-                    // neither half on its own.
-                    if offset > start && offset < boundary && widths.starts[offset] {
+                    if offset > start && offset < boundary && widths.hyphenates(offset) {
                         opportunities.push(Opportunity {
                             end: offset,
                             hyphen: true,
@@ -297,6 +294,29 @@ mod tests {
         let lines = layout_body("tick extraordinary", 40.0);
         assert!(lines.len() >= 2);
         assert_eq!(line_text(&lines[lines.len() - 1]), "extraordinary");
+    }
+
+    /// A code span takes no hyphen, whatever `hyphens: auto` asks for
+    /// around it, which is what the vocabulary says of one. The same
+    /// word as prose does break.
+    #[test]
+    fn a_code_span_takes_no_hyphen() {
+        use crate::content::{Inline, NodeId};
+        use crate::lines::LineLayout;
+        use crate::lines::testing::{code, hyphenated, one_run, registry};
+
+        let layout = LineLayout::new(registry());
+        let set = |inlines: &[Inline]| {
+            layout
+                .layout(inlines, body(), 44.0, hyphenated())
+                .iter()
+                .map(line_text)
+                .collect::<Vec<String>>()
+        };
+        let prose = set(&one_run("extraordinarily"));
+        assert!(prose.len() > 1, "the word did not break: {prose:?}");
+        let spanned = set(&[code(NodeId::new(3), "extraordinarily")]);
+        assert_eq!(spanned, ["extraordinarily"], "the code span was broken");
     }
 
     /// Hyphenation on: a long word splits at syllable boundaries and

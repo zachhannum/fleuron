@@ -244,6 +244,9 @@ pub(super) struct Widths {
     /// font units. Empty for every paragraph with no cloned box in
     /// it, which is nearly all of them.
     cloned: Vec<Cloned>,
+    /// Stretches set as they were written, which take no hyphen. An
+    /// inline code span is one.
+    literal: Vec<Range<usize>>,
 }
 
 /// One inline box that paints all four of its edges on every line it
@@ -255,6 +258,13 @@ struct Cloned {
 }
 
 impl Widths {
+    /// Whether a hyphen may be put at byte `at`: not inside a
+    /// cluster, whose glyph belongs to neither half of a break, and
+    /// not inside a stretch set as it was written.
+    pub(super) fn hyphenates(&self, at: usize) -> bool {
+        self.starts[at] && !self.literal.iter().any(|range| range.contains(&at))
+    }
+
     /// The widths of one flattened paragraph, shaped. `units` takes a
     /// length in points into the paragraph's own font units, which is
     /// how an inline box's edges are charged beside the glyphs.
@@ -280,6 +290,7 @@ impl Widths {
                     trailing: span.box_.trailing() * units,
                 })
                 .collect(),
+            literal: flat.literal.clone(),
         };
         let bytes = text.as_bytes();
         for span in shaped {

@@ -756,9 +756,11 @@ impl Builder<'_, '_> {
     /// One code block's lines as fragments.
     ///
     /// The text breaks at its own newlines and nowhere else. Nothing
-    /// in it hyphenates and no line of it is justified, whatever the
-    /// cascade asked for around it, because a break the author did not
-    /// write changes what the code says.
+    /// in it hyphenates, no line of it is justified, no mark of it
+    /// hangs past the measure, and its first line carries no indent,
+    /// whatever the cascade asked for around it. A character the
+    /// author did not put where the reader finds it changes what the
+    /// code says.
     fn code_block(
         &mut self,
         id: NodeId,
@@ -775,7 +777,6 @@ impl Builder<'_, '_> {
         let style = computed.paragraph();
         let options = LineBreakOptions {
             preformatted: true,
-            hanging: computed.hanging_punctuation,
             ..LineBreakOptions::default()
         };
         let spec = Measure::uniform(measure);
@@ -803,6 +804,9 @@ impl Builder<'_, '_> {
             cap: None,
             cap_x: 0.0,
         };
+        if lines.is_empty() {
+            self.emit_one(x, 0.0, Piece::Blank);
+        }
         let mut first = true;
         for fragment in set_lines(self.paginator, lines, &spec, &[], &setting) {
             self.emit(&mut first, fragment);

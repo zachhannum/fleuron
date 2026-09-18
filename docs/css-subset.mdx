@@ -579,6 +579,8 @@ Lines break the same way under all four. When justifying, `text-justify: inter-c
 
 The syllable patterns come from the book's language. `extra["language"]` in the [metadata](reference/markdown.mdx) names it as a BCP 47 tag, read by its primary subtag, so `fr-CA` is French. The engine hyphenates a book that declares no language as English. A language it has no patterns for leaves every word whole and warns, naming the tag. The language belongs to the book, so one book is hyphenated in one language.
 
+An inline `code` span and a `pre` take no hyphen, whatever `hyphens` asks for around them. A break the author did not write changes what the code says.
+
 The following example justifies the text, hyphenates it, and hangs punctuation into the margins:
 
 ```css
@@ -969,7 +971,7 @@ hr {
 
 ### Code blocks
 
-A code block in the manuscript becomes a `pre`. The block is preformatted: it breaks its lines at its own newlines and nowhere else, its spaces stand where the author wrote them, nothing in it hyphenates, and no line of it is justified. No declaration turns any of that off. `white-space` is not in the subset, and a `pre` is preformatted whether or not a stylesheet says so.
+A code block in the manuscript becomes a `pre`. The block is preformatted: it breaks its lines at its own newlines and nowhere else, its spaces stand where the author wrote them, nothing in it hyphenates, no line of it is justified, no mark of it hangs past the measure, and its first line carries no indent. No declaration turns any of that off. `white-space` is not in the subset, and a `pre` is preformatted whether or not a stylesheet says so.
 
 In the built-in stylesheet, a code block has a monospace family and space above and below it.
 
