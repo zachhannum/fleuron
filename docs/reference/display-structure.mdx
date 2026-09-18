@@ -202,6 +202,8 @@ The following methods take the id of a pseudo-element:
 
 The inspection of a pseudo-element names the element in `element` and the pseudo-element in `pseudo_element`, as `::first-letter`. The boxes of `::before` and `::after` on a block are the boxes of the block that they add. The boxes of the other pseudo-elements are the area that their text covers on each page. For a drop cap, that area is the rectangle of the letter.
 
+The inspection also carries `element_node`, the id of that element. A host that lists a pseudo-element beside its element moves from one to the other with it. `Session::inspect` takes that id and answers for the element. The id of the element does not follow from the id of the pseudo-element, so a host reads it from the inspection.
+
 ### `Rect`
 
 ```rust

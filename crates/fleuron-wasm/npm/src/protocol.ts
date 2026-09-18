@@ -186,6 +186,8 @@ export interface Inspection {
   node: number | null;
   /** The element name selectors match, or the margin box's at-rule, as `@top-left`. For a pseudo-element, the element it belongs to. */
   element: string;
+  /** That element, by its id: the same as `node` for an element, and the element a pseudo-element belongs to. `null` for a margin box. */
+  elementNode: number | null;
   /** For a pseudo-element, its name as CSS writes it, as `::first-letter`. */
   pseudoElement?: string;
   /** The id a selector reaches it by. */

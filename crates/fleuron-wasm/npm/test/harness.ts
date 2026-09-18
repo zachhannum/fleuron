@@ -625,6 +625,33 @@ check(
     renderedBeside !== null,
 );
 
+// A host that lists a pseudo-element beside its element moves from one
+// to the other by id, without knowing how the id of a pseudo-element
+// is packed.
+const capped = await client.preview([styleOp('p::first-letter { initial-letter: 3 }')]);
+const capRun = capped?.pages
+  .flatMap((page) => page.items)
+  .find((item) => item.kind === 'text' && item.pseudoElement !== null);
+const cap =
+  capRun?.kind === 'text' && capRun.pseudoElement !== null
+    ? await client.inspect(capRun.pseudoElement)
+    : null;
+const owns = cap === null || cap.elementNode === null ? null : await client.inspect(cap.elementNode);
+check(
+  'a pseudo-element answers with the element it belongs to, which answers for itself',
+  cap !== null &&
+    cap.pseudoElement === '::first-letter' &&
+    cap.elementNode !== null &&
+    cap.elementNode !== cap.node &&
+    owns !== null &&
+    owns.node === cap.elementNode &&
+    owns.element === cap.element &&
+    owns.elementNode === owns.node,
+  JSON.stringify(cap === null ? null : { node: cap.node, elementNode: cap.elementNode }),
+);
+check('a margin box answers with no element', (folioBox?.elementNode ?? null) === null);
+await client.preview([styleOp('')]);
+
 const wrong = preview.pages.map((page) => misplaced(page, preview)).find((bad) => bad !== null);
 check('every glyph is painted at the x the display structure gave it', wrong === undefined, wrong ?? '');
 const wrongSelection = preview.pages
