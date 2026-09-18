@@ -9,7 +9,7 @@
 
 use fleuron::content::{NodeId, SourceRange};
 use fleuron::images::{Asset, Assets, Intrinsic};
-use fleuron::pages::{DrawItem, Glyph, Page, Side};
+use fleuron::pages::{DrawItem, Glyph, Link, LinkTo, Page, PageBox, Side};
 use fleuron::style::Color;
 use fleuron::wire;
 use fleuron::{LayoutOutput, Warning};
@@ -164,6 +164,34 @@ fn section_ids() -> Vec<NodeId> {
     book.sections.iter().map(|section| section.id).collect()
 }
 
+fn page_box() -> impl Strategy<Value = PageBox> {
+    (
+        0u32..400,
+        coordinate(),
+        coordinate(),
+        coordinate(),
+        coordinate(),
+    )
+        .prop_map(|(page, x, y, width, height)| PageBox {
+            page,
+            x,
+            y,
+            width,
+            height,
+        })
+}
+
+fn link() -> impl Strategy<Value = Link> {
+    let to = prop_oneof![
+        (1u32..10_000, page_box()).prop_map(|(node, place)| LinkTo::Place {
+            node: NodeId::new(node),
+            place,
+        }),
+        "[a-z:/.]{0,30}".prop_map(LinkTo::Uri),
+    ];
+    (proptest::collection::vec(page_box(), 0..3), to).prop_map(|(areas, to)| Link { areas, to })
+}
+
 fn page() -> impl Strategy<Value = Page> {
     (
         1u32..2000,
@@ -171,14 +199,16 @@ fn page() -> impl Strategy<Value = Page> {
         1.0f32..2000.0,
         proptest::sample::subsequence(section_ids(), 0..=3),
         proptest::collection::vec(item(), 0..8),
+        proptest::collection::vec(link(), 0..3),
     )
-        .prop_map(|(number, width, height, sections, items)| Page {
+        .prop_map(|(number, width, height, sections, items, links)| Page {
             number,
             side: Side::of_number(number),
             width,
             height,
             sections,
             items,
+            links,
         })
 }
 

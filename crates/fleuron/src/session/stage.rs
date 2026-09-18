@@ -156,9 +156,9 @@ impl Session<'_> {
 
     /// Takes the pages of a flow, with the links on them and the
     /// outline of the book's headings.
-    fn place(&mut self, pages: Vec<Page>, targets: &BTreeMap<NodeId, PageBox>) {
+    fn place(&mut self, mut pages: Vec<Page>, targets: &BTreeMap<NodeId, PageBox>) {
         let (registry, assets) = (self.registry.get(), self.assets.get());
-        let (navigation, warnings) = navigation(&self.book, &pages, targets, registry);
+        let (navigation, warnings) = navigation(&self.book, &mut pages, targets, registry);
         self.link_warnings = warnings;
         let output = self
             .output

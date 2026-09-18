@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 14;
+pub const VERSION: u16 = 15;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -140,7 +140,7 @@ mod tests {
     use crate::content::{NodeId, PseudoElement, SourceRange};
     use crate::fonts::{AxisSetting, FaceAttributes, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
-    use crate::pages::{Corners, DrawItem, Glyph, Page, Radius, Side};
+    use crate::pages::{Corners, DrawItem, Glyph, Link, LinkTo, Page, PageBox, Radius, Side};
     use crate::style::{Color, Edges};
 
     fn output() -> LayoutOutput {
@@ -206,6 +206,40 @@ mod tests {
                         },
                         color: Color::rgba(51, 102, 153, 128),
                         layer: 0,
+                    },
+                ],
+                links: vec![
+                    Link {
+                        areas: vec![
+                            PageBox {
+                                page: 0,
+                                x: 72.0,
+                                y: 88.0,
+                                width: 40.0,
+                                height: 12.0,
+                            },
+                            PageBox {
+                                page: 0,
+                                x: 72.0,
+                                y: 102.0,
+                                width: 20.0,
+                                height: 12.0,
+                            },
+                        ],
+                        to: LinkTo::Place {
+                            node: NodeId::new(12),
+                            place: PageBox {
+                                page: 4,
+                                x: 72.0,
+                                y: 72.0,
+                                width: 252.0,
+                                height: 30.0,
+                            },
+                        },
+                    },
+                    Link {
+                        areas: vec![],
+                        to: LinkTo::Uri("https://example.com".into()),
                     },
                 ],
             }],
@@ -298,6 +332,7 @@ mod tests {
             height: 612.0,
             sections: vec![],
             items: vec![],
+            links: vec![],
         });
         let bytes = encode_range(&book, 1, 1).unwrap();
         let read = decode(&bytes).unwrap();

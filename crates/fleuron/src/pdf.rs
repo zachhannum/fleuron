@@ -10,8 +10,8 @@
 //! each run was shaped from travels with it, so the writer can build
 //! the glyph-to-character map that makes the text selectable.
 //!
-//! Links and the outline are layout's too: each link arrives with the
-//! area it covers and the place it goes, and each outline entry with
+//! Links and the outline are layout's too: each link arrives on its
+//! page with the areas it covers and the place it goes, and each outline entry with
 //! the place of its heading.
 
 use krilla::action::LinkAction;
@@ -33,7 +33,7 @@ use crate::LayoutOutput;
 use crate::content::Metadata;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
-use crate::pages::{Corners, DrawItem, Glyph, Link, LinkTo, OutlineEntry, Page, PageBox};
+use crate::pages::{Corners, DrawItem, Glyph, LinkTo, OutlineEntry, Page, PageBox};
 use crate::style::Color;
 
 /// What can go wrong turning the display structure into a PDF.
@@ -93,17 +93,18 @@ fn write_with(
     let images = embed_images(assets)?;
     let mut document = Document::new_with(settings);
     document.set_metadata(document_metadata(metadata));
-    let mut links = output.navigation.links.iter().peekable();
-    for (index, page) in output.pages.iter().enumerate() {
+    for page in &output.pages {
         let mut pdf_page = document.start_page_with(PageSettings::new(page.width, page.height));
         let mut surface = pdf_page.surface();
         for item in &page.items {
             paint(&mut surface, item, page, &fonts, &images, registry)?;
         }
         surface.finish();
-        while let Some(link) = links.next_if(|link| link.area.page as usize <= index) {
-            if let Some(annotation) = annotation(link) {
-                pdf_page.add_annotation(annotation);
+        for link in &page.links {
+            for area in &link.areas {
+                if let Some(annotation) = annotation(area, &link.to) {
+                    pdf_page.add_annotation(annotation);
+                }
             }
         }
         pdf_page.finish();
@@ -120,13 +121,12 @@ fn write_with(
         .map_err(|e| PdfError::Serialize(format!("{e:?}")))
 }
 
-/// One line of a link as the annotation a viewer follows. A link whose
-/// area is empty is none.
-fn annotation(link: &Link) -> Option<Annotation> {
-    let area = link.area;
+/// One line of a link as the annotation a viewer follows. An empty
+/// area is none.
+fn annotation(area: &PageBox, to: &LinkTo) -> Option<Annotation> {
     let rect = Rect::from_xywh(area.x, area.y, area.width, area.height)?;
-    let target = match &link.to {
-        LinkTo::Place(place) => Target::Destination(destination(place).into()),
+    let target = match to {
+        LinkTo::Place { place, .. } => Target::Destination(destination(place).into()),
         LinkTo::Uri(uri) => Target::Action(LinkAction::new(uri.clone()).into()),
     };
     Some(LinkAnnotation::new(rect, target).into())
@@ -776,6 +776,7 @@ mod tests {
                 height,
                 sections: Vec::new(),
                 items,
+                links: Vec::new(),
             }],
             fonts: registry().font_ref(0).cloned().into_iter().collect(),
             assets: Vec::new(),

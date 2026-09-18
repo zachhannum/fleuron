@@ -25,6 +25,7 @@ import {
   decodeDisplayList,
   faceFamily,
   initWasm,
+  linkAt,
   PAGE_BACKGROUND,
   PAGE_FURNITURE,
   paintPage,
@@ -649,6 +650,62 @@ check(
   }),
 );
 
+// Links. Each page carries the links set on it, resolved, and a host
+// follows one from the link alone: the place it goes names the page by
+// its place in the book, which is the range that fetches it.
+const crossReference = preview.pages
+  .flatMap((page, at) => page.links.map((link, index) => ({ page, at, link, index })))
+  .find(({ link }) => link.to.kind === 'place');
+check('the cross-reference in the fixture book is a link on its page', crossReference !== undefined);
+const crossTo = crossReference?.link.to;
+if (crossReference !== undefined && crossTo?.kind === 'place') {
+  const { page, at, link, index } = crossReference;
+  const { node, place } = crossTo;
+  const area = link.areas[0];
+  check(
+    'linkAt finds the link at a point inside its area, and nothing just outside it',
+    area !== undefined &&
+      linkAt(page, area.x + area.width / 2, area.y + area.height / 2) === link &&
+      linkAt(page, area.x + area.width / 2, area.y - 1) === null,
+    JSON.stringify(link.areas),
+  );
+  const marked = paintPage(page, { fonts: preview.fonts });
+  const marks = [...marked.matchAll(/<rect [^>]*data-link="(\d+)"/g)].map((mark) => Number(mark[1]));
+  check(
+    'the painter marks each line of each link over the selection layer, by its index',
+    marks.length === page.links.flatMap((each) => each.areas).length &&
+      marks.includes(index) &&
+      marked.indexOf('data-link-layer') > marked.indexOf('data-selection-layer') &&
+      !marked.includes('<a '),
+    `${marks.length} marks`,
+  );
+  const unmarked = paintPage(page, { fonts: preview.fonts, links: false });
+  check(
+    'a host that marks links itself turns the marks off, and the rest of the page is the same',
+    !unmarked.includes('data-link') &&
+      marked.replace(/<g data-link-layer="true">.*?<\/g>/, '') === unmarked,
+  );
+  const span = await client.preview([], { first: at, count: 1 });
+  const held = span?.pages[0]?.links[index];
+  const outside = place.page !== at;
+  const landing = held?.to.kind === 'place' ? await client.preview([], { first: held.to.place.page, count: 1 }) : null;
+  const [folio] = await client.foliosOf([node]);
+  check(
+    'a host that holds a span without the target follows the link to it from the link alone',
+    outside &&
+      JSON.stringify(held) === JSON.stringify(link) &&
+      landing?.first === place.page &&
+      folio?.at === place.page,
+    `link on page ${at} to ${JSON.stringify(place)}, the target opens at ${folio?.at}`,
+  );
+}
+check(
+  'a page with no link paints no mark',
+  preview.pages
+    .filter((page) => page.links.length === 0)
+    .every((page) => !paintPage(page, { fonts: preview.fonts }).includes('data-link')),
+);
+
 // A face the painter was told nothing about still paints: the stack
 // falls through to whatever the reader has.
 const unnamed = paintPage(preview.pages[0] as Page, { fonts: [] });
@@ -862,7 +919,7 @@ function rects(svg: string): Record<string, number>[] {
         ]),
       ),
     )
-    .filter((rect) => !('asset' in rect));
+    .filter((rect) => !('asset' in rect) && !('link' in rect));
 }
 
 /** Two lengths in points, the same to within a rounding of a float. */

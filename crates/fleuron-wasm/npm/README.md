@@ -34,6 +34,36 @@ are handled internally, and all three stay exported.
 `fleuron-react` is the same thing as a component, with no engine logic
 of its own.
 
+## Links
+
+A click on a link in the preview follows it. A link to a place in the
+book turns to the page of that place. A link to a url opens the url in
+a new window.
+
+`onLink` lets the host decide what a click does. The preview calls it
+with the link and the click event, before it follows the link. If it
+returns `false`, the page does not turn. If the host gives an
+`onLink`, the preview opens no url.
+
+```js
+const preview = await Preview.mount(document.querySelector('#book'), {
+  onLink: (link) => {
+    if (link.to.kind === 'uri') {
+      openTab(link.to.url);
+    }
+  },
+});
+```
+
+A host that draws pages with `paintPage` reads `page.links`. Each link
+has one box for each line, in points, and a target. A target in the
+book carries the element, its box, and the index of its page in the
+book, which is the `first` of the range that fetches that page.
+`linkAt(page, x, y)` gives the link at a point in page points. The
+painter marks each box with a transparent `rect[data-link]` that takes
+no pointer events. `paintPage(page, { links: false })` leaves the marks
+out.
+
 ## In a worker
 
 ```js

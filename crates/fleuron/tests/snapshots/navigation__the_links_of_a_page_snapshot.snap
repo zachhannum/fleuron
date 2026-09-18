@@ -1,0 +1,50 @@
+---
+source: crates/fleuron/tests/navigation.rs
+expression: page.links
+---
+[
+  {
+    "areas": [
+      {
+        "page": 0,
+        "x": 69.784996,
+        "y": 79.7225,
+        "width": 44.341003,
+        "height": 14.354996
+      }
+    ],
+    "to": {
+      "Uri": "https://example.com/society"
+    }
+  },
+  {
+    "areas": [
+      {
+        "page": 0,
+        "x": 184.08595,
+        "y": 95.1225,
+        "width": 192.83018,
+        "height": 14.355003
+      },
+      {
+        "page": 0,
+        "x": 54.0,
+        "y": 110.52251,
+        "width": 93.89598,
+        "height": 14.354996
+      }
+    ],
+    "to": {
+      "Place": {
+        "node": 73,
+        "place": {
+          "page": 2,
+          "x": 54.0,
+          "y": 54.0,
+          "width": 336.0,
+          "height": 25.199999
+        }
+      }
+    }
+  }
+]

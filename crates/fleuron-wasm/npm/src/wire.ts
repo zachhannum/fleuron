@@ -8,8 +8,10 @@
  * catches the day those two stop agreeing.
  */
 
+import type { PageBox } from './protocol.js';
+
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 14;
+export const WIRE_VERSION = 15;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -305,7 +307,47 @@ export interface Page {
    * the order the blocks are written.
    */
   items: DrawItem[];
+  /**
+   * The links set on this page, in the order their text is painted.
+   * Empty on a page with no link. {@link linkAt} finds the one under a
+   * point.
+   */
+  links: Link[];
 }
+
+/** One link on one page: the area its text covers on each line, and where it goes. */
+export interface Link {
+  /**
+   * One area for each line the link is set on in this page. Each runs
+   * across the link's glyphs on that line, the text of its `::before`
+   * and `::after` included, and down from the ascent to the descent of
+   * the face. The space between two lines is in none of them.
+   */
+  areas: PageBox[];
+  /** Where the link goes. */
+  to: LinkTo;
+}
+
+/**
+ * Where a link goes: a place in the book, or a url outside it.
+ *
+ * A place carries everything a host needs to follow it without the
+ * page it lands on: `place.page` is the place of that page in the
+ * book, counting from 0, as `Request.first` counts.
+ */
+export type LinkTo =
+  | {
+      kind: 'place';
+      /** The id of the element the link names. */
+      node: number;
+      /** The box of that element, on the page it opens on. */
+      place: PageBox;
+    }
+  | {
+      kind: 'uri';
+      /** The url, as the manuscript wrote it. */
+      url: string;
+    };
 
 /** One axis of a variable face, pinned. */
 export interface AxisSetting {
@@ -579,6 +621,26 @@ function item(r: Reader): DrawItem {
   }
 }
 
+function pageBox(r: Reader): PageBox {
+  return { page: r.varint(), x: r.f32(), y: r.f32(), width: r.f32(), height: r.f32() };
+}
+
+function linkTo(r: Reader): LinkTo {
+  const variant = r.varint();
+  switch (variant) {
+    case 0:
+      return { kind: 'place', node: r.varint(), place: pageBox(r) };
+    case 1:
+      return { kind: 'uri', url: r.string() };
+    default:
+      throw new WireError(`link target ${variant} is not one this reader reads`);
+  }
+}
+
+function link(r: Reader): Link {
+  return { areas: r.seq(() => pageBox(r)), to: linkTo(r) };
+}
+
 function page(r: Reader): Page {
   const number = r.varint();
   const side = SIDES[r.varint()];
@@ -592,7 +654,24 @@ function page(r: Reader): Page {
     height: r.f32(),
     sections: r.seq(() => r.varint()),
     items: r.seq(() => item(r)),
+    links: r.seq(() => link(r)),
   };
+}
+
+/**
+ * The link under a point on a page, in points from the page's top-left
+ * corner, or `null` where there is none. A host that hit tests on its
+ * own converts the pointer to page points and asks this, rather than
+ * reading the element under the pointer.
+ */
+export function linkAt(page: Page, x: number, y: number): Link | null {
+  return (
+    page.links.find((link) =>
+      link.areas.some(
+        (area) => x >= area.x && x <= area.x + area.width && y >= area.y && y <= area.y + area.height,
+      ),
+    ) ?? null
+  );
 }
 
 function font(r: Reader): FontRefEntry {
