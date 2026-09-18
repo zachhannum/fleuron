@@ -37,7 +37,8 @@ fn nodes(book: &Book) -> Vec<Node> {
                 Inline::Break { .. } => (None, None),
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => (None, Some(children)),
+                | Inline::Link { children, .. }
+                | Inline::Span { children, .. } => (None, Some(children)),
             };
             out.push(Node {
                 id: fleuron::content::inline_id(inline),

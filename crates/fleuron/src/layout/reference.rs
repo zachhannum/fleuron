@@ -226,7 +226,8 @@ fn inline_texts(inlines: &[Inline], anchors: &Anchors, texts: &mut BTreeMap<Node
         });
         if let Inline::Emphasis { children, .. }
         | Inline::Strong { children, .. }
-        | Inline::Link { children, .. } = inline
+        | Inline::Link { children, .. }
+        | Inline::Span { children, .. } = inline
         {
             inline_texts(children, anchors, texts);
         }
@@ -375,9 +376,9 @@ impl Named {
             let (href, children) = match inline {
                 Inline::Text { .. } | Inline::Break { .. } => continue,
                 Inline::Code { .. } => (None, None),
-                Inline::Emphasis { children, .. } | Inline::Strong { children, .. } => {
-                    (None, Some(children))
-                }
+                Inline::Emphasis { children, .. }
+                | Inline::Strong { children, .. }
+                | Inline::Span { children, .. } => (None, Some(children)),
                 Inline::Link { url, children, .. } => (Some(url.as_str()), Some(children)),
             };
             let id = inline_id(inline);

@@ -1080,7 +1080,8 @@ fn named_inlines<'a>(
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } => named_inlines(children, source, first, warnings),
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => named_inlines(children, source, first, warnings),
         }
     }
 }

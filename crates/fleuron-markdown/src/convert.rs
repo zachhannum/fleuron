@@ -279,12 +279,16 @@ impl<'a> Converter<'a> {
                 classes,
                 attrs,
             }) => {
-                if !attrs.is_empty() {
+                let spanned = self.heading_run(read).is_some();
+                if !attrs.is_empty() && !spanned {
                     self.warn(UNSUPPORTED_HEADING_ATTRIBUTE, at);
                 }
-                let named = Attributes {
-                    id: id.map(|id| id.into_string()),
-                    classes: classes.into_iter().map(|c| c.into_string()).collect(),
+                let named = match spanned {
+                    true => Attributes::default(),
+                    false => Attributes {
+                        id: id.map(|id| id.into_string()),
+                        classes: classes.into_iter().map(|c| c.into_string()).collect(),
+                    },
                 };
                 self.push_inlines(InlineFor::Heading(heading_level(level), named), read)
             }
@@ -504,9 +508,24 @@ impl<'a> Converter<'a> {
     /// files that block instead, so a heading may open a section and a
     /// paragraph joins the one already open.
     fn close_inlines(&mut self) {
-        let Some((children, kind, read)) = self.inlines.pop() else {
+        let Some((mut children, kind, read)) = self.inlines.pop() else {
             return;
         };
+        if matches!(kind, InlineFor::Heading(..))
+            && let Some(run) = self.heading_run(read)
+        {
+            children.push(Inline::Text {
+                id: Default::default(),
+                value: self.text[run.clone()].to_string(),
+                attributes: Attributes::default(),
+                position: Some(self.lines.position(run.start)),
+                span: Some(SourceSpan {
+                    start: run.start as u32,
+                    end: run.end as u32,
+                }),
+            });
+        }
+        let children = self.fold_spans(children);
         let (at, span) = (Some(read.position), Some(read.span));
         match kind {
             InlineFor::Emphasis => self.inline(Inline::Emphasis {
@@ -800,6 +819,93 @@ impl<'a> Converter<'a> {
         None
     }
 
+    /// Folds every `[run]{.class}` of one inline frame into a span.
+    ///
+    /// A bracketed run with no destination arrives as a bracket of
+    /// its own, the run, a second bracket, and the text after it, so
+    /// a span is read out of what a frame collected rather than out
+    /// of one event. The brace run has to follow the bracket
+    /// directly: `[words] {.class}` is prose.
+    fn fold_spans(&mut self, mut children: Vec<Inline>) -> Vec<Inline> {
+        if !self.options.dialect.attributes {
+            return children;
+        }
+        let mut at = 2;
+        while at < children.len() {
+            let Some((inside, rest, moved)) = brace_head(&children[at]) else {
+                at += 1;
+                continue;
+            };
+            let (inside, rest) = (inside.to_string(), rest.to_string());
+            if !bracket(&children[at - 1], ']') {
+                at += 1;
+                continue;
+            }
+            let Some(open) = children[..at - 1]
+                .iter()
+                .rposition(|inline| bracket(inline, '['))
+            else {
+                at += 1;
+                continue;
+            };
+            let Some(attributes) = named(&inside) else {
+                if let Some(position) = inline_position(&children[at]) {
+                    self.warn(UNSUPPORTED_ATTRIBUTE, position);
+                }
+                at += 1;
+                continue;
+            };
+            let position = inline_position(&children[open]);
+            let span = inline_span(&children[open]).map(|opened| SourceSpan {
+                start: opened.start,
+                end: moved.map_or(opened.end, |moved| moved.start),
+            });
+            let inner: Vec<Inline> = children.drain(open + 1..at - 1).collect();
+            let mut folded = vec![Inline::Span {
+                id: Default::default(),
+                children: inner,
+                attributes,
+                position,
+                span,
+            }];
+            if !rest.is_empty() {
+                folded.push(Inline::Text {
+                    id: Default::default(),
+                    value: rest,
+                    attributes: Attributes::default(),
+                    position: moved.map(|moved| self.lines.position(moved.start as usize)),
+                    span: moved,
+                });
+            }
+            at = open + folded.len();
+            // The bracket, the bracket after it, and the brace run.
+            children.splice(open..open + 3, folded);
+        }
+        children
+    }
+
+    /// The trailing brace run of a heading that closes a bracketed
+    /// run, as bytes of the source.
+    ///
+    /// The parser takes the run at the end of a heading line as the
+    /// heading's own names. A run directly after `]` belongs to the
+    /// span it closes, and the heading hands it back.
+    fn heading_run(&self, read: Read) -> Option<Range<usize>> {
+        if !self.options.dialect.attributes {
+            return None;
+        }
+        let start = read.span.start as usize;
+        let end = (read.span.end as usize).min(self.text.len());
+        let line = self.text.get(start..end)?.trim_end();
+        if !line.ends_with('}') {
+            return None;
+        }
+        let open = line.rfind('{')?;
+        line[..open]
+            .ends_with(']')
+            .then(|| start + open..start + line.len())
+    }
+
     /// Files an attribute line that named nothing as the prose it was
     /// read as.
     fn dangling(&mut self) {
@@ -1069,6 +1175,29 @@ fn brace_text(inlines: &[Inline]) -> Option<&str> {
         return None;
     };
     value.trim().strip_prefix('{')?.strip_suffix('}')
+}
+
+/// A brace run written at the head of one text run: what it names,
+/// the text after the run, and where that text was read from.
+fn brace_head(inline: &Inline) -> Option<(&str, &str, Option<SourceSpan>)> {
+    let Inline::Text { value, span, .. } = inline else {
+        return None;
+    };
+    let inside = value.strip_prefix('{')?;
+    let close = inside.find('}')?;
+    let rest = &inside[close + 1..];
+    let taken = (value.len() - rest.len()) as u32;
+    let moved = span.map(|span| SourceSpan {
+        start: (span.start + taken).min(span.end),
+        end: span.end,
+    });
+    Some((&inside[..close], rest, moved))
+}
+
+/// Whether one inline is a bracket the parser wrote on its own,
+/// which is how a bracketed run with no destination arrives.
+fn bracket(inline: &Inline, which: char) -> bool {
+    matches!(inline, Inline::Text { value, .. } if value.len() == 1 && value.starts_with(which))
 }
 
 /// The classes and id a brace run holds: `.class` and `#id`, in any
@@ -2032,6 +2161,211 @@ Ordinary prose.
                 "{warnings:?}"
             );
         }
+    }
+
+    /// The inlines of one block, whatever kind of block it is.
+    fn inlines_of(block: &Block) -> &[Inline] {
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => inlines,
+            other => panic!("expected text, got {other:?}"),
+        }
+    }
+
+    /// The classes of one span, and the text inside it.
+    fn spans(inlines: &[Inline]) -> Vec<(Vec<String>, String)> {
+        inlines
+            .iter()
+            .filter_map(|inline| match inline {
+                Inline::Span { attributes, .. } => Some((
+                    attributes.classes.clone(),
+                    inline_text(std::slice::from_ref(inline)),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Acceptance: a bracketed run followed by a brace run is a span
+    /// the sheet names, and the prose around it is untouched.
+    #[test]
+    fn a_bracketed_run_before_a_brace_run_is_a_span() {
+        let (sections, warnings) = to_sections(
+            "# C\n\nA [some words]{.number #one} b.\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let inlines = inlines_of(&sections[0].blocks[1]);
+        assert_eq!(inline_text(inlines), "A some words b.");
+        let [
+            Inline::Text { .. },
+            Inline::Span { attributes, .. },
+            Inline::Text { value, .. },
+        ] = inlines
+        else {
+            panic!("expected a span among prose, got {inlines:?}");
+        };
+        assert_eq!(attributes.classes, ["number"]);
+        assert_eq!(attributes.id.as_deref(), Some("one"));
+        assert_eq!(value, " b.");
+    }
+
+    /// Acceptance: two runs of one heading, each named by the sheet,
+    /// inside the one heading. The run at the end of the line is the
+    /// span's rather than the heading's.
+    #[test]
+    fn a_heading_holds_two_named_runs() {
+        let (sections, warnings) = to_sections(
+            "# [Chapter One]{.number} [The Road]{.title}\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let heading = &sections[0].blocks[0];
+        assert!(block_attributes(heading).is_empty(), "{heading:?}");
+        assert_eq!(text_of(heading), "Chapter One The Road");
+        assert_eq!(
+            spans(inlines_of(heading)),
+            [
+                (vec!["number".to_string()], "Chapter One".to_string()),
+                (vec!["title".to_string()], "The Road".to_string()),
+            ]
+        );
+    }
+
+    /// A heading still takes the run written after its own text.
+    #[test]
+    fn a_heading_keeps_a_trailing_run_of_its_own() {
+        let sections = read("# [Chapter One]{.number} The Road {#ch1 .grand}\n");
+        let heading = &sections[0].blocks[0];
+        assert_eq!(
+            block_attributes(heading),
+            &Attributes {
+                id: Some("ch1".into()),
+                classes: vec!["grand".into()],
+            }
+        );
+        assert_eq!(text_of(heading), "Chapter One The Road");
+        assert_eq!(
+            spans(inlines_of(heading)),
+            [(vec!["number".to_string()], "Chapter One".to_string())]
+        );
+    }
+
+    /// A span holds the markup written inside it, and a span written
+    /// inside another is its child.
+    #[test]
+    fn a_span_holds_the_markup_inside_it() {
+        let sections = read("# C\n\n[a *b* [c]{.inner}]{.outer}\n");
+        let inlines = inlines_of(&sections[0].blocks[1]);
+        let [
+            Inline::Span {
+                children,
+                attributes,
+                ..
+            },
+        ] = inlines
+        else {
+            panic!("expected one span, got {inlines:?}");
+        };
+        assert_eq!(attributes.classes, ["outer"]);
+        assert_eq!(inline_text(children), "a b c");
+        assert!(
+            matches!(children[1], Inline::Emphasis { .. }),
+            "{children:?}"
+        );
+        assert_eq!(
+            spans(children),
+            [(vec!["inner".to_string()], "c".to_string())]
+        );
+    }
+
+    /// A span is read from the bytes it was written at, the brackets
+    /// and the run included.
+    #[test]
+    fn a_span_is_read_from_the_bytes_it_was_written_at() {
+        let markdown = "# C\n\nA [words]{.number} b.\n";
+        let sections = read(markdown);
+        let inlines = inlines_of(&sections[0].blocks[1]);
+        let Inline::Span { position, span, .. } = &inlines[1] else {
+            panic!("expected a span, got {inlines:?}");
+        };
+        let span = span.expect("a parsed span was read from somewhere");
+        assert_eq!(
+            &markdown[span.start as usize..span.end as usize],
+            "[words]{.number}"
+        );
+        assert_eq!(*position, Some(SourcePos { line: 3, column: 3 }));
+        let Inline::Text { span: after, .. } = &inlines[2] else {
+            panic!("expected prose after the span, got {inlines:?}");
+        };
+        let after = after.expect("prose was read from somewhere");
+        assert_eq!(&markdown[after.start as usize..after.end as usize], " b.");
+    }
+
+    /// Acceptance: the brace run has to follow the bracket directly.
+    /// A gap between them is prose, and says nothing.
+    #[test]
+    fn a_gap_before_the_brace_run_is_prose() {
+        let (sections, warnings) = to_sections(
+            "# C\n\nA [words] {.number} b.\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let inlines = inlines_of(&sections[0].blocks[1]);
+        assert_eq!(inline_text(inlines), "A [words] {.number} b.");
+        assert!(spans(inlines).is_empty(), "{inlines:?}");
+    }
+
+    /// Acceptance: a run the syntax cannot hold stays prose and
+    /// warns, the same as one written on a line of its own.
+    #[test]
+    fn a_span_run_the_syntax_cannot_hold_stays_prose_and_warns() {
+        for run in ["{key=value}", "{#one #two}", "{.9lives}"] {
+            let (sections, warnings) = to_sections(
+                &format!("# C\n\nA [words]{run} b.\n"),
+                "test.md",
+                &Options::default(),
+            );
+            let inlines = inlines_of(&sections[0].blocks[1]);
+            assert_eq!(inline_text(inlines), format!("A [words]{run} b."));
+            assert!(spans(inlines).is_empty(), "{run}: {inlines:?}");
+            assert_eq!(warnings.len(), 1, "{run}: {warnings:?}");
+            assert!(
+                warnings[0].message.contains("Unsupported attribute"),
+                "{warnings:?}"
+            );
+        }
+    }
+
+    /// Acceptance: under CommonMark the brackets and the braces are
+    /// prose, and the tree holds no span.
+    #[test]
+    fn common_mark_reads_a_bracketed_run_as_prose() {
+        let plain = Options {
+            dialect: Dialect::common_mark(),
+            ..Options::default()
+        };
+        let (sections, warnings) = to_sections(
+            "# [Chapter One]{.number} [The Road]{.title}\n\nA [words]{.number} b.\n",
+            "test.md",
+            &plain,
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            text_of(&sections[0].blocks[0]),
+            "[Chapter One]{.number} [The Road]{.title}"
+        );
+        assert_eq!(text_of(&sections[0].blocks[1]), "A [words]{.number} b.");
+        assert!(
+            sections[0]
+                .blocks
+                .iter()
+                .all(|block| spans(inlines_of(block)).is_empty()),
+            "{:?}",
+            sections[0].blocks,
+        );
     }
 
     /// Under CommonMark the braces are four characters of prose, and

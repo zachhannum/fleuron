@@ -2663,7 +2663,8 @@ fn append_inlines(inlines: &[Inline], text: &mut String) {
             Inline::Break { .. } => text.push('\n'),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } => append_inlines(children, text),
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => append_inlines(children, text),
         }
     }
 }
