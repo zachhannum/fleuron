@@ -267,7 +267,8 @@ impl Source {
                         }
                     }
                 }
-                Block::ThematicBreak { .. }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
                 | Block::PageBreak { .. }
                 | Block::ColumnBreak { .. }
                 | Block::Image { .. } => {}

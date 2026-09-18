@@ -17,7 +17,7 @@ use fleuron_markdown::{Options, Sections, assemble, to_sections};
 /// to the mapping, and page counts move with it.
 const DIGESTS: [(Corpus, u64); 2] = [
     (Corpus::PrideAndPrejudice, 9189800476242993549),
-    (Corpus::MonteCristo, 2340015116922178090),
+    (Corpus::MonteCristo, 2659680016170457565),
 ];
 
 #[test]
@@ -63,6 +63,7 @@ fn hash_blocks(blocks: &[Block], hasher: &mut DefaultHasher) {
             Block::PageBreak { .. } => "page_break".hash(hasher),
             Block::ColumnBreak { .. } => "column_break".hash(hasher),
             Block::Image { url, alt, .. } => ("image", url, alt).hash(hasher),
+            Block::CodeBlock { info, text, .. } => ("code_block", info, text).hash(hasher),
             Block::List {
                 ordered,
                 start,
@@ -204,7 +205,8 @@ fn strip_blocks(blocks: &mut [Block]) {
                 (*position, *span) = (None, None);
                 strip_blocks(blocks);
             }
-            Block::ThematicBreak { position, span, .. }
+            Block::CodeBlock { position, span, .. }
+            | Block::ThematicBreak { position, span, .. }
             | Block::PageBreak { position, span, .. }
             | Block::ColumnBreak { position, span, .. }
             | Block::Image { position, span, .. } => (*position, *span) = (None, None),

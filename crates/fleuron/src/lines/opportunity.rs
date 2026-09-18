@@ -1,5 +1,8 @@
 //! Where a line may end: UAX #14, word boundaries from UAX #29, and
 //! the syllable breaks hyphenation adds.
+//!
+//! Preformatted text keeps only the breaks UAX #14 makes mandatory,
+//! which are the newlines the author wrote.
 
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 
@@ -54,13 +57,15 @@ impl LineLayout<'_> {
         widths: &Widths,
         options: LineBreakOptions,
     ) -> Vec<Opportunity> {
+        let allowed = |kind: &BreakOpportunity| match options.preformatted {
+            true => *kind == BreakOpportunity::Mandatory,
+            false => matches!(
+                kind,
+                BreakOpportunity::Allowed | BreakOpportunity::Mandatory
+            ),
+        };
         let mut opportunities: Vec<Opportunity> = linebreaks(text)
-            .filter(|(_, kind)| {
-                matches!(
-                    kind,
-                    BreakOpportunity::Allowed | BreakOpportunity::Mandatory
-                )
-            })
+            .filter(|(_, kind)| allowed(kind))
             .map(|(index, kind)| Opportunity {
                 end: index,
                 hyphen: false,
@@ -151,7 +156,12 @@ impl LineLayout<'_> {
         for opportunity in self.opportunities(text, widths, options) {
             let end = opportunity.end - newline_before(text, opportunity.end);
             let content_end = end - trailing_spaces(text, 0, end);
-            let next = skip_spaces(text, opportunity.end);
+            // Preformatted text starts its next line where the
+            // author started it, spaces included.
+            let next = match options.preformatted {
+                true => opportunity.end,
+                false => skip_spaces(text, opportunity.end),
+            };
             let hard = opportunity.forced && opportunity.end < text.len();
             let hang = if !hangs || hard {
                 0.0

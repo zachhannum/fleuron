@@ -70,7 +70,7 @@ Then each warning, prefixed with its origin when it has one:
 
 ```text
 fleuron: warning: house.css:14:3: Unsupported property `text-shadow`. The declaration is ignored.
-fleuron: warning: chapter-03.md:88:1: Code blocks are not supported. Falling back to a plain paragraph.
+fleuron: warning: chapter-03.md:88:1: Unsupported attribute. Only `.class` or `#id` are valid.
 fleuron: 2 warnings. The PDF was written anyway.
 ```
 

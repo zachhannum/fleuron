@@ -377,6 +377,32 @@ pub enum Block {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// A code block: preformatted text, set as it was written.
+    ///
+    /// It holds text rather than inlines, because a code block has no
+    /// markup inside it. The text keeps the newlines and the spaces
+    /// the author wrote, and those are what its lines break at.
+    CodeBlock {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// The word after the opening fence, where one was written.
+        /// It is carried for a painter that reads it, and the engine
+        /// makes nothing of it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        info: Option<String>,
+        /// The block's text, newlines and indentation intact.
+        text: String,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// `---`: a scene break, rendered as space or an ornament (❦).
     ThematicBreak {
         /// Engine-assigned identity, for diagnostics; never serialized.
@@ -915,7 +941,8 @@ fn subtree_in_blocks(blocks: &[Block], node: NodeId) -> Option<Range<u32>> {
             Block::Blockquote { blocks, .. } => subtree_in_blocks(blocks, node),
             Block::List { items, .. } => subtree_in_items(items, node),
             Block::Table { head, body, .. } => subtree_in_rows(rows(head, body), node),
-            Block::ThematicBreak { .. }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
             | Block::PageBreak { .. }
             | Block::ColumnBreak { .. }
             | Block::Image { .. } => None,
@@ -971,7 +998,8 @@ fn block_nodes(block: &Block) -> u32 {
         Block::Blockquote { blocks, .. } => blocks.iter().map(block_nodes).sum(),
         Block::List { items, .. } => items.iter().map(item_nodes).sum(),
         Block::Table { head, body, .. } => rows(head, body).map(row_nodes).sum(),
-        Block::ThematicBreak { .. }
+        Block::CodeBlock { .. }
+        | Block::ThematicBreak { .. }
         | Block::PageBreak { .. }
         | Block::ColumnBreak { .. }
         | Block::Image { .. } => 0,
@@ -1060,7 +1088,8 @@ fn node_in_blocks(blocks: &[Block], byte: u32) -> Option<(NodeId, SourceSpan)> {
             Block::Blockquote { blocks, .. } => node_in_blocks(blocks, byte),
             Block::List { items, .. } => node_in_items(items, byte),
             Block::Table { head, body, .. } => node_in_rows(rows(head, body), byte),
-            Block::ThematicBreak { .. }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
             | Block::PageBreak { .. }
             | Block::ColumnBreak { .. }
             | Block::Image { .. } => None,
@@ -1110,7 +1139,8 @@ fn span_in_blocks(blocks: &[Block], node: NodeId) -> Option<SourceSpan> {
             Block::Blockquote { blocks, .. } => span_in_blocks(blocks, node),
             Block::List { items, .. } => span_in_items(items, node),
             Block::Table { head, body, .. } => span_in_rows(rows(head, body), node),
-            Block::ThematicBreak { .. }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
             | Block::PageBreak { .. }
             | Block::ColumnBreak { .. }
             | Block::Image { .. } => None,
@@ -1217,6 +1247,7 @@ pub fn block_attributes(block: &Block) -> &Attributes {
         | Block::ColumnBreak { attributes, .. }
         | Block::Image { attributes, .. }
         | Block::List { attributes, .. }
+        | Block::CodeBlock { attributes, .. }
         | Block::Table { attributes, .. } => attributes,
     }
 }
@@ -1245,6 +1276,7 @@ pub fn block_position(block: &Block) -> Option<SourcePos> {
         | Block::ColumnBreak { position, .. }
         | Block::Image { position, .. }
         | Block::List { position, .. }
+        | Block::CodeBlock { position, .. }
         | Block::Table { position, .. } => *position,
     }
 }
@@ -1273,6 +1305,7 @@ pub fn block_id(block: &Block) -> NodeId {
         | Block::ColumnBreak { id, .. }
         | Block::Image { id, .. }
         | Block::List { id, .. }
+        | Block::CodeBlock { id, .. }
         | Block::Table { id, .. } => *id,
     }
 }
@@ -1288,6 +1321,7 @@ pub fn block_span(block: &Block) -> Option<SourceSpan> {
         | Block::ColumnBreak { span, .. }
         | Block::Image { span, .. }
         | Block::List { span, .. }
+        | Block::CodeBlock { span, .. }
         | Block::Table { span, .. } => *span,
     }
 }
@@ -1338,7 +1372,8 @@ fn assign_block(block: &mut Block, next: &mut u32) {
                 assign_block(nested, next);
             }
         }
-        Block::ThematicBreak { id, .. }
+        Block::CodeBlock { id, .. }
+        | Block::ThematicBreak { id, .. }
         | Block::PageBreak { id, .. }
         | Block::ColumnBreak { id, .. }
         | Block::Image { id, .. } => {
@@ -1797,7 +1832,8 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                         walk_block(ids, nested);
                     }
                 }
-                Block::ThematicBreak { id, .. }
+                Block::CodeBlock { id, .. }
+                | Block::ThematicBreak { id, .. }
                 | Block::PageBreak { id, .. }
                 | Block::ColumnBreak { id, .. }
                 | Block::Image { id, .. } => ids.push(*id),

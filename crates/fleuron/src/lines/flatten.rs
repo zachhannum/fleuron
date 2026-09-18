@@ -460,6 +460,22 @@ impl LineLayout<'_> {
         flat
     }
 
+    /// Flattens preformatted text as the text of `node`: its newlines
+    /// and its spaces stand as the author wrote them.
+    pub(super) fn flatten_preformatted(
+        &self,
+        text: &str,
+        node: NodeId,
+        style: ParagraphStyle,
+    ) -> FlatParagraph {
+        let mut flat = FlatParagraph::new();
+        if !text.is_empty() {
+            flat.open(Some(node), 0);
+            self.push_run(&mut flat, text, style, Lead::default());
+        }
+        flat
+    }
+
     fn walk_inlines(
         &self,
         inlines: &[Inline],

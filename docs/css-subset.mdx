@@ -322,8 +322,8 @@ h2 {
 The element names come from markdown:
 
 ```
-book section h1 h2 h3 h4 h5 h6 p blockquote hr img ul ol li
-table thead tbody tr th td code em strong a span
+book section h1 h2 h3 h4 h5 h6 p blockquote pre hr img ul ol
+li table thead tbody tr th td code em strong a span
 ```
 
 {/* end generated */}
@@ -1386,6 +1386,14 @@ p + p {
    from it. */
 blockquote {
   margin: 1em 2em;
+}
+
+/* A code block has space above and below it, and a monospace family.
+   The bundled family is the only face a book gets without
+   @font-face, so a book that wants a monospace face declares one. */
+pre {
+  font-family: monospace;
+  margin: 1em 0;
 }
 
 /* A list has space above and below it. Its markers are in the
