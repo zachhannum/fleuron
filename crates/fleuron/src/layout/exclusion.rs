@@ -405,9 +405,9 @@ pub(super) struct Anchored {
     /// That block's padding box on the page the anchor landed on,
     /// which the settling pass fills in.
     container: Option<Rect>,
-    /// The width its lines were broken to the insets of, where the
-    /// insets left it a width of its containing block. A box whose
-    /// width the insets say nothing about has none.
+    /// The width of the containing block its lines were broken
+    /// against, where the insets left it a width of that block. A box
+    /// whose width the insets say nothing about has none.
     measured: Option<f32>,
     /// Width in points, margins included.
     width: f32,
@@ -1572,6 +1572,40 @@ mod tests {
             panic!("the box paints one background: {boxes:?}");
         };
         (*x, *y, *w, *h)
+    }
+
+    /// A block whose first child is a box against the page keeps a
+    /// border box of its own: the box is no fragment of it, and the
+    /// block starts at the first fragment the flow places.
+    #[test]
+    fn a_block_keeps_its_own_box_when_a_box_against_the_page_opens_it() {
+        let css = "blockquote { margin: 0; background-color: #eeeeee } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0 }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let (x, y, w, h) = tinted(page);
+        assert!((x - left).abs() < 1e-3, "the quotation starts at {x}");
+        assert!((y - top).abs() < 1e-3, "the quotation opens at {y}");
+        assert!(
+            (w - geometry.measure()).abs() < 1e-3,
+            "the quotation is {w} wide",
+        );
+        let text: Vec<ContentLine<'_>> = content_lines(page)
+            .into_iter()
+            .filter(|(_, runs)| runs.iter().any(|run| run.2.contains("steady")))
+            .collect();
+        assert!(!text.is_empty(), "the quotation set no line of its own");
+        for (baseline, _) in text {
+            assert!(
+                baseline > y && baseline < y + h,
+                "the line at {baseline} is outside the quotation",
+            );
+        }
     }
 
     /// Acceptance: with a quotation that `position: relative` moved,
