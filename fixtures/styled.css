@@ -111,6 +111,16 @@ a::after {
   content: " (page " target-counter(attr(href url), page) ")";
 }
 
+/* The cross-reference sits on a tinted chip: a background, a padding
+   and a rounded border on a run rather than on a block. The chip
+   holds the link and the page number it prints. */
+a {
+  padding: 1pt 3pt;
+  background-color: #efe7d6;
+  border: 0.5pt solid #8a7a5c;
+  border-radius: 3pt;
+}
+
 /* Every image except the map. The text wraps around the shape the
    ornament's alpha channel covers rather than around its box. */
 img:not(.map) {
