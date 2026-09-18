@@ -36,8 +36,9 @@ pub enum Piece {
         /// The line itself, shaped and measured.
         line: Line,
         /// The drop cap set beside this line, on the first line of a
-        /// paragraph that has one.
-        cap: Option<DropCap>,
+        /// paragraph that has one. Boxed: a book has thousands of
+        /// lines and a handful of initial letters.
+        cap: Option<Box<DropCap>>,
     },
     /// A placed image, sized against the content box.
     Image {
