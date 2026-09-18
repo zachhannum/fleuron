@@ -63,6 +63,16 @@ const COMPARED = 3;
  * the export here.
  */
 const BOXED = 22;
+/**
+ * And the page the inline box is compared on: the excerpt's
+ * cross-reference, which `fixtures/styled.css` puts on a tinted chip
+ * with rounded corners.
+ *
+ * The reference runs over a line break, so the chip is two boxes, and
+ * a painter that squared the wrong corners differs from the export
+ * here.
+ */
+const CHIPPED = 28;
 
 let failures = 0;
 
@@ -546,6 +556,7 @@ async function comparedWithTheExport(what: string, compared: number): Promise<vo
 
 await comparedWithTheExport('running text', COMPARED);
 await comparedWithTheExport('a bordered and tinted quotation', BOXED);
+await comparedWithTheExport('a chip on a cross-reference', CHIPPED);
 
 // The display-typography book, whose every page is set in the three
 // properties that change which glyphs a run is shaped from. The
