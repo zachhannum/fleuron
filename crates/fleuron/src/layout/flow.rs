@@ -9,6 +9,7 @@ use crate::pages::{Corners, DrawItem, Page, PageBox, Radius, Side};
 use crate::style::{AlignContent, Break, Color, Edges, PageQuery, Situation};
 
 use super::Paginator;
+use super::background::Backdrop;
 use super::build::Reflow;
 use super::exclusion::{AnchoredBoxes, Settling};
 use super::fragment::{BreakPoint, Decoration, Decorations, Fragment, Marks, Piece};
@@ -1110,46 +1111,73 @@ impl Painted {
         if open_below {
             (radii.bottom_left, radii.bottom_right) = (Radius::SQUARE, Radius::SQUARE);
         }
-        let mut items = self.decoration.backdrop.rounded(x, y, w, h, radii, layer);
-        let colors = self.decoration.colors;
-        if !radii.is_square() {
-            let widths = Edges {
-                top,
-                bottom,
-                ..border
-            };
-            items.extend(rings(x, y, w, h, radii, widths, colors, layer));
-            fade(&mut items, self.decoration.opacity);
-            return items;
-        }
-        // The corners fall to the horizontal edges: a filled rect is
-        // all a square box needs, and a mitre is a path.
-        let mut rect = |x: f32, y: f32, w: f32, h: f32, color| {
-            if w > 0.0 && h > 0.0 {
-                items.push(DrawItem::Rect {
-                    x,
-                    y,
-                    w,
-                    h,
-                    color,
-                    layer,
-                });
-            }
+        let widths = Edges {
+            top,
+            bottom,
+            ..border
         };
-        rect(x, y, w, top, colors.top);
-        rect(x, y + h - bottom, w, bottom, colors.bottom);
-        let side = h - top - bottom;
-        rect(x, y + top, border.left, side, colors.left);
-        rect(
-            x + w - border.right,
-            y + top,
-            border.right,
-            side,
-            colors.right,
+        let mut items = box_items(
+            x,
+            y,
+            w,
+            h,
+            radii,
+            widths,
+            self.decoration.colors,
+            &self.decoration.backdrop,
+            layer,
         );
         fade(&mut items, self.decoration.opacity);
         items
     }
+}
+
+/// What one box paints, backdrop first and border over it. `border`
+/// is zero on an edge the box does not paint, and `radii` is square
+/// at a corner it goes on past.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn box_items(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radii: Corners,
+    border: Edges,
+    colors: Edges<Color>,
+    backdrop: &Backdrop,
+    layer: i32,
+) -> Vec<DrawItem> {
+    let mut items = backdrop.rounded(x, y, w, h, radii, layer);
+    if !radii.is_square() {
+        items.extend(rings(x, y, w, h, radii, border, colors, layer));
+        return items;
+    }
+    // The corners fall to the horizontal edges: a filled rect is all
+    // a square box needs, and a mitre is a path.
+    let mut rect = |x: f32, y: f32, w: f32, h: f32, color| {
+        if w > 0.0 && h > 0.0 {
+            items.push(DrawItem::Rect {
+                x,
+                y,
+                w,
+                h,
+                color,
+                layer,
+            });
+        }
+    };
+    rect(x, y, w, border.top, colors.top);
+    rect(x, y + h - border.bottom, w, border.bottom, colors.bottom);
+    let side = h - border.top - border.bottom;
+    rect(x, y + border.top, border.left, side, colors.left);
+    rect(
+        x + w - border.right,
+        y + border.top,
+        border.right,
+        side,
+        colors.right,
+    );
+    items
 }
 
 /// Where one paragraph's fragments end: the run of them that share

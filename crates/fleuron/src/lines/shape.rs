@@ -115,6 +115,9 @@ impl LineLayout<'_> {
         // costs no width, and the paragraph's face, because that is
         // where its width was charged.
         let color = runs.last().map_or(style.color, |run| run.color);
+        // The hyphen belongs to the word it broke, so it sits inside
+        // whatever box that word is in.
+        let inline = runs.last().and_then(|run| run.inline);
         match runs.last_mut() {
             Some(run) if run.font_id == style.font_id && run.size == style.size => {
                 run.text.push('-');
@@ -143,6 +146,9 @@ impl LineLayout<'_> {
                 text_start: ending,
                 origin: None,
                 pseudo_element: None,
+                inline,
+                lead: 0.0,
+                trail: 0.0,
                 features: Features::NONE,
                 color,
                 glyphs: vec![ShapedGlyph {

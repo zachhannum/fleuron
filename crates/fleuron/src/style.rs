@@ -34,7 +34,7 @@ use crate::content::{
     block_position, inline_attributes, inline_position, origin, rows,
 };
 use crate::fonts::{FaceAttributes, FontError, FontRegistry, FontSource};
-use crate::lines::{FirstLine, InlineStyles, ParagraphStyle};
+use crate::lines::{FirstLine, InlineBox, InlineStyles, ParagraphStyle};
 use crate::pages::Side;
 
 pub(crate) use inspect::element_of;
@@ -595,6 +595,11 @@ impl InlineStyles for StyleTree {
             Some(index) => self.styles[*index as usize].paragraph(),
             None => block,
         }
+    }
+
+    fn inline_box(&self, id: NodeId) -> Option<InlineBox> {
+        let index = self.by_node.get(id.get() as usize)?;
+        self.styles[*index as usize].inline_box()
     }
 }
 

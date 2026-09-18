@@ -8,7 +8,7 @@ use crate::fonts::Features;
 use crate::style::{Color, FontVariantCaps, TextTransform};
 
 use super::LineLayout;
-use super::paragraph::{InlineStyles, Lead, ParagraphStyle};
+use super::paragraph::{InlineBox, InlineStyles, Lead, ParagraphStyle};
 
 /// Flattened paragraph content: the text as it is shaped, the text
 /// the author wrote under it, and, per style span, the byte range it
@@ -35,6 +35,11 @@ pub(super) struct FlatParagraph {
     word_start: bool,
     /// The style spans, in document order.
     pub(super) spans: Vec<StyleSpan>,
+    /// The inline elements that paint a box, in the order they open.
+    pub(super) boxes: Vec<BoxSpan>,
+    /// The innermost inline element open, which the spans written
+    /// now belong to.
+    inline: Option<NodeId>,
     /// Which node each stretch of the source was written in, in
     /// document order.
     origins: Vec<Origin>,
@@ -59,6 +64,18 @@ struct Origin {
     node_start: u32,
 }
 
+/// One inline element's box, over the bytes of the shaped text it
+/// covers. The range of a nested box falls inside the range of the
+/// box around it.
+pub(super) struct BoxSpan {
+    /// The inline element the box belongs to.
+    pub(super) node: NodeId,
+    /// What it paints, and what that takes on each edge.
+    pub(super) box_: InlineBox,
+    /// Byte range in the paragraph's shaped text.
+    pub(super) range: Range<usize>,
+}
+
 /// One span of uniform shaping: a face, a size, the tracking after
 /// each of its clusters, and the features it is shaped with.
 pub(super) struct StyleSpan {
@@ -68,19 +85,23 @@ pub(super) struct StyleSpan {
     pub(super) tracking: f32,
     pub(super) features: Features,
     pub(super) color: Color,
+    /// The innermost inline element the span was written in.
+    pub(super) inline: Option<NodeId>,
     /// Byte range in the paragraph's shaped text.
     pub(super) range: Range<usize>,
 }
 
 impl StyleSpan {
     /// Whether two spans are set the same way, the text they cover
-    /// aside.
+    /// aside. An inline element is part of that: a box is painted
+    /// around the runs of one element, so a run never spans two.
     fn same_style(&self, other: &StyleSpan) -> bool {
         self.font_id == other.font_id
             && self.size == other.size
             && self.tracking == other.tracking
             && self.features == other.features
             && self.color == other.color
+            && self.inline == other.inline
     }
 }
 
@@ -321,9 +342,34 @@ impl FlatParagraph {
                 small_caps: caps == SmallCaps::Feature,
             },
             color: style.color,
+            inline: self.inline,
             range: start..self.text.len(),
         };
         self.spans.push(span);
+    }
+
+    /// Opens the inline element `id`, with the box it paints where it
+    /// paints one, and answers what closing it puts back.
+    fn open_inline(&mut self, id: NodeId, box_: Option<InlineBox>) -> Open {
+        let was = self.inline;
+        self.inline = Some(id);
+        let at = box_.map(|box_| {
+            self.boxes.push(BoxSpan {
+                node: id,
+                box_,
+                range: self.text.len()..self.text.len(),
+            });
+            self.boxes.len() - 1
+        });
+        Open { was, at }
+    }
+
+    /// Closes it again, over the text written since.
+    fn close_inline(&mut self, open: Open) {
+        if let Some(at) = open.at {
+            self.boxes[at].range.end = self.text.len();
+        }
+        self.inline = open.was;
     }
 
     /// Joins two adjacent spans set the same way, from `from` to the
@@ -343,6 +389,13 @@ impl FlatParagraph {
             }
         }
     }
+}
+
+/// One open inline element: the one it was opened inside, and the box
+/// it pushed, where it paints one.
+struct Open {
+    was: Option<NodeId>,
+    at: Option<usize>,
 }
 
 /// Raises one character to a capital where a synthesis has to draw a
@@ -421,17 +474,21 @@ impl LineLayout<'_> {
                 Inline::Break { .. } => self.push_break(flat, style, lead),
                 Inline::Code { id, value, .. } => {
                     let generated = styles.generated(inline);
+                    let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     self.push_text(flat, *id, value, styles.style(*id, style), lead);
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
+                    flat.close_inline(open);
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. } => {
                     let generated = styles.generated(inline);
+                    let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     self.walk_inlines(children, styles.style(*id, style), styles, lead, flat);
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
+                    flat.close_inline(open);
                 }
             }
         }

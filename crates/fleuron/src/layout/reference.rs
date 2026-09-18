@@ -16,7 +16,7 @@ use crate::content::{
     Anchors, Block, Book, Inline, LinkTarget, NodeId, Row, Section, SourcePos, block_id, inline_id,
     inline_position, item_blocks, origin, rows, text,
 };
-use crate::lines::{Generated, InlineStyles, ParagraphStyle};
+use crate::lines::{Generated, InlineBox, InlineStyles, ParagraphStyle};
 use crate::style::{ComputedStyle, Content, ContentPiece, StyleTree, Target};
 
 use super::Paginator;
@@ -462,6 +462,10 @@ pub(super) struct Referring<'r, 'a> {
 impl InlineStyles for Referring<'_, '_> {
     fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
         InlineStyles::style(self.paginator.styles, id, block)
+    }
+
+    fn inline_box(&self, id: NodeId) -> Option<InlineBox> {
+        InlineStyles::inline_box(self.paginator.styles, id)
     }
 
     fn generated(&self, inline: &Inline) -> Generated {

@@ -30,7 +30,8 @@ impl Paginator<'_> {
         items.append(&mut match &fragment.piece {
             Piece::Line { line, cap } => {
                 let baseline = top + line.box_.baseline;
-                let mut items = self.text_items(line, x + fragment.x, baseline, fragment.layer);
+                let mut items = self.inline_items(line, x + fragment.x, baseline, fragment.layer);
+                items.append(&mut self.text_items(line, x + fragment.x, baseline, fragment.layer));
                 if let Some(cap) = cap {
                     items.append(&mut self.text_items(
                         &cap.line,
@@ -98,12 +99,15 @@ impl Paginator<'_> {
     /// What hangs into a margin is not part of the width, which is the
     /// point of hanging it.
     pub(super) fn line_width(&self, line: &Line) -> f32 {
-        line.runs
-            .iter()
-            .map(|run| run.advance as f32 / self.upem(run.font_id) * run.size)
-            .sum::<f32>()
+        line.runs.iter().map(|run| self.run_width(run)).sum::<f32>()
             - line.overhang
             - line.protrusion
+    }
+
+    /// One run in points, the edges of the inline boxes that open and
+    /// close on it included: what it takes across the line.
+    fn run_width(&self, run: &crate::lines::ShapedRun) -> f32 {
+        run.lead + run.advance as f32 / self.upem(run.font_id) * run.size + run.trail
     }
 
     /// One span's width in points. Runs of different sizes each
@@ -114,7 +118,7 @@ impl Paginator<'_> {
         let span = &line.spans[index];
         let ink = line.runs[span.runs.clone()]
             .iter()
-            .map(|run| run.advance as f32 / self.upem(run.font_id) * run.size)
+            .map(|run| self.run_width(run))
             .sum::<f32>();
         let overhang = if index + 1 == line.spans.len() {
             line.overhang
@@ -141,6 +145,9 @@ impl Paginator<'_> {
             let mut x_cursor = x + span.offset;
             for run in &line.runs[span.runs.clone()] {
                 let upem = self.upem(run.font_id);
+                // The leading edges of the inline boxes that open on
+                // this run come before its first glyph.
+                x_cursor += run.lead;
                 let mut glyphs = Vec::with_capacity(run.glyphs.len());
                 let mut glyph_x = x_cursor;
                 for (shaped, range) in run.glyphs.iter().zip(run.glyph_ranges()) {
@@ -166,7 +173,7 @@ impl Paginator<'_> {
                     glyphs,
                     layer,
                 });
-                x_cursor = glyph_x;
+                x_cursor = glyph_x + run.trail;
             }
         }
         items

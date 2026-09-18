@@ -512,6 +512,23 @@ impl ComputedStyle {
         (x + leading, (measure - leading - trailing).max(0.0))
     }
 
+    /// The box this style paints around the runs of an inline
+    /// element, and `None` where it paints none and takes no width.
+    ///
+    /// Padding counts even where nothing is painted over it: it is
+    /// width, and the line breaks against it.
+    pub fn inline_box(&self) -> Option<crate::lines::InlineBox> {
+        let padding = self.padding;
+        let border = self.border.widths();
+        let paints = self.background.paints() || self.border.paints();
+        let spaced = padding != Edges::all(0.0);
+        (paints || spaced).then_some(crate::lines::InlineBox {
+            padding,
+            border,
+            cloned: self.box_decoration_break == BoxDecorationBreak::Clone,
+        })
+    }
+
     /// Everything line layout needs from a style.
     pub fn paragraph(&self) -> crate::lines::ParagraphStyle {
         crate::lines::ParagraphStyle {

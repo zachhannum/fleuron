@@ -28,6 +28,7 @@ use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 
 mod breaker;
 mod flatten;
+mod inline;
 mod justify;
 mod line;
 mod measure;
@@ -38,11 +39,11 @@ mod shape;
 #[cfg(test)]
 mod testing;
 
-pub use line::{Line, LineSpan, ShapedRun, Spans};
+pub use line::{InlineFragment, Line, LineSpan, ShapedRun, Spans};
 pub use measure::{Measure, Span};
 pub use paragraph::{
-    FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineStyles, LineBreakOptions,
-    Opening, ParagraphStyle, Patterns,
+    FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineBox, InlineStyles,
+    LineBreakOptions, Opening, ParagraphStyle, Patterns,
 };
 
 use breaker::Breaker;
@@ -316,7 +317,14 @@ impl LineLayout<'_> {
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
 
-        let widths = Widths::build(&flat.text, spans);
+        // Points into the paragraph's own font units: what an
+        // inline box's edges are charged in.
+        let units = if style.size > 0.0 {
+            upem / style.size
+        } else {
+            0.0
+        };
+        let widths = Widths::build(flat, spans, units);
         let hyphen = self.hyphen_advance(style) as f32;
         let breaks = self.break_points(&flat.text, &widths, hyphen, options);
         let breaker = Breaker {
@@ -359,10 +367,18 @@ impl LineLayout<'_> {
                 if at.hyphen {
                     self.hyphenate(&mut line.runs, style);
                 }
+                let offset = span.origin - *origin;
+                let mut boxes = self.inline_fragments(
+                    flat,
+                    &mut line.runs[first..],
+                    offset,
+                    start..at.content_end,
+                );
+                line.boxes.append(&mut boxes);
                 let width = line.runs[first..].iter().map(|run| run.advance).sum();
                 spans.push(LineSpan {
                     runs: first..line.runs.len(),
-                    offset: span.origin - *origin,
+                    offset,
                     width,
                 });
                 line.width += width;
