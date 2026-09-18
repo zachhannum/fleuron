@@ -268,6 +268,17 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 hash_node(*id, styles, h);
                 hash_inlines(children, styles, h);
             }
+            Inline::Note {
+                id,
+                blocks,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (7u8, position).hash(h);
+                hash_node(*id, styles, h);
+                hash_blocks(blocks, styles, h);
+            }
         }
     }
 }
@@ -324,6 +335,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         content,
         string_set,
         counter_reset,
+        note_reset,
         initial_letter,
         // Whether a block is in the flow decides whether the section
         // holds fragments for it or an anchor. A relative block's
@@ -373,7 +385,14 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
-    (content, string_set, counter_reset, initial_letter).hash(h);
+    (
+        content,
+        string_set,
+        counter_reset,
+        note_reset,
+        initial_letter,
+    )
+        .hash(h);
     (position, z_index, opacity.to_bits()).hash(h);
     hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);

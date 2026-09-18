@@ -485,8 +485,8 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
     Spec {
         name: "counter-reset",
         inherited: false,
-        syntax: "none | page <integer>?",
-        examples: &["none", "page", "page 1"],
+        syntax: "none | [ page <integer>? || note <integer>? ]",
+        examples: &["none", "page", "page 1", "note", "note 1"],
         read: |name, input| longhand(name, input, counter_reset, Declaration::CounterReset),
     },
     Spec {

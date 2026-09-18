@@ -2727,6 +2727,9 @@ fn append_inlines(inlines: &[Inline], text: &mut String) {
         match inline {
             Inline::Text { value, .. } | Inline::Code { value, .. } => text.push_str(value),
             Inline::Break { .. } => text.push('\n'),
+            // The note itself is set at the foot of the page, and
+            // `laid_out` asks for it there.
+            Inline::Note { .. } => {}
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }

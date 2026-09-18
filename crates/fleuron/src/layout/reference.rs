@@ -379,6 +379,10 @@ impl Named {
             let (href, children) = match inline {
                 Inline::Text { .. } | Inline::Break { .. } => continue,
                 Inline::Code { .. } => (None, None),
+                Inline::Note { blocks, .. } => {
+                    self.blocks(blocks, styles, references, source);
+                    (None, None)
+                }
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Span { children, .. } => (None, Some(children)),

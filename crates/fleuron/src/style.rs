@@ -1079,6 +1079,7 @@ fn named_inlines<'a>(
         );
         match inline {
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+            Inline::Note { blocks, .. } => named_blocks(blocks, source, first, warnings),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }

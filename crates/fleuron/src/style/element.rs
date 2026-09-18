@@ -494,6 +494,20 @@ impl ElementTree {
                     attributes,
                     ..
                 } => ("span", *id, attributes, Some(children)),
+                // A note holds blocks, so its children are blocks of
+                // its own rather than the inlines around it.
+                Inline::Note {
+                    id,
+                    blocks,
+                    attributes,
+                    ..
+                } => {
+                    let index = self.push("note", *id, attributes, Some(parent), false);
+                    let kids = self.blocks(blocks, index);
+                    self.link(index, &kids);
+                    children.push(index);
+                    continue;
+                }
             };
             let index = self.push(name, id, attributes, Some(parent), false);
             if let Some(nested) = nested {
