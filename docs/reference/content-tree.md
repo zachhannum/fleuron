@@ -168,11 +168,14 @@ A row and a cell each take an optional `position`, `span` and `attributes`, the 
 | `strong` | `children`. Bold, in the built-in sheet. |
 | `code` | `value`. Literal, with no markup inside, monospace and never hyphenated. |
 | `link` | `url` and `children`. The engine lays out the text. The url reaches the painters that can express one. |
+| `span` | `children`. A run a sheet names, with no meaning of its own. It takes the style of the element around it, in the built-in sheet. |
 | `break` | No fields of its own. The line ends at the break, and the text after it stays in the same block. |
 
 Text runs are not elements as far as CSS is concerned. They take the style of the inline or block around them, and never count towards `:first-child`. A break is not an element either.
 
 Where the engine reads an inline tree as one string, a break is a newline. `string-set` with `content()` and `target-text()` read a heading that way.
+
+A span is what a sheet reaches part of a heading by. A chapter opening written as a number over a title is one heading of two spans. A rule on each one sets the two runs at their own sizes, and `string-set` on one of them puts that run in the running head.
 
 ## Naming a node
 

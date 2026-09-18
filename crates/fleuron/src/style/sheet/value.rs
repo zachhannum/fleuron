@@ -549,8 +549,9 @@ fn target<'i>(input: &mut Parser<'i, '_>) -> Result<Target, ParseError<'i, Style
     })
 }
 
-/// `string-set: none | <name> [content() | <string>]+ [, …]`. What a
-/// running head picks up: the element's own text, literals, or both.
+/// `string-set: none | <name> [content() | content(text) | <string>]+
+/// [, …]`. What a running head picks up: the element's own text,
+/// literals, or both.
 pub(super) fn string_set(input: &mut Parser<'_, '_>) -> Option<Vec<StringSet>> {
     if input.try_parse(none_keyword).is_ok() {
         return Some(Vec::new());
@@ -593,14 +594,19 @@ pub(super) fn counter_reset(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
     Some(Some(folio.max(0) as u32))
 }
 
-/// `content()`, the element's own text, with no argument list the
-/// engine has a second answer for.
+/// `content()` and `content(text)`, both the element's own text.
+/// `text` is the only argument the engine has an answer for.
 fn content_function<'i>(input: &mut Parser<'i, '_>) -> Result<(), ParseError<'i, StyleError<'i>>> {
     let function = input.expect_function()?.clone();
     if !function.eq_ignore_ascii_case("content") {
         return Err(input.new_custom_error(StyleError::UnsupportedValue(function)));
     }
     input.parse_nested_block(|input| {
+        if let Ok(argument) = input.try_parse(|input| input.expect_ident().cloned())
+            && !argument.eq_ignore_ascii_case("text")
+        {
+            return Err(input.new_custom_error(StyleError::UnsupportedValue(argument)));
+        }
         input
             .expect_exhausted()
             .map_err(ParseError::<StyleError<'_>>::from)

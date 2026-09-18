@@ -1080,7 +1080,8 @@ fn named_inlines<'a>(
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } => named_inlines(children, source, first, warnings),
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => named_inlines(children, source, first, warnings),
         }
     }
 }
@@ -2202,6 +2203,23 @@ mod tests {
                 value: vec![StringPiece::Text("— ".into()), StringPiece::Content],
             }],
         );
+        // `content(text)` is the other spelling of the same thing,
+        // and an argument the engine has no answer for is not.
+        let spelled = compile(
+            &book,
+            "h1 { string-set: chapter content(text) }
+             p { string-set: stanza content(before) }",
+        );
+        assert_eq!(
+            first(&spelled, "h1").string_set,
+            vec![StringSet {
+                name: "chapter".into(),
+                value: vec![StringPiece::Content],
+            }],
+        );
+        assert!(first(&spelled, "p").string_set.is_empty());
+        assert_eq!(spelled.warnings().len(), 1, "{:?}", spelled.warnings());
+
         assert_eq!(first(&tree, "section").counter_reset, Some(7));
         // Not inherited: a paragraph inside the section restarts
         // nothing and sets nothing.

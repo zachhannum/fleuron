@@ -454,7 +454,8 @@ mod tests {
             {"type": "emphasis", "children": [{"type": "text", "value": "b"}]},
             {"type": "strong", "children": [{"type": "text", "value": "c"}]},
             {"type": "code", "value": "d"},
-            {"type": "link", "url": "x", "children": [{"type": "text", "value": "e"}]}
+            {"type": "link", "url": "x", "children": [{"type": "text", "value": "e"}]},
+            {"type": "span", "children": [{"type": "text", "value": "f"}]}
         ]"#;
         let headings: Vec<String> = (1..=6)
             .map(|level| {

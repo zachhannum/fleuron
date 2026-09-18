@@ -168,9 +168,9 @@ fn links_in_inlines<'b>(
                     position: *position,
                 });
             }
-            Inline::Emphasis { children, .. } | Inline::Strong { children, .. } => {
-                links_in_inlines(children, source, out)
-            }
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Span { children, .. } => links_in_inlines(children, source, out),
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
         }
     }

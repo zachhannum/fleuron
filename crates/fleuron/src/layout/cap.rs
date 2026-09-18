@@ -105,7 +105,8 @@ fn take_initial(inlines: &[Inline]) -> Option<Initial> {
                 Inline::Break { .. } => out.push((None, "\n")),
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => texts(children, out),
+                | Inline::Link { children, .. }
+                | Inline::Span { children, .. } => texts(children, out),
             }
         }
     }

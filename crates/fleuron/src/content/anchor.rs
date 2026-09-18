@@ -280,7 +280,8 @@ impl Source {
             self.write(inline_id(inline), &inline_attributes(inline).id);
             if let Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
-            | Inline::Link { children, .. } = inline
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } = inline
             {
                 self.collect_inlines(children);
             }

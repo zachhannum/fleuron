@@ -25,7 +25,8 @@ fn nodes(book: &fleuron::content::Book) -> BTreeMap<u32, String> {
                 Inline::Break { .. } => {}
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
-                | Inline::Link { children, .. } => walk_inlines(children, out),
+                | Inline::Link { children, .. }
+                | Inline::Span { children, .. } => walk_inlines(children, out),
             }
         }
     }

@@ -357,12 +357,19 @@ impl Builder<'_, '_> {
         marks.targets.push(node);
     }
 
-    /// The same for the inlines of one block that carry an id, which
-    /// land on the block's first line.
+    /// The same for the inlines of one block: an inline that carries
+    /// an id is a target, and one that sets a string resolves it
+    /// against its own text. Both land on the block's first line.
     fn name_inlines(&mut self, inlines: &[Inline]) {
         for inline in inlines {
+            let node = inline_id(inline);
             if inline_attributes(inline).id.is_some() {
-                self.name(inline_id(inline));
+                self.name(node);
+            }
+            let style = self.styles().style(node);
+            if !style.string_set.is_empty() || style.counter_reset.is_some() {
+                let style = style.clone();
+                self.mark(&style, std::slice::from_ref(inline));
             }
             if let Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }

@@ -195,7 +195,34 @@ A line that names nothing becomes plain prose, and warns. This happens when the 
 
 An id names one element. A book that writes one twice lays out with both matching, and warns naming both places.
 
-`Dialect::attributes` is the switch. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
+`Dialect::attributes` is the switch for the attribute line and for the span. It is on under `Dialect::fleuron()`, which is the default, and off under `Dialect::common_mark()`, where a brace run is prose.
+
+## Naming a run
+
+A brace run written directly after a bracketed run names that run. The run becomes a `span`, an inline element with no meaning of its own. A class or an id on it is what a rule reaches, so a sheet can set part of a heading on its own.
+
+The following example writes a chapter opening as a number over a title, in one heading:
+
+```markdown
+# [Chapter One]{.number} [The Road]{.title}
+```
+
+The following rules set the two runs at their own sizes:
+
+```css
+.number { font-size: 24pt }
+.title { font-size: 12pt }
+```
+
+The whole heading is one heading to `string-set`, to a running head, and to its slug. To take one run instead, set the string on the span. The following rule puts the title alone in the running head:
+
+```css
+h1 span:last-child { string-set: chapter-title content(text) }
+```
+
+The brace run must follow the bracket directly. `[words] {.class}` is prose. A heading takes the brace run at the end of its line, except where that run closes a bracketed run. That run is the span's.
+
+A brace run that is not classes and an id stays plain text, the brackets included, and warns.
 
 ## Links to a heading
 
@@ -295,6 +322,7 @@ A link to a source or a heading that the book does not have also prints nothing.
 | `**strong**` | `strong` |
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
+| `[text]{.class}` | `span` |
 | two spaces or `\` at the end of a line | `break` |
 
 A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
@@ -340,6 +368,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | html, a footnote reference, a task marker | nothing. There is no prose in them |
 | an attribute line naming nothing | a paragraph of its own |
 | a brace run that is not classes and an id | a paragraph of its own |
+| a brace run after `]` that is not classes and an id | plain text, the brackets included |
 
 ## Dialects
 
@@ -348,7 +377,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | switch | |
 |---|---|
 | `frontmatter` | A leading `---` block is metadata rather than a scene break. On by default. |
-| `attributes` | An attribute line names the block under it, and a heading or an image takes the run written after it. On by default. |
+| `attributes` | An attribute line names the block under it, a heading or an image takes the run written after it, and `[text]{.class}` is a span. On by default. |
 | `tables` | Tables, written as GitHub writes them. On by default. |
 | `gfm` | Strikethrough and task lists. |
 | `wikilinks` | `[[wikilinks]]`, which become links. |
