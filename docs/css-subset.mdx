@@ -426,7 +426,7 @@ blockquote::before {
 }
 ```
 
-`position: absolute` puts the box [against the page](#putting-a-block-against-the-page), the same as a block. The place of the box in its element decides the page. The box then takes up no room among the paragraphs. With `wrap-flow`, the text wraps around the box.
+`position: absolute` puts the box [against the page](#putting-a-block-against-the-page), the same as a block. The place of the box in its element decides the page. The box then takes up no room among the paragraphs. With `wrap-flow`, the text wraps around the box. If the element is relative or absolute, the box measures its insets from that element. See [The box the insets measure from](#the-box-the-insets-measure-from).
 
 The following example puts an ornament at the top left of the content box, on each page that an `h2` heading starts on:
 
@@ -1010,7 +1010,7 @@ You can move a block away from its place among the paragraphs. Use `position` to
 | `relative` | The engine moves the block by its insets. Nothing around it moves. |
 | `absolute` | The engine takes the block out of the text and puts it against the page. |
 
-`top`, `right`, `bottom`, and `left` are the insets. Each one takes a length or a percentage. A percentage on `left` or `right` is a percentage of the width of the content box. A percentage on `top` or `bottom` is a percentage of its height.
+`top`, `right`, `bottom`, and `left` are the insets. Each one takes a length or a percentage. A percentage on `left` or `right` is a percentage of the width of the content box. A percentage on `top` or `bottom` is a percentage of its height. Where a block around an absolute block is relative or absolute, the insets measure from that block instead. See [The box the insets measure from](#the-box-the-insets-measure-from).
 
 ### Moving a block from its place
 
@@ -1046,11 +1046,41 @@ blockquote.epigraph {
 }
 ```
 
+### The box the insets measure from
+
+The insets of an absolute box measure from its containing block. The containing block is the nearest block around it with `position: relative` or `position: absolute`. The insets measure from the padding box of that block, which is the space inside its border. A percentage on an inset is a percentage of the width or the height of the containing block. A negative inset reaches outside it.
+
+If no block around the box is relative or absolute, the containing block is the content box of the page.
+
+An inset of a relative block moves the block. The boxes inside it move with it.
+
+The place where you write the box still decides the page. A block around the box can run over more than one page. The box measures from the part of that block on the page the box lands on.
+
+The following example moves a quotation 30 points down and 30 points to the right. The first paragraph of the quotation sits at the top left of the quotation and fills half of its width:
+
+```css
+blockquote {
+  margin: 0;
+  position: relative;
+  top: 30pt;
+  left: 30pt;
+}
+
+blockquote p:first-child {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 50%;
+}
+```
+
 ## Images against the page
 
 You can put an image against the page rather than among the paragraphs. The text then wraps around it.
 
 `position: absolute` takes the image out of the text. The insets place it on the page. `top`, `right`, `bottom`, and `left` measure from the content box, which is the space inside the page margins. A percentage is a percentage of the width or the height of the content box. A negative inset reaches into the margin. An inset of `auto` lets the opposite inset place the image. Where both insets of an axis are `auto`, the image sits at the left or the top edge of the content box.
+
+If a relative or absolute block holds the image, the insets measure from that block rather than from the page. See [The box the insets measure from](#the-box-the-insets-measure-from).
 
 The image takes its size the same way as an image among the paragraphs. See [Image size](#image-size). A percentage on `width` or `max-width` is a percentage of the width of the content box. If the image does not fit the content box, the engine makes it smaller. Margins on the image add space between it and the text.
 
