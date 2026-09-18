@@ -114,6 +114,7 @@ The answer is a walk over the pages the session already holds. Asking runs a sta
 | | |
 |---|---|
 | `element`, `id`, `classes` | The element, and the names a selector reaches it by. |
+| `element_node` | The element, by its id. For a pseudo-element, the element it belongs to. Nothing for a margin box. |
 | `pseudo_element` | For a pseudo-element, its name, such as `::first-letter`. `element` is then the element that it belongs to. |
 | `ancestors` | The elements it sits inside, the book first. |
 | `rules` | The rules that matched, in cascade order. Each rule gives its sheet, line, column, selector, and specificity. |
