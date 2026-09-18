@@ -640,7 +640,9 @@ The engine paints one box per line the element reaches. Padding and a border on 
 
 Where a line break splits the element, `box-decoration-break` decides which edges each part of it takes. With `slice`, the first part draws the left edge and the last part draws the right edge. The corners at the break are square. With `clone`, every part draws all four edges and all four rounded corners.
 
-The engine paints the box over the background of the block around it, and under the text it sits behind.
+The engine paints the box over the background of the block around it, and under the text it sits behind. A block that the sheet puts against the page carries the boxes of its own runs with it.
+
+`position`, `z-index`, and `opacity` on an inline element are not in the subset. The element takes the layer and the opacity of the block around it.
 
 The following example sets a keyword in white on a gray chip with rounded corners:
 
@@ -1477,7 +1479,7 @@ code { font-family: monospace }
 | lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
-| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned block |
+| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, a width or a height on a positioned block, and `position`, `z-index` or `opacity` on an inline element |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |

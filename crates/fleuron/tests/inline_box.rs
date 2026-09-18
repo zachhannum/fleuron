@@ -391,3 +391,57 @@ fn a_chip_paints_before_the_run_it_tints() {
         .expect("the tag was set");
     assert!(tint < tagged, "the run was painted under its own tint");
 }
+
+/// A chip travels with the block the sheet takes out of the flow and
+/// puts against the page. The box of an inline element is painted
+/// with the fragments of its own paragraph, so it moves with them.
+#[test]
+fn a_chip_travels_with_the_block_the_sheet_anchors() {
+    let quoted = Block::Blockquote {
+        id: NodeId::UNASSIGNED,
+        blocks: vec![paragraph(vec![
+            text("roll for "),
+            code("2d6"),
+            text(" and add the modifier"),
+        ])],
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    };
+    let mut book = Book {
+        metadata: Default::default(),
+        sections: vec![Section {
+            attributes: Default::default(),
+            id: NodeId::UNASSIGNED,
+            source: None,
+            title: None,
+            blocks: vec![paragraph(vec![text("a line of prose")]), quoted],
+            position: None,
+            span: None,
+        }],
+    };
+    book.assign_node_ids();
+    let css = format!(
+        "{CHIP_CSS}\nblockquote {{ position: absolute; top: 40pt; left: 10pt; margin: 0 }}"
+    );
+    let pages = pages(&book, &css);
+    let painted = rects(&pages[0]);
+    assert_eq!(painted.len(), 1, "one tint and no more: {painted:?}");
+    let (x, y, w, h, _) = painted[0];
+
+    // The quotation sits 10pt into the content box, so the chip is
+    // past that, and the line above it stays where it was.
+    let runs = runs(&pages[0]);
+    let tag = run_named(&runs, "2d6");
+    let flowed = run_named(&runs, "a line of prose");
+    assert!(x > 30.0, "the chip did not travel with the block: {x}");
+    assert!(
+        close(x, tag.1 - 4.0) && close(x + w, run_named(&runs, "and add the modifier").1),
+        "the chip lost the run it sits behind: {painted:?} {runs:?}",
+    );
+    assert!(
+        tag.2 > y && tag.2 < y + h,
+        "the run is not inside the chip: {painted:?} {tag:?}",
+    );
+    assert!(flowed.2 < y, "the anchored block did not leave the flow");
+}
