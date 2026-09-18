@@ -1366,7 +1366,7 @@ mod tests {
         tagged_prose, with_image, with_images,
     };
     use crate::pages::{DrawItem, Page, Side};
-    use crate::style::Situation;
+    use crate::style::{Color, Situation};
 
     /// The image the tests anchor is 144pt square.
     const IMAGE: f32 = 144.0;
@@ -1548,6 +1548,275 @@ mod tests {
         assert!(
             near(y, top + height * 0.9 - IMAGE),
             "the image opens at {y}"
+        );
+    }
+
+    /// The quotation the tests of a positioned ancestor lift a box
+    /// out of. Its first paragraph is the box. The second stays in the
+    /// flow, which is what gives the quotation a box of its own.
+    fn quote_around_a_box() -> Block {
+        quote(vec![
+            paragraph(&"lilliputian ".repeat(40)),
+            paragraph(&"a steady sentence of prose ".repeat(8)),
+        ])
+    }
+
+    /// The background one box paints, which is the only thing these
+    /// tests tint.
+    fn tinted(page: &Page) -> (f32, f32, f32, f32) {
+        let boxes: Vec<(f32, f32, f32, f32, Color)> = rects(page)
+            .into_iter()
+            .filter(|(_, _, _, _, color)| color.r == 238 && color.g == 238)
+            .collect();
+        let [(x, y, w, h, _)] = boxes.as_slice() else {
+            panic!("the box paints one background: {boxes:?}");
+        };
+        (*x, *y, *w, *h)
+    }
+
+    /// Acceptance: with a quotation that `position: relative` moved,
+    /// the first paragraph of it and its background sit at the top
+    /// left of the quotation's padding box.
+    #[test]
+    fn an_absolute_box_sits_against_the_block_that_position_moved() {
+        let css = "blockquote { margin: 0; position: relative; top: 30pt; left: 30pt } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0; right: 50%; \
+                   background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let (x, y, w, h) = tinted(page);
+        assert!((x - (left + 30.0)).abs() < 1e-3, "the box starts at {x}");
+        assert!((y - (top + 30.0)).abs() < 1e-3, "the box opens at {y}");
+        assert!(
+            (w - geometry.measure() / 2.0).abs() < 1e-3,
+            "the box is {w} wide",
+        );
+        let lines = quoted_lines(page);
+        assert!(!lines.is_empty(), "the box set no line");
+        for (baseline, runs) in lines {
+            assert!(baseline > y && baseline < y + h, "a line at {baseline}");
+            assert!(
+                (runs[0].0 - (left + 30.0)).abs() < 1e-3,
+                "the line at {baseline} starts at {}",
+                runs[0].0,
+            );
+        }
+    }
+
+    /// Part: a box inside a block that `position` left alone is placed
+    /// against the page, the way a box with no block around it is.
+    #[test]
+    fn a_box_inside_a_static_block_is_placed_against_the_page() {
+        let css = "blockquote { margin: 0 } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0; right: 50%; \
+                   background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let (x, y, w, _) = tinted(page);
+        assert!((x - left).abs() < 1e-3, "the box starts at {x}");
+        assert!((y - top).abs() < 1e-3, "the box opens at {y}");
+        assert!(
+            (w - geometry.measure() / 2.0).abs() < 1e-3,
+            "the box is {w} wide",
+        );
+    }
+
+    /// Part: the insets measure from the padding box of the block
+    /// around the box, and a percentage is a percentage of that box.
+    #[test]
+    fn the_insets_of_a_box_measure_the_padding_box_around_it() {
+        let css = "blockquote { margin: 0; padding: 20pt; border: 5pt solid #000000; \
+                   height: 200pt; position: relative } \
+                   blockquote p:first-child { position: absolute; top: 10%; left: 25%; \
+                   right: 25%; background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        // The padding box of the quotation: its border box less the
+        // border, and as tall as the height the sheet asked for and
+        // the padding around it.
+        let (inner, tall) = (geometry.measure() - 10.0, 240.0);
+        let (x, y, w, _) = tinted(page);
+        assert!(
+            (x - (left + 5.0 + inner * 0.25)).abs() < 1e-3,
+            "the box starts at {x}",
+        );
+        assert!(
+            (y - (top + 5.0 + tall * 0.1)).abs() < 1e-3,
+            "the box opens at {y}",
+        );
+        assert!((w - inner / 2.0).abs() < 1e-3, "the box is {w} wide");
+    }
+
+    /// Part: a block around a box can run over more than one page. The
+    /// box measures from the part of it on the page its anchor landed
+    /// on.
+    #[test]
+    fn a_box_measures_from_the_part_of_the_block_on_its_own_page() {
+        let css = "blockquote { margin: 0; position: relative; left: 30pt } \
+                   blockquote p:last-child { position: absolute; top: 12pt; left: 0; \
+                   background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![
+                paragraph(&"a steady sentence of prose ".repeat(8)),
+                quote(vec![
+                    paragraph(&"plain words to fill the page ".repeat(200)),
+                    paragraph(&"lilliputian ".repeat(20)),
+                ]),
+            ])],
+        );
+        assert!(pages.len() > 1, "the quotation stayed on one page");
+        let page = pages.last().expect("a book of pages");
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let (x, y, _, _) = tinted(page);
+        assert!((x - (left + 30.0)).abs() < 1e-3, "the box starts at {x}");
+        assert!(
+            (y - (top + 12.0)).abs() < 1e-3,
+            "the box opens at {y}, not against the head of the page",
+        );
+    }
+
+    /// Acceptance: an absolute block inside an absolute block is
+    /// placed against the outer block.
+    #[test]
+    fn an_absolute_block_inside_an_absolute_block_is_placed_against_the_outer_one() {
+        let css = "blockquote { margin: 0; position: absolute; top: 72pt; left: 72pt } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0; right: 50%; \
+                   background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        // The outer block runs from its inset to the far edge of the
+        // page area, and the inner one fills half of that.
+        let outer = geometry.content_size().0 - 72.0;
+        let (x, y, w, _) = tinted(page);
+        assert!((x - (left + 72.0)).abs() < 1e-3, "the box starts at {x}");
+        assert!((y - (top + 72.0)).abs() < 1e-3, "the box opens at {y}");
+        assert!((w - outer / 2.0).abs() < 1e-3, "the box is {w} wide");
+        for (baseline, runs) in quoted_lines(page) {
+            assert!(
+                (runs[0].0 - (left + 72.0)).abs() < 1e-3,
+                "the line at {baseline} starts at {}",
+                runs[0].0,
+            );
+        }
+    }
+
+    /// Acceptance: an absolute box that `::before` generates on a
+    /// relative block is placed against that block.
+    #[test]
+    fn a_box_generated_on_a_relative_block_is_placed_against_it() {
+        let css = "blockquote { margin: 0; position: relative; top: 24pt; left: 24pt } \
+                   blockquote::before { content: \"A note\"; position: absolute; top: 0; \
+                   left: 0; right: 50%; background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(vec![quote_around_a_box(), paragraph("after")])],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let (left, top) = geometry.content_origin();
+        let (x, y, w, _) = tinted(page);
+        assert!((x - (left + 24.0)).abs() < 1e-3, "the box starts at {x}");
+        assert!((y - (top + 24.0)).abs() < 1e-3, "the box opens at {y}");
+        assert!(
+            (w - geometry.measure() / 2.0).abs() < 1e-3,
+            "the box is {w} wide",
+        );
+        assert!(
+            content_items(page)
+                .iter()
+                .any(|(x, y, _, text)| text.contains("A note")
+                    && (x - (left + 24.0)).abs() < 1e-3
+                    && *y > top + 24.0),
+            "the generated text is not in the box",
+        );
+    }
+
+    /// Acceptance: a box with `wrap-flow: end` inside a relative block
+    /// holds the prose off the place where it is drawn.
+    #[test]
+    fn a_wrapping_box_inside_a_relative_block_holds_the_prose_off_it() {
+        let css = "blockquote { margin: 0; position: relative; left: 60pt } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0; right: 50%; \
+                   wrap-flow: end; background-color: #eeeeee }";
+        let pages = paginate_styled(
+            css,
+            vec![section(
+                std::iter::once(quote_around_a_box())
+                    .chain(long_prose(8))
+                    .collect(),
+            )],
+        );
+        let page = &pages[0];
+        let geometry = page_geometry(css, page);
+        let left = geometry.content_origin().0;
+        let (x, y, w, h) = tinted(page);
+        assert!((x - (left + 60.0)).abs() < 1e-3, "the box starts at {x}");
+        let prose: Vec<ContentLine<'_>> = content_lines(page)
+            .into_iter()
+            .filter(|(_, runs)| !runs.iter().any(|run| run.2.contains("lilliputian")))
+            .collect();
+        let beside: Vec<&ContentLine<'_>> = prose
+            .iter()
+            .filter(|(baseline, _)| *baseline > y && *baseline < y + h)
+            .collect();
+        assert!(!beside.is_empty(), "no line is set beside the box");
+        for (baseline, runs) in beside {
+            assert!(
+                runs[0].0 >= x + w - 1e-3,
+                "the line at {baseline} starts at {}, over the box",
+                runs[0].0,
+            );
+        }
+        assert!(
+            prose
+                .iter()
+                .any(|(_, runs)| (runs[0].0 - left).abs() < 1e-3),
+            "no line under the box runs the full measure",
+        );
+    }
+
+    /// Acceptance: two layouts of a book with a positioned ancestor in
+    /// it are byte-identical.
+    #[test]
+    fn a_book_with_a_positioned_ancestor_lays_out_the_same_way_twice() {
+        let css = "blockquote { margin: 0; position: relative; top: 30pt; left: 30pt } \
+                   blockquote p:first-child { position: absolute; top: 0; left: 0; right: 50%; \
+                   wrap-flow: end; background-color: #eeeeee }";
+        let book = || {
+            vec![section(
+                std::iter::once(quote_around_a_box())
+                    .chain(long_prose(12))
+                    .collect(),
+            )]
+        };
+        let once = paginate_styled(css, book());
+        let twice = paginate_styled(css, book());
+        assert!(once.len() > 1, "one page proves little here");
+        assert_eq!(
+            serde_json::to_string(&once).expect("the pages encode"),
+            serde_json::to_string(&twice).expect("the pages encode"),
         );
     }
 
