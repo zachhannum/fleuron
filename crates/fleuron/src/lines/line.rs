@@ -38,13 +38,24 @@ pub struct ShapedRun {
     /// The pseudo-element the run was cut from, where it was cut from
     /// one.
     pub pseudo_element: Option<NodeId>,
+    /// The innermost inline element the run came from: a link, an
+    /// emphasis, a strong, a code span. `None` on the text of the
+    /// paragraph itself.
+    pub inline: Option<NodeId>,
+    /// Points of space before the run's first glyph, from the leading
+    /// edges of the inline boxes that open on it.
+    pub lead: f32,
+    /// Points of space after its last glyph, from the trailing edges
+    /// of the ones that close on it.
+    pub trail: f32,
     /// The features the run was shaped with.
     pub features: Features,
     /// What the run is painted in.
     pub color: Color,
     /// The glyphs, in visual order.
     pub glyphs: Vec<ShapedGlyph>,
-    /// Total advance of the run's glyphs, in font units.
+    /// Total advance of the run's glyphs, in font units. What an
+    /// inline box takes beside them is `lead` and `trail`, in points.
     pub advance: u32,
 }
 
@@ -117,6 +128,37 @@ impl std::ops::DerefMut for Spans {
     }
 }
 
+/// One inline element's box on one line: where it sits, and which of
+/// its edges it paints there.
+///
+/// An inline element covers as many lines as its runs reach, and one
+/// of these stands for what it takes on one of them. The edges the
+/// line break cut are open under `box-decoration-break: slice` and
+/// closed under `clone`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InlineFragment {
+    /// The inline element the box belongs to.
+    pub node: NodeId,
+    /// Which span of the line the box is set in, as an index into
+    /// `Line::spans`. An element covering two spans of one band has a
+    /// box in each of them.
+    pub span: usize,
+    /// Points from the leading edge of that span to the leading edge
+    /// of the border box. The span's own offset moves the box with
+    /// the text, which is what alignment moves.
+    pub x: f32,
+    /// Width of the border box, in points.
+    pub width: f32,
+    /// Points from the baseline up to the top of the border box.
+    pub above: f32,
+    /// Points from the baseline down to its bottom.
+    pub below: f32,
+    /// Whether the leading edge is painted here.
+    pub opens: bool,
+    /// Whether the trailing edge is.
+    pub closes: bool,
+}
+
 /// One typeset line: shaped runs plus its width in font units.
 ///
 /// A line is a band of the page, which is set in one span or in
@@ -127,6 +169,9 @@ pub struct Line {
     pub runs: Vec<ShapedRun>,
     /// The spans the runs are divided between, in reading order.
     pub spans: Spans,
+    /// The boxes the inline elements on the line paint there,
+    /// outermost first. Empty on the ordinary line of a book.
+    pub boxes: Vec<InlineFragment>,
     /// Advance of the line's glyphs, trailing spaces excluded; a
     /// hyphenated line's hyphen is charged here even though the glyph
     /// joins the runs when the structured outpur paints it. What hangs
@@ -155,6 +200,7 @@ impl Line {
                 width,
             }),
             runs,
+            boxes: Vec::new(),
             width,
             overhang: 0.0,
             protrusion: 0.0,
@@ -167,6 +213,7 @@ impl Line {
         Line {
             runs: Vec::new(),
             spans: Spans::Many(Vec::new()),
+            boxes: Vec::new(),
             width: 0,
             overhang: 0.0,
             protrusion: 0.0,
@@ -192,10 +239,27 @@ pub(super) struct Widths {
     /// Tracking charged to the last cluster starting before byte `i`.
     /// Empty where nothing is tracked, which is most paragraphs.
     trailing: Vec<f32>,
+    /// The inline boxes a break inside closes and opens again: their
+    /// byte range, their leading edge and their trailing edge, in
+    /// font units. Empty for every paragraph with no cloned box in
+    /// it, which is nearly all of them.
+    cloned: Vec<Cloned>,
+}
+
+/// One inline box that paints all four of its edges on every line it
+/// reaches, from `box-decoration-break: clone`.
+struct Cloned {
+    range: Range<usize>,
+    leading: f32,
+    trailing: f32,
 }
 
 impl Widths {
-    pub(super) fn build(text: &str, shaped: &[ShapedSpan]) -> Widths {
+    /// The widths of one flattened paragraph, shaped. `units` takes a
+    /// length in points into the paragraph's own font units, which is
+    /// how an inline box's edges are charged beside the glyphs.
+    pub(super) fn build(flat: &FlatParagraph, shaped: &[ShapedSpan], units: f32) -> Widths {
+        let text = flat.text.as_str();
         let tracked = shaped.iter().any(|span| span.tracking != 0.0);
         let mut widths = Widths {
             text: vec![0.0; text.len() + 1],
@@ -206,6 +270,16 @@ impl Widths {
             } else {
                 Vec::new()
             },
+            cloned: flat
+                .boxes
+                .iter()
+                .filter(|span| span.box_.cloned && !span.range.is_empty())
+                .map(|span| Cloned {
+                    range: span.range.clone(),
+                    leading: span.box_.leading() * units,
+                    trailing: span.box_.trailing() * units,
+                })
+                .collect(),
         };
         let bytes = text.as_bytes();
         for span in shaped {
@@ -221,6 +295,17 @@ impl Widths {
                     widths.trailing[at] = span.tracking;
                 }
             }
+        }
+        // An inline box is width like any other: its leading edge
+        // falls at its first byte and its trailing edge at its last,
+        // so a line that holds either end is charged for it and one
+        // that runs through the middle is charged for neither.
+        for span in &flat.boxes {
+            if span.range.is_empty() {
+                continue;
+            }
+            widths.text[span.range.start] += span.box_.leading() * units;
+            widths.text[span.range.end - 1] += span.box_.trailing() * units;
         }
         // Exclusive prefixes: entry `i` totals the glyphs that
         // start before byte `i`, which is exactly the glyphs on a line
@@ -251,6 +336,26 @@ impl Widths {
             return 0.0;
         }
         self.text[to] - self.text[from] - self.trailing.get(to).copied().unwrap_or(0.0)
+    }
+
+    /// The same for a whole line, with the edges a cloned box closes
+    /// at the break and opens again after it.
+    ///
+    /// A box the line runs into the middle of paints its trailing
+    /// edge at the break, and one the line starts in the middle of
+    /// paints its leading edge at the line's own start. The edges at
+    /// the two true ends of the box are charged by `build`.
+    pub(super) fn line_advance(&self, from: usize, to: usize) -> f32 {
+        let mut width = self.advance(from, to);
+        for cloned in &self.cloned {
+            if from > cloned.range.start && from < cloned.range.end {
+                width += cloned.leading;
+            }
+            if to > cloned.range.start && to < cloned.range.end {
+                width += cloned.trailing;
+            }
+        }
+        width
     }
 }
 
@@ -301,6 +406,9 @@ pub(super) fn cut_runs(
             // paragraph is broken, by `tile`.
             origin: None,
             pseudo_element: None,
+            inline: spec.inline,
+            lead: 0.0,
+            trail: 0.0,
             features: spec.features,
             color: spec.color,
             glyphs,

@@ -911,10 +911,12 @@ pub(super) fn set_lines(
     } else {
         0.0
     };
-    let mut cap = setting.cap.as_ref().map(|cap| DropCap {
-        line: cap.line.clone(),
-        x: setting.x + setting.cap_x,
-        drop,
+    let mut cap = setting.cap.as_ref().map(|cap| {
+        Box::new(DropCap {
+            line: cap.line.clone(),
+            x: setting.x + setting.cap_x,
+            drop,
+        })
     });
 
     let mut fragments = Vec::with_capacity(count);

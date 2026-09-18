@@ -4,9 +4,10 @@ use crate::content::{Attributes, Inline, NodeId};
 use crate::fonts::FontRegistry;
 
 use super::{
-    FirstLine, Inherited, Line, LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle,
-    Span,
+    FirstLine, Inherited, InlineBox, InlineStyles, Line, LineBreakOptions, LineLayout, Measure,
+    Opening, ParagraphStyle, Span,
 };
+use crate::style::Edges;
 
 pub(super) fn registry() -> &'static FontRegistry {
     static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -182,3 +183,74 @@ pub(super) fn span_width_pt(line: &Line, index: usize) -> f32 {
 /// capitals show in the drawn text.
 pub(super) const OPENING: &str = "it was the best of times and the worst of them too, \
     and nobody in the whole of the parish could tell the one from the other";
+
+/// A style tree that answers with a box for the inline elements it
+/// was given one for, and with the block's own style for everything.
+pub(super) struct Boxed(pub(super) Vec<(NodeId, InlineBox)>);
+
+impl InlineStyles for Boxed {
+    fn style(&self, _id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
+        block
+    }
+
+    fn inline_box(&self, id: NodeId) -> Option<InlineBox> {
+        self.0
+            .iter()
+            .find(|(node, _)| *node == id)
+            .map(|(_, box_)| *box_)
+    }
+}
+
+/// A box of `padding` points on all four edges, with no border.
+pub(super) fn padded(padding: f32) -> InlineBox {
+    InlineBox {
+        padding: Edges::all(padding),
+        border: Edges::all(0.0),
+        cloned: false,
+    }
+}
+
+/// A box of `width` points of border on all four edges, with no
+/// padding.
+pub(super) fn bordered(width: f32) -> InlineBox {
+    InlineBox {
+        padding: Edges::all(0.0),
+        border: Edges::all(width),
+        cloned: false,
+    }
+}
+
+/// One code span, under `id`.
+pub(super) fn code(id: NodeId, value: &str) -> Inline {
+    Inline::Code {
+        id,
+        value: value.to_string(),
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    }
+}
+
+/// One emphasis holding `children`, under `id`.
+pub(super) fn emphasis(id: NodeId, children: Vec<Inline>) -> Inline {
+    Inline::Emphasis {
+        id,
+        children,
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    }
+}
+
+/// One paragraph broken to `measure_pt`, with the boxes `styles`
+/// answers for.
+pub(super) fn layout_boxed(inlines: &[Inline], measure_pt: f32, styles: &Boxed) -> Vec<Line> {
+    LineLayout::new(registry()).layout_styled(
+        inlines,
+        body(),
+        styles,
+        &Measure::uniform(measure_pt),
+        LineBreakOptions::default(),
+        Opening::default(),
+    )
+}

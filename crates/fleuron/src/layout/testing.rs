@@ -180,6 +180,34 @@ pub(super) fn prose() -> Block {
     paragraph(&"a quiet sentence of prose ".repeat(6))
 }
 
+/// One paragraph with a code span between two stretches of prose.
+pub(super) fn tagged_paragraph(before: &str, tag: &str, after: &str) -> Block {
+    let text = |value: &str| Inline::Text {
+        id: NodeId::UNASSIGNED,
+        value: value.to_string(),
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    };
+    Block::Paragraph {
+        id: NodeId::UNASSIGNED,
+        inlines: vec![
+            text(before),
+            Inline::Code {
+                id: NodeId::UNASSIGNED,
+                value: tag.to_string(),
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+            text(after),
+        ],
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    }
+}
+
 /// Every filled rect one page paints, in paint order.
 pub(super) fn rects(page: &Page) -> Vec<(f32, f32, f32, f32, Color)> {
     page.items

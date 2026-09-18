@@ -2,7 +2,7 @@
 //! over the line it opens on, and what it hangs into the margin.
 
 use crate::content::{Inline, Metadata, NodeId};
-use crate::style::{Color, FontVariantCaps, TextTransform};
+use crate::style::{Color, Edges, FontVariantCaps, TextTransform};
 use serde::Serialize;
 
 /// Everything one paragraph's layout depends on, and the colour its
@@ -100,6 +100,45 @@ impl Lead {
     }
 }
 
+/// What one inline element paints around its runs, and what that
+/// takes on each edge.
+///
+/// The edges are points. The leading and trailing ones are width
+/// like any other, so the breaker is told about them; the ones above
+/// and below leave the line the height it was.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InlineBox {
+    /// Padding, in points.
+    pub padding: Edges,
+    /// Border widths, in points, zero on an edge that is not drawn.
+    pub border: Edges,
+    /// Whether `box-decoration-break: clone` closes the edges a line
+    /// break cuts.
+    pub cloned: bool,
+}
+
+impl InlineBox {
+    /// What the box takes before the first of its runs.
+    pub fn leading(&self) -> f32 {
+        self.padding.left + self.border.left
+    }
+
+    /// What it takes after the last of them.
+    pub fn trailing(&self) -> f32 {
+        self.padding.right + self.border.right
+    }
+
+    /// How far it reaches over the runs it covers.
+    pub fn above(&self) -> f32 {
+        self.padding.top + self.border.top
+    }
+
+    /// How far it reaches under them.
+    pub fn below(&self) -> f32 {
+        self.padding.bottom + self.border.bottom
+    }
+}
+
 /// Where line layout gets the style of one inline node.
 ///
 /// The style tree answers by node id. `Inherited` answers with the
@@ -108,6 +147,12 @@ impl Lead {
 pub trait InlineStyles {
     /// The style of `id`, given the style of the block it sits in.
     fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle;
+
+    /// The box the inline element `id` paints around its runs, where
+    /// it paints one. Nothing, for a caller with no tree to ask.
+    fn inline_box(&self, _id: NodeId) -> Option<InlineBox> {
+        None
+    }
 
     /// The text the sheet generates around one inline element.
     /// Nothing, for a caller with no sheet to ask.

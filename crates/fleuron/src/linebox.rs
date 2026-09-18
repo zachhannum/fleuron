@@ -41,6 +41,19 @@ impl Strut {
         }
     }
 
+    /// The content area a face makes at `size`: its ascent and its
+    /// descent alone. This is the box an inline element's padding and
+    /// border are measured from, so what a chip encloses is the
+    /// letters rather than the space the line height opened around
+    /// them.
+    pub fn content(metrics: FontMetricsTable, size: f32) -> Strut {
+        let upem = metrics.units_per_em as f32;
+        Strut {
+            above: metrics.ascender as f32 / upem * size,
+            below: -metrics.descender as f32 / upem * size,
+        }
+    }
+
     /// Total height: `above + below`.
     pub fn height(self) -> f32 {
         self.above + self.below
@@ -89,6 +102,9 @@ mod tests {
             text_start: 0,
             origin: None,
             pseudo_element: None,
+            inline: None,
+            lead: 0.0,
+            trail: 0.0,
             features: crate::fonts::Features::NONE,
             color: crate::style::Color::BLACK,
             glyphs: Vec::new(),

@@ -23,8 +23,9 @@
 //! of each, `table` sets a table a row at a time, `flow` stacks
 //! fragments into pages, `exclusion` places the images and blocks the
 //! sheet anchored and wraps prose around them, `background` puts art
-//! behind a box, `furniture` paints the margin boxes, and `text` turns
-//! a shaped line into paint ops.
+//! behind a box, `inline` paints the box an inline element takes on a
+//! line, `furniture` paints the margin boxes, and `text` turns a
+//! shaped line into paint ops.
 
 mod background;
 mod build;
@@ -34,6 +35,7 @@ mod flow;
 mod fragment;
 mod furniture;
 mod image;
+mod inline;
 mod list;
 mod navigation;
 mod reference;

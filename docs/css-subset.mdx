@@ -632,6 +632,29 @@ h2 { color: rgb(140, 30, 30) }
 
 How far a mark hangs depends on the mark: nearly all of a period or comma, less of a colon, none of a letter.
 
+### Inline boxes
+
+An inline element is a link, emphasis, strong text, or code. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
+
+The engine paints one box per line the element reaches. Padding and a border on the left and the right are width. They move the text after them, and the line breaks against them. Padding and a border above and below the text leave the height of the line alone. A box deeper than the text reaches over the lines around it.
+
+Where a line break splits the element, `box-decoration-break` decides which edges each part of it takes. With `slice`, the first part draws the left edge and the last part draws the right edge. The corners at the break are square. With `clone`, every part draws all four edges and all four rounded corners.
+
+The engine paints the box over the background of the block around it, and under the text it sits behind. A block that the sheet puts against the page carries the boxes of its own runs with it.
+
+`position`, `z-index`, and `opacity` on an inline element are not in the subset. The element takes the layer and the opacity of the block around it.
+
+The following example sets a keyword in white on a gray chip with rounded corners:
+
+```css
+code {
+  background-color: #858585;
+  color: #ffffff;
+  padding: 2pt 4pt;
+  border-radius: 3pt;
+}
+```
+
 ## Blocks
 
 These do not inherit. A block is a paragraph, a heading, a quotation, an image, a thematic break, a list, a list item, or a table.
@@ -1486,7 +1509,7 @@ code { font-family: monospace }
 | lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
-| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, and a width or a height on a positioned block |
+| positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, a width or a height on a positioned block, and `position`, `z-index` or `opacity` on an inline element |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
@@ -1495,7 +1518,7 @@ code { font-family: monospace }
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width` |
-| inline boxes | a border, padding, or background on an inline element, and a border or padding on `@page` |
+| inline boxes | a margin on an inline element, and a border or padding on `@page` |
 | columns | `column-fill`, `column-rule-color`, the `columns` and `column-rule` shorthands, columns on any element, and `column-span` on a block inside a quotation or a table cell |
 
 Two of those have visible consequences today. The last page fills its columns in order and stops short rather than balancing them. A column rule uses the book's text color.

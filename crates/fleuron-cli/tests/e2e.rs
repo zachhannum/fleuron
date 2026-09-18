@@ -26,7 +26,7 @@ use std::process::{Command, Output};
 
 use fleuron::content::{Block, Book, Inline, Row};
 use fleuron::images::{Assets, ImageLoader};
-use fleuron::pages::{DrawItem, Page, Side};
+use fleuron::pages::{Corners, DrawItem, Page, Side};
 use fleuron::style::Color;
 use fleuron_markdown::Options;
 
@@ -454,6 +454,97 @@ fn the_page_scan_covers_the_chapter_opening_in_the_preview_and_the_pdf() {
         }),
         "the preview paints the scan at {scan:?} and the PDF writes none there",
     );
+}
+
+/// The inline box through the fixture book: `fixtures/styled.css`
+/// puts the excerpt's cross-reference on a tinted chip with rounded
+/// corners.
+///
+/// The chip is a box around a run rather than around a block. The
+/// reference runs over a line break, so the chip is two boxes: the
+/// first rounds its left corners and the second rounds its right
+/// ones, which is `box-decoration-break: slice`.
+#[test]
+fn the_styled_book_puts_its_cross_reference_on_a_chip() {
+    const TINT: Color = Color::rgb(0xef, 0xe7, 0xd6);
+
+    let pages = styled_pages();
+    let chips: Vec<(usize, f32, f32, f32, f32, Corners)> = pages
+        .iter()
+        .enumerate()
+        .flat_map(|(index, page)| {
+            page.items.iter().filter_map(move |item| match item {
+                DrawItem::Rounded {
+                    x,
+                    y,
+                    w,
+                    h,
+                    color,
+                    radii,
+                    ..
+                } if *color == TINT => Some((index, *x, *y, *w, *h, *radii)),
+                _ => None,
+            })
+        })
+        .collect();
+    assert_eq!(
+        chips.len(),
+        2,
+        "the reference breaks over two lines: {chips:?}"
+    );
+    let (first, last) = (chips[0], chips[1]);
+    assert_eq!(first.0, last.0, "the two pieces are on one page");
+    assert!(first.2 < last.2, "the two pieces share a baseline");
+    assert_eq!(
+        (first.5.top_left.x, first.5.top_right.x),
+        (3.0, 0.0),
+        "the opening piece is not rounded on its left alone",
+    );
+    assert_eq!(
+        (last.5.top_left.x, last.5.top_right.x),
+        (0.0, 3.0),
+        "the closing piece is not rounded on its right alone",
+    );
+
+    // The link and the page it prints are inside the two pieces, and
+    // neither piece covers the line it sits on.
+    let page = &pages[first.0];
+    let inside: Vec<&str> = page
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Text { x, y, text, .. } => chips
+                .iter()
+                .any(|(_, left, top, w, h, _)| {
+                    *x >= *left && *x <= left + w && *y > *top && *y < top + h
+                })
+                .then_some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        inside.iter().any(|text| text.contains("chapter III"))
+            && inside.iter().any(|text| text.contains("page ")),
+        "the chip does not hold the reference and the page it prints: {inside:?}",
+    );
+    for (_, _, _, w, _, _) in &chips {
+        assert!(*w < page.width / 2.0, "a piece covers half its line: {w}pt");
+    }
+
+    // It paints before the runs it sits behind.
+    let chip = page
+        .items
+        .iter()
+        .position(|item| matches!(item, DrawItem::Rounded { color, .. } if *color == TINT))
+        .expect("the chip was painted");
+    let reference = page
+        .items
+        .iter()
+        .position(
+            |item| matches!(item, DrawItem::Text { text, .. } if text.contains("chapter III")),
+        )
+        .expect("the reference was set");
+    assert!(chip < reference, "the reference paints under its own chip");
 }
 
 /// The box model through the fixture book: `fixtures/styled.css`

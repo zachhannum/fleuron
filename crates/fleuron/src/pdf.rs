@@ -1200,6 +1200,44 @@ mod tests {
         );
     }
 
+    /// Acceptance: a rounded chip on a run draws its corners in the
+    /// export, the way a rounded block does. The chip reaches the
+    /// painter as one rounded box, so the curves come out of the same
+    /// path builder the preview reads the same box through.
+    #[test]
+    fn a_rounded_chip_draws_its_corners() {
+        let mut book = book("roll for the modifier");
+        let Some(Block::Paragraph { inlines, .. }) = book.sections[0].blocks.first_mut() else {
+            panic!("the fixture opens with a paragraph");
+        };
+        inlines.push(Inline::Code {
+            id: Default::default(),
+            value: "2d6".into(),
+            attributes: Attributes::default(),
+            position: None,
+            span: None,
+        });
+        book.assign_node_ids();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "chip.css",
+            "code { background-color: #858585; padding: 2pt 4pt; border-radius: 3pt }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let chip = output.pages[0]
+            .items
+            .iter()
+            .filter(|item| matches!(item, DrawItem::Rounded { .. }))
+            .count();
+        assert_eq!(chip, 1, "the chip is not one rounded box");
+        let painted = content(&readable(&output, &Metadata::default()));
+        assert_eq!(
+            painted.matches(" c\n").count(),
+            4,
+            "one curve per corner of the chip:\n{painted}",
+        );
+    }
+
     /// Acceptance: a rounded background image is clipped to the same
     /// curve as the tint under it.
     #[test]
