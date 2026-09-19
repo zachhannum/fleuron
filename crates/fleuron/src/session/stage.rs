@@ -349,8 +349,8 @@ mod tests {
     use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, NodeId, Section};
     use crate::pages::DrawItem;
     use crate::session::testing::{
-        MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, painted,
-        prose, runs, section, sheets, three_chapters,
+        MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, noted,
+        painted, prose, runs, section, sheets, three_chapters,
     };
     use crate::session::{Session, Stages};
     use crate::style::Color;
@@ -918,6 +918,58 @@ mod tests {
         assert_eq!(
             serde_json::to_vec(&once.pages).expect("pages serialize"),
             preview,
+        );
+    }
+
+    /// A book whose notes are numbered by page settles the numbering
+    /// in the session as a single run settles it, and an edit to one
+    /// chapter leaves the notes of the others where they were.
+    #[test]
+    fn the_preview_numbers_the_notes_a_single_run_numbers() {
+        let noted = |tag: &str, count: usize| -> Vec<Block> {
+            (0..count)
+                .map(|index| {
+                    noted(
+                        &format!("{tag} ").repeat(80),
+                        &format!("The note of {tag} {index}."),
+                    )
+                })
+                .collect()
+        };
+        let mut session = Session::new(crate::session::testing::registry());
+        session.set_content(book(vec![
+            section("one.md", noted("alpha", 6)),
+            section("two.md", noted("beta", 6)),
+        ]));
+        session.set_style(sheets("notes { counter-reset: note }"));
+        let pages = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
+        let styles = session.styles().clone();
+        let once = crate::layout::layout_book(
+            session.book(),
+            &styles,
+            crate::session::testing::registry(),
+            crate::layout::no_assets(),
+        );
+        assert!(once.pages.len() > 2, "a book of more than one page");
+        assert_eq!(
+            serde_json::to_vec(&once.pages).expect("pages serialize"),
+            pages,
+            "the preview numbered the notes another way",
+        );
+
+        session.replace_source("two.md", vec![section("two.md", noted("gamma", 8))]);
+        let edited = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
+        let styles = session.styles().clone();
+        let again = crate::layout::layout_book(
+            session.book(),
+            &styles,
+            crate::session::testing::registry(),
+            crate::layout::no_assets(),
+        );
+        assert_eq!(
+            serde_json::to_vec(&again.pages).expect("pages serialize"),
+            edited,
+            "the preview and the single run parted company over an edit",
         );
     }
 
