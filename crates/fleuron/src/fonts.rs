@@ -235,6 +235,22 @@ pub struct FontMetricsTable {
     /// Height of a capital above the baseline. Zero when the face
     /// declares none, which is what a drop cap has to fall back from.
     pub cap_height: i16,
+    /// Where the face puts an underline, from its `post` table.
+    /// `None` when the face declares none.
+    pub underline: Option<Rule>,
+    /// Where it puts a strikethrough, from its `OS/2` table. `None`
+    /// when the face declares none.
+    pub strikeout: Option<Rule>,
+}
+
+/// Where a face puts one rule across its text, in font units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+pub struct Rule {
+    /// The top of the rule, from the baseline, positive above it. An
+    /// underline is below the baseline, so its offset is negative.
+    pub offset: i16,
+    /// How thick the rule is.
+    pub thickness: i16,
 }
 
 /// One registered face: bytes plus everything decoded from them.
@@ -675,6 +691,16 @@ fn read_metrics(font: &skrifa::FontRef, location: &Location) -> FontMetricsTable
         descender: metrics.descent as i16,
         line_gap: metrics.leading as i16,
         cap_height: metrics.cap_height.unwrap_or_default() as i16,
+        underline: metrics.underline.map(rule),
+        strikeout: metrics.strikeout.map(rule),
+    }
+}
+
+/// One decoration of a face, rounded to font units.
+fn rule(decoration: skrifa::metrics::Decoration) -> Rule {
+    Rule {
+        offset: decoration.offset as i16,
+        thickness: decoration.thickness as i16,
     }
 }
 
@@ -905,6 +931,27 @@ mod tests {
         assert_eq!(metrics.ascender, 1007);
         assert_eq!(metrics.descender, -298);
         assert_eq!(metrics.line_gap, 0);
+    }
+
+    /// Part: the underline comes off the `post` table and the
+    /// strikethrough off `OS/2`, so a rule drawn across the text
+    /// sits where the designer put it.
+    #[test]
+    fn metrics_carry_the_underline_and_the_strikeout() {
+        let registry = registry();
+        let metrics = registry.metrics(0).unwrap();
+        let underline = metrics.underline.expect("the face declares an underline");
+        let strikeout = metrics.strikeout.expect("the face declares a strikeout");
+        assert!(
+            underline.offset < 0,
+            "the underline sits above the baseline: {underline:?}",
+        );
+        assert!(underline.thickness > 0, "{underline:?}");
+        assert!(
+            strikeout.offset > 0,
+            "the strikeout sits below the baseline: {strikeout:?}",
+        );
+        assert!(strikeout.thickness > 0, "{strikeout:?}");
     }
 
     /// hmtx advances, read straight from the tables.
