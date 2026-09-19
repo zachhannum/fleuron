@@ -1255,7 +1255,7 @@ note {
 }
 ```
 
-The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as the content box. Its height is what the notes in it come to.
+The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as a column, which on a page that does not divide is the whole content box. Its height is what the notes in it come to.
 
 A note takes those properties, and the text properties with them. The blocks of a note are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet returns `font-style`, `font-weight`, and `text-indent` to their initial values. A reference in italic therefore leaves the note upright.
 
@@ -1263,9 +1263,11 @@ The engine prints the number twice: as the reference in the line, and as a mark 
 
 ### The area and the page
 
-The engine takes the area off the content box before it places a line. A page with notes on it holds fewer lines of text. A line that no longer fits moves to the next page. The note of a reference on that line moves with it.
+The engine takes the area off the column before it places a line. A column with notes under it holds fewer lines of text. A line that no longer fits moves on, and the note of a reference on that line moves with it.
 
-A note longer than the room the page has left is split. The rest of it opens the area of the next page, above the notes of that page, and carries no reference of its own.
+A note longer than the room the column has left is split. The rest of it opens the area of the next column, above the notes of that column, and carries no reference of its own. The last column of a page hands what it cannot hold to the next page.
+
+On a page that divides into columns, each column sets its own notes under itself.
 
 ### Numbering
 

@@ -76,7 +76,7 @@ pub(super) struct Placed {
     /// ends on rather than the one it was measured for.
     section: NodeId,
     /// The column of the page it landed in.
-    column: u32,
+    pub(super) column: u32,
     /// The tier of the page it landed in.
     tier: usize,
     /// Top of its box, from the content box's top.
@@ -128,7 +128,7 @@ pub(super) struct Checkpoint {
     carried: Vec<Decoration>,
     pending_anchors: Vec<NodeId>,
     header: Vec<(f32, Vec<DrawItem>)>,
-    notes: Vec<(Arc<Note>, usize)>,
+    notes: Vec<(u32, Arc<Note>, usize)>,
 }
 
 /// Why the page being built ends.
@@ -192,7 +192,7 @@ pub(super) struct Flow<'a, 'p> {
     /// The column being filled, counting from the leading edge.
     pub(super) column: u32,
     /// How many the page divides into.
-    columns: u32,
+    pub(super) columns: u32,
     /// Where in `placed` the column being filled began. A break backs
     /// up to a fragment of this column, never past its head.
     pub(super) column_start: usize,
@@ -222,10 +222,10 @@ pub(super) struct Flow<'a, 'p> {
     /// The border boxes of the blocks on the pages closed so far.
     boxes: Vec<(NodeId, PageBox)>,
     /// The notes the page being built owes, in the order their
-    /// references were set. Each one says which of its fragments the
-    /// page has still to set, so a note the page before could not
-    /// finish opens the list.
-    pub(super) notes: Vec<(Arc<Note>, usize)>,
+    /// references were set: the column each one is set under, the
+    /// note, and which of its fragments the column has still to set.
+    /// A note the page before could not finish opens the list.
+    pub(super) notes: Vec<(u32, Arc<Note>, usize)>,
     /// The page each note's reference was set on.
     pub(super) note_pages: BTreeMap<NodeId, u32>,
     /// Whether a box measures its insets from a block rather than from
@@ -490,8 +490,9 @@ impl<'a, 'p> Flow<'a, 'p> {
             .clone()
             .map(|notes| *notes)
             .unwrap_or_default();
+        let column = self.column;
         self.notes
-            .extend(notes.iter().map(|note| (note.clone(), 0usize)));
+            .extend(notes.iter().map(|note| (column, note.clone(), 0usize)));
         self.placed.push(Placed {
             section: self.section,
             column: self.column,
@@ -668,10 +669,14 @@ impl<'a, 'p> Flow<'a, 'p> {
                 down = self.cursor - tiers[tier].top;
             }
             let (to_x, to_y) = self.origin();
-            self.notes
-                .extend(placed.notes.iter().map(|note| (note.clone(), 0usize)));
             placed.top += down;
             placed.column = self.column;
+            self.notes.extend(
+                placed
+                    .notes
+                    .iter()
+                    .map(|note| (placed.column, note.clone(), 0usize)),
+            );
             placed.tier = self.tiers.len() - 1;
             shift(&mut placed.items, to_x - from_x, to_y - from_y + down);
             shift_boxes(&mut placed.boxes, to_x - from_x, to_y - from_y + down);
@@ -718,8 +723,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut placed = std::mem::take(&mut self.placed);
         let within = self.containers(&placed);
         self.land(&placed, within);
-        let area = self.notes_area(&placed);
-        let under = area.as_ref().map(|area| area.height).unwrap_or(0.0);
+        let areas = self.notes_areas(&placed);
+        let under = areas
+            .iter()
+            .map(|(_, area)| area.height)
+            .fold(0.0, f32::max);
         if self.paints && ending == Ending::Short {
             self.align(&mut placed, under);
         }
@@ -738,7 +746,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 self.boxes.push((node, PageBox { page, ..area }));
             }
         }
-        self.notes_closed(&area);
+        self.notes_closed(&areas);
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
         for placed in placed {
@@ -749,7 +757,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 .marks
                 .as_ref()
                 .is_some_and(|marks| !marks.targets.is_empty())
-                .then(|| self.area(&placed, index));
+                .then(|| self.placed_area(&placed, index));
             for (node, area) in placed.boxes {
                 let page = index as u32;
                 self.boxes.push((node, PageBox { page, ..area }));
@@ -767,21 +775,23 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             items.extend(placed.items);
         }
-        // The notes go under the text of the page, so they are
-        // painted after it and the baselines of the page rise from
-        // its first line to its last note.
-        if let Some(area) = &area
-            && self.paints
-        {
+        // The notes go under the text of the column they were
+        // written in, so they are painted after it and the baselines
+        // of a column rise from its first line to its last note.
+        if self.paints {
             let geometry = self.paginator.master(index, &self.slot).geometry;
-            let (mut painted, areas) = self.paginator.area_items(area, geometry.content_origin());
-            items.append(&mut painted);
             let page = index as u32;
-            self.boxes.extend(
-                areas
-                    .into_iter()
-                    .map(|(node, area)| (node, PageBox { page, ..area })),
-            );
+            for (column, area) in &areas {
+                let (mut painted, boxes) = self
+                    .paginator
+                    .area_items(area, geometry.column_origin(*column));
+                items.append(&mut painted);
+                self.boxes.extend(
+                    boxes
+                        .into_iter()
+                        .map(|(node, area)| (node, PageBox { page, ..area })),
+                );
+            }
         }
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);
@@ -884,7 +894,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// The box one placed fragment takes on the page at `index`: its
     /// own top and height, across the column it is in, or across the
     /// content box where its tier spans the columns.
-    fn area(&self, placed: &Placed, index: usize) -> PageBox {
+    fn placed_area(&self, placed: &Placed, index: usize) -> PageBox {
         let geometry = self.paginator.master(index, &self.slot).geometry;
         let (x, y) = geometry.column_origin(placed.column);
         let width = match self.tiers.get(placed.tier) {

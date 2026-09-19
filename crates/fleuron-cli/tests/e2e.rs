@@ -1431,13 +1431,14 @@ fn a_two_column_book_reaches_the_pdf() {
         COLUMN_PAGES, EXPECTED_PAGES,
         "dividing the page box should change the pagination",
     );
-    if let Some(text) = extract_reading_order(&pdf) {
+    // Reading order guesses a page's blocks from where they sit, and
+    // on a divided page the guess turns on the height of a glyph. The
+    // writer puts runs in the order the columns fill. A word a line
+    // broke at a hyphen comes back in halves, so the comparison is
+    // over text with no hyphens in it.
+    if let Some(text) = extract_content_order(&pdf) {
         assert_eq!(pages_of(&text).len(), COLUMN_PAGES);
-        // Reading order joins the halves of a word a line broke at a
-        // hyphen and drops the hyphen with it, so the comparison is
-        // over text with none. It also reads a table a column at a
-        // time, so the table is compared whole.
-        if let Err(difference) = holds(&fixture_book(), &strip_folios(&text), unhyphenated, false) {
+        if let Err(difference) = holds(&fixture_book(), &strip_folios(&text), unhyphenated, true) {
             panic!("the two-column PDF's prose is not the book's: {difference}");
         }
     }
@@ -2407,13 +2408,6 @@ fn fixture_book() -> Book {
 /// rejoins words broken across lines and swallows the hyphen.
 fn extract_text(pdf: &Path) -> Option<String> {
     extract_with(pdf, &["-layout"])
-}
-
-/// The same in reading order rather than physical layout, which is
-/// how a reader walks a page whose content box is divided: down one
-/// column, then down the next.
-fn extract_reading_order(pdf: &Path) -> Option<String> {
-    extract_with(pdf, &[])
 }
 
 /// The same in the order the runs were written to the page.

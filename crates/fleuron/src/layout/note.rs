@@ -1,14 +1,17 @@
 //! Footnotes: what each note is numbered, what its body comes to,
 //! and the area at the foot of the page its body is set in.
 //!
-//! A note is written in the flow and set at the foot of the page its
-//! reference lands on. The area grows as the page takes notes, and
-//! the content box it leaves shrinks with it, so a line that no
-//! longer fits moves to the next page and takes its note with it.
+//! A note is written in the flow and set under the column its
+//! reference lands in. The area grows as the column takes notes, and
+//! the room the column has for lines shrinks with it, so a line that
+//! no longer fits moves on and takes its note with it.
 //!
-//! A note whose body outruns the room the page has left is split. The
-//! rest of it opens the area of the next page, above the notes that
-//! page takes for itself, and carries no reference of its own.
+//! A note whose body outruns the room the column has left is split.
+//! The rest of it opens the area of the next column, above the notes
+//! that column takes for itself, and carries no reference of its own.
+//!
+//! A page that does not divide has one column, so its area is the
+//! width of its content box.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -224,10 +227,15 @@ impl Paginator<'_> {
         }))
     }
 
-    /// Where the notes of a page start, and how wide they are set.
+    /// Where the notes of a column start, and how wide they are set.
     pub(super) fn note_measure(&self) -> (f32, f32) {
-        let width = self.styles.default_page().geometry.content_size().0;
-        self.area_style().content_box(0.0, width)
+        self.area_style().content_box(0.0, self.note_width())
+    }
+
+    /// How wide the area is: the measure of a column, which is the
+    /// content box of a page that divides into one.
+    pub(super) fn note_width(&self) -> f32 {
+        self.styles.default_page().geometry.measure()
     }
 
     /// The number the note is set beside, shaped in the note's own
@@ -359,8 +367,7 @@ impl Paginator<'_> {
         let style = self.area_style();
         let (above, _) = area_edges(style);
         let (x, _) = self.note_measure();
-        let width = self.styles.default_page().geometry.content_size().0;
-        let (left, width) = style.border_box(0.0, width);
+        let (left, width) = style.border_box(0.0, self.note_width());
         let top = area.top + style.margin.top;
         let height = (area.height - style.margin.top - style.margin.bottom).max(0.0);
         let ink = |edge: crate::style::Border| edge.color.unwrap_or(style.color);
@@ -398,53 +405,87 @@ impl Paginator<'_> {
 }
 
 impl Flow<'_, '_> {
-    /// Where the content of the page being built has to stop: the
-    /// content box, less what the notes on the page need at its foot.
+    /// Where the column being filled has to stop: the content box,
+    /// less what the notes of that column need at the foot of it.
     /// `fragment` is the one about to be placed, whose own notes join
     /// them.
     ///
-    /// This is the push-back: a note makes the page shorter, and a
-    /// line that no longer fits under it moves to the next page with
-    /// the note its reference holds.
+    /// This is the push-back: a note makes the column shorter, and a
+    /// line that no longer fits under it moves on and takes the note
+    /// its reference holds with it.
     pub(super) fn room(&self, fragment: &Fragment) -> f32 {
         let coming = fragment.notes.as_deref().map(Vec::as_slice).unwrap_or(&[]);
-        if self.notes.is_empty() && coming.is_empty() {
+        let owed = self.owed(self.column);
+        if owed.is_empty() && coming.is_empty() {
             return self.height;
         }
         let (above, below) = area_edges(self.paginator.area_style());
         let mut wanted = above + below;
-        for (index, (note, from)) in self.notes.iter().enumerate() {
+        for (index, (note, from)) in owed.iter().enumerate() {
             wanted += note.height(*from, index > 0);
         }
-        let under = !self.notes.is_empty();
+        let under = !owed.is_empty();
         for (index, note) in coming.iter().enumerate() {
             wanted += note.height(0, under || index > 0);
         }
         (self.height - wanted).max(0.0)
     }
 
-    /// What the notes of the page being closed come to, with `placed`
-    /// the fragments on it.
-    pub(super) fn notes_area(&self, placed: &[Placed]) -> Option<Area> {
-        let foot = placed
+    /// The notes one column of the page being built owes, in the
+    /// order their references were set.
+    fn owed(&self, column: u32) -> Vec<(Arc<Note>, usize)> {
+        self.notes
             .iter()
-            .map(|placed| placed.top + placed.height)
-            .fold(0.0, f32::max);
-        self.paginator.area(&self.notes, foot, self.height)
+            .filter(|(at, _, _)| *at == column)
+            .map(|(_, note, from)| (note.clone(), *from))
+            .collect()
+    }
+
+    /// What the notes of the page being closed come to: one area
+    /// under each column that owes any, with `placed` the fragments
+    /// on the page.
+    ///
+    /// A column sets its notes under the foot of its own text. What
+    /// one column cannot hold is set under the next, and what the
+    /// last of them cannot hold opens the next page.
+    pub(super) fn notes_areas(&self, placed: &[Placed]) -> Vec<(u32, Area)> {
+        let mut areas = Vec::new();
+        let mut left: Vec<(Arc<Note>, usize)> = Vec::new();
+        for column in 0..self.columns.max(1) {
+            let mut owed = std::mem::take(&mut left);
+            owed.append(&mut self.owed(column));
+            if owed.is_empty() {
+                continue;
+            }
+            let foot = placed
+                .iter()
+                .filter(|placed| placed.column == column)
+                .map(|placed| placed.top + placed.height)
+                .fold(0.0, f32::max);
+            let Some(area) = self.paginator.area(&owed, foot, self.height) else {
+                continue;
+            };
+            left = area.left.clone();
+            areas.push((column, area));
+        }
+        areas
     }
 
     /// Records the page the references of its notes were set on, and
-    /// hands what the area could not hold to the next page.
-    pub(super) fn notes_closed(&mut self, area: &Option<Area>) {
+    /// hands what the page could not set to the next one.
+    pub(super) fn notes_closed(&mut self, areas: &[(u32, Area)]) {
         let page = self.pages.len() as u32;
-        for (note, from) in &self.notes {
+        for (_, note, from) in &self.notes {
             if *from == 0 {
                 self.note_pages.insert(note.node, page);
             }
         }
-        self.notes = area
-            .as_ref()
-            .map(|area| area.left.clone())
-            .unwrap_or_default();
+        self.notes = areas
+            .last()
+            .map(|(_, area)| area.left.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(note, from)| (0, note, from))
+            .collect();
     }
 }
