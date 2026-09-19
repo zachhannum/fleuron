@@ -320,6 +320,16 @@ impl Paginator<'_> {
         builder.opacity = around.opacity;
         builder.blocks([child], 0.0, width);
         let stacked = builder.stack();
+        if !stacked.notes.is_empty() {
+            self.warn(
+                concat!(
+                    "A note was written inside a block against the page. ",
+                    "The note is left out, because the block is out of the flow.",
+                )
+                .to_string(),
+                None,
+            );
+        }
         let margin = style.margin;
         let inner = (
             (width - margin.inline()).max(0.0),

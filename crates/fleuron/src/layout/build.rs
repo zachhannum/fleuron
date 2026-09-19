@@ -531,12 +531,16 @@ impl Builder<'_, '_> {
     pub(super) fn stack(mut self) -> Stacked {
         let mut marks = None;
         let mut anchors = Vec::new();
+        let mut notes = Vec::new();
         let mut placed = Vec::new();
         let mut cursor = 0.0f32;
         for fragment in &self.fragments {
             if let Piece::Anchor(node) = fragment.piece {
                 anchors.push(node);
                 continue;
+            }
+            if let Some(held) = &fragment.notes {
+                notes.extend(held.iter().cloned());
             }
             gather(&mut marks, fragment.marks.clone());
             let top = cursor + fragment.lead + fragment.fixed;
@@ -553,6 +557,7 @@ impl Builder<'_, '_> {
             boxes,
             height: cursor + self.margin + self.fixed,
             anchors,
+            notes,
             marks,
         }
     }
@@ -1158,6 +1163,9 @@ pub(super) struct Stacked {
     pub(super) height: f32,
     /// The boxes the sheet lifted out of the flow from inside them.
     pub(super) anchors: Vec<NodeId>,
+    /// The notes written inside them, which are set at the foot of
+    /// the page the stack lands on.
+    pub(super) notes: Vec<Arc<Note>>,
     /// The strings, folios, and targets the blocks give the page
     /// furniture.
     pub(super) marks: Option<Box<Marks>>,

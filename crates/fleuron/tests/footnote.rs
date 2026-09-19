@@ -17,6 +17,9 @@ use fleuron::style::{Source, StyleTree, Stylesheets};
 use fleuron_markdown::Options;
 use proptest::prelude::*;
 
+/// The book the whole pipeline is run over, notes and all.
+const FIXTURE: &str = include_str!("../../../fixtures/gulliver-excerpt.md");
+
 fn registry() -> &'static FontRegistry {
     static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
     REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
@@ -203,6 +206,38 @@ fn the_settle_terminates() {
     );
     let again = Paginator::new(registry(), &styles).paginate(&book);
     assert_eq!(pages.len(), again.len(), "the settled page count is stable");
+}
+
+/// Acceptance: the numbering settles on the fixture book, which is
+/// the book the whole pipeline is run over.
+#[test]
+fn the_settle_terminates_on_the_fixture_book() {
+    let book = read(FIXTURE);
+    let styles = styled(&book, "notes { counter-reset: note }");
+    let paginator = Paginator::new(registry(), &styles);
+    let pages = paginator.paginate(&book);
+    assert!(pages.len() > 2, "a book of more than one page");
+    assert!(
+        paginator.settles() < 4,
+        "the numbering took {} passes and did not settle",
+        paginator.settles(),
+    );
+    assert!(
+        marks(&pages).iter().any(|mark| mark == "1."),
+        "the fixture book set no note",
+    );
+}
+
+/// A note written in a table cell is set at the foot of the page the
+/// row lands on.
+#[test]
+fn a_note_in_a_table_cell_reaches_the_foot_of_the_page() {
+    let markdown = "| Ship | Sailed |\n|---|---|\n\
+                    | The Hesper[^a] | 3 March |\n\n\
+                    [^a]: note1 of the ship.\n";
+    let pages = lay_out(markdown, "").pages;
+    assert_eq!(holding(&pages, "note1"), [1], "the note left the book");
+    assert_eq!(marks(&pages), ["1."]);
 }
 
 /// The first note of every page is numbered 1 where the area
