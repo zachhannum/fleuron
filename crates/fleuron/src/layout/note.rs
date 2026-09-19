@@ -268,9 +268,10 @@ pub(super) struct Area {
     pub(super) top: f32,
     /// What the whole area takes, the box's own edges included.
     pub(super) height: f32,
-    /// The fragments set in it, each with its top from the top of the
-    /// area's content box.
-    pub(super) placed: Vec<(f32, Fragment)>,
+    /// The fragments set in it: the note each one is of, which of its
+    /// fragments it is, and its top from the top of the area's
+    /// content box.
+    pub(super) placed: Vec<(f32, Arc<Note>, usize)>,
     /// The notes the page could not set, each with the fragment of it
     /// the next page opens with.
     pub(super) left: Vec<(Arc<Note>, usize)>,
@@ -306,7 +307,7 @@ impl Paginator<'_> {
         let style = self.area_style();
         let (above, below) = area_edges(style);
         let room = height - foot - above - below;
-        let mut placed: Vec<(f32, Fragment)> = Vec::new();
+        let mut placed: Vec<(f32, Arc<Note>, usize)> = Vec::new();
         let mut cursor = 0.0f32;
         let mut owed: Vec<(Arc<Note>, usize)> = Vec::new();
         for (note, from) in notes {
@@ -324,10 +325,7 @@ impl Paginator<'_> {
                     break;
                 }
                 cursor += step;
-                placed.push((
-                    cursor - note.fragments[at].height,
-                    note.fragments[at].clone(),
-                ));
+                placed.push((cursor - note.fragments[at].height, note.clone(), at));
                 at += 1;
             }
             if at < note.fragments.len() {
@@ -383,12 +381,12 @@ impl Paginator<'_> {
         let placed: Vec<(f32, &Fragment)> = area
             .placed
             .iter()
-            .map(|(at, fragment)| (*at, fragment))
+            .map(|(at, note, index)| (*at, &note.fragments[*index]))
             .collect();
         let (mut boxes, _) = decorate(&placed);
         super::flow::shift(&mut boxes, inner.0, inner.1);
         items.append(&mut boxes);
-        for (at, fragment) in &area.placed {
+        for (at, fragment) in placed {
             items.append(&mut self.fragment_items(fragment, inner.0, inner.1 + at));
         }
         items

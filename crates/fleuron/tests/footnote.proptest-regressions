@@ -1,8 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc cef4dfdc114385585033aa6007a6751695c279e8a87ef764a441177b8cc7ef8b # shrinks to markdown = "Line1 of the manuscript runs along[^1].\n\nLine2 of the manuscript runs along[^2].\n\n[^1]: a\n\n[^2]: a\n\n[^3]: a\n\n"
-cc 2195b751e2f4e1557ed38a887d7aff11110818296786aa811a982272ceb546ab # shrinks to markdown = "Line1 of the manuscript runs along[^1].\n\nLine2 of the manuscript runs along[^2].\n\n[^1]: a\n\n[^2]: c\n\n[^3]: w emeao sjfjgcyknakm bqpzwoup aavkjvdmhjr fkszryirq bbxhvbwnrxu amenz opfs lbbllofer gvosh cbr whrlqr wgtkormx sgmlojqsvnl p urzbmzvdc tkqoybcvvx qpelw jroxrel rdajnp nmi tvhamvsfyc xgaylna oaiongulf v kqmfzz b tacbvgzvsg wlvq seifo isz xssaxcvpyh xayqkf ioikgfx ztctj csoritpusc dhlbqvu tplan um lwkbpqp opsrwb yfpe\n\n"

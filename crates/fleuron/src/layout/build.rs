@@ -1195,6 +1195,16 @@ pub(super) fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(Node
             boxes[index].bottom = top + fragment.height + boxes[index].decoration.below;
         }
     }
+    // A block the stack does not finish ends at the last fragment of
+    // it that is here. A note split across two pages is one.
+    let last = placed
+        .last()
+        .map(|(top, fragment)| top + fragment.height)
+        .unwrap_or(0.0);
+    for index in open {
+        boxes[index].bottom = last;
+        boxes[index].cut_below = true;
+    }
     let mut items = Vec::new();
     let mut areas = Vec::new();
     for painted in &boxes {
