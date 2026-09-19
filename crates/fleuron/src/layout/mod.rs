@@ -58,7 +58,7 @@ use background::Backdrop;
 pub(crate) use exclusion::AnchoredBoxes;
 pub(crate) use flow::{PageInfo, Paged};
 pub(crate) use navigation::{navigation, run_area};
-pub(crate) use note::Numbering;
+pub(crate) use note::{Numbering, UNSETTLED};
 pub(crate) use reference::{Named, References, landed, moved};
 
 use std::borrow::Cow;
@@ -367,14 +367,7 @@ impl Paginator<'_> {
             self.settles.set(self.settles.get() + 1);
             paged = self.pass(book);
         }
-        self.warn(
-            concat!(
-                "The notes were numbered by page and the numbering did not settle. ",
-                "The numbers are the ones of the last pass.",
-            )
-            .to_string(),
-            None,
-        );
+        self.warn(note::UNSETTLED.to_string(), None);
         paged
     }
 

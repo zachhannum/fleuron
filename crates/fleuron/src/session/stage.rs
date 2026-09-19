@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::Warning;
 use crate::content::NodeId;
 use crate::layout::{
-    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, landed, moved, navigation,
+    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, UNSETTLED, landed, moved,
+    navigation,
 };
 use crate::pages::{Page, PageBox};
 
@@ -216,6 +217,10 @@ impl Session<'_> {
             self.stages.settle += 1;
             paged = self.fragment(false);
         }
+        self.flow_warnings.push(Warning {
+            message: UNSETTLED.to_string(),
+            origin: None,
+        });
         paged
     }
 

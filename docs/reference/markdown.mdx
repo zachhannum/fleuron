@@ -344,6 +344,7 @@ A link to a source or a heading that the book does not have also prints nothing.
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
 | `[text]{.class}` | `span` |
+| `[^label]`, with `[^label]:` elsewhere | `note`, holding the blocks of the note |
 | two spaces or `\` at the end of a line | `break` |
 
 A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
@@ -365,6 +366,22 @@ The Voyage to Lilliput
 
 A rule on `h1::first-line` styles the text before the break. The text after the break takes the style of `h1`. The whole heading is one heading to `string-set`, to a running head, and to its slug.
 
+## Footnotes
+
+A footnote is written the way GitHub writes one: `[^label]` where the reference belongs, and `[^label]: the note` on a line of its own. The label names the note and is not printed. The following example writes a note on the sum the author was given:
+
+```markdown
+I got forty pounds,[^purse] and a promise of thirty pounds a year.
+
+[^purse]: Forty pounds is the whole of the author's patrimony.
+```
+
+The note becomes a `note` inline where the reference was written, and the note holds blocks. A note of two paragraphs is two paragraphs, and a note can hold a list or a quotation. Indent the lines under the first one to keep them in the note.
+
+The reference and the note can be written in either order, and a note can be written far from the paragraph that refers to it. The engine sets the note at the foot of the page its reference lands on. [The CSS subset](../css-subset.mdx#footnotes) says how the note and the area at the foot of the page are styled.
+
+Two things warn. A note that no reference names is kept where it was written. A second note under one label is the note its reference takes, and the first is kept where it was written.
+
 ## What warns
 
 The manuscript below uses every construct in the tables above, the ones with no counterpart included. Constructs the content tree has a node for are laid out. The rest is laid out as prose and reported under the page.
@@ -381,11 +398,10 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | construct | becomes |
 |---|---|
 | a definition list | one paragraph per entry |
-| a footnote | prose where the definition was written |
 | strikethrough, superscript, subscript | plain text |
 | math | plain text |
 | an image among prose | a block after the paragraph |
-| html, a footnote reference, a task marker | nothing. There is no prose in them |
+| html, a task marker | nothing. There is no prose in them |
 | an attribute line naming nothing | a paragraph of its own |
 | a brace run that is not classes and an id | a paragraph of its own |
 | a brace run after `]` that is not classes and an id | plain text, the brackets included |
@@ -403,6 +419,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | `wikilinks` | `[[wikilinks]]`, which become links. |
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 | `breaks` | A line of nothing but `\pagebreak` or `\columnbreak` starts a new page or the next column. On by default. |
+| `footnotes` | `[^label]` and `[^label]:`, as GitHub writes them. On by default. |
 
 `Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run, a table, and `\pagebreak` are prose.
 

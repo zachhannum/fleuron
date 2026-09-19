@@ -1233,6 +1233,54 @@ img {
 }
 ```
 
+## Footnotes
+
+A note is written in the manuscript where its reference belongs, and the engine sets it at the foot of the page that reference lands on. [The markdown mapping](reference/markdown.mdx#footnotes) says how a note is written.
+
+Two elements style a note. `note` is the note itself: the reference in the line, the number beside the note, and the blocks of the note. `notes` is the area the notes of one page are set in, at the foot of the content box.
+
+The following example sets the notes of a page under a rule, in a smaller size than the text:
+
+```css
+notes {
+  margin-top: 1em;
+  padding-top: 0.4em;
+  border-top: thin solid;
+}
+
+note {
+  font-size: 9pt;
+  line-height: 1.2;
+  padding-left: 1.5em;
+}
+```
+
+The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as the content box. It holds as many notes as the page has room for, so its height is what the notes in it come to.
+
+A note takes the same properties, and the text properties with them. Its blocks are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet sets `font-style`, `font-weight` and `text-indent` back to their initial values, so a reference in italic does not set the note in italic.
+
+The number is printed twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does, and hangs in the padding to the left of the note.
+
+### The area and the page
+
+The area comes off the content box before a line is placed, so a page with notes on it holds fewer lines of text. A line that no longer fits moves to the next page, and the note its reference holds moves with it.
+
+A note longer than the room the page has left is split. What is left of it opens the area of the next page, above the notes of that page, and carries no reference of its own.
+
+### Numbering
+
+The note counter runs through the book. `counter-reset: note` restarts it, and where the rule is decides how often:
+
+| the rule is on | the numbering restarts |
+|---|---|
+| `section` | at every chapter, which is what the built-in stylesheet does |
+| `notes` | at every page |
+| any other element | at that element |
+
+`counter-reset: note 5` restarts the numbering at 5 rather than at 1. The `page` and the `note` counters go in one declaration: `counter-reset: page 1 note 1`.
+
+A note numbered by its page is numbered from a layout that is already finished, because which page a note is set on is a layout result. So the engine lays the book out again, up to four times, until the numbering stops changing. A book that has not settled by then keeps the numbers of the last layout, and the engine warns.
+
 ## Chapter openings
 
 ### Drop caps
@@ -1575,7 +1623,8 @@ code { font-family: monospace }
 | code blocks | `white-space`, `tab-size`, and syntax highlighting |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
-| counters | any counter other than `page`, and `counter-increment` |
+| counters | any counter other than `page` and `note`, and `counter-increment` |
+| footnotes | `::footnote-call` and `::footnote-marker`, a note set in the margin or at the end of the book, `float: footnote`, and a rule that reaches the area of one page rather than every page |
 | generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
