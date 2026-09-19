@@ -24,8 +24,8 @@ use super::fragment::{Fragment, Marker};
 
 /// What a book whose notes are numbered by page says when the
 /// numbering does not settle.
-pub(crate) const UNSETTLED: &str = "The notes were numbered by page and the numbering did not \
-                                    settle. The numbers are the ones of the last pass.";
+pub(crate) const UNSETTLED: &str = "The notes are numbered by page and the numbering did not \
+                                    settle. The numbers are the ones of the last layout.";
 
 /// One note the flow sets at the foot of a page: what it is
 /// numbered, and its body as fragments of the footnote area.

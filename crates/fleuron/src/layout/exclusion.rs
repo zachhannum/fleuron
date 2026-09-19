@@ -322,11 +322,9 @@ impl Paginator<'_> {
         let stacked = builder.stack();
         if !stacked.notes.is_empty() {
             self.warn(
-                concat!(
-                    "A note was written inside a block against the page. ",
-                    "The note is left out, because the block is out of the flow.",
-                )
-                .to_string(),
+                "A note was written inside a block against the page. The note is left \
+                 out."
+                    .to_string(),
                 None,
             );
         }

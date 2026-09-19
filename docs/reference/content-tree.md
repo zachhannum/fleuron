@@ -181,7 +181,7 @@ A span is what a sheet reaches part of a heading by. A chapter opening written a
 
 ## Notes
 
-A note is an inline that holds blocks. It stands where its reference was written, and the engine sets its blocks at the foot of the page that reference lands on.
+A note is an inline that holds blocks. It stands where its reference was written. The engine puts its blocks at the foot of the page that reference lands on.
 
 ```json
 {
@@ -195,9 +195,9 @@ A note is an inline that holds blocks. It stands where its reference was written
 }
 ```
 
-A note holds no mark of its own. The number the reference prints, and the number the note is set beside, come from the cascade. `counter-reset: note` is what restarts the numbering.
+A note holds no mark of its own. The cascade decides the number the reference prints and the number beside the note. `counter-reset: note` restarts the numbering. See [Footnotes](../css-subset.mdx#footnotes).
 
-The text of the element around a note leaves the note out. A heading with a note in it sets the heading in a running head without the note.
+The text of the element around a note leaves the note out. A running head taken from a heading with a note in it holds the heading alone.
 
 ## Naming a node
 

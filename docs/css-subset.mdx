@@ -1235,11 +1235,11 @@ img {
 
 ## Footnotes
 
-A note is written in the manuscript where its reference belongs, and the engine sets it at the foot of the page that reference lands on. [The markdown mapping](reference/markdown.mdx#footnotes) says how a note is written.
+A footnote is written in the manuscript where its reference belongs. The engine puts the note at the foot of the page that reference lands on. [The markdown mapping](reference/markdown.mdx#footnotes) says how to write one.
 
-Two elements style a note. `note` is the note itself: the reference in the line, the number beside the note, and the blocks of the note. `notes` is the area the notes of one page are set in, at the foot of the content box.
+Two elements style a note. `note` is the note itself: the reference in the line, the number beside the note, and the blocks of the note. `notes` is the area at the foot of the content box that holds the notes of one page.
 
-The following example sets the notes of a page under a rule, in a smaller size than the text:
+The following example puts the notes of a page under a rule, in a smaller size than the text:
 
 ```css
 notes {
@@ -1255,17 +1255,17 @@ note {
 }
 ```
 
-The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as the content box. It holds as many notes as the page has room for, so its height is what the notes in it come to.
+The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as the content box. Its height is what the notes in it come to.
 
-A note takes the same properties, and the text properties with them. Its blocks are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet sets `font-style`, `font-weight` and `text-indent` back to their initial values, so a reference in italic does not set the note in italic.
+A note takes those properties, and the text properties with them. The blocks of a note are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet returns `font-style`, `font-weight`, and `text-indent` to their initial values. A reference in italic therefore leaves the note upright.
 
-The number is printed twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does, and hangs in the padding to the left of the note.
+The engine prints the number twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does. It hangs in the padding to the left of the note.
 
 ### The area and the page
 
-The area comes off the content box before a line is placed, so a page with notes on it holds fewer lines of text. A line that no longer fits moves to the next page, and the note its reference holds moves with it.
+The engine takes the area off the content box before it places a line. A page with notes on it holds fewer lines of text. A line that no longer fits moves to the next page. The note of a reference on that line moves with it.
 
-A note longer than the room the page has left is split. What is left of it opens the area of the next page, above the notes of that page, and carries no reference of its own.
+A note longer than the room the page has left is split. The rest of it opens the area of the next page, above the notes of that page, and carries no reference of its own.
 
 ### Numbering
 
@@ -1279,7 +1279,7 @@ The note counter runs through the book. `counter-reset: note` restarts it, and w
 
 `counter-reset: note 5` restarts the numbering at 5 rather than at 1. The `page` and the `note` counters go in one declaration: `counter-reset: page 1 note 1`.
 
-A note numbered by its page is numbered from a layout that is already finished, because which page a note is set on is a layout result. So the engine lays the book out again, up to four times, until the numbering stops changing. A book that has not settled by then keeps the numbers of the last layout, and the engine warns.
+The page a note lands on is a layout result, so a note numbered by its page takes its number from a layout that is finished. The engine lays the book out again, up to four times, until the numbering stops changing. A book that has not settled by then keeps the numbers of the last layout, and the engine warns.
 
 ## Chapter openings
 
