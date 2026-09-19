@@ -113,6 +113,10 @@ fn hash_inlines(inlines: &[Inline], hasher: &mut DefaultHasher) {
                 "span".hash(hasher);
                 hash_inlines(children, hasher);
             }
+            Inline::Note { blocks, .. } => {
+                "note".hash(hasher);
+                hash_blocks(blocks, hasher);
+            }
         }
     }
 }
@@ -274,6 +278,15 @@ fn strip_inlines(inlines: &mut [Inline]) {
             } => {
                 (*position, *span) = (None, None);
                 strip_inlines(children);
+            }
+            Inline::Note {
+                position,
+                span,
+                blocks,
+                ..
+            } => {
+                (*position, *span) = (None, None);
+                strip_blocks(blocks);
             }
         }
     }

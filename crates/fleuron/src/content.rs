@@ -1991,6 +1991,13 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                 Inline::Text { id, .. } | Inline::Code { id, .. } | Inline::Break { id, .. } => {
                     vec![*id]
                 }
+                Inline::Note { id, blocks, .. } => {
+                    let mut ids = vec![*id];
+                    for block in blocks {
+                        walk_block(&mut ids, block);
+                    }
+                    ids
+                }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. }
