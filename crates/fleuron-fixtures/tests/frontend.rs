@@ -109,6 +109,10 @@ fn hash_inlines(inlines: &[Inline], hasher: &mut DefaultHasher) {
                 ("link", url).hash(hasher);
                 hash_inlines(children, hasher);
             }
+            Inline::Strikethrough { children, .. } => {
+                "strikethrough".hash(hasher);
+                hash_inlines(children, hasher);
+            }
             Inline::Span { children, .. } => {
                 "span".hash(hasher);
                 hash_inlines(children, hasher);
@@ -265,6 +269,12 @@ fn strip_inlines(inlines: &mut [Inline]) {
                 ..
             }
             | Inline::Link {
+                position,
+                span,
+                children,
+                ..
+            }
+            | Inline::Strikethrough {
                 position,
                 span,
                 children,

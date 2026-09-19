@@ -612,6 +612,44 @@ fn the_styled_book_puts_its_cross_reference_on_a_chip() {
     assert!(chip < reference, "the reference paints under its own chip");
 }
 
+/// Acceptance: `text-decoration` through the fixture book.
+/// `fixtures/styled.css` draws a rule under the cross-reference, in
+/// a colour of its own.
+///
+/// The reference runs over a line break, so the rule is two rules,
+/// one on each line, each as wide as the words on that line. Both
+/// sit under the baseline they belong to.
+#[test]
+fn the_styled_book_draws_a_rule_under_its_cross_reference() {
+    const RULE: Color = Color::rgb(0x7a, 0x6a, 0x4c);
+
+    let pages = styled_pages();
+    let drawn: Vec<(usize, f32, f32, f32, f32)> = pages
+        .iter()
+        .enumerate()
+        .flat_map(|(index, page)| fills(page, RULE).map(move |(x, y, w, h, _)| (index, x, y, w, h)))
+        .collect();
+    assert!(
+        drawn.len() >= 2,
+        "the reference drew one rule only: {drawn:?}",
+    );
+    let page = &pages[drawn[0].0];
+    for (index, x, y, w, h) in &drawn {
+        assert_eq!(*index, drawn[0].0, "the rules are not on one page");
+        assert!(*w > 0.0 && *h > 0.0, "a rule has no area: {drawn:?}");
+        assert!(x + w < page.width, "a rule ran off the page: {drawn:?}",);
+        // The rule belongs to a run on the line above it, so some
+        // run shares its left edge and sits over it.
+        let over = page.items.iter().any(|item| match item {
+            DrawItem::Text {
+                x: at, y: baseline, ..
+            } => (at - x).abs() < 0.01 && *baseline < *y && y - baseline < 4.0,
+            _ => false,
+        });
+        assert!(over, "nothing is set over the rule at ({x}, {y})");
+    }
+}
+
 /// The box model through the fixture book: `fixtures/styled.css`
 /// puts the excerpt's inventory of the man-mountain's pockets in a
 /// bordered, padded, tinted box, and a rule under every chapter
@@ -2846,6 +2884,7 @@ fn append_inlines(inlines: &[Inline], text: &mut String, notes: &mut Notes) {
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => append_inlines(children, text, notes),
         }
     }

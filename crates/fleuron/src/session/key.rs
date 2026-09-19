@@ -263,6 +263,17 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 hash_node(*id, styles, h);
                 hash_inlines(children, styles, h);
             }
+            Inline::Strikethrough {
+                id,
+                children,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (8u8, position).hash(h);
+                hash_node(*id, styles, h);
+                hash_inlines(children, styles, h);
+            }
             Inline::Span {
                 id,
                 children,

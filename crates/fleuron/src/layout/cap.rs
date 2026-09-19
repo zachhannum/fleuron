@@ -109,6 +109,7 @@ fn take_initial(inlines: &[Inline]) -> Option<Initial> {
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }
+                | Inline::Strikethrough { children, .. }
                 | Inline::Span { children, .. } => texts(children, out),
             }
         }

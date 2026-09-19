@@ -455,9 +455,10 @@ mod tests {
             {"type": "strong", "children": [{"type": "text", "value": "c"}]},
             {"type": "code", "value": "d"},
             {"type": "link", "url": "x", "children": [{"type": "text", "value": "e"}]},
-            {"type": "span", "children": [{"type": "text", "value": "f"}]},
+            {"type": "strikethrough", "children": [{"type": "text", "value": "f"}]},
+            {"type": "span", "children": [{"type": "text", "value": "g"}]},
             {"type": "note", "blocks": [{"type": "paragraph", "inlines": [
-                {"type": "text", "value": "g"}
+                {"type": "text", "value": "h"}
             ]}]}
         ]"#;
         let headings: Vec<String> = (1..=6)

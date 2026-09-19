@@ -523,6 +523,7 @@ impl LineLayout<'_> {
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. }
+                | Inline::Strikethrough { id, children, .. }
                 | Inline::Span { id, children, .. } => {
                     let generated = styles.generated(inline);
                     let open = flat.open_inline(*id, styles.inline_box(*id));

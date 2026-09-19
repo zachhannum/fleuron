@@ -971,6 +971,44 @@ mod tests {
         );
     }
 
+    /// Acceptance: the preview and the export agree about a rule
+    /// across a run. Both painters read the rects the display
+    /// structure holds and neither derives one of its own, so the
+    /// test is that the export paints a filled path at the
+    /// coordinates layout wrote.
+    #[test]
+    fn a_rule_across_a_run_paints_where_layout_put_it() {
+        let book = chapter();
+        let styles = crate::style::Stylesheets::parse(&[crate::style::Source::author(
+            "decoration.css",
+            "h1 { text-decoration: underline }",
+        )])
+        .compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let rules: Vec<(f32, f32, f32, f32)> = output.pages[0]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                DrawItem::Rect { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rules.len(), 1, "the heading did not take one rule");
+        let (x, y, w, h) = rules[0];
+        let painted = content(&readable(&output, &Metadata::default()));
+        let corners = [
+            format!("{x} {y} m"),
+            format!("{} {y} l", x + w),
+            format!("{} {} l", x + w, y + h),
+        ];
+        for corner in &corners {
+            assert!(
+                painted.contains(corner),
+                "the export did not paint `{corner}`:\n{painted}",
+            );
+        }
+    }
+
     /// Colour reaches the page: a heading the sheet coloured fills
     /// with the colour its run carries, a rule fills with its own,
     /// and a page in black writes no colour at all.

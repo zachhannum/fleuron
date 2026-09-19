@@ -38,6 +38,7 @@ fn nodes(book: &Book) -> Vec<Node> {
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }
+                | Inline::Strikethrough { children, .. }
                 | Inline::Span { children, .. } => (None, Some(children)),
             };
             out.push(Node {

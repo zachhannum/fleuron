@@ -150,6 +150,7 @@ th {
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
+s { text-decoration: line-through }
 
 @page {
   size: 432pt 648pt;
