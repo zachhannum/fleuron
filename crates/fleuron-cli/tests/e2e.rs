@@ -2717,20 +2717,32 @@ fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Re
 /// Reads back the note that stands at `at`, and says whether one
 /// did. The notes come in the order their references were written,
 /// so the one to look for is the first that is still waiting.
+///
+/// A note longer than the room its page has left is split, and the
+/// rest of it stands at the foot of the next page. So what is read
+/// here is as much of the note as stands at `at`, and the rest waits
+/// where it was.
 fn took_note(
     rendered: &[char],
     at: &mut usize,
     notes: &mut std::collections::VecDeque<Vec<char>>,
 ) -> bool {
-    let Some(note) = notes.front() else {
+    let Some(note) = notes.front_mut() else {
         return false;
     };
-    let end = *at + note.len();
-    if rendered.get(*at..end) != Some(note.as_slice()) {
+    let taken = note
+        .iter()
+        .zip(&rendered[(*at).min(rendered.len())..])
+        .take_while(|(wanted, found)| wanted == found)
+        .count();
+    if taken == 0 {
         return false;
     }
-    *at = end;
-    notes.pop_front();
+    *at += taken;
+    note.drain(..taken);
+    if note.is_empty() {
+        notes.pop_front();
+    }
     true
 }
 

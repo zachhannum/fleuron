@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::content::{Block, Book, Inline, NodeId, block_id, notes_in_blocks};
+use crate::content::{Block, Book, Inline, NodeId, block_id, cell_blocks, notes_in_inlines};
 use crate::pages::DrawItem;
 use crate::style::{ComputedStyle, StyleTree};
 
@@ -114,12 +114,41 @@ impl Numbering {
     fn blocks(&mut self, blocks: &[Block], styles: &StyleTree, next: &mut u32) {
         for block in blocks {
             self.restart(next, styles.style(block_id(block)));
-            for note in notes_in_blocks(std::slice::from_ref(block)) {
-                if let Inline::Note { id, .. } = note {
-                    self.numbers.insert(*id, *next);
-                    *next += 1;
+            match block {
+                Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                    self.inlines(inlines, styles, next)
                 }
+                Block::Blockquote { blocks, .. } => self.blocks(blocks, styles, next),
+                Block::List { items, .. } => {
+                    for item in items {
+                        self.restart(next, styles.style(item.id));
+                        self.blocks(&item.blocks, styles, next);
+                    }
+                }
+                Block::Table { head, body, .. } => {
+                    for blocks in cell_blocks(head, body) {
+                        self.blocks(blocks, styles, next);
+                    }
+                }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
+                | Block::PageBreak { .. }
+                | Block::ColumnBreak { .. }
+                | Block::Image { .. } => {}
             }
+        }
+    }
+
+    /// The same over the notes written among one block's inlines. A
+    /// note written inside another takes the number after it.
+    fn inlines(&mut self, inlines: &[Inline], styles: &StyleTree, next: &mut u32) {
+        for note in notes_in_inlines(inlines) {
+            let Inline::Note { id, blocks, .. } = note else {
+                continue;
+            };
+            self.numbers.insert(*id, *next);
+            *next += 1;
+            self.blocks(blocks, styles, next);
         }
     }
 
@@ -179,6 +208,16 @@ impl Paginator<'_> {
             builder.hang(start, marker);
         }
         builder.close(&style, start);
+        if builder
+            .fragments
+            .iter()
+            .any(|fragment| fragment.notes.is_some())
+        {
+            self.warn(
+                "A note was written inside another note. The note inside is left out.".to_string(),
+                None,
+            );
+        }
         Some(Arc::new(Note {
             node: *id,
             number,
@@ -278,7 +317,10 @@ impl Paginator<'_> {
             let mut at = *from;
             while at < note.fragments.len() {
                 let step = note.step(at, !placed.is_empty());
-                if cursor + step > room {
+                // The area takes one fragment whatever room is left,
+                // the way a fragment taller than a page is set on it
+                // and overflows it.
+                if cursor + step > room && !placed.is_empty() {
                     break;
                 }
                 cursor += step;
@@ -373,8 +415,8 @@ impl Flow<'_, '_> {
             wanted += note.height(*from, index > 0);
         }
         let under = !self.notes.is_empty();
-        for note in coming {
-            wanted += note.height(0, under || !std::ptr::eq(note, &coming[0]));
+        for (index, note) in coming.iter().enumerate() {
+            wanted += note.height(0, under || index > 0);
         }
         (self.height - wanted).max(0.0)
     }
