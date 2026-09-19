@@ -6,6 +6,7 @@
 //! until the block under it arrives; a line that names nothing is
 //! prose again, and warns.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use fleuron::Warning;
@@ -66,6 +67,7 @@ fn parser_options(options: &Options) -> ParserOptions {
     parser.set(ParserOptions::ENABLE_STRIKETHROUGH, dialect.gfm);
     parser.set(ParserOptions::ENABLE_TASKLISTS, dialect.gfm);
     parser.set(ParserOptions::ENABLE_WIKILINKS, dialect.wikilinks);
+    parser.set(ParserOptions::ENABLE_FOOTNOTES, dialect.footnotes);
     parser.set(ParserOptions::ENABLE_HEADING_ATTRIBUTES, dialect.attributes);
     parser.set(
         ParserOptions::ENABLE_SMART_PUNCTUATION,
@@ -234,6 +236,33 @@ struct Converter<'a> {
     code: Option<CodeFrame>,
     /// Depth of metadata blocks, whose text is not content.
     metadata: u32,
+    /// The notes whose definitions have arrived, by the label they
+    /// were written under.
+    notes: BTreeMap<String, Definition>,
+    /// The definitions being read, innermost last.
+    reading_notes: Vec<NoteFrame>,
+    /// The label each reference named, by the byte the reference
+    /// starts at. A reference is read before the note it names, so the
+    /// two are put together once the whole source is read.
+    called: BTreeMap<u32, String>,
+}
+
+/// One footnote definition, read and waiting for a reference.
+struct Definition {
+    blocks: Vec<Block>,
+    /// The section it was written in, and where in that section's
+    /// blocks it stands. A note nothing refers to goes back there.
+    at: (usize, usize),
+    read: Read,
+    /// Whether a reference took it.
+    taken: bool,
+}
+
+/// A footnote definition while its blocks are still arriving.
+struct NoteFrame {
+    label: String,
+    read: Read,
+    at: (usize, usize),
 }
 
 impl<'a> Converter<'a> {
@@ -254,6 +283,9 @@ impl<'a> Converter<'a> {
             table: None,
             code: None,
             metadata: 0,
+            notes: BTreeMap::new(),
+            reading_notes: Vec::new(),
+            called: BTreeMap::new(),
         }
     }
 
@@ -394,10 +426,10 @@ impl<'a> Converter<'a> {
                 })
             }
             Event::End(TagEnd::CodeBlock) => self.close_code(),
-            Event::Start(Tag::FootnoteDefinition(_)) => self.warn(
-                "Footnotes are not supported. The note is kept where it was written.",
-                at,
-            ),
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                self.open_note(label.into_string(), read)
+            }
+            Event::End(TagEnd::FootnoteDefinition) => self.close_note(),
             Event::Start(Tag::DefinitionList) => self.warn(
                 "Definition lists are not supported. Falling back to one paragraph per entry.",
                 at,
@@ -443,10 +475,16 @@ impl<'a> Converter<'a> {
             Event::Html(_) | Event::InlineHtml(_) => {
                 self.warn("Inline HTML is not supported and will be ignored.", at)
             }
-            Event::FootnoteReference(_) => self.warn(
-                "Footnote references are not supported and will be ignored.",
-                at,
-            ),
+            Event::FootnoteReference(label) => {
+                self.called.insert(read.span.start, label.into_string());
+                self.inline(Inline::Note {
+                    id: Default::default(),
+                    blocks: Vec::new(),
+                    attributes: Attributes::default(),
+                    position: Some(at),
+                    span: Some(read.span),
+                })
+            }
             Event::TaskListMarker(_) => self.warn(
                 "Task list markers are not supported and will be ignored.",
                 at,
@@ -1143,7 +1181,180 @@ impl<'a> Converter<'a> {
     fn finish(mut self) -> (Vec<Section>, Vec<Warning>) {
         self.dangling();
         self.flush_section();
+        self.settle_notes();
         (self.sections, self.warnings)
+    }
+
+    /// Opens a footnote definition. Its blocks are the note's rather
+    /// than the section's, so they are read into a frame of their own.
+    fn open_note(&mut self, label: String, read: Read) {
+        let at = (
+            self.sections.len().saturating_sub(1),
+            self.blocks.iter().map(Vec::len).sum(),
+        );
+        self.reading_notes.push(NoteFrame { label, read, at });
+        self.blocks.push(Vec::new());
+    }
+
+    /// Files the note whose blocks have all arrived. A second note
+    /// under one label is the second one: the first is kept where it
+    /// was written.
+    fn close_note(&mut self) {
+        self.settle_item();
+        self.flush_deferred();
+        self.dangling();
+        let Some(frame) = self.reading_notes.pop() else {
+            return;
+        };
+        let blocks = self.blocks.pop().unwrap_or_default();
+        let definition = Definition {
+            blocks,
+            at: frame.at,
+            read: frame.read,
+            taken: false,
+        };
+        if let Some(first) = self.notes.insert(frame.label, definition) {
+            self.warn(
+                "Two footnotes were written under one label. The first is kept where it was \
+                 written.",
+                first.read.position,
+            );
+            self.keep(first);
+        }
+    }
+
+    /// Puts each note where its reference was written, and keeps the
+    /// prose of the ones no reference names.
+    fn settle_notes(&mut self) {
+        if self.notes.is_empty() && self.called.is_empty() {
+            return;
+        }
+        let mut sections = std::mem::take(&mut self.sections);
+        let mut missing = Vec::new();
+        for section in &mut sections {
+            take_notes(
+                &mut section.blocks,
+                &mut self.notes,
+                &self.called,
+                &mut missing,
+            );
+        }
+        self.sections = sections;
+        for at in missing {
+            self.warn(
+                "This footnote reference names a note that was not written. The reference is \
+                 left out.",
+                at,
+            );
+        }
+        for (_, definition) in std::mem::take(&mut self.notes) {
+            if definition.taken {
+                continue;
+            }
+            self.warn(
+                "No reference names this footnote. The note is kept where it was written.",
+                definition.read.position,
+            );
+            self.keep(definition);
+        }
+    }
+
+    /// Puts the blocks of a note nothing refers to back where they
+    /// were written.
+    fn keep(&mut self, definition: Definition) {
+        let (index, at) = definition.at;
+        let Some(section) = self.sections.get_mut(index) else {
+            return;
+        };
+        let at = at.min(section.blocks.len());
+        for (step, block) in definition.blocks.into_iter().enumerate() {
+            section.blocks.insert(at + step, block);
+        }
+    }
+}
+
+/// Puts each note of these blocks where its reference was written.
+///
+/// A reference whose note was written twice takes the second of them,
+/// and one whose note was never written is left out: its position
+/// goes to `missing`, which is what the warning names.
+fn take_notes(
+    blocks: &mut [Block],
+    notes: &mut BTreeMap<String, Definition>,
+    called: &BTreeMap<u32, String>,
+    missing: &mut Vec<SourcePos>,
+) {
+    for block in blocks {
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                take_notes_in_inlines(inlines, notes, called, missing)
+            }
+            Block::Blockquote { blocks, .. } => take_notes(blocks, notes, called, missing),
+            Block::List { items, .. } => {
+                for item in items {
+                    take_notes(&mut item.blocks, notes, called, missing);
+                }
+            }
+            Block::Table { head, body, .. } => {
+                for row in head.iter_mut().chain(body) {
+                    for cell in &mut row.cells {
+                        take_notes(&mut cell.blocks, notes, called, missing);
+                    }
+                }
+            }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => {}
+        }
+    }
+}
+
+/// The same over one run of inlines. A reference with no note behind
+/// it is taken out of the run.
+fn take_notes_in_inlines(
+    inlines: &mut Vec<Inline>,
+    notes: &mut BTreeMap<String, Definition>,
+    called: &BTreeMap<u32, String>,
+    missing: &mut Vec<SourcePos>,
+) {
+    let mut at = 0;
+    while at < inlines.len() {
+        match &mut inlines[at] {
+            Inline::Note {
+                blocks,
+                position,
+                span,
+                ..
+            } => {
+                let taken = span
+                    .and_then(|span| called.get(&span.start))
+                    .and_then(|label| notes.get_mut(label))
+                    .filter(|definition| !definition.taken)
+                    .map(|definition| {
+                        definition.taken = true;
+                        std::mem::take(&mut definition.blocks)
+                    });
+                match taken {
+                    Some(taken) => *blocks = taken,
+                    None => {
+                        missing.extend(*position);
+                        inlines.remove(at);
+                        continue;
+                    }
+                }
+                take_notes(blocks, notes, called, missing);
+            }
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => {
+                take_notes_in_inlines(children, notes, called, missing)
+            }
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+        }
+        at += 1;
     }
 }
 

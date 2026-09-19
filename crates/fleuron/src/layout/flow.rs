@@ -14,6 +14,7 @@ use super::build::Reflow;
 use super::exclusion::{AnchoredBoxes, Settling};
 use super::fragment::{BreakPoint, Decoration, Decorations, Fragment, Marks, Piece};
 use super::furniture::Strings;
+use super::note::Note;
 
 /// What one page needs to know to ask the style tree for its master:
 /// the named page in force, and the situation the page is in.
@@ -63,6 +64,8 @@ pub(crate) struct Paged {
     /// The border box of each block in the flow, one for each page and
     /// column it reaches, in the order the pages closed.
     pub(crate) boxes: Vec<(NodeId, PageBox)>,
+    /// The page each note's reference was set on.
+    pub(crate) notes: BTreeMap<NodeId, u32>,
 }
 
 /// One fragment placed on the page being built.
@@ -91,6 +94,9 @@ pub(super) struct Placed {
     /// The images anchored above it, which land on the page it ends
     /// on.
     pub(super) anchors: Vec<NodeId>,
+    /// The notes whose references it holds, which are set at the foot
+    /// of the page it ends on.
+    pub(super) notes: Vec<Arc<Note>>,
     /// Whether it is a table's body row, which has the header rows
     /// set above it when it opens a column.
     repeats: bool,
@@ -122,6 +128,7 @@ pub(super) struct Checkpoint {
     carried: Vec<Decoration>,
     pending_anchors: Vec<NodeId>,
     header: Vec<(f32, Vec<DrawItem>)>,
+    notes: Vec<(Arc<Note>, usize)>,
 }
 
 /// Why the page being built ends.
@@ -214,6 +221,13 @@ pub(super) struct Flow<'a, 'p> {
     header: Vec<(f32, Vec<DrawItem>)>,
     /// The border boxes of the blocks on the pages closed so far.
     boxes: Vec<(NodeId, PageBox)>,
+    /// The notes the page being built owes, in the order their
+    /// references were set. Each one says which of its fragments the
+    /// page has still to set, so a note the page before could not
+    /// finish opens the list.
+    pub(super) notes: Vec<(Arc<Note>, usize)>,
+    /// The page each note's reference was set on.
+    pub(super) note_pages: BTreeMap<NodeId, u32>,
     /// Whether a box measures its insets from a block rather than from
     /// the page area. The flow that settles resolves the border box of
     /// every block it closes a page on for those boxes.
@@ -252,6 +266,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             paints: true,
             header: Vec::new(),
             boxes: Vec::new(),
+            notes: Vec::new(),
+            note_pages: BTreeMap::new(),
             nested,
         }
     }
@@ -331,6 +347,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             carried: self.carried.clone(),
             pending_anchors: self.pending_anchors.clone(),
             header: self.header.clone(),
+            notes: self.notes.clone(),
         }
     }
 
@@ -357,6 +374,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.carried.clone_from(&checkpoint.carried);
         self.pending_anchors.clone_from(&checkpoint.pending_anchors);
         self.header.clone_from(&checkpoint.header);
+        self.notes.clone_from(&checkpoint.notes);
+        self.note_pages.retain(|_, page| (*page as usize) < pages);
     }
 
     /// Places one fragment, ending columns and pages as its break
@@ -426,7 +445,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             let opening = self.opening();
             let lead = if opening { 0.0 } else { fragment.lead };
-            if opening || self.cursor + lead + fragment.fixed + fragment.height <= self.height {
+            let room = self.room(fragment);
+            if opening || self.cursor + lead + fragment.fixed + fragment.height <= room {
                 let headed = opening && repeats(fragment) && self.head_rows();
                 self.emit(fragment, lead);
                 // A page cannot end between the header rows and the
@@ -465,6 +485,13 @@ impl<'a, 'p> Flow<'a, 'p> {
             _ => Vec::new(),
         };
         self.cursor = top + fragment.height;
+        let notes = fragment
+            .notes
+            .clone()
+            .map(|notes| *notes)
+            .unwrap_or_default();
+        self.notes
+            .extend(notes.iter().map(|note| (note.clone(), 0usize)));
         self.placed.push(Placed {
             section: self.section,
             column: self.column,
@@ -478,6 +505,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             anchors: std::mem::take(&mut self.pending_anchors),
             repeats: repeats(fragment),
             boxes,
+            notes,
         });
     }
 
@@ -509,6 +537,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 anchors: Vec::new(),
                 repeats: false,
                 boxes: Vec::new(),
+                notes: Vec::new(),
             });
             self.cursor = top + height;
         }
@@ -602,6 +631,8 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn carry(&mut self, cut: usize) {
         let crossing = cut <= self.tier().start;
         let mut carried = self.placed.split_off(cut);
+        let moved: usize = carried.iter().map(|placed| placed.notes.len()).sum();
+        self.notes.truncate(self.notes.len() - moved);
         let from: Vec<(f32, f32)> = carried
             .iter()
             .map(|placed| self.column_origin(placed.column))
@@ -637,6 +668,8 @@ impl<'a, 'p> Flow<'a, 'p> {
                 down = self.cursor - tiers[tier].top;
             }
             let (to_x, to_y) = self.origin();
+            self.notes
+                .extend(placed.notes.iter().map(|note| (note.clone(), 0usize)));
             placed.top += down;
             placed.column = self.column;
             placed.tier = self.tiers.len() - 1;
@@ -685,8 +718,10 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut placed = std::mem::take(&mut self.placed);
         let within = self.containers(&placed);
         self.land(&placed, within);
+        let area = self.notes_area(&placed);
+        let under = area.as_ref().map(|area| area.height).unwrap_or(0.0);
         if self.paints && ending == Ending::Short {
-            self.align(&mut placed);
+            self.align(&mut placed, under);
         }
         // Backgrounds, borders, column rules and images go in front
         // of the page's text, which is where the flow puts them. What
@@ -698,11 +733,16 @@ impl<'a, 'p> Flow<'a, 'p> {
             items.append(&mut self.decorate(&placed));
             items.append(&mut self.rules(&placed));
             items.append(&mut self.anchored_items());
+            if let Some(area) = &area {
+                let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
+                items.append(&mut self.paginator.area_items(area, geometry.content_origin()));
+            }
             let page = self.pages.len() as u32;
             for (node, area) in self.anchored_areas() {
                 self.boxes.push((node, PageBox { page, ..area }));
             }
         }
+        self.notes_closed(&area);
         let index = self.pages.len();
         let mut sections: Vec<NodeId> = Vec::new();
         for placed in placed {
@@ -764,7 +804,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     ///
     /// A page whose prose wraps around a box stays at the top, because
     /// its lines were broken beside the box where they stand.
-    fn align(&mut self, placed: &mut [Placed]) {
+    fn align(&mut self, placed: &mut [Placed], under: f32) {
         let index = self.pages.len();
         let share = match self
             .paginator
@@ -783,7 +823,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             .iter()
             .map(|placed| placed.top + placed.height)
             .fold(0.0, f32::max);
-        let down = (self.height - foot).max(0.0) * share;
+        let down = (self.height - under - foot).max(0.0) * share;
         for placed in placed.iter_mut() {
             placed.top += down;
             shift(&mut placed.items, 0.0, down);
@@ -1096,6 +1136,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     pub(super) fn finish(mut self) -> Paged {
         self.close(Ending::Short);
         Paged {
+            notes: self.note_pages,
             pages: self.pages,
             infos: self.infos,
             targets: self.targets,

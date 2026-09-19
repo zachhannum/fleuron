@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::content::{
     Block, Inline, NodeId, PseudoElement, Section, SourcePos, block_attributes, block_id,
-    block_position, inline_attributes, inline_id, origin, text,
+    block_position, inline_attributes, inline_id, notes_in_inlines, origin, text,
 };
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::pages::{DrawItem, PageBox};
@@ -22,6 +22,7 @@ use super::fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decoration,
 };
 use super::image::ImageSize;
+use super::note::Note;
 use super::reference::Referring;
 
 impl Paginator<'_> {
@@ -700,6 +701,12 @@ impl Builder<'_, '_> {
             taken: cap.as_ref().map_or(0, |(_, taken)| *taken),
             node: id,
         };
+        // The notes are built before the lines, because the number
+        // of each is what its reference prints in one of them.
+        let notes: Vec<Arc<Note>> = notes_in_inlines(inlines)
+            .into_iter()
+            .filter_map(|note| self.paginator.note(note, self.source))
+            .collect();
         let referring = Referring {
             paginator: self.paginator,
             source: self.source,
@@ -716,6 +723,7 @@ impl Builder<'_, '_> {
             widows: computed.widows as usize,
             cap: cap.map(|(cap, _)| cap),
             cap_x: 0.0,
+            notes,
         };
         let fragments = set_lines(self.paginator, broken.lines, &spec, &[], &setting);
         let reflow = shaped.filter(|_| self.paginator.wraps()).map(|shaped| {
@@ -803,6 +811,7 @@ impl Builder<'_, '_> {
             widows: computed.widows as usize,
             cap: None,
             cap_x: 0.0,
+            notes: Vec::new(),
         };
         if lines.is_empty() {
             self.emit_one(x, 0.0, Piece::Blank);
@@ -876,6 +885,7 @@ impl Builder<'_, '_> {
                 widows: style.widows as usize,
                 cap: None,
                 cap_x: 0.0,
+                notes: Vec::new(),
             };
             let mut first = true;
             for fragment in set_lines(self.paginator, lines, &spec, &[], &setting) {
@@ -1008,11 +1018,20 @@ pub(super) fn set_lines(
         slot += line.spans.len();
         let height = line.box_.height;
         let protrusion = line.protrusion;
+        let notes: Vec<Arc<Note>> = setting
+            .notes
+            .iter()
+            .filter(|note| line.runs.iter().any(|run| run.inline == Some(note.node)))
+            .cloned()
+            .collect();
         let piece = Piece::Line {
             line,
             cap: (index == 0).then(|| cap.take()).flatten(),
         };
         let mut fragment = Fragment::plain(setting.x + origin - protrusion, height, piece);
+        if !notes.is_empty() {
+            fragment.notes = Some(Box::new(notes));
+        }
         fragment.break_before =
             if index < setting.orphans || count - index < setting.widows || index < sunk {
                 BreakPoint::Forbidden
@@ -1086,6 +1105,10 @@ pub(super) struct Setting {
     /// Where the letter goes, from `x`. An image in the way of the
     /// bands it is sunk over moves it along with them.
     cap_x: f32,
+    /// The notes written in the paragraph, in reading order. Each one
+    /// lands on the line its reference was set on, and travels with
+    /// that line.
+    notes: Vec<Arc<Note>>,
 }
 
 impl Setting {
@@ -1142,7 +1165,7 @@ pub(super) struct Stacked {
 
 /// The decorated blocks inside one stack, as the rects they paint. A
 /// stack is never split, so no box inside it is cut.
-fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(NodeId, PageBox)>) {
+pub(super) fn decorate(placed: &[(f32, &Fragment)]) -> (Vec<DrawItem>, Vec<(NodeId, PageBox)>) {
     let mut boxes: Vec<Painted> = Vec::new();
     let mut open: Vec<usize> = Vec::new();
     for (top, fragment) in placed {

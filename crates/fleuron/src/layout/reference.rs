@@ -498,6 +498,14 @@ impl InlineStyles for Referring<'_, '_> {
             after: text(styles.after(id)),
         }
     }
+
+    fn call(&self, note: &Inline) -> Option<(String, ParagraphStyle)> {
+        let id = inline_id(note);
+        let style = self.paginator.styles.style(id);
+        let number = self.paginator.note_number(id);
+        let call = style.list_style_type.numeral(number)?;
+        Some((call, style.paragraph()))
+    }
 }
 
 #[cfg(test)]

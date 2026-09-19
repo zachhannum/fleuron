@@ -238,6 +238,18 @@ impl ListStyleType {
         }
     }
 
+    /// The mark itself, with no space and no point after it: what a
+    /// note's reference prints. Nothing for `none`.
+    pub fn numeral(self, number: u32) -> Option<String> {
+        match self {
+            ListStyleType::None => None,
+            ListStyleType::Disc => Some("\u{2022}".into()),
+            ListStyleType::Circle => Some("\u{25E6}".into()),
+            ListStyleType::Square => Some("\u{25A0}".into()),
+            ListStyleType::Counter(style) => Some(style.format(number)),
+        }
+    }
+
     /// The CSS keyword.
     pub fn keyword(self) -> &'static str {
         match self {

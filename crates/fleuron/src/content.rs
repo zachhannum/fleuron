@@ -1171,6 +1171,27 @@ pub fn notes_in_blocks(blocks: &[Block]) -> Vec<&Inline> {
     out
 }
 
+/// The notes written directly among these inlines, in reading order.
+/// A note written inside another note is that note's own.
+pub fn notes_in_inlines(inlines: &[Inline]) -> Vec<&Inline> {
+    let mut out = Vec::new();
+    shallow_notes_in_inlines(inlines, &mut out);
+    out
+}
+
+fn shallow_notes_in_inlines<'b>(inlines: &'b [Inline], out: &mut Vec<&'b Inline>) {
+    for inline in inlines {
+        match inline {
+            Inline::Note { .. } => out.push(inline),
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => shallow_notes_in_inlines(children, out),
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+        }
+    }
+}
+
 fn gather_notes_in_blocks<'b>(blocks: &'b [Block], out: &mut Vec<&'b Inline>) {
     for block in blocks {
         match block {
