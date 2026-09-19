@@ -38,6 +38,7 @@ mod image;
 mod inline;
 mod list;
 mod navigation;
+mod note;
 mod reference;
 mod table;
 mod text;
@@ -50,12 +51,14 @@ pub use fragment::{
     BreakPoint, Decoration, Decorations, DropCap, Fragment, Marker, Marks, Piece, TableRow,
 };
 pub use furniture::margin_band;
+pub use note::Note;
 
 use background::Backdrop;
 
 pub(crate) use exclusion::AnchoredBoxes;
 pub(crate) use flow::{PageInfo, Paged};
 pub(crate) use navigation::{navigation, run_area};
+pub(crate) use note::{Numbering, UNSETTLED};
 pub(crate) use reference::{Named, References, landed, moved};
 
 use std::borrow::Cow;
@@ -72,6 +75,12 @@ use crate::style::{Background, PageStyle, Position, StyleTree};
 use crate::{LayoutOutput, Warning};
 
 use flow::{Flow, PageSlot};
+
+/// How many times a book whose notes are numbered by page is laid
+/// out again for them. Each pass numbers the notes of the pass
+/// before, and a book that has not settled by the last of them keeps
+/// the numbers it has.
+pub(crate) const NOTE_PASSES: u32 = 4;
 
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.
@@ -139,6 +148,8 @@ pub struct Paginator<'a> {
     rebreaks: Cell<u32>,
     /// What the references in the book resolve against.
     references: RefCell<References>,
+    /// What the notes of the book are numbered.
+    notes: RefCell<Numbering>,
     /// How many times the book was laid out again to print the pages
     /// its references name.
     settles: Cell<u32>,
@@ -182,6 +193,7 @@ impl<'a> Paginator<'a> {
             wraps: OnceCell::new(),
             rebreaks: Cell::new(0),
             references: RefCell::new(References::default()),
+            notes: RefCell::new(Numbering::default()),
             settles: Cell::new(0),
         }
     }
@@ -312,7 +324,11 @@ impl Paginator<'_> {
         if self.styles.refers() {
             self.refer(References::of(book));
         }
+        self.number(Numbering::of(book, self.styles));
         let mut paged = self.pass(book);
+        if self.styles.numbers_notes_per_page() {
+            paged = self.settle_notes(book, paged);
+        }
         if self.styles.counts_pages() {
             let found = landed(&paged);
             let resolved = self.references.borrow().landed(found.clone());
@@ -330,6 +346,28 @@ impl Paginator<'_> {
             }
         }
         self.paint(&mut paged.pages, &paged.infos);
+        paged
+    }
+
+    /// Numbers the notes by the page their references were set on,
+    /// and lays the book out again to print those numbers.
+    ///
+    /// A number of another width moves the line its reference is on,
+    /// which can move a note onto another page and number it again.
+    /// So the book is laid out until the numbering stops changing,
+    /// and the numbering of the last pass stands where it does not.
+    fn settle_notes(&self, book: &Book, mut paged: Paged) -> Paged {
+        let start = self.styles.first_note_number();
+        for _ in 0..NOTE_PASSES {
+            let numbered = self.notes.borrow().on_pages(&paged.notes, start);
+            if numbered == *self.notes.borrow() {
+                return paged;
+            }
+            self.number(numbered);
+            self.settles.set(self.settles.get() + 1);
+            paged = self.pass(book);
+        }
+        self.warn(note::UNSETTLED.to_string(), None);
         paged
     }
 

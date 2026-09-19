@@ -379,6 +379,10 @@ impl Named {
             let (href, children) = match inline {
                 Inline::Text { .. } | Inline::Break { .. } => continue,
                 Inline::Code { .. } => (None, None),
+                Inline::Note { blocks, .. } => {
+                    self.blocks(blocks, styles, references, source);
+                    (None, None)
+                }
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Span { children, .. } => (None, Some(children)),
@@ -493,6 +497,14 @@ impl InlineStyles for Referring<'_, '_> {
             before: text(styles.before(id)),
             after: text(styles.after(id)),
         }
+    }
+
+    fn call(&self, note: &Inline) -> Option<(String, ParagraphStyle)> {
+        let id = inline_id(note);
+        let style = self.paginator.styles.style(id);
+        let number = self.paginator.note_number(id);
+        let call = style.list_style_type.numeral(number)?;
+        Some((call, style.paragraph()))
     }
 }
 

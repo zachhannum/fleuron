@@ -86,10 +86,16 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "list-style-type" => ListStyleType::keyword(style.list_style_type).into(),
         "content" => content(&style.content),
         "string-set" => string_set(&style.string_set),
-        "counter-reset" => match style.counter_reset {
-            None => "none".into(),
-            Some(folio) => format!("page {folio}"),
-        },
+        "counter-reset" => {
+            let counters: Vec<String> = [("page", style.counter_reset), ("note", style.note_reset)]
+                .into_iter()
+                .filter_map(|(name, value)| Some(format!("{name} {}", value?)))
+                .collect();
+            match counters.is_empty() {
+                true => "none".into(),
+                false => counters.join(" "),
+            }
+        }
         "initial-letter" => style.initial_letter.to_string(),
         "position" => match style.position {
             Position::Static => "static",

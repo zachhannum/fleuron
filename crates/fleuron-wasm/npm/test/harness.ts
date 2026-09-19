@@ -956,23 +956,28 @@ function near(painted: number | undefined, wanted: number): boolean {
 
 // Columns. The page box divides, the flow fills one column before it
 // fills the next, and the painter draws the rule the display structure
-// carries in the gutter, which is the rect the PDF writer fills.
+// carries in the gutter, which is the rect the PDF writer fills. The
+// rule down a gutter is the upright rect of a page: the one above the
+// notes of a page lies flat.
+const upright = (rect: { w: number; h: number }): boolean => rect.w < rect.h;
 const divided = await client.preview([
   styleOp(
     '@page { column-count: 2; column-gap: 18pt; column-rule-style: solid; column-rule-width: 0.5pt }',
   ),
 ]);
-const columned = divided?.pages.find((page) =>
-  page.items.some((item) => item.kind === 'rect'),
-) ?? null;
-const rule = columned?.items.find((item): item is RectItem => item.kind === 'rect') ?? null;
+const gutterRule = (page: Page): RectItem[] =>
+  page.items.filter((item): item is RectItem => item.kind === 'rect' && upright(item));
+const columned = divided?.pages.find((page) => gutterRule(page).length > 0) ?? null;
+const rule = columned === null ? null : (gutterRule(columned)[0] ?? null);
 check(
   'a two-column page carries one rule down its gutter',
-  rule !== null && rule.w === 0.5 && columned?.items.filter((item) => item.kind === 'rect').length === 1,
+  rule !== null && rule.w === 0.5 && columned !== null && gutterRule(columned).length === 1,
   rule === null ? 'no rect on any page' : `${rule.w}pt wide at ${rule.x}`,
 );
 const drawn = columned === null ? '' : paintPage(columned, { fonts: divided?.fonts ?? [], paper: null });
-const gutterRects = rects(drawn);
+const gutterRects = rects(drawn).filter((rect) =>
+  upright({ w: Number(rect['width']), h: Number(rect['height']) }),
+);
 check(
   'and the painter draws it where the display structure put it',
   rule !== null &&

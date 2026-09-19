@@ -502,6 +502,20 @@ impl LineLayout<'_> {
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                     flat.close_inline(open);
                 }
+                // The note itself is set at the foot of the page.
+                // What stands in the line is its reference. The box
+                // the note paints is around the note there, not
+                // around the reference here, so the reference takes
+                // none of it.
+                Inline::Note { id, .. } => {
+                    let Some((call, style)) = styles.call(inline) else {
+                        continue;
+                    };
+                    let open = flat.open_inline(*id, None);
+                    flat.open(None, 0);
+                    self.push_run(flat, &call, style, lead);
+                    flat.close_inline(open);
+                }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. }

@@ -159,6 +159,13 @@ pub trait InlineStyles {
     fn generated(&self, _inline: &Inline) -> Generated {
         Generated::default()
     }
+
+    /// The reference of one note, in the style it is set in: the
+    /// note's number as the cascade spells it. Nothing, for a caller
+    /// with no book to number the notes of.
+    fn call(&self, _note: &Inline) -> Option<(String, ParagraphStyle)> {
+        None
+    }
 }
 
 /// Text the sheet generates around one inline element: what

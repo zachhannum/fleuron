@@ -8,10 +8,10 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
-    ColumnSpan, Content, ContentPiece, Corner, CounterStyle, Declaration, Edge, Family, FontStyle,
-    FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType, Position,
-    ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform,
-    Url, WrapFlow,
+    ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration, Edge,
+    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType,
+    Position, ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify,
+    TextTransform, Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -579,19 +579,33 @@ pub(super) fn string_set(input: &mut Parser<'_, '_>) -> Option<Vec<StringSet>> {
     }
 }
 
-/// `counter-reset: none | page <integer>?`. The page counter is the
-/// only one there is, and the value is the folio the page this
-/// element opens takes.
-pub(super) fn counter_reset(input: &mut Parser<'_, '_>) -> Option<Option<u32>> {
-    let keyword = input.expect_ident().ok()?.clone();
-    if keyword.eq_ignore_ascii_case("none") {
-        return Some(None);
+/// `counter-reset: none | [ page <integer>? || note <integer>? ]`.
+/// The page counter is the folio the page this element opens takes.
+/// The note counter is the number the first note under this element
+/// takes.
+pub(super) fn counter_reset(input: &mut Parser<'_, '_>) -> Option<CounterReset> {
+    let mut counters = CounterReset::default();
+    loop {
+        let keyword = input.expect_ident().ok()?.clone();
+        if keyword.eq_ignore_ascii_case("none") {
+            return counters.is_none().then_some(counters);
+        }
+        let counter = if keyword.eq_ignore_ascii_case("page") {
+            &mut counters.page
+        } else if keyword.eq_ignore_ascii_case("note") {
+            &mut counters.note
+        } else {
+            return None;
+        };
+        if counter.is_some() {
+            return None;
+        }
+        let value = input.try_parse(|input| input.expect_integer()).unwrap_or(1);
+        *counter = Some(value.max(0) as u32);
+        if input.is_exhausted() {
+            return Some(counters);
+        }
     }
-    if !keyword.eq_ignore_ascii_case("page") {
-        return None;
-    }
-    let folio = input.try_parse(|input| input.expect_integer()).unwrap_or(1);
-    Some(Some(folio.max(0) as u32))
 }
 
 /// `content()` and `content(text)`, both the element's own text.

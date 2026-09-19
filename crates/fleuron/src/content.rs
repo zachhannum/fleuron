@@ -786,6 +786,30 @@ pub enum Inline {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// A footnote. Its reference sits in the line where it was
+    /// written, and its blocks are set at the foot of the page that
+    /// reference lands on.
+    ///
+    /// The blocks are the note itself, so a note holds paragraphs,
+    /// lists and everything else a blockquote holds. The engine sets
+    /// the reference and the number beside the note from the
+    /// cascade, so neither is in the tree.
+    Note {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// The note itself, in reading order.
+        blocks: Vec<Block>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// A run the sheet names, and nothing else. It carries no meaning
     /// of its own, so the built-in sheet styles it like the text
     /// around it and a class on it is what reaches it.
@@ -821,6 +845,9 @@ fn push_text(inlines: &[Inline], out: &mut String) {
         match inline {
             Inline::Text { value, .. } | Inline::Code { value, .. } => out.push_str(value),
             Inline::Break { .. } => out.push('\n'),
+            // A note is set at the foot of the page, so its prose is
+            // no part of the text the line it was written in holds.
+            Inline::Note { .. } => {}
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
@@ -858,10 +885,12 @@ impl Book {
             .filter(|section| section.source.as_deref() == Some(source))
             .find_map(|section| {
                 let span = section.span.filter(|span| span.covers(byte))?;
-                Some(narrowest(
-                    (section.id, span),
-                    node_in_blocks(&section.blocks, byte),
-                ))
+                let inner = node_in_blocks(&section.blocks, byte);
+                let inner = match node_in_notes(&section.blocks, byte) {
+                    Some(note) => Some(narrowest(note, inner)),
+                    None => inner,
+                };
+                Some(narrowest((section.id, span), inner))
             })
             .map(|(node, _)| node)
     }
@@ -980,6 +1009,7 @@ fn subtree_in_inlines(inlines: &[Inline], node: NodeId) -> Option<Range<u32>> {
         }
         return match inline {
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
+            Inline::Note { blocks, .. } => subtree_in_blocks(blocks, node),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
@@ -1045,6 +1075,7 @@ fn subtree_in_rows<'a>(rows: impl Iterator<Item = &'a Row>, node: NodeId) -> Opt
 pub(crate) fn inline_nodes(inline: &Inline) -> u32 {
     1 + match inline {
         Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => 0,
+        Inline::Note { blocks, .. } => blocks.iter().map(block_nodes).sum(),
         Inline::Emphasis { children, .. }
         | Inline::Strong { children, .. }
         | Inline::Link { children, .. }
@@ -1115,7 +1146,13 @@ fn node_in_inlines(inlines: &[Inline], byte: u32) -> Option<(NodeId, SourceSpan)
             continue;
         }
         let inner = match inline {
-            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
+            // A note was written where its definition was, which is
+            // not the stretch its reference covers. `node_in_notes`
+            // answers for those bytes.
+            Inline::Text { .. }
+            | Inline::Code { .. }
+            | Inline::Break { .. }
+            | Inline::Note { .. } => None,
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
@@ -1124,6 +1161,104 @@ fn node_in_inlines(inlines: &[Inline], byte: u32) -> Option<(NodeId, SourceSpan)
         return Some(narrowest((inline_id(inline), span), inner));
     }
     None
+}
+
+/// Every note written among these blocks, in reading order. A note
+/// written inside another note comes after it.
+pub fn notes_in_blocks(blocks: &[Block]) -> Vec<&Inline> {
+    let mut out = Vec::new();
+    gather_notes_in_blocks(blocks, &mut out);
+    out
+}
+
+/// The notes written directly among these inlines, in reading order.
+/// A note written inside another note is that note's own.
+pub fn notes_in_inlines(inlines: &[Inline]) -> Vec<&Inline> {
+    let mut out = Vec::new();
+    shallow_notes_in_inlines(inlines, &mut out);
+    out
+}
+
+fn shallow_notes_in_inlines<'b>(inlines: &'b [Inline], out: &mut Vec<&'b Inline>) {
+    for inline in inlines {
+        match inline {
+            Inline::Note { .. } => out.push(inline),
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => shallow_notes_in_inlines(children, out),
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+        }
+    }
+}
+
+fn gather_notes_in_blocks<'b>(blocks: &'b [Block], out: &mut Vec<&'b Inline>) {
+    for block in blocks {
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                gather_notes_in_inlines(inlines, out)
+            }
+            Block::Blockquote { blocks, .. } => gather_notes_in_blocks(blocks, out),
+            Block::List { items, .. } => {
+                for item in items {
+                    gather_notes_in_blocks(&item.blocks, out);
+                }
+            }
+            Block::Table { head, body, .. } => {
+                for blocks in cell_blocks(head, body) {
+                    gather_notes_in_blocks(blocks, out);
+                }
+            }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => {}
+        }
+    }
+}
+
+fn gather_notes_in_inlines<'b>(inlines: &'b [Inline], out: &mut Vec<&'b Inline>) {
+    for inline in inlines {
+        match inline {
+            Inline::Note { blocks, .. } => {
+                out.push(inline);
+                gather_notes_in_blocks(blocks, out);
+            }
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. }
+            | Inline::Span { children, .. } => gather_notes_in_inlines(children, out),
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+        }
+    }
+}
+
+/// The innermost node of the notes written among these blocks a
+/// byte was read into.
+///
+/// A note sits in the line its reference was written on, and its own
+/// blocks were read from wherever the note was written. So the bytes
+/// of a note are outside the span of every node that holds it, and
+/// the search for them starts again here.
+fn node_in_notes(blocks: &[Block], byte: u32) -> Option<(NodeId, SourceSpan)> {
+    let mut found: Option<(NodeId, SourceSpan)> = None;
+    for note in notes_in_blocks(blocks) {
+        let Inline::Note { id, blocks, .. } = note else {
+            continue;
+        };
+        let Some(hit) = node_in_blocks(blocks, byte) else {
+            continue;
+        };
+        let hit = match inline_span(note) {
+            Some(span) if span.covers(byte) => narrowest((*id, span), Some(hit)),
+            _ => hit,
+        };
+        if found.is_none_or(|found| hit.1.width() < found.1.width()) {
+            found = Some(hit);
+        }
+    }
+    found
 }
 
 /// The span of one node of these blocks, by id.
@@ -1183,6 +1318,7 @@ fn span_in_inlines(inlines: &[Inline], node: NodeId) -> Option<SourceSpan> {
         }
         let found = match inline {
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => None,
+            Inline::Note { blocks, .. } => span_in_blocks(blocks, node),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
@@ -1261,6 +1397,7 @@ pub fn inline_attributes(inline: &Inline) -> &Attributes {
         | Inline::Emphasis { attributes, .. }
         | Inline::Strong { attributes, .. }
         | Inline::Link { attributes, .. }
+        | Inline::Note { attributes, .. }
         | Inline::Span { attributes, .. } => attributes,
     }
 }
@@ -1290,6 +1427,7 @@ pub fn inline_position(inline: &Inline) -> Option<SourcePos> {
         | Inline::Emphasis { position, .. }
         | Inline::Strong { position, .. }
         | Inline::Link { position, .. }
+        | Inline::Note { position, .. }
         | Inline::Span { position, .. } => *position,
     }
 }
@@ -1335,6 +1473,7 @@ pub fn inline_id(inline: &Inline) -> NodeId {
         | Inline::Emphasis { id, .. }
         | Inline::Strong { id, .. }
         | Inline::Link { id, .. }
+        | Inline::Note { id, .. }
         | Inline::Span { id, .. } => *id,
     }
 }
@@ -1348,6 +1487,7 @@ pub fn inline_span(inline: &Inline) -> Option<SourceSpan> {
         | Inline::Emphasis { span, .. }
         | Inline::Strong { span, .. }
         | Inline::Link { span, .. }
+        | Inline::Note { span, .. }
         | Inline::Span { span, .. } => *span,
     }
 }
@@ -1407,6 +1547,12 @@ fn assign_inline(inline: &mut Inline, next: &mut u32) {
     match inline {
         Inline::Text { id, .. } | Inline::Code { id, .. } | Inline::Break { id, .. } => {
             *id = next_id(next);
+        }
+        Inline::Note { id, blocks, .. } => {
+            *id = next_id(next);
+            for block in blocks {
+                assign_block(block, next);
+            }
         }
         Inline::Emphasis { id, children, .. }
         | Inline::Strong { id, children, .. }
@@ -1865,6 +2011,13 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
             match inline {
                 Inline::Text { id, .. } | Inline::Code { id, .. } | Inline::Break { id, .. } => {
                     vec![*id]
+                }
+                Inline::Note { id, blocks, .. } => {
+                    let mut ids = vec![*id];
+                    for block in blocks {
+                        walk_block(&mut ids, block);
+                    }
+                    ids
                 }
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }

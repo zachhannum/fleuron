@@ -28,7 +28,8 @@ pub use computed::ComputedStyle;
 
 pub(crate) use computed::computed_size;
 pub use counter::{
-    Content, ContentPiece, CounterStyle, ListStyleType, StringPiece, StringSet, Target,
+    Content, ContentPiece, CounterReset, CounterStyle, ListStyleType, StringPiece, StringSet,
+    Target,
 };
 pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
@@ -65,7 +66,7 @@ pub enum Declaration {
     Page(Option<String>),
     Content(Content),
     StringSet(Vec<StringSet>),
-    CounterReset(Option<u32>),
+    CounterReset(counter::CounterReset),
     InitialLetter(u16),
     Position(Position),
     Inset(Edge, Option<Length>),

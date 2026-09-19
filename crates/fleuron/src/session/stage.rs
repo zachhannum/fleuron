@@ -5,7 +5,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::Warning;
 use crate::content::NodeId;
-use crate::layout::{Named, Paged, Paginator, References, landed, moved, navigation};
+use crate::layout::{
+    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, UNSETTLED, landed, moved,
+    navigation,
+};
 use crate::pages::{Page, PageBox};
 
 use super::invalidate::{Against, Prints, hyphenation, section_local};
@@ -35,6 +38,7 @@ impl Session<'_> {
         }
         if self.retain {
             if self.stale >= Stale::Break {
+                self.notes = Numbering::of(&self.book, &self.styles);
                 self.rebreak();
             }
             if self.stale >= Stale::Flow {
@@ -91,12 +95,13 @@ impl Session<'_> {
                 supplied,
                 hyphenation(&self.book.metadata),
                 &self.references,
+                &self.notes,
             );
             let kept = spare
                 .get_mut(&key)
                 .and_then(|slots| slots.pop())
                 .and_then(|slot| previous[slot].take());
-            fresh.push(match kept {
+            fresh.push(match kept.filter(|cached| cached.renumbers(section.id)) {
                 Some(mut cached) => {
                     cached.renumber(section.id);
                     cached
@@ -112,6 +117,7 @@ impl Session<'_> {
                     );
                     paginator.language(&self.book.metadata);
                     paginator.refer(self.references.clone());
+                    paginator.number(self.notes.clone());
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -143,6 +149,9 @@ impl Session<'_> {
     /// built again once the pages are known.
     fn reflow(&mut self) {
         let mut paged = self.fragment(false);
+        if self.styles.numbers_notes_per_page() {
+            paged = self.settle_notes(paged);
+        }
         if self.styles.counts_pages() {
             paged = self.settle(&paged);
         } else {
@@ -188,6 +197,33 @@ impl Session<'_> {
         paged
     }
 
+    /// Numbers the notes by the page their references were set on,
+    /// and breaks the sections that hold one again to print those
+    /// numbers.
+    ///
+    /// A number of another width moves the line its reference is on,
+    /// which can move a note onto another page and number it again.
+    /// So the pass runs until the numbering stops changing, and the
+    /// numbering of the last pass stands where it does not.
+    fn settle_notes(&mut self, mut paged: Paged) -> Paged {
+        let start = self.styles.first_note_number();
+        for _ in 0..NOTE_PASSES {
+            let numbered = self.notes.on_pages(&paged.notes, start);
+            if numbered == self.notes {
+                return paged;
+            }
+            self.notes = numbered;
+            self.rebreak();
+            self.stages.settle += 1;
+            paged = self.fragment(false);
+        }
+        self.flow_warnings.push(Warning {
+            message: UNSETTLED.to_string(),
+            origin: None,
+        });
+        paged
+    }
+
     /// Lays the book out again with the folio each reference prints,
     /// read off the pages of the pass before. Only the sections whose
     /// references print a page are built again, and one that prints
@@ -212,7 +248,11 @@ impl Session<'_> {
             }
             let key = settled_key(first.key, &named.pages, &found);
             printed.extend(named.pages);
-            let cached = match spare.get_mut(&key).and_then(Vec::pop) {
+            let cached = match spare
+                .get_mut(&key)
+                .and_then(Vec::pop)
+                .filter(|cached| cached.renumbers(section.id))
+            {
                 Some(mut cached) => {
                     cached.renumber(section.id);
                     cached
@@ -226,6 +266,7 @@ impl Session<'_> {
                     );
                     paginator.language(&self.book.metadata);
                     paginator.refer(resolved.clone());
+                    paginator.number(self.notes.clone());
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -308,8 +349,8 @@ mod tests {
     use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, NodeId, Section};
     use crate::pages::DrawItem;
     use crate::session::testing::{
-        MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, painted,
-        prose, runs, section, sheets, three_chapters,
+        MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, noted,
+        painted, prose, runs, section, sheets, three_chapters,
     };
     use crate::session::{Session, Stages};
     use crate::style::Color;
@@ -877,6 +918,58 @@ mod tests {
         assert_eq!(
             serde_json::to_vec(&once.pages).expect("pages serialize"),
             preview,
+        );
+    }
+
+    /// A book whose notes are numbered by page settles the numbering
+    /// in the session as a single run settles it, and an edit to one
+    /// chapter leaves the notes of the others where they were.
+    #[test]
+    fn the_preview_numbers_the_notes_a_single_run_numbers() {
+        let noted = |tag: &str, count: usize| -> Vec<Block> {
+            (0..count)
+                .map(|index| {
+                    noted(
+                        &format!("{tag} ").repeat(80),
+                        &format!("The note of {tag} {index}."),
+                    )
+                })
+                .collect()
+        };
+        let mut session = Session::new(crate::session::testing::registry());
+        session.set_content(book(vec![
+            section("one.md", noted("alpha", 6)),
+            section("two.md", noted("beta", 6)),
+        ]));
+        session.set_style(sheets("notes { counter-reset: note }"));
+        let pages = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
+        let styles = session.styles().clone();
+        let once = crate::layout::layout_book(
+            session.book(),
+            &styles,
+            crate::session::testing::registry(),
+            crate::layout::no_assets(),
+        );
+        assert!(once.pages.len() > 2, "a book of more than one page");
+        assert_eq!(
+            serde_json::to_vec(&once.pages).expect("pages serialize"),
+            pages,
+            "the preview numbered the notes another way",
+        );
+
+        session.replace_source("two.md", vec![section("two.md", noted("gamma", 8))]);
+        let edited = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
+        let styles = session.styles().clone();
+        let again = crate::layout::layout_book(
+            session.book(),
+            &styles,
+            crate::session::testing::registry(),
+            crate::layout::no_assets(),
+        );
+        assert_eq!(
+            serde_json::to_vec(&again.pages).expect("pages serialize"),
+            edited,
+            "the preview and the single run parted company over an edit",
         );
     }
 

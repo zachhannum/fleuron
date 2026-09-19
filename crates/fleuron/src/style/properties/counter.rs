@@ -3,6 +3,27 @@
 
 use serde::Serialize;
 
+/// What `counter-reset` restarts on one element, and what it
+/// restarts at.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+pub struct CounterReset {
+    /// The folio the page this element opens takes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<u32>,
+    /// The number the first note under this element takes. On the
+    /// footnote area it is the number the first note on every page
+    /// takes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<u32>,
+}
+
+impl CounterReset {
+    /// Whether it restarts nothing, which is what `none` says.
+    pub fn is_none(self) -> bool {
+        self.page.is_none() && self.note.is_none()
+    }
+}
+
 /// What a page margin box paints, or what a pseudo-element generates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -214,6 +235,18 @@ impl ListStyleType {
             ListStyleType::Circle => Some("\u{25E6} ".into()),
             ListStyleType::Square => Some("\u{25A0} ".into()),
             ListStyleType::Counter(style) => Some(format!("{}. ", style.format(number))),
+        }
+    }
+
+    /// The mark itself, with no space and no point after it: what a
+    /// note's reference prints. Nothing for `none`.
+    pub fn numeral(self, number: u32) -> Option<String> {
+        match self {
+            ListStyleType::None => None,
+            ListStyleType::Disc => Some("\u{2022}".into()),
+            ListStyleType::Circle => Some("\u{25E6}".into()),
+            ListStyleType::Square => Some("\u{25A0}".into()),
+            ListStyleType::Counter(style) => Some(style.format(number)),
         }
     }
 

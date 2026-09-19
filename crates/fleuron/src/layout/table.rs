@@ -96,6 +96,7 @@ impl<'a> Builder<'a, '_> {
 
         let mut cells = Vec::new();
         let mut anchors = Vec::new();
+        let mut notes = Vec::new();
         let mut marks: Option<Box<Marks>> = None;
         let named = std::iter::once((row.id, &row.attributes))
             .chain(row.cells.iter().map(|c| (c.id, &c.attributes)));
@@ -113,6 +114,7 @@ impl<'a> Builder<'a, '_> {
             let measure = (grid.widths[column] - border.inline() - padding.inline()).max(0.0);
             let mut content = self.cell(&cell.blocks, x, measure);
             anchors.append(&mut content.anchors);
+            notes.append(&mut content.notes);
             gather(&mut marks, content.marks.take());
             let top = border.top + padding.top;
             height = height.max(top + content.height + padding.bottom + border.bottom);
@@ -217,6 +219,9 @@ impl<'a> Builder<'a, '_> {
                 repeats: headers > 0 && !head,
             })),
         );
+        if !notes.is_empty() {
+            fragment.notes = Some(Box::new(notes));
+        }
         self.ask(style.break_before);
         gather(&mut self.pending_marks, marks);
         if !*first {

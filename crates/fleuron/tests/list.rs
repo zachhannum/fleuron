@@ -330,6 +330,9 @@ fn a_loose_list_puts_space_between_its_items_and_a_tight_list_does_not() {
 
 /// The text of a tight item is not in a `p` element, and the
 /// paragraphs of a loose item are.
+///
+/// Every book ends in the footnote area, which is the box its notes
+/// are set in and is no part of the list.
 #[test]
 fn only_a_loose_item_holds_p_elements() {
     let elements = |markdown: &str| -> Vec<&'static str> {
@@ -342,11 +345,11 @@ fn only_a_loose_item_holds_p_elements() {
     };
     assert_eq!(
         elements("- one\n- two\n"),
-        ["book", "section", "ul", "li", "li"]
+        ["book", "section", "ul", "li", "li", "notes"]
     );
     assert_eq!(
         elements("- one\n\n- two\n"),
-        ["book", "section", "ul", "li", "p", "li", "p"]
+        ["book", "section", "ul", "li", "p", "li", "p", "notes"]
     );
 }
 

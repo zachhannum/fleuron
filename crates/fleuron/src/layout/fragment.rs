@@ -11,6 +11,7 @@ use crate::style::{BorderRadius, BoxDecorationBreak, Break, Color, ComputedStyle
 use super::background::Backdrop;
 
 use super::build::Reflow;
+use super::note::Note;
 
 /// Whether a page may end above a fragment.
 ///
@@ -133,6 +134,11 @@ pub struct Fragment {
     /// The markers of the list items that open on this fragment,
     /// outermost first. Boxed, because most fragments open no item.
     pub markers: Option<Box<Vec<Marker>>>,
+    /// The notes whose references were set on this fragment, in the
+    /// order they were written. They are set at the foot of whichever
+    /// page the fragment lands on. Boxed: a book has thousands of
+    /// lines and a handful of notes.
+    pub notes: Option<Box<Vec<Arc<Note>>>>,
     /// The paragraph this line came out of, shared by every line of
     /// it, and `None` on everything else. The flow reads it where an
     /// image narrows the bands the paragraph is set in. A book that
@@ -170,6 +176,7 @@ impl Fragment {
             marks: None,
             decorations: None,
             markers: None,
+            notes: None,
             reflow: None,
             spanning: false,
             layer: 0,

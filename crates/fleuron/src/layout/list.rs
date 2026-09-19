@@ -71,7 +71,7 @@ impl Builder<'_, '_> {
     /// Puts a marker on the first fragment its item emitted, from
     /// `start`. An item that emitted nothing emits the height of the
     /// marker to set it on.
-    fn hang(&mut self, start: usize, marker: Marker) {
+    pub(super) fn hang(&mut self, start: usize, marker: Marker) {
         let first = self.fragments[start..]
             .iter_mut()
             .find(|fragment| !matches!(fragment.piece, Piece::Anchor(_)));

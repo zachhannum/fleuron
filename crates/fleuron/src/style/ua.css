@@ -17,6 +17,7 @@ book {
 section {
   page: chapter;
   break-before: recto;
+  counter-reset: note;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -82,6 +83,29 @@ hr {
   margin: 1em 0;
   break-before: avoid;
   break-after: avoid;
+}
+
+/* The notes of a page stand at the foot of its content box, under a
+   rule. */
+notes {
+  margin-top: 1em;
+  padding-top: 0.4em;
+  border-top: thin solid;
+}
+
+/* A note is set smaller than the text, and starts flush in the
+   letters the book is set in, wherever its reference was written. The
+   number is the reference in the line and the mark beside the note,
+   and it hangs in the indent to the left of the note. */
+note {
+  font-size: 9pt;
+  line-height: 1.2;
+  font-style: normal;
+  font-weight: normal;
+  text-indent: 0;
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-top: 0.4em;
 }
 
 /* A page break and a column break hold no text. The content after
