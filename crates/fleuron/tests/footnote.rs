@@ -358,6 +358,36 @@ fn the_note_is_set_under_the_text_of_the_page() {
     );
 }
 
+/// A note is a node of the book like any other: a session answers
+/// which page it is set on and what box it takes there.
+#[test]
+fn a_session_answers_for_the_box_a_note_takes() {
+    let book = read(&manuscript(4, 2, "note1 at the foot."));
+    let mut session = fleuron::session::Session::new(registry());
+    session.set_content(book.clone());
+    session.set_style(Stylesheets::parse(&[]));
+    session.preview();
+    let note = fleuron::content::notes_in_blocks(&book.sections[0].blocks)
+        .into_iter()
+        .map(fleuron::content::inline_id)
+        .next()
+        .expect("the manuscript holds a note");
+    let inside = book.subtree(note).expect("the note holds its own nodes");
+    let boxes: Vec<_> = inside
+        .map(fleuron::content::NodeId::new)
+        .filter_map(|node| session.inspect(node))
+        .flat_map(|inspection| inspection.boxes)
+        .collect();
+    assert!(
+        !boxes.is_empty(),
+        "the blocks of the note took no box on the page",
+    );
+    assert!(
+        boxes.iter().all(|area| area.page == 0),
+        "the note was set on another page than its reference",
+    );
+}
+
 /// A manuscript with a note in each of its first few paragraphs.
 fn manuscript_strategy() -> impl Strategy<Value = String> {
     (

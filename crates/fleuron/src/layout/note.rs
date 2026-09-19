@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::content::{Block, Book, Inline, NodeId, block_id, cell_blocks, notes_in_inlines};
-use crate::pages::DrawItem;
+use crate::pages::{DrawItem, PageBox};
 use crate::style::{ComputedStyle, StyleTree};
 
 use super::Paginator;
@@ -196,7 +196,6 @@ impl Paginator<'_> {
         let (x, measure) = self.note_measure();
         let style = self.styles.style(*id).clone();
         let mut builder = Builder::new(self, source);
-        builder.name(*id);
         let start = builder.open(*id, &style, &[], x, measure);
         let (inner, narrowed) = style.content_box(x, measure);
         builder.blocks(
@@ -349,10 +348,14 @@ impl Paginator<'_> {
         })
     }
 
-    /// What one page's area paints, in page coordinates: the box
-    /// itself, the boxes of the notes in it, and their text.
-    /// `origin` is the page's content box.
-    pub(super) fn area_items(&self, area: &Area, origin: (f32, f32)) -> Vec<DrawItem> {
+    /// What one page's area paints, in page coordinates, and the
+    /// border box every block of it takes there. `origin` is the
+    /// page's content box.
+    pub(super) fn area_items(
+        &self,
+        area: &Area,
+        origin: (f32, f32),
+    ) -> (Vec<DrawItem>, Vec<(NodeId, PageBox)>) {
         let style = self.area_style();
         let (above, _) = area_edges(style);
         let (x, _) = self.note_measure();
@@ -383,13 +386,14 @@ impl Paginator<'_> {
             .iter()
             .map(|(at, note, index)| (*at, &note.fragments[*index]))
             .collect();
-        let (mut boxes, _) = decorate(&placed);
+        let (mut boxes, mut areas) = decorate(&placed);
         super::flow::shift(&mut boxes, inner.0, inner.1);
+        super::flow::shift_boxes(&mut areas, inner.0, inner.1);
         items.append(&mut boxes);
         for (at, fragment) in placed {
             items.append(&mut self.fragment_items(fragment, inner.0, inner.1 + at));
         }
-        items
+        (items, areas)
     }
 }
 

@@ -774,7 +774,14 @@ impl<'a, 'p> Flow<'a, 'p> {
             && self.paints
         {
             let geometry = self.paginator.master(index, &self.slot).geometry;
-            items.append(&mut self.paginator.area_items(area, geometry.content_origin()));
+            let (mut painted, areas) = self.paginator.area_items(area, geometry.content_origin());
+            items.append(&mut painted);
+            let page = index as u32;
+            self.boxes.extend(
+                areas
+                    .into_iter()
+                    .map(|(node, area)| (node, PageBox { page, ..area })),
+            );
         }
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);
