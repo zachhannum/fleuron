@@ -245,6 +245,9 @@ struct Converter<'a> {
     /// starts at. A reference is read before the note it names, so the
     /// two are put together once the whole source is read.
     called: BTreeMap<u32, String>,
+    /// The notes a second note under the same label displaced. They
+    /// go back where they were written.
+    stray: Vec<Definition>,
 }
 
 /// One footnote definition, read and waiting for a reference.
@@ -286,6 +289,7 @@ impl<'a> Converter<'a> {
             notes: BTreeMap::new(),
             reading_notes: Vec::new(),
             called: BTreeMap::new(),
+            stray: Vec::new(),
         }
     }
 
@@ -1219,14 +1223,14 @@ impl<'a> Converter<'a> {
                  written.",
                 first.read.position,
             );
-            self.keep(first);
+            self.stray.push(first);
         }
     }
 
     /// Puts each note where its reference was written, and keeps the
     /// prose of the ones no reference names.
     fn settle_notes(&mut self) {
-        if self.notes.is_empty() && self.called.is_empty() {
+        if self.notes.is_empty() && self.called.is_empty() && self.stray.is_empty() {
             return;
         }
         let mut sections = std::mem::take(&mut self.sections);
@@ -1247,6 +1251,7 @@ impl<'a> Converter<'a> {
                 at,
             );
         }
+        let mut kept = std::mem::take(&mut self.stray);
         for (_, definition) in std::mem::take(&mut self.notes) {
             if definition.taken {
                 continue;
@@ -1255,6 +1260,12 @@ impl<'a> Converter<'a> {
                 "No reference names this footnote. The note is kept where it was written.",
                 definition.read.position,
             );
+            kept.push(definition);
+        }
+        // The last one written goes back first, so the ones above it
+        // still stand where they were counted.
+        kept.sort_by_key(|definition| std::cmp::Reverse(definition.at));
+        for definition in kept {
             self.keep(definition);
         }
     }
@@ -2736,5 +2747,90 @@ Ordinary prose.
         };
         assert_eq!((url.as_str(), alt.as_str()), ("map.png", "a map"));
         assert_eq!(warnings.len(), 1);
+    }
+
+    /// A note is read where its reference was written, whatever the
+    /// order the two were written in.
+    #[test]
+    fn a_note_is_read_where_its_reference_was_written() {
+        for markdown in [
+            "A line[^a] of prose.\n\n[^a]: The note.\n",
+            "[^a]: The note.\n\nA line[^a] of prose.\n",
+        ] {
+            let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+            assert!(warnings.is_empty(), "{warnings:?}");
+            assert_eq!(sections[0].blocks.len(), 1, "the note left a block behind");
+            let Block::Paragraph { inlines, .. } = &sections[0].blocks[0] else {
+                panic!("expected a paragraph");
+            };
+            let Some(Inline::Note { blocks, .. }) = inlines.get(1) else {
+                panic!("expected a note, got {inlines:?}");
+            };
+            assert_eq!(text_of(&blocks[0]), "The note.");
+            assert_eq!(inline_text(inlines), "A line of prose.");
+        }
+    }
+
+    /// A note holds blocks, so a note of two paragraphs is two
+    /// paragraphs.
+    #[test]
+    fn a_note_holds_the_blocks_it_was_written_with() {
+        let markdown = "A line[^a].\n\n[^a]: The first paragraph.\n\n    The second one.\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let Block::Paragraph { inlines, .. } = &sections[0].blocks[0] else {
+            panic!("expected a paragraph");
+        };
+        let Some(Inline::Note { blocks, .. }) = inlines.get(1) else {
+            panic!("expected a note");
+        };
+        assert_eq!(blocks.len(), 2, "{blocks:?}");
+        assert_eq!(text_of(&blocks[1]), "The second one.");
+    }
+
+    /// A note nothing refers to is prose, and stays where it was
+    /// written.
+    #[test]
+    fn a_note_nothing_refers_to_is_kept_where_it_was_written() {
+        let markdown = "A line of prose.\n\n[^a]: The note.\n\nAnother line.\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0]
+                .message
+                .contains("No reference names this footnote")
+        );
+        let texts: Vec<String> = sections[0].blocks.iter().map(text_of).collect();
+        assert_eq!(texts, ["A line of prose.", "The note.", "Another line."]);
+    }
+
+    /// Two notes under one label are two notes. The reference takes
+    /// the second, and the first is kept where it was written.
+    #[test]
+    fn a_label_written_twice_keeps_the_first_note_where_it_was() {
+        let markdown = "A line[^a].\n\n[^a]: The first.\n\n[^a]: The second.\n";
+        let (sections, warnings) = to_sections(markdown, "test.md", &Options::default());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].message.contains("Two footnotes were written"));
+        let texts: Vec<String> = sections[0].blocks.iter().map(text_of).collect();
+        assert_eq!(texts, ["A line.", "The first."]);
+    }
+
+    /// A dialect with no footnotes in it reads the reference as the
+    /// prose it was written as.
+    #[test]
+    fn a_dialect_without_footnotes_reads_a_reference_as_prose() {
+        let options = Options {
+            dialect: Dialect {
+                footnotes: false,
+                ..Dialect::fleuron()
+            },
+            ..Options::default()
+        };
+        let (sections, warnings) =
+            to_sections("A line[^a].\n\n[^a]: The note.\n", "test.md", &options);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let texts: Vec<String> = sections[0].blocks.iter().map(text_of).collect();
+        assert_eq!(texts, ["A line[^a].", "[^a]: The note."]);
     }
 }
