@@ -525,6 +525,11 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `letter-spacing` | `letter-spacing: 0.05em` |
 | `font-variant-caps` | `font-variant-caps: small-caps` |
 | `text-transform` | `text-transform: uppercase` |
+| `text-decoration-line` | `text-decoration-line: underline` |
+| `text-decoration-color` | `text-decoration-color: #808080` |
+| `text-decoration-style` | `text-decoration-style: double` |
+| `text-decoration-thickness` | `text-decoration-thickness: 0.06em` |
+| `text-decoration` | `text-decoration: underline` |
 | `text-align` | `text-align: justify` |
 | `text-justify` | `text-justify: inter-character` |
 | `text-indent` | `text-indent: 1.2em` |
@@ -536,25 +541,30 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `list-style-type` | `list-style-type: decimal` |
 
 ```css
-font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
-font-size:           <length> | <percentage>;
-font-style:          normal | italic | oblique;
-font-weight:         normal | bold | <number [1,1000]>;
-color:               <color>;
-line-height:         normal | <number> | <length> | <percentage>;
-letter-spacing:      normal | <length>;
-font-variant-caps:   normal | small-caps;
-text-transform:      none | uppercase | lowercase | capitalize;
-text-align:          left | right | center | justify | start | end;
-text-justify:        auto | inter-word | inter-character | distribute;
-text-indent:         <length> | <percentage>;
-hanging-punctuation: none | [ first || [ force-end | allow-end ] || last ];
-hyphens:             none | manual | auto;
-orphans:             <integer>;
-widows:              <integer>;
-page:                auto | <name>;
-border-collapse:     separate | collapse;
-list-style-type:     disc | circle | square | decimal | lower-roman | upper-roman | lower-alpha | upper-alpha | none;
+font-family:               [ <family-name> | serif | sans-serif | monospace ]#;
+font-size:                 <length> | <percentage>;
+font-style:                normal | italic | oblique;
+font-weight:               normal | bold | <number [1,1000]>;
+color:                     <color>;
+line-height:               normal | <number> | <length> | <percentage>;
+letter-spacing:            normal | <length>;
+font-variant-caps:         normal | small-caps;
+text-transform:            none | uppercase | lowercase | capitalize;
+text-decoration-line:      none | [ underline || overline || line-through ];
+text-decoration-color:     currentcolor | <color>;
+text-decoration-style:     solid | double;
+text-decoration-thickness: auto | from-font | <length>;
+text-decoration:           none | [ underline || overline || line-through ] || solid || double || <color> || <length>;
+text-align:                left | right | center | justify | start | end;
+text-justify:              auto | inter-word | inter-character | distribute;
+text-indent:               <length> | <percentage>;
+hanging-punctuation:       none | [ first || [ force-end | allow-end ] || last ];
+hyphens:                   none | manual | auto;
+orphans:                   <integer>;
+widows:                    <integer>;
+page:                      auto | <name>;
+border-collapse:           separate | collapse;
+list-style-type:           disc | circle | square | decimal | lower-roman | upper-roman | lower-alpha | upper-alpha | none;
 ```
 
 {/* end generated */}

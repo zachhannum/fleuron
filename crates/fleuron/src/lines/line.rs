@@ -6,7 +6,7 @@ use std::ops::Range;
 use crate::content::{NodeId, SourceRange};
 use crate::fonts::{Features, ShapedGlyph};
 use crate::linebox::LineBox;
-use crate::style::Color;
+use crate::style::{Color, TextDecoration};
 
 use super::flatten::FlatParagraph;
 use super::shape::ShapedSpan;
@@ -52,6 +52,9 @@ pub struct ShapedRun {
     pub features: Features,
     /// What the run is painted in.
     pub color: Color,
+    /// What is drawn across it: the rules `text-decoration` asks
+    /// for, each painted over the run's own advance.
+    pub decoration: TextDecoration,
     /// The glyphs, in visual order.
     pub glyphs: Vec<ShapedGlyph>,
     /// Total advance of the run's glyphs, in font units. What an
@@ -422,6 +425,7 @@ pub(super) fn cut_runs(
             trail: 0.0,
             features: spec.features,
             color: spec.color,
+            decoration: spec.decoration,
             glyphs,
             advance,
         });

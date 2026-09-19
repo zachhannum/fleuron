@@ -8,9 +8,9 @@ use crate::style::sheet::PROPERTIES;
 use crate::style::{
     BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderRadius, BorderStyle,
     BoxDecorationBreak, Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord,
-    CornerRadius, CounterStyle, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Inset,
-    ListStyleType, Position, ShapeOutside, StringPiece, StringSet, Target, TextAlign, TextJustify,
-    TextTransform, Width, WrapFlow,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edges, Family, FontStyle,
+    FontVariantCaps, Hyphens, Inset, ListStyleType, Position, ShapeOutside, StringPiece, StringSet,
+    Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 
 /// The computed value of every property a style rule can declare, and
@@ -56,6 +56,22 @@ fn value(style: &ComputedStyle, property: &str) -> String {
             TextTransform::Capitalize => "capitalize",
         }
         .into(),
+        "text-decoration-line" => decoration_line(style.text_decoration_line),
+        "text-decoration-color" => style.text_decoration_color.unwrap_or(style.color).to_hex(),
+        "text-decoration-style" => decoration_style(style.text_decoration_style).into(),
+        "text-decoration-thickness" => style
+            .text_decoration_thickness
+            .map(points)
+            .unwrap_or_else(|| "auto".into()),
+        "text-decoration" => {
+            let mut written = vec![decoration_line(style.text_decoration_line)];
+            if style.text_decoration_line.draws() {
+                written.push(decoration_style(style.text_decoration_style).into());
+                written.push(value(style, "text-decoration-color"));
+                written.push(value(style, "text-decoration-thickness"));
+            }
+            written.join(" ")
+        }
         "text-align" => match style.text_align {
             TextAlign::Left => "left",
             TextAlign::Right => "right",
@@ -209,6 +225,32 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         }
         .into(),
         _ => String::new(),
+    }
+}
+
+/// Which rules are drawn, as CSS writes them.
+fn decoration_line(line: DecorationLine) -> String {
+    let named = [
+        (line.under, "underline"),
+        (line.over, "overline"),
+        (line.through, "line-through"),
+    ];
+    let drawn: Vec<&str> = named
+        .iter()
+        .filter(|(drawn, _)| *drawn)
+        .map(|(_, name)| *name)
+        .collect();
+    match drawn.is_empty() {
+        true => "none".into(),
+        false => drawn.join(" "),
+    }
+}
+
+/// How each one is drawn, as CSS writes it.
+fn decoration_style(style: DecorationStyle) -> &'static str {
+    match style {
+        DecorationStyle::Solid => "solid",
+        DecorationStyle::Double => "double",
     }
 }
 

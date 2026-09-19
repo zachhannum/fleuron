@@ -343,3 +343,81 @@ pub enum ColumnSpan {
     /// columns above it and columns below it.
     All,
 }
+
+/// Which rules a run has drawn across it, from
+/// `text-decoration-line`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+pub struct DecorationLine {
+    /// `underline`: a rule under the text.
+    pub under: bool,
+    /// `overline`: a rule over it.
+    pub over: bool,
+    /// `line-through`: a rule across it.
+    pub through: bool,
+}
+
+impl DecorationLine {
+    /// No rule at all, which is `none`.
+    pub const NONE: DecorationLine = DecorationLine {
+        under: false,
+        over: false,
+        through: false,
+    };
+
+    /// Whether any rule is drawn.
+    pub fn draws(self) -> bool {
+        self.under || self.over || self.through
+    }
+}
+
+/// How one rule is drawn, from `text-decoration-style`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecorationStyle {
+    /// `solid`: one rule.
+    #[default]
+    Solid,
+    /// `double`: two rules, one thickness apart.
+    Double,
+}
+
+impl DecorationStyle {
+    /// How many rules one decoration draws.
+    pub fn rules(self) -> u8 {
+        match self {
+            DecorationStyle::Solid => 1,
+            DecorationStyle::Double => 2,
+        }
+    }
+}
+
+/// What a run has drawn across it: the rules, what they are painted
+/// in, how they are drawn, and how thick they are.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize)]
+pub struct TextDecoration {
+    /// Which rules are drawn.
+    pub line: DecorationLine,
+    /// What they are painted in. `None` is the colour of the text.
+    pub color: Option<Color>,
+    /// How each one is drawn.
+    pub style: DecorationStyle,
+    /// How thick each one is, in points. `None` is the thickness the
+    /// face declares.
+    pub thickness: Option<f32>,
+}
+
+impl TextDecoration {
+    /// Nothing drawn, which is what a run takes until a rule asks
+    /// for something.
+    pub const NONE: TextDecoration = TextDecoration {
+        line: DecorationLine::NONE,
+        color: None,
+        style: DecorationStyle::Solid,
+        thickness: None,
+    };
+
+    /// Whether anything is drawn.
+    pub fn draws(&self) -> bool {
+        self.line.draws()
+    }
+}

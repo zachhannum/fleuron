@@ -328,6 +328,14 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         letter_spacing,
         font_variant_caps,
         text_transform,
+        // A rule across a run is painted over the advance the
+        // glyphs took, so nothing about it moves a line. The runs
+        // carry it, which is why a sheet that draws one has to break
+        // them again.
+        text_decoration_line,
+        text_decoration_color,
+        text_decoration_style,
+        text_decoration_thickness,
         text_align,
         text_justify,
         hanging_punctuation,
@@ -389,6 +397,13 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     }
     (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
+    (
+        text_decoration_line,
+        text_decoration_color,
+        text_decoration_style,
+        text_decoration_thickness.map(f32::to_bits),
+    )
+        .hash(h);
     (text_align, text_justify, hanging_punctuation).hash(h);
     (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
     (

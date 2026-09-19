@@ -1,6 +1,7 @@
 //! Shaped lines as paint ops, and the widths a placed line has.
 
-use crate::lines::{Line, ParagraphStyle};
+use crate::fonts::{FontMetricsTable, Rule};
+use crate::lines::{Line, ParagraphStyle, ShapedRun};
 use crate::pages::{DrawItem, Glyph};
 
 use super::Paginator;
@@ -173,12 +174,110 @@ impl Paginator<'_> {
                     glyphs,
                     layer,
                 });
+                items.append(&mut self.decoration_items(
+                    run,
+                    x_cursor,
+                    baseline,
+                    glyph_x - x_cursor,
+                    layer,
+                ));
                 x_cursor = glyph_x + run.trail;
             }
         }
         items
     }
+
+    /// The rules `text-decoration` draws across one run, each a rect
+    /// over the advance the run's glyphs took. They come after the
+    /// glyphs, so a rule is painted over the letters it crosses.
+    ///
+    /// A run is what one line holds, so a decoration a line break
+    /// splits is drawn on both lines, each at that line's own width.
+    fn decoration_items(
+        &self,
+        run: &ShapedRun,
+        x: f32,
+        baseline: f32,
+        width: f32,
+        layer: i32,
+    ) -> Vec<DrawItem> {
+        let decoration = run.decoration;
+        if !decoration.draws() || width <= 0.0 {
+            return Vec::new();
+        }
+        let metrics = self.registry.metrics(run.font_id);
+        let color = decoration.color.unwrap_or(run.color);
+        let mut items = Vec::new();
+        let mut rules = Vec::new();
+        if decoration.line.over {
+            rules.push(overline(metrics, run.size));
+        }
+        if decoration.line.through {
+            rules.push(line_through(metrics, run.size));
+        }
+        if decoration.line.under {
+            rules.push(underline(metrics, run.size));
+        }
+        for (top, thickness) in rules {
+            let thickness = decoration.thickness.unwrap_or(thickness).max(0.0);
+            if thickness <= 0.0 {
+                continue;
+            }
+            for rule in 0..decoration.style.rules() {
+                items.push(DrawItem::Rect {
+                    x,
+                    y: baseline + top + rule as f32 * thickness * 2.0,
+                    w: width,
+                    h: thickness,
+                    color,
+                    layer,
+                });
+            }
+        }
+        items
+    }
 }
+
+/// Where one rule sits under a face's own baseline, and how thick it
+/// is, both in points at `size`. The offset is positive downward,
+/// which is the direction the page measures in.
+fn placed(metrics: Option<FontMetricsTable>, rule: Option<Rule>, size: f32) -> Option<(f32, f32)> {
+    let metrics = metrics?;
+    let rule = rule?;
+    let scale = size / metrics.units_per_em.max(1) as f32;
+    Some((-rule.offset as f32 * scale, rule.thickness as f32 * scale))
+}
+
+/// A rule under the text, where the face's `post` table puts it.
+fn underline(metrics: Option<FontMetricsTable>, size: f32) -> (f32, f32) {
+    placed(metrics, metrics.and_then(|m| m.underline), size)
+        .unwrap_or((size * FALLBACK_UNDERLINE, size * FALLBACK_THICKNESS))
+}
+
+/// A rule across the text, where the face's `OS/2` table puts it.
+fn line_through(metrics: Option<FontMetricsTable>, size: f32) -> (f32, f32) {
+    placed(metrics, metrics.and_then(|m| m.strikeout), size)
+        .unwrap_or((-size * FALLBACK_STRIKEOUT, size * FALLBACK_THICKNESS))
+}
+
+/// A rule over the text. No table declares one, so it sits at the
+/// ascent, as thick as the underline is.
+fn overline(metrics: Option<FontMetricsTable>, size: f32) -> (f32, f32) {
+    let thickness = underline(metrics, size).1;
+    let top = match metrics {
+        Some(metrics) => -(metrics.ascender as f32) * size / metrics.units_per_em.max(1) as f32,
+        None => -size * FALLBACK_ASCENT,
+    };
+    (top, thickness)
+}
+
+/// Where the rules fall on a face that declares none, as fractions
+/// of the em. A face without a `post` table is rare, and a book is
+/// better served by a rule a little out of place than by none.
+const FALLBACK_UNDERLINE: f32 = 0.1;
+const FALLBACK_STRIKEOUT: f32 = 0.25;
+const FALLBACK_THICKNESS: f32 = 0.05;
+const FALLBACK_ASCENT: f32 = 0.8;
 
 #[cfg(test)]
 mod tests {

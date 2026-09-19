@@ -107,6 +107,7 @@ mod tests {
             trail: 0.0,
             features: crate::fonts::Features::NONE,
             color: crate::style::Color::BLACK,
+            decoration: crate::style::TextDecoration::NONE,
             glyphs: Vec::new(),
             advance: 0,
         }

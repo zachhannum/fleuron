@@ -35,8 +35,9 @@ pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, E
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
-    FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextJustify, TextTransform, Width,
+    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
+    Family, FontStyle, FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextDecoration,
+    TextJustify, TextTransform, Width,
 };
 
 pub(crate) use background::no_background;
@@ -56,6 +57,12 @@ pub enum Declaration {
     LetterSpacing(Length),
     FontVariantCaps(FontVariantCaps),
     TextTransform(TextTransform),
+    TextDecorationLine(DecorationLine),
+    /// `None` is `currentcolor`.
+    TextDecorationColor(Option<Color>),
+    TextDecorationStyle(DecorationStyle),
+    /// `None` is `auto`, which is the thickness the face declares.
+    TextDecorationThickness(Option<Length>),
     TextAlign(TextAlign),
     TextJustify(TextJustify),
     TextIndent(Length),
@@ -157,6 +164,10 @@ impl Declaration {
             Declaration::LetterSpacing(_) => "letter-spacing",
             Declaration::FontVariantCaps(_) => "font-variant-caps",
             Declaration::TextTransform(_) => "text-transform",
+            Declaration::TextDecorationLine(_) => "text-decoration-line",
+            Declaration::TextDecorationColor(_) => "text-decoration-color",
+            Declaration::TextDecorationStyle(_) => "text-decoration-style",
+            Declaration::TextDecorationThickness(_) => "text-decoration-thickness",
             Declaration::TextAlign(_) => "text-align",
             Declaration::TextJustify(_) => "text-justify",
             Declaration::TextIndent(_) => "text-indent",

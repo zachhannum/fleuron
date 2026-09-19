@@ -8,18 +8,19 @@ use cssparser::{
 
 use crate::Warning;
 use crate::style::properties::{
-    BorderStyle, Corner, Custom, Declaration, Edge, Length, MEDIUM, Pending,
+    BorderStyle, Corner, Custom, Declaration, DecorationLine, Edge, Length, MEDIUM, Pending,
 };
 
-use super::color::{background_color, border_color, color};
+use super::color::{background_color, border_color, color, decoration_color};
 use super::custom::{mentions_var, raw};
 use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
     border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
-    decoration_break, edges, families, font_style, generated, hanging, hyphens, inset, keyword_or,
-    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
-    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
-    text_transform, variant_caps, weight, width, wrap_flow, z_index,
+    decoration_break, decoration_keyword, decoration_line, decoration_style, decoration_thickness,
+    edges, families, font_style, generated, hanging, hyphens, inset, keyword_or, length,
+    letter_spacing, line_height, line_style, line_width, list_style_type, opacity, page_name,
+    positioning, property, shape_outside, string_set, text_align, text_justify, text_transform,
+    variant_caps, weight, width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, Written, position, warning};
@@ -310,6 +311,47 @@ fn border<'i>(
         .collect())
 }
 
+/// Reads `text-decoration`: the rules, a style, a colour and a
+/// thickness in any order, any of them left out. What is left out
+/// goes back to its initial value, as the shorthand asks.
+fn text_decoration<'i>(
+    name: &CowRcStr<'i>,
+    input: &mut Parser<'i, '_>,
+) -> Result<Vec<Declaration>, ParseError<'i, StyleError<'i>>> {
+    let (mut line, mut style, mut color, mut thickness) = (None, None, None, None);
+    loop {
+        if let Ok(one) = input.try_parse(|input| decoration_keyword(input).ok_or(())) {
+            let drawn: &mut DecorationLine = line.get_or_insert(DecorationLine::NONE);
+            drawn.under |= one.under;
+            drawn.over |= one.over;
+            drawn.through |= one.through;
+        } else if style.is_none()
+            && let Ok(value) = input.try_parse(|input| decoration_style(input).ok_or(()))
+        {
+            style = Some(value);
+        } else if thickness.is_none()
+            && let Ok(value) = input.try_parse(|input| decoration_thickness(input).ok_or(()))
+        {
+            thickness = Some(value);
+        } else if color.is_none()
+            && let Ok(value) = input.try_parse(|input| decoration_color(input).ok_or(()))
+        {
+            color = Some(value);
+        } else {
+            break;
+        }
+    }
+    if line.is_none() && style.is_none() && color.is_none() && thickness.is_none() {
+        return Err(input.new_custom_error(StyleError::UnsupportedValue(name.clone())));
+    }
+    Ok(vec![
+        Declaration::TextDecorationLine(line.unwrap_or(DecorationLine::NONE)),
+        Declaration::TextDecorationStyle(style.unwrap_or_default()),
+        Declaration::TextDecorationColor(color.flatten()),
+        Declaration::TextDecorationThickness(thickness.flatten()),
+    ])
+}
+
 /// Every edge, for the shorthands that set all four.
 const ALL_EDGES: &[Edge] = &[Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 
@@ -387,6 +429,74 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "none | uppercase | lowercase | capitalize",
         examples: &["uppercase"],
         read: |name, input| longhand(name, input, text_transform, Declaration::TextTransform),
+    },
+    Spec {
+        name: "text-decoration-line",
+        inherited: true,
+        syntax: "none | [ underline || overline || line-through ]",
+        examples: &["underline", "line-through", "underline overline"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                decoration_line,
+                Declaration::TextDecorationLine,
+            )
+        },
+    },
+    Spec {
+        name: "text-decoration-color",
+        inherited: true,
+        syntax: "currentcolor | <color>",
+        examples: &["#808080", "currentcolor"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                decoration_color,
+                Declaration::TextDecorationColor,
+            )
+        },
+    },
+    Spec {
+        name: "text-decoration-style",
+        inherited: true,
+        syntax: "solid | double",
+        examples: &["double"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                decoration_style,
+                Declaration::TextDecorationStyle,
+            )
+        },
+    },
+    Spec {
+        name: "text-decoration-thickness",
+        inherited: true,
+        syntax: "auto | from-font | <length>",
+        examples: &["0.06em", "auto", "from-font"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                decoration_thickness,
+                Declaration::TextDecorationThickness,
+            )
+        },
+    },
+    Spec {
+        name: "text-decoration",
+        inherited: true,
+        syntax: "none | [ underline || overline || line-through ] || solid || double || <color> || <length>",
+        examples: &[
+            "underline",
+            "line-through",
+            "underline #808080",
+            "underline double 1pt",
+        ],
+        read: text_decoration,
     },
     Spec {
         name: "text-align",

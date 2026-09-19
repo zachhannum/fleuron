@@ -43,10 +43,10 @@ pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
     ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
-    CornerRadius, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Inset,
-    Length, LineHeight, ListStyleType, MarginBox, PageGeometry, Position, ShapeOutside, ShapePoint,
-    ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform,
-    Url, Width, WrapFlow,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, FontStyle,
+    FontVariantCaps, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, PageGeometry,
+    Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target,
+    TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
