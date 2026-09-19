@@ -1257,9 +1257,11 @@ note {
 
 The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as a column, which on a page that does not divide is the whole content box. Its height is what the notes in it come to.
 
-A note takes those properties, and the text properties with them. The blocks of a note are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet returns `font-style`, `font-weight`, and `text-indent` to their initial values. A reference in italic therefore leaves the note upright.
+A note takes those properties, and the text properties with them. The box it paints is the box at the foot of the page. The reference in the line takes the text properties alone, so it stands against the word it was written after whatever padding the note has.
 
-The engine prints the number twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does. It hangs in the padding to the left of the note.
+The blocks of a note are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet returns `font-style`, `font-weight`, and `text-indent` to their initial values. A reference in italic therefore leaves the note upright.
+
+The engine prints the number twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does. It hangs in the padding to the left of the note, so `padding-left` is the indent it hangs in.
 
 ### The area and the page
 

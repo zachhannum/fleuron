@@ -335,6 +335,35 @@ fn the_sheet_styles_the_area() {
     );
 }
 
+/// The padding of a note is the indent its number hangs in at the
+/// foot of the page. The reference in the line takes none of it, and
+/// stands against the word it was written after.
+#[test]
+fn the_padding_of_a_note_reaches_the_foot_of_the_page_alone() {
+    let markdown = manuscript(4, 2, "note1 at the foot.");
+    let run = |css: &str, wanted: &str| -> f32 {
+        lay_out(&markdown, css)
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .find_map(|item| match item {
+                DrawItem::Text { x, text, .. } if text.trim() == wanted => Some(*x),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the book says {wanted:?}"))
+    };
+    let wide = "note { padding-left: 4em }";
+    assert_eq!(
+        run("", "1"),
+        run(wide, "1"),
+        "the padding of the note moved its reference",
+    );
+    assert!(
+        run(wide, "1.") > run("", "1."),
+        "the padding of the note left the indent its number hangs in",
+    );
+}
+
 /// A note is set under the text of the page its reference is on.
 #[test]
 fn the_note_is_set_under_the_text_of_the_page() {
