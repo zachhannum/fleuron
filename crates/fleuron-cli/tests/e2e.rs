@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "c62b271b68f3c0368c2423fedfb72e3ddf8a896789ee2d3a87aaadf2c78a432b";
+    "6c71212da4a6b5e13ec2d4269fc321eb498590a80715af0057efbf4c3e0c0d1f";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -1126,8 +1126,12 @@ fn styled_pages_with(extra: &str) -> Vec<Page> {
 /// built-in sheet sets the `chapter` running string from.
 fn chapter_title(book: &Book) -> String {
     let mut title = String::new();
+    let mut notes = Notes {
+        number: 0,
+        prose: Vec::new(),
+    };
     if let Some(Block::Heading { inlines, .. }) = book.sections[0].blocks.first() {
-        append_inlines(inlines, &mut title);
+        append_inlines(inlines, &mut title, &mut notes);
     }
     assert!(!title.is_empty(), "the fixture opens with a heading");
     title
@@ -1939,15 +1943,18 @@ fn the_pdf_holds_every_word_of_the_book() {
     let book = fixture_book();
     let laid = laid_out(&book);
     assert!(
-        laid.iter()
+        laid.parts
+            .iter()
             .any(|part| matches!(part, Laid::Prose(prose) if !prose.is_empty())),
         "the fixture has no prose to check",
     );
     assert!(
-        laid.iter()
+        laid.parts
+            .iter()
             .any(|part| matches!(part, Laid::Table { body, .. } if !body.is_empty())),
         "the fixture has no table to check",
     );
+    assert!(!laid.notes.is_empty(), "the fixture has no note to check");
     let (pdf, _) = render("text", &[]);
     let Some(text) = extract_text(&pdf) else {
         return;
@@ -2492,25 +2499,73 @@ enum Laid {
     },
 }
 
-fn laid_out(book: &Book) -> Vec<Laid> {
-    let mut laid = Vec::new();
+/// What one book comes to: the parts in reading order, and the notes
+/// set at the foot of the pages their references land on.
+struct LaidOut {
+    parts: Vec<Laid>,
+    /// The notes, in the order their references were written, each
+    /// one the mark it is set beside and its own prose.
+    notes: Vec<String>,
+}
+
+fn laid_out(book: &Book) -> LaidOut {
+    let mut out = LaidOut {
+        parts: Vec::new(),
+        notes: Vec::new(),
+    };
     for section in &book.sections {
-        append_blocks(&section.blocks, &mut laid, false);
+        // The built-in sheet restarts the numbering at every chapter.
+        let mut notes = Notes {
+            number: 0,
+            prose: Vec::new(),
+        };
+        append_blocks(&section.blocks, &mut out.parts, false, &mut notes);
+        out.notes.append(&mut notes.prose);
     }
-    laid
+    out
+}
+
+/// The notes of one chapter while its blocks are being read: what the
+/// next one is numbered, and the prose of the ones read so far.
+struct Notes {
+    number: u32,
+    prose: Vec<String>,
+}
+
+impl Notes {
+    /// Reads one note: its mark and its prose go to the foot of a
+    /// page, and the number the mark prints is what stands in the
+    /// line.
+    fn take(&mut self, blocks: &[Block]) -> String {
+        self.number += 1;
+        let mut parts = Vec::new();
+        let mut inner = Notes {
+            number: 0,
+            prose: Vec::new(),
+        };
+        append_blocks(blocks, &mut parts, false, &mut inner);
+        let mut prose = format!("{}. ", self.number);
+        for part in parts {
+            if let Laid::Prose(text) = part {
+                prose.push_str(&text);
+            }
+        }
+        self.prose.push(prose);
+        self.number.to_string()
+    }
 }
 
 /// `nested` is whether the blocks are inside an item of a list, where
 /// the built-in sheet marks the items of a list with open circles.
-fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
+fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool, notes: &mut Notes) {
     for block in blocks {
         match block {
             Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
                 let mut text = String::new();
-                append_inlines(inlines, &mut text);
+                append_inlines(inlines, &mut text, notes);
                 laid.push(Laid::Prose(text));
             }
-            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid, nested),
+            Block::Blockquote { blocks, .. } => append_blocks(blocks, laid, nested, notes),
             // The marker of an item is set before the item's first
             // line, to the left of it.
             Block::List {
@@ -2526,7 +2581,7 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
                         (false, true) => "\u{25E6}".to_string(),
                     };
                     laid.push(Laid::Prose(marker));
-                    append_blocks(&item.blocks, laid, true);
+                    append_blocks(&item.blocks, laid, true, notes);
                 }
             }
             // A code block sets as its own lines, so each of them
@@ -2547,9 +2602,13 @@ fn append_blocks(blocks: &[Block], laid: &mut Vec<Laid>, nested: bool) {
 /// The text of every cell of one row, from the leading edge.
 fn row_text(row: &Row) -> String {
     let mut text = String::new();
+    let mut notes = Notes {
+        number: 0,
+        prose: Vec::new(),
+    };
     for cell in &row.cells {
         let mut inner = Vec::new();
-        append_blocks(&cell.blocks, &mut inner, false);
+        append_blocks(&cell.blocks, &mut inner, false, &mut notes);
         for part in inner {
             if let Laid::Prose(prose) = part {
                 text.push_str(&prose);
@@ -2573,24 +2632,45 @@ fn row_text(row: &Row) -> String {
 /// the extraction returns to the book's own order. That is for an
 /// extraction in reading order, which does not keep a table in order
 /// with the prose around it.
+///
+/// A note is set at the foot of the page its reference lands on,
+/// which is not where it was written. So the notes are asked for in
+/// the order their references were, wherever the prose of the book
+/// gives way to one.
 fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Result<(), String> {
     let rendered: Vec<char> = clean(text).chars().collect();
     let laid = laid_out(book);
+    let mut notes: std::collections::VecDeque<Vec<char>> = laid
+        .notes
+        .iter()
+        .map(|note| clean(note).chars().collect())
+        .collect();
+    let parts = laid.parts;
     let mut at = 0;
     let mut index = 0;
-    while let Some(part) = laid.get(index) {
+    while let Some(part) = parts.get(index) {
         index += 1;
         match part {
             Laid::Prose(prose) => {
                 let expected: Vec<char> = clean(prose).chars().collect();
-                let end = at + expected.len();
-                if rendered.get(at..end) != Some(expected.as_slice()) {
+                let mut taken = 0;
+                while taken < expected.len() {
+                    if rendered.get(at) == Some(&expected[taken]) {
+                        at += 1;
+                        taken += 1;
+                        continue;
+                    }
+                    // A page can end inside a paragraph, and the
+                    // notes of that page stand between its two
+                    // halves.
+                    if took_note(&rendered, &mut at, &mut notes) {
+                        continue;
+                    }
                     return Err(first_difference(
-                        &String::from_iter(&expected),
+                        &String::from_iter(&expected[taken..]),
                         &String::from_iter(&rendered[at.min(rendered.len())..]),
                     ));
                 }
-                at = end;
             }
             Laid::Table { head, body } => {
                 let head: Vec<Vec<char>> = head
@@ -2604,7 +2684,7 @@ fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Re
                 if by_row {
                     at = rows_at(&rendered, at, &head, &body)?;
                 } else {
-                    let after: Vec<Vec<char>> = laid[index..]
+                    let after: Vec<Vec<char>> = parts[index..]
                         .iter()
                         .map_while(|part| match part {
                             Laid::Prose(prose) => Some(clean(prose).chars().collect()),
@@ -2618,6 +2698,13 @@ fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Re
             }
         }
     }
+    while took_note(&rendered, &mut at, &mut notes) {}
+    if let Some(note) = notes.front() {
+        return Err(format!(
+            "a note did not come back: {}",
+            String::from_iter(note),
+        ));
+    }
     if at < rendered.len() {
         return Err(format!(
             "the PDF runs on past the book: {}",
@@ -2625,6 +2712,26 @@ fn holds(book: &Book, text: &str, clean: fn(&str) -> String, by_row: bool) -> Re
         ));
     }
     Ok(())
+}
+
+/// Reads back the note that stands at `at`, and says whether one
+/// did. The notes come in the order their references were written,
+/// so the one to look for is the first that is still waiting.
+fn took_note(
+    rendered: &[char],
+    at: &mut usize,
+    notes: &mut std::collections::VecDeque<Vec<char>>,
+) -> bool {
+    let Some(note) = notes.front() else {
+        return false;
+    };
+    let end = *at + note.len();
+    if rendered.get(*at..end) != Some(note.as_slice()) {
+        return false;
+    }
+    *at = end;
+    notes.pop_front();
+    true
 }
 
 /// Reads a table back one row at a time from `at`, and answers where
@@ -2722,18 +2829,18 @@ fn missing(rendered: &[char], at: usize, row: &[char]) -> String {
     )
 }
 
-fn append_inlines(inlines: &[Inline], text: &mut String) {
+fn append_inlines(inlines: &[Inline], text: &mut String, notes: &mut Notes) {
     for inline in inlines {
         match inline {
             Inline::Text { value, .. } | Inline::Code { value, .. } => text.push_str(value),
             Inline::Break { .. } => text.push('\n'),
-            // The note itself is set at the foot of the page, and
-            // `laid_out` asks for it there.
-            Inline::Note { .. } => {}
+            // What stands in the line is the reference. The note
+            // itself is set at the foot of the page.
+            Inline::Note { blocks, .. } => text.push_str(&notes.take(blocks)),
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
-            | Inline::Span { children, .. } => append_inlines(children, text),
+            | Inline::Span { children, .. } => append_inlines(children, text, notes),
         }
     }
 }
