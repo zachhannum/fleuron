@@ -48,7 +48,7 @@ use std::borrow::Cow;
 use crate::content::{Book, NodeId, SourceRange};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
-use crate::layout::{Fragment, PageInfo, Piece, References, no_assets};
+use crate::layout::{Fragment, Numbering, PageInfo, Piece, References, no_assets};
 use crate::pages::PageBox;
 use crate::style::{StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
@@ -166,6 +166,18 @@ struct Cached {
 }
 
 impl Cached {
+    /// Whether the lines can be moved onto the ids the book hands out
+    /// now. The notes a line carries were built with ids of their
+    /// own, and moving those is not what `renumber` does, so a
+    /// section that holds one is broken again instead.
+    fn renumbers(&self, section: NodeId) -> bool {
+        section == self.section
+            || !self
+                .fragments
+                .iter()
+                .any(|fragment| fragment.notes.is_some())
+    }
+
     /// Moves the source ranges onto the ids the book hands out now.
     /// Ids renumber globally on every edit, so a chapter nothing
     /// touched comes back out of the cache under a new number; its
@@ -277,6 +289,8 @@ pub struct Session<'a> {
     /// What the book's references resolve against on the pass that
     /// finds the pages.
     references: References,
+    /// What the notes of the book are numbered.
+    notes: Numbering,
     /// Each section's lines on the pass that prints the pages its
     /// references name. `None` for a section with no such reference,
     /// whose lines from the pass before stand.
@@ -332,6 +346,7 @@ impl<'a> Session<'a> {
             retain: true,
             lines: Vec::new(),
             references: References::default(),
+            notes: Numbering::default(),
             settled: Vec::new(),
             settle_warnings: Vec::new(),
             link_warnings: Vec::new(),
@@ -386,6 +401,7 @@ impl<'a> Session<'a> {
             retain: false,
             lines: Vec::new(),
             references: References::default(),
+            notes: Numbering::default(),
             settled: Vec::new(),
             settle_warnings: Vec::new(),
             link_warnings: Vec::new(),

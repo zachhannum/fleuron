@@ -34,7 +34,7 @@ fn nodes(book: &Book) -> Vec<Node> {
                 Inline::Text { value, .. } | Inline::Code { value, .. } => {
                     (Some(value.clone()), None)
                 }
-                Inline::Break { .. } => (None, None),
+                Inline::Break { .. } | Inline::Note { .. } => (None, None),
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }

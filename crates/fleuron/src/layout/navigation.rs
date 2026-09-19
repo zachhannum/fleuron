@@ -172,6 +172,7 @@ fn links_in_inlines<'b>(
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Span { children, .. } => links_in_inlines(children, source, out),
+            Inline::Note { blocks, .. } => links_in_blocks(blocks, source, out),
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
         }
     }

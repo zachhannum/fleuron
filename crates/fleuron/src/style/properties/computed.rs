@@ -76,6 +76,11 @@ pub struct ComputedStyle {
     /// `counter-reset: page`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counter_reset: Option<u32>,
+    /// The number the first note under this element takes, from
+    /// `counter-reset: note`. On the footnote area it restarts the
+    /// numbering on every page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note_reset: Option<u32>,
     /// Lines an initial letter is sunk over, from `initial-letter`.
     /// Fewer than two is no drop cap.
     pub initial_letter: u16,
@@ -191,6 +196,7 @@ impl ComputedStyle {
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
+            note_reset: None,
             initial_letter: 0,
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
@@ -238,6 +244,7 @@ impl ComputedStyle {
             content: Content::None,
             string_set: Vec::new(),
             counter_reset: None,
+            note_reset: None,
             initial_letter: 0,
             position: Position::Static,
             inset: Edges::all(Inset::Auto),
@@ -286,7 +293,10 @@ impl ComputedStyle {
             Declaration::Page(name) => self.page = name.clone(),
             Declaration::Content(content) => self.content = content.clone(),
             Declaration::StringSet(sets) => self.string_set = sets.clone(),
-            Declaration::CounterReset(folio) => self.counter_reset = *folio,
+            Declaration::CounterReset(counters) => {
+                self.counter_reset = counters.page;
+                self.note_reset = counters.note;
+            }
             Declaration::InitialLetter(lines) => self.initial_letter = *lines,
             Declaration::Position(position) => self.position = *position,
             Declaration::Inset(edge, length) => {
@@ -390,7 +400,10 @@ impl ComputedStyle {
             Declaration::Page(_) => self.page = base.page.clone(),
             Declaration::Content(_) => self.content = base.content.clone(),
             Declaration::StringSet(_) => self.string_set = base.string_set.clone(),
-            Declaration::CounterReset(_) => self.counter_reset = base.counter_reset,
+            Declaration::CounterReset(_) => {
+                self.counter_reset = base.counter_reset;
+                self.note_reset = base.note_reset;
+            }
             Declaration::InitialLetter(_) => self.initial_letter = base.initial_letter,
             Declaration::Position(_) => self.position = base.position,
             Declaration::Inset(edge, _) => *self.inset.edge(*edge) = base.inset.get(*edge),

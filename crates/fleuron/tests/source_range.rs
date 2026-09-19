@@ -99,7 +99,7 @@ fn nodes(book: &Book) -> BTreeMap<u32, String> {
                 Inline::Text { id, value, .. } | Inline::Code { id, value, .. } => {
                     out.insert(id.get(), value.clone());
                 }
-                Inline::Break { .. } => {}
+                Inline::Break { .. } | Inline::Note { .. } => {}
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }

@@ -116,6 +116,27 @@ pub(super) fn paragraph(value: &str) -> Block {
     }
 }
 
+/// A paragraph with a note written into it. The note holds one
+/// paragraph of its own.
+pub(super) fn noted(value: &str, note: &str) -> Block {
+    Block::Paragraph {
+        id: NodeId::UNASSIGNED,
+        inlines: vec![
+            text(value),
+            Inline::Note {
+                id: NodeId::UNASSIGNED,
+                blocks: vec![paragraph(note)],
+                attributes: Attributes::default(),
+                position: None,
+                span: None,
+            },
+        ],
+        attributes: Attributes::default(),
+        position: None,
+        span: None,
+    }
+}
+
 pub(super) fn heading(value: &str) -> Block {
     Block::Heading {
         id: NodeId::UNASSIGNED,

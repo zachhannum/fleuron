@@ -103,6 +103,9 @@ fn take_initial(inlines: &[Inline]) -> Option<Initial> {
                     out.push((Some(*id), value))
                 }
                 Inline::Break { .. } => out.push((None, "\n")),
+                // The note is set at the foot of the page, so an
+                // initial letter never comes out of one.
+                Inline::Note { .. } => {}
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }

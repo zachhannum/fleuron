@@ -322,8 +322,9 @@ h2 {
 The element names come from markdown:
 
 ```
-book section h1 h2 h3 h4 h5 h6 p blockquote pre hr img ul ol
-li table thead tbody tr th td code em strong a span
+book section notes note h1 h2 h3 h4 h5 h6 p blockquote pre
+hr img ul ol li table thead tbody tr th td code em strong a
+span
 ```
 
 {/* end generated */}
@@ -700,7 +701,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 ```css
 content:                    none | [ <string> | target-counter( <target> , page , <counter-style>? ) | target-text( <target> ) ]+;
 string-set:                 none | [ <name> [ content() | content(text) | <string> ]+ ]#;
-counter-reset:              none | page <integer>?;
+counter-reset:              none | [ page <integer>? || note <integer>? ];
 initial-letter:             <integer>;
 position:                   static | relative | absolute;
 top:                        auto | <length> | <percentage>;
@@ -1232,6 +1233,58 @@ img {
 }
 ```
 
+## Footnotes
+
+A footnote is written in the manuscript where its reference belongs. The engine puts the note at the foot of the page that reference lands on. [The markdown mapping](reference/markdown.mdx#footnotes) says how to write one.
+
+Two elements style a note. `note` is the note itself: the reference in the line, the number beside the note, and the blocks of the note. `notes` is the area at the foot of the content box that holds the notes of one page.
+
+The following example puts the notes of a page under a rule, in a smaller size than the text:
+
+```css
+notes {
+  margin-top: 1em;
+  padding-top: 0.4em;
+  border-top: thin solid;
+}
+
+note {
+  font-size: 9pt;
+  line-height: 1.2;
+  padding-left: 1.5em;
+}
+```
+
+The area takes the properties under [Blocks](#blocks): a margin, a border, padding, and a background. It is as wide as a column, which on a page that does not divide is the whole content box. Its height is what the notes in it come to.
+
+A note takes those properties, and the text properties with them. The box it paints is the box at the foot of the page. The reference in the line takes the text properties alone, so it stands against the word it was written after whatever padding the note has.
+
+The blocks of a note are elements of their own, so `note p` selects the paragraphs of a note. A note stands where its reference was written, so it inherits from the paragraph that holds the reference. The built-in stylesheet returns `font-style`, `font-weight`, and `text-indent` to their initial values. A reference in italic therefore leaves the note upright.
+
+The engine prints the number twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does. It hangs in the padding to the left of the note, so `padding-left` is the indent it hangs in.
+
+### The area and the page
+
+The engine takes the area off the column before it places a line. A column with notes under it holds fewer lines of text. A line that no longer fits moves on, and the note of a reference on that line moves with it.
+
+A note longer than the room the column has left is split. The rest of it opens the area of the next column, above the notes of that column, and carries no reference of its own. The last column of a page hands what it cannot hold to the next page.
+
+On a page that divides into columns, each column sets its own notes under itself.
+
+### Numbering
+
+The note counter runs through the book. `counter-reset: note` restarts it, and where the rule is decides how often:
+
+| the rule is on | the numbering restarts |
+|---|---|
+| `section` | at every chapter, which is what the built-in stylesheet does |
+| `notes` | at every page |
+| any other element | at that element |
+
+`counter-reset: note 5` restarts the numbering at 5 rather than at 1. The `page` and the `note` counters go in one declaration: `counter-reset: page 1 note 1`.
+
+The page a note lands on is a layout result, so a note numbered by its page takes its number from a layout that is finished. The engine lays the book out again, up to four times, until the numbering stops changing. A book that has not settled by then keeps the numbers of the last layout, and the engine warns.
+
 ## Chapter openings
 
 ### Drop caps
@@ -1396,6 +1449,7 @@ book {
 section {
   page: chapter;
   break-before: recto;
+  counter-reset: note;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -1461,6 +1515,29 @@ hr {
   margin: 1em 0;
   break-before: avoid;
   break-after: avoid;
+}
+
+/* The notes of a page stand at the foot of its content box, under a
+   rule. */
+notes {
+  margin-top: 1em;
+  padding-top: 0.4em;
+  border-top: thin solid;
+}
+
+/* A note is set smaller than the text, and starts flush in the
+   letters the book is set in, wherever its reference was written. The
+   number is the reference in the line and the mark beside the note,
+   and it hangs in the indent to the left of the note. */
+note {
+  font-size: 9pt;
+  line-height: 1.2;
+  font-style: normal;
+  font-weight: normal;
+  text-indent: 0;
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-top: 0.4em;
 }
 
 /* A page break and a column break hold no text. The content after
@@ -1550,7 +1627,8 @@ code { font-family: monospace }
 | code blocks | `white-space`, `tab-size`, and syntax highlighting |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
-| counters | any counter other than `page`, and `counter-increment` |
+| counters | any counter other than `page` and `note`, and `counter-increment` |
+| footnotes | `::footnote-call` and `::footnote-marker`, a note set in the margin or at the end of the book, `float: footnote`, a rule that reaches the area of one page rather than every page, and a note inside a block against the page |
 | generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |

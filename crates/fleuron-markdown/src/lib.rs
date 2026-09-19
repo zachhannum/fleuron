@@ -104,6 +104,9 @@ pub struct Dialect {
     /// A line of nothing but `\pagebreak` or `\columnbreak` starts a
     /// new page or the next column.
     pub breaks: bool,
+    /// Footnotes, as GitHub writes them: `[^1]` in the prose, and
+    /// `[^1]: the note` on a line of its own.
+    pub footnotes: bool,
 }
 
 impl Default for Dialect {
@@ -126,6 +129,7 @@ impl Dialect {
             wikilinks: false,
             smart_punctuation: false,
             breaks: true,
+            footnotes: true,
         }
     }
 
@@ -136,6 +140,7 @@ impl Dialect {
             attributes: false,
             tables: false,
             breaks: false,
+            footnotes: false,
             ..Dialect::fleuron()
         }
     }

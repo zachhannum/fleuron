@@ -278,8 +278,8 @@ p {
  */
 export const MAPPING_MD = `## [The Levant Papers]{.title}
 
-The letter reached Marsh on a Tuesday, in *the second post*, and it was
-**not** what he had been waiting for. It began \`Dear sir\` and ended
+The letter reached Marsh on a Tuesday, in *the second post*,[^post] and it
+was **not** what he had been waiting for. It began \`Dear sir\` and ended
 without a name, which is [the whole of the difficulty](https://example.com).
 
 It closed, as the last one had:
@@ -298,6 +298,9 @@ A friend at Smyrna
 |:---|:---|---:|
 | The *Hesper* | 3 March | Smyrna |
 | The *Ariel* | 9 March | Beirut |
+
+[^post]: The second post reached the office at four, and the clerk read it
+    first.
 
 Marsh wrote down the two things he knew:
 
