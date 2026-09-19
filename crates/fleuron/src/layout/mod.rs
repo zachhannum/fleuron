@@ -80,7 +80,7 @@ use flow::{Flow, PageSlot};
 /// out again for them. Each pass numbers the notes of the pass
 /// before, and a book that has not settled by the last of them keeps
 /// the numbers it has.
-const NOTE_PASSES: u32 = 4;
+pub(crate) const NOTE_PASSES: u32 = 4;
 
 /// One book through the whole pipeline: lines laid out, flowed into
 /// pages, everything the output needs assembled.

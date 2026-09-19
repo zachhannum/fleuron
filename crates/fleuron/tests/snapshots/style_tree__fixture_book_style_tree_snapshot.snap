@@ -71,6 +71,7 @@ expression: tree
       "widows": 2,
       "page": "chapter",
       "content": "none",
+      "note_reset": 1,
       "initial_letter": 0,
       "margin": {
         "top": 0.0,

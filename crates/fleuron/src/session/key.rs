@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use crate::content::{Block, Inline, NodeId, Section, rows};
-use crate::layout::{Named, References};
+use crate::content::{Block, Inline, NodeId, Section, inline_id, notes_in_blocks, rows};
+use crate::layout::{Named, Numbering, References};
 use crate::lines::Patterns;
 use crate::style::{
     Background, BackgroundSize, ColumnRule, Columns, ComputedStyle, Coord, Edges, Inset,
@@ -23,7 +23,9 @@ use super::invalidate::Against;
 ///
 /// A section's references reach past it, to the elements they name.
 /// The words of each, and whether an element carries the id at all,
-/// are known before anything is laid out, so they are part of it.
+/// are known before anything is laid out, so they are part of it. So
+/// is the number of each note it holds, which is what the reference
+/// of that note prints in a line.
 pub(super) fn section_key(
     section: &Section,
     styles: &StyleTree,
@@ -31,6 +33,7 @@ pub(super) fn section_key(
     assets: Option<usize>,
     hyphenation: (Patterns, Option<&str>),
     references: &References,
+    notes: &Numbering,
 ) -> u64 {
     let mut hasher = DefaultHasher::new();
     let h = &mut hasher;
@@ -40,6 +43,9 @@ pub(super) fn section_key(
     (&section.source, &section.title, section.position).hash(h);
     hash_node(section.id, styles, h);
     hash_blocks(&section.blocks, styles, h);
+    for note in notes_in_blocks(&section.blocks) {
+        notes.number(inline_id(note)).hash(h);
+    }
     if styles.refers() {
         let named = Named::in_section(section, styles, references);
         (named.pages.len(), named.texts.len()).hash(h);

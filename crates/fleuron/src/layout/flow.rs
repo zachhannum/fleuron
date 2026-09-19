@@ -733,10 +733,6 @@ impl<'a, 'p> Flow<'a, 'p> {
             items.append(&mut self.decorate(&placed));
             items.append(&mut self.rules(&placed));
             items.append(&mut self.anchored_items());
-            if let Some(area) = &area {
-                let geometry = self.paginator.master(self.pages.len(), &self.slot).geometry;
-                items.append(&mut self.paginator.area_items(area, geometry.content_origin()));
-            }
             let page = self.pages.len() as u32;
             for (node, area) in self.anchored_areas() {
                 self.boxes.push((node, PageBox { page, ..area }));
@@ -770,6 +766,15 @@ impl<'a, 'p> Flow<'a, 'p> {
                 }
             }
             items.extend(placed.items);
+        }
+        // The notes go under the text of the page, so they are
+        // painted after it and the baselines of the page rise from
+        // its first line to its last note.
+        if let Some(area) = &area
+            && self.paints
+        {
+            let geometry = self.paginator.master(index, &self.slot).geometry;
+            items.append(&mut self.paginator.area_items(area, geometry.content_origin()));
         }
         let mut page = self.paginator.blank_page(&self.slot);
         page.side = Side::of_number(self.pages.len() as u32 + 1);

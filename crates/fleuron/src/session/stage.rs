@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::Warning;
 use crate::content::NodeId;
-use crate::layout::{Named, Paged, Paginator, References, landed, moved, navigation};
+use crate::layout::{
+    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, landed, moved, navigation,
+};
 use crate::pages::{Page, PageBox};
 
 use super::invalidate::{Against, Prints, hyphenation, section_local};
@@ -35,6 +37,7 @@ impl Session<'_> {
         }
         if self.retain {
             if self.stale >= Stale::Break {
+                self.notes = Numbering::of(&self.book, &self.styles);
                 self.rebreak();
             }
             if self.stale >= Stale::Flow {
@@ -91,12 +94,13 @@ impl Session<'_> {
                 supplied,
                 hyphenation(&self.book.metadata),
                 &self.references,
+                &self.notes,
             );
             let kept = spare
                 .get_mut(&key)
                 .and_then(|slots| slots.pop())
                 .and_then(|slot| previous[slot].take());
-            fresh.push(match kept {
+            fresh.push(match kept.filter(|cached| cached.renumbers(section.id)) {
                 Some(mut cached) => {
                     cached.renumber(section.id);
                     cached
@@ -112,6 +116,7 @@ impl Session<'_> {
                     );
                     paginator.language(&self.book.metadata);
                     paginator.refer(self.references.clone());
+                    paginator.number(self.notes.clone());
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {
@@ -143,6 +148,9 @@ impl Session<'_> {
     /// built again once the pages are known.
     fn reflow(&mut self) {
         let mut paged = self.fragment(false);
+        if self.styles.numbers_notes_per_page() {
+            paged = self.settle_notes(paged);
+        }
         if self.styles.counts_pages() {
             paged = self.settle(&paged);
         } else {
@@ -188,6 +196,29 @@ impl Session<'_> {
         paged
     }
 
+    /// Numbers the notes by the page their references were set on,
+    /// and breaks the sections that hold one again to print those
+    /// numbers.
+    ///
+    /// A number of another width moves the line its reference is on,
+    /// which can move a note onto another page and number it again.
+    /// So the pass runs until the numbering stops changing, and the
+    /// numbering of the last pass stands where it does not.
+    fn settle_notes(&mut self, mut paged: Paged) -> Paged {
+        let start = self.styles.first_note_number();
+        for _ in 0..NOTE_PASSES {
+            let numbered = self.notes.on_pages(&paged.notes, start);
+            if numbered == self.notes {
+                return paged;
+            }
+            self.notes = numbered;
+            self.rebreak();
+            self.stages.settle += 1;
+            paged = self.fragment(false);
+        }
+        paged
+    }
+
     /// Lays the book out again with the folio each reference prints,
     /// read off the pages of the pass before. Only the sections whose
     /// references print a page are built again, and one that prints
@@ -212,7 +243,11 @@ impl Session<'_> {
             }
             let key = settled_key(first.key, &named.pages, &found);
             printed.extend(named.pages);
-            let cached = match spare.get_mut(&key).and_then(Vec::pop) {
+            let cached = match spare
+                .get_mut(&key)
+                .and_then(Vec::pop)
+                .filter(|cached| cached.renumbers(section.id))
+            {
                 Some(mut cached) => {
                     cached.renumber(section.id);
                     cached
@@ -226,6 +261,7 @@ impl Session<'_> {
                     );
                     paginator.language(&self.book.metadata);
                     paginator.refer(resolved.clone());
+                    paginator.number(self.notes.clone());
                     let fragments = paginator.section_fragments(section);
                     self.stages.lines += 1;
                     Cached {

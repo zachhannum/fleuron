@@ -600,7 +600,7 @@ pub(super) fn counter_reset(input: &mut Parser<'_, '_>) -> Option<CounterReset> 
         if counter.is_some() {
             return None;
         }
-        let value = input.try_parse(|input| input.expect_integer()).unwrap_or(0);
+        let value = input.try_parse(|input| input.expect_integer()).unwrap_or(1);
         *counter = Some(value.max(0) as u32);
         if input.is_exhausted() {
             return Some(counters);
