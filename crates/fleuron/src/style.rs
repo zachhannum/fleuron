@@ -216,6 +216,9 @@ pub struct StyleTree {
     /// Whether generated text names another element at all.
     #[serde(skip)]
     refers: bool,
+    /// The footnote area, which no content node stands behind.
+    #[serde(skip)]
+    notes: NodeId,
     warnings: Vec<Warning>,
 }
 
@@ -236,6 +239,12 @@ impl StyleTree {
             .copied()
             .unwrap_or_default();
         &self.styles[index as usize]
+    }
+
+    /// The node the footnote area is styled by: the `notes` element,
+    /// which stands for the foot of every page.
+    pub fn notes_area(&self) -> NodeId {
+        self.notes
     }
 
     /// Everything line layout needs about one node.
@@ -987,6 +996,7 @@ fn cascade(
         after_by_node,
         counts_pages,
         refers,
+        notes: elements.notes(),
         warnings,
     }
 }

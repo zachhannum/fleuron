@@ -179,9 +179,11 @@ impl SelectorImpl for Fleuron {
 /// Every element name the tree can hold, in the order the content
 /// tree introduces them. A selector names one of these or matches
 /// nothing.
-pub const ELEMENTS: [&str; 27] = [
+pub const ELEMENTS: [&str; 29] = [
     "book",
     "section",
+    "notes",
+    "note",
     "h1",
     "h2",
     "h3",
@@ -208,6 +210,17 @@ pub const ELEMENTS: [&str; 27] = [
     "a",
     "span",
 ];
+
+/// The id past the last one the book assigned. Text runs hold ids
+/// and are no elements, so the elements alone do not say where the
+/// book's ids end.
+fn past_last_id(book: &Book) -> u32 {
+    book.sections
+        .last()
+        .and_then(|section| book.subtree(section.id))
+        .map(|held| held.end)
+        .unwrap_or(1)
+}
 
 /// One element: a name, an identity in the content tree, and the
 /// links a selector walks.
@@ -238,6 +251,9 @@ pub struct ElementTree {
     /// The paragraphs that have no element of their own, each with the
     /// `li` whose anonymous box holds it.
     anonymous: Vec<(NodeId, usize)>,
+    /// The footnote area, which stands for the foot of every page
+    /// rather than for anything the manuscript wrote.
+    notes: NodeId,
 }
 
 impl ElementTree {
@@ -269,7 +285,25 @@ impl ElementTree {
             })
             .collect();
         tree.link(root, &sections);
+        tree.notes = tree.area(root, past_last_id(book));
         tree
+    }
+
+    /// The footnote area: the box the notes of a page are set in.
+    ///
+    /// No content node stands behind it, so it takes an id past the
+    /// ones the book assigned. It is not among the children of the
+    /// book, because the sections are the children a sheet counts,
+    /// and it is the book that it inherits from.
+    fn area(&mut self, root: usize, past: u32) -> NodeId {
+        let id = NodeId::new(past);
+        self.push("notes", id, &Attributes::default(), Some(root), false);
+        id
+    }
+
+    /// The id of the footnote area.
+    pub fn notes(&self) -> NodeId {
+        self.notes
     }
 
     /// Every element, in document order.
