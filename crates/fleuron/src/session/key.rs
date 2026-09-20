@@ -397,10 +397,12 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // What a custom property holds reaches layout only through the
         // properties that read it, which are hashed here already.
         custom: _,
-        font_feature_settings: _,
-        font_variant_ligatures: _,
-        font_variant_numeric: _,
-        font_variant_alternates: _,
+        // A feature draws other glyphs, and other glyphs take other
+        // advances, so a line breaks where the features put it.
+        font_feature_settings,
+        font_variant_ligatures,
+        font_variant_numeric,
+        font_variant_alternates,
     } = style;
     (border_collapse, list_style_type).hash(h);
     for size in [width, height, min_height, max_width, max_height] {
@@ -412,6 +414,13 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     }
     (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
     (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
+    (
+        font_feature_settings,
+        font_variant_ligatures,
+        font_variant_numeric,
+        font_variant_alternates,
+    )
+        .hash(h);
     (
         text_decoration_line,
         text_decoration_color,

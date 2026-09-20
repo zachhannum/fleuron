@@ -180,15 +180,17 @@ const SOURCES: [(&str, &str, usize); 4] = [
 
 /// Sheets spanning every tier the classifier has: one the engine
 /// models nothing of, one that only moves furniture, one that moves
-/// the page box, two that move the measure and the face, and one
-/// that puts two measures on the book at once.
-const SHEETS: [&str; 6] = [
+/// the page box, two that move the measure and the face, one that
+/// puts two measures on the book at once, and one that asks the face
+/// for a feature, which draws other glyphs at other advances.
+const SHEETS: [&str; 7] = [
     "p { color: rebeccapurple }",
     "@page { @bottom-center { content: \"leaf\" } }",
     "@page { margin-bottom: 96pt }",
     "book { font-size: 13pt; line-height: 1.6 }",
     "@page { margin-left: 90pt }",
     "@page :left { margin-left: 24pt }",
+    "p { font-feature-settings: \"ss01\" 1 }",
 ];
 
 fn edit_strategy() -> impl Strategy<Value = Edit> {
