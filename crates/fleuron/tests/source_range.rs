@@ -103,6 +103,7 @@ fn nodes(book: &Book) -> BTreeMap<u32, String> {
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }
+                | Inline::Strikethrough { children, .. }
                 | Inline::Span { children, .. } => walk_inlines(children, out),
             }
         }

@@ -810,6 +810,23 @@ pub enum Inline {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+    /// `~~struck~~`: a line through it, in the default sheet.
+    Strikethrough {
+        /// Engine-assigned identity, for diagnostics; never serialized.
+        #[serde(skip)]
+        id: NodeId,
+        /// The struck inlines.
+        children: Vec<Inline>,
+        /// What a sheet names it by.
+        #[serde(default, skip_serializing_if = "Attributes::is_empty")]
+        attributes: Attributes,
+        /// Where the frontend read this from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<SourcePos>,
+        /// The bytes of that source it was read from.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
     /// A run the sheet names, and nothing else. It carries no meaning
     /// of its own, so the built-in sheet styles it like the text
     /// around it and a class on it is what reaches it.
@@ -851,6 +868,7 @@ fn push_text(inlines: &[Inline], out: &mut String) {
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => push_text(children, out),
         }
     }
@@ -1013,6 +1031,7 @@ fn subtree_in_inlines(inlines: &[Inline], node: NodeId) -> Option<Range<u32>> {
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => subtree_in_inlines(children, node),
         };
     }
@@ -1079,6 +1098,7 @@ pub(crate) fn inline_nodes(inline: &Inline) -> u32 {
         Inline::Emphasis { children, .. }
         | Inline::Strong { children, .. }
         | Inline::Link { children, .. }
+        | Inline::Strikethrough { children, .. }
         | Inline::Span { children, .. } => children.iter().map(inline_nodes).sum(),
     }
 }
@@ -1156,6 +1176,7 @@ fn node_in_inlines(inlines: &[Inline], byte: u32) -> Option<(NodeId, SourceSpan)
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => node_in_inlines(children, byte),
         };
         return Some(narrowest((inline_id(inline), span), inner));
@@ -1186,6 +1207,7 @@ fn shallow_notes_in_inlines<'b>(inlines: &'b [Inline], out: &mut Vec<&'b Inline>
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => shallow_notes_in_inlines(children, out),
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
         }
@@ -1228,6 +1250,7 @@ fn gather_notes_in_inlines<'b>(inlines: &'b [Inline], out: &mut Vec<&'b Inline>)
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => gather_notes_in_inlines(children, out),
             Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
         }
@@ -1322,6 +1345,7 @@ fn span_in_inlines(inlines: &[Inline], node: NodeId) -> Option<SourceSpan> {
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => span_in_inlines(children, node),
         };
         if found.is_some() {
@@ -1398,6 +1422,7 @@ pub fn inline_attributes(inline: &Inline) -> &Attributes {
         | Inline::Strong { attributes, .. }
         | Inline::Link { attributes, .. }
         | Inline::Note { attributes, .. }
+        | Inline::Strikethrough { attributes, .. }
         | Inline::Span { attributes, .. } => attributes,
     }
 }
@@ -1428,6 +1453,7 @@ pub fn inline_position(inline: &Inline) -> Option<SourcePos> {
         | Inline::Strong { position, .. }
         | Inline::Link { position, .. }
         | Inline::Note { position, .. }
+        | Inline::Strikethrough { position, .. }
         | Inline::Span { position, .. } => *position,
     }
 }
@@ -1474,6 +1500,7 @@ pub fn inline_id(inline: &Inline) -> NodeId {
         | Inline::Strong { id, .. }
         | Inline::Link { id, .. }
         | Inline::Note { id, .. }
+        | Inline::Strikethrough { id, .. }
         | Inline::Span { id, .. } => *id,
     }
 }
@@ -1488,6 +1515,7 @@ pub fn inline_span(inline: &Inline) -> Option<SourceSpan> {
         | Inline::Strong { span, .. }
         | Inline::Link { span, .. }
         | Inline::Note { span, .. }
+        | Inline::Strikethrough { span, .. }
         | Inline::Span { span, .. } => *span,
     }
 }
@@ -1557,6 +1585,7 @@ fn assign_inline(inline: &mut Inline, next: &mut u32) {
         Inline::Emphasis { id, children, .. }
         | Inline::Strong { id, children, .. }
         | Inline::Link { id, children, .. }
+        | Inline::Strikethrough { id, children, .. }
         | Inline::Span { id, children, .. } => {
             *id = next_id(next);
             for child in children {
@@ -2022,6 +2051,7 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
                 Inline::Emphasis { id, children, .. }
                 | Inline::Strong { id, children, .. }
                 | Inline::Link { id, children, .. }
+                | Inline::Strikethrough { id, children, .. }
                 | Inline::Span { id, children, .. } => {
                     let mut ids = vec![*id];
                     ids.extend(children.iter().flat_map(walk_inline_ids));

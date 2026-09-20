@@ -16,9 +16,9 @@ use super::counter::{Content, ListStyleType, StringSet};
 use super::edges::{Border, BorderRadius, CornerRadius, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, Family, FontStyle,
-    FontVariantCaps, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign, TextJustify, TextTransform,
-    Width,
+    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
+    Family, FontStyle, FontVariantCaps, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign,
+    TextDecoration, TextJustify, TextTransform, Width,
 };
 
 /// One node's resolved style: what every downstream pass reads.
@@ -48,6 +48,22 @@ pub struct ComputedStyle {
     pub font_variant_caps: FontVariantCaps,
     /// What the run's letters are transformed to before shaping.
     pub text_transform: TextTransform,
+    /// Which rules are drawn across the run, from
+    /// `text-decoration-line`.
+    #[serde(skip_serializing_if = "undecorated")]
+    pub text_decoration_line: DecorationLine,
+    /// What those rules are painted in, from
+    /// `text-decoration-color`. `None` is the colour of the text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_decoration_color: Option<Color>,
+    /// How each rule is drawn, from `text-decoration-style`.
+    #[serde(skip_serializing_if = "solid")]
+    pub text_decoration_style: DecorationStyle,
+    /// How thick each rule is, in points, from
+    /// `text-decoration-thickness`. `None` is the thickness the face
+    /// declares.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_decoration_thickness: Option<f32>,
     /// How lines fill the measure.
     pub text_align: TextAlign,
     /// What justification opens up to fill it.
@@ -185,6 +201,10 @@ impl ComputedStyle {
             letter_spacing: 0.0,
             font_variant_caps: FontVariantCaps::Normal,
             text_transform: TextTransform::None,
+            text_decoration_line: DecorationLine::NONE,
+            text_decoration_color: None,
+            text_decoration_style: DecorationStyle::Solid,
+            text_decoration_thickness: None,
             text_align: TextAlign::Left,
             text_justify: TextJustify::InterWord,
             hanging_punctuation: HangingPunctuation::NONE,
@@ -281,6 +301,13 @@ impl ComputedStyle {
             }
             Declaration::FontVariantCaps(caps) => self.font_variant_caps = *caps,
             Declaration::TextTransform(transform) => self.text_transform = *transform,
+            Declaration::TextDecorationLine(line) => self.text_decoration_line = *line,
+            Declaration::TextDecorationColor(color) => self.text_decoration_color = *color,
+            Declaration::TextDecorationStyle(style) => self.text_decoration_style = *style,
+            Declaration::TextDecorationThickness(length) => {
+                self.text_decoration_thickness =
+                    length.map(|length| length.to_points(self.font_size, root_size).max(0.0))
+            }
             Declaration::TextAlign(align) => self.text_align = *align,
             Declaration::TextJustify(justify) => self.text_justify = *justify,
             Declaration::HangingPunctuation(hanging) => self.hanging_punctuation = *hanging,
@@ -388,6 +415,18 @@ impl ComputedStyle {
             Declaration::LetterSpacing(_) => self.letter_spacing = base.letter_spacing,
             Declaration::FontVariantCaps(_) => self.font_variant_caps = base.font_variant_caps,
             Declaration::TextTransform(_) => self.text_transform = base.text_transform,
+            Declaration::TextDecorationLine(_) => {
+                self.text_decoration_line = base.text_decoration_line
+            }
+            Declaration::TextDecorationColor(_) => {
+                self.text_decoration_color = base.text_decoration_color
+            }
+            Declaration::TextDecorationStyle(_) => {
+                self.text_decoration_style = base.text_decoration_style
+            }
+            Declaration::TextDecorationThickness(_) => {
+                self.text_decoration_thickness = base.text_decoration_thickness
+            }
             Declaration::TextAlign(_) => self.text_align = base.text_align,
             Declaration::TextJustify(_) => self.text_justify = base.text_justify,
             Declaration::HangingPunctuation(_) => {
@@ -490,6 +529,7 @@ impl ComputedStyle {
                 self.text_transform,
             ),
             color: set(self.color != element.color, self.color),
+            decoration: set(self.decoration() != element.decoration(), self.decoration()),
         }
     }
 
@@ -552,6 +592,18 @@ impl ComputedStyle {
             letter_spacing: self.letter_spacing,
             caps: self.font_variant_caps,
             transform: self.text_transform,
+            decoration: self.decoration(),
+        }
+    }
+
+    /// What is drawn across this style's runs, the four longhands
+    /// gathered into one value.
+    pub fn decoration(&self) -> TextDecoration {
+        TextDecoration {
+            line: self.text_decoration_line,
+            color: self.text_decoration_color,
+            style: self.text_decoration_style,
+            thickness: self.text_decoration_thickness,
         }
     }
 }
@@ -607,6 +659,14 @@ fn square(radius: &BorderRadius) -> bool {
 
 fn sliced(value: &BoxDecorationBreak) -> bool {
     *value == BoxDecorationBreak::Slice
+}
+
+fn undecorated(line: &DecorationLine) -> bool {
+    !line.draws()
+}
+
+fn solid(style: &DecorationStyle) -> bool {
+    *style == DecorationStyle::Solid
 }
 
 fn auto_width(width: &Width) -> bool {

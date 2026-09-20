@@ -8,10 +8,10 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
-    ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration, Edge,
-    Family, FontStyle, FontVariantCaps, Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType,
-    Position, ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify,
-    TextTransform, Url, WrapFlow,
+    ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration,
+    DecorationLine, DecorationStyle, Edge, Family, FontStyle, FontVariantCaps, Hyphens,
+    LINE_WIDTHS, Length, LineHeight, ListStyleType, Position, ShapeSource, SizeSource, StringPiece,
+    StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -214,6 +214,61 @@ pub(super) fn text_transform(input: &mut Parser<'_, '_>) -> Option<TextTransform
         "capitalize" => Some(TextTransform::Capitalize),
         _ => None,
     }
+}
+
+/// `text-decoration-line: none | [ underline || overline ||
+/// line-through ]`.
+pub(super) fn decoration_line(input: &mut Parser<'_, '_>) -> Option<DecorationLine> {
+    let mut line = DecorationLine::NONE;
+    let mut seen = false;
+    while let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        seen = true;
+        match_ignore_ascii_case! { &keyword,
+            "none" if line == DecorationLine::NONE => {},
+            "underline" => line.under = true,
+            "overline" => line.over = true,
+            "line-through" => line.through = true,
+            _ => return None,
+        }
+    }
+    seen.then_some(line)
+}
+
+/// One keyword of `text-decoration-line`. The shorthand reads the
+/// rest of its value around these, so it takes them one at a time.
+pub(super) fn decoration_keyword(input: &mut Parser<'_, '_>) -> Option<DecorationLine> {
+    let keyword = input.expect_ident().ok()?.clone();
+    let one = |line: DecorationLine| Some(line);
+    match_ignore_ascii_case! { &keyword,
+        "none" => one(DecorationLine::NONE),
+        "underline" => one(DecorationLine { under: true, ..DecorationLine::NONE }),
+        "overline" => one(DecorationLine { over: true, ..DecorationLine::NONE }),
+        "line-through" => one(DecorationLine { through: true, ..DecorationLine::NONE }),
+        _ => None,
+    }
+}
+
+/// `text-decoration-style: solid | double`.
+pub(super) fn decoration_style(input: &mut Parser<'_, '_>) -> Option<DecorationStyle> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "solid" => Some(DecorationStyle::Solid),
+        "double" => Some(DecorationStyle::Double),
+        _ => None,
+    }
+}
+
+/// `text-decoration-thickness: auto | from-font | <length>`. `auto`
+/// and `from-font` are the same answer here: the face declares the
+/// thickness and nothing overrides it.
+pub(super) fn decoration_thickness(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return match_ignore_ascii_case! { &keyword,
+            "auto" | "from-font" => Some(None),
+            _ => None,
+        };
+    }
+    length(input).map(Some)
 }
 
 pub(super) fn text_align(input: &mut Parser<'_, '_>) -> Option<TextAlign> {

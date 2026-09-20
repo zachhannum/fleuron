@@ -2,7 +2,7 @@
 //! over the line it opens on, and what it hangs into the margin.
 
 use crate::content::{Inline, Metadata, NodeId};
-use crate::style::{Color, Edges, FontVariantCaps, TextTransform};
+use crate::style::{Color, Edges, FontVariantCaps, TextDecoration, TextTransform};
 use serde::Serialize;
 
 /// Everything one paragraph's layout depends on, and the colour its
@@ -27,6 +27,9 @@ pub struct ParagraphStyle {
     /// What the run is painted in. Nothing measures it: a run
     /// carries it from here to the display structure.
     pub color: Color,
+    /// What is drawn across the run. Nothing measures it either: the
+    /// rules are painted over the advance the glyphs already took.
+    pub decoration: TextDecoration,
 }
 
 /// What `::first-line` changes about the paragraph it opens.
@@ -46,6 +49,8 @@ pub struct FirstLine {
     pub transform: Option<TextTransform>,
     /// `color`.
     pub color: Option<Color>,
+    /// What `text-decoration` draws across the line.
+    pub decoration: Option<TextDecoration>,
 }
 
 impl FirstLine {
@@ -57,6 +62,7 @@ impl FirstLine {
             caps: self.caps.unwrap_or(style.caps),
             transform: self.transform.unwrap_or(style.transform),
             color: self.color.unwrap_or(style.color),
+            decoration: self.decoration.unwrap_or(style.decoration),
             ..style
         }
     }

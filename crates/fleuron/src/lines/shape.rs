@@ -115,6 +115,9 @@ impl LineLayout<'_> {
         // costs no width, and the paragraph's face, because that is
         // where its width was charged.
         let color = runs.last().map_or(style.color, |run| run.color);
+        // The hyphen belongs to the word it broke, so a rule drawn
+        // across that word is drawn across it too.
+        let decoration = runs.last().map_or(style.decoration, |run| run.decoration);
         // The hyphen belongs to the word it broke, so it sits inside
         // whatever box that word is in.
         let inline = runs.last().and_then(|run| run.inline);
@@ -151,6 +154,7 @@ impl LineLayout<'_> {
                 trail: 0.0,
                 features: Features::NONE,
                 color,
+                decoration,
                 glyphs: vec![ShapedGlyph {
                     id,
                     x_advance: advance,

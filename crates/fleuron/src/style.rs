@@ -43,10 +43,10 @@ pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
     ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
-    CornerRadius, CounterStyle, Edge, Edges, Family, FontStyle, FontVariantCaps, Hyphens, Inset,
-    Length, LineHeight, ListStyleType, MarginBox, PageGeometry, Position, ShapeOutside, ShapePoint,
-    ShapeSource, SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform,
-    Url, Width, WrapFlow,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, FontStyle,
+    FontVariantCaps, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, PageGeometry,
+    Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target,
+    TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -1093,6 +1093,7 @@ fn named_inlines<'a>(
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => named_inlines(children, source, first, warnings),
         }
     }
@@ -2192,6 +2193,58 @@ mod tests {
         assert_eq!(verso.geometry.margin.right, 54.0);
         // Every situation of every named page has a master.
         assert_eq!(tree.masters().len(), 10);
+    }
+
+    /// Part: the `text-decoration` shorthand sets all four
+    /// longhands, and puts back to its initial value every one it
+    /// leaves out.
+    #[test]
+    fn the_text_decoration_shorthand_sets_every_longhand() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { text-decoration: underline double #808080 1.5pt }
+             em { text-decoration: line-through }",
+        );
+        let paragraph = first(&tree, "p");
+        assert_eq!(
+            paragraph.text_decoration_line,
+            DecorationLine {
+                under: true,
+                over: false,
+                through: false,
+            },
+        );
+        assert_eq!(paragraph.text_decoration_style, DecorationStyle::Double);
+        assert_eq!(
+            paragraph.text_decoration_color,
+            Some(Color::rgb(128, 128, 128)),
+        );
+        assert_eq!(paragraph.text_decoration_thickness, Some(1.5));
+
+        // The emphasis is inside the paragraph, so it inherits all
+        // four and then the shorthand puts back the three it does
+        // not name.
+        let emphasis = first(&tree, "em");
+        assert_eq!(
+            emphasis.text_decoration_line,
+            DecorationLine {
+                under: false,
+                over: false,
+                through: true,
+            },
+        );
+        assert_eq!(emphasis.text_decoration_style, DecorationStyle::Solid);
+        assert_eq!(emphasis.text_decoration_color, None);
+        assert_eq!(emphasis.text_decoration_thickness, None);
+
+        // The longhands inherit on their own: an emphasis the
+        // shorthand does not reach keeps what the paragraph drew.
+        let inherited = compile(&book, "p { text-decoration: underline }");
+        assert_eq!(
+            first(&inherited, "em").text_decoration_line,
+            first(&inherited, "p").text_decoration_line,
+        );
     }
 
     /// The furniture grammar: what an element sets a running string

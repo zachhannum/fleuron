@@ -314,8 +314,8 @@ fi
 \`\`\`
 
 What the vocabulary has no room for is set as prose and reported. Marsh
-was ~~certain~~ almost certain, and wrote to the shipping office that
-afternoon.
+was ~~certain~~ almost certain, and wrote <b>at once</b> to the shipping
+office that afternoon.
 
 \\pagebreak
 `;

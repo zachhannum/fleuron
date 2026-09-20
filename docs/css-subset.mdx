@@ -324,7 +324,7 @@ The element names come from markdown:
 ```
 book section notes note h1 h2 h3 h4 h5 h6 p blockquote pre
 hr img ul ol li table thead tbody tr th td code em strong a
-span
+s span
 ```
 
 {/* end generated */}
@@ -405,7 +405,7 @@ Each pseudo-element starts from the style of the element it belongs to, so a rul
 
 `::before` and `::after` add content to an element. The `content` property holds what they add. A rule with no `content`, or with `content: none`, adds nothing. See [Cross-references](#cross-references) for how to print the page number or the text of another element in `content`.
 
-On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, code, or a span. The text properties style that text.
+On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, struck text, code, or a span. The text properties style that text.
 
 On a block or a section, `::before` adds a box as the first child, and `::after` adds a box as the last child. The box is as wide as the content box of the element. It takes the text properties of the element, and a rule on the pseudo-element overrides them.
 
@@ -525,6 +525,11 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `letter-spacing` | `letter-spacing: 0.05em` |
 | `font-variant-caps` | `font-variant-caps: small-caps` |
 | `text-transform` | `text-transform: uppercase` |
+| `text-decoration-line` | `text-decoration-line: underline` |
+| `text-decoration-color` | `text-decoration-color: #808080` |
+| `text-decoration-style` | `text-decoration-style: double` |
+| `text-decoration-thickness` | `text-decoration-thickness: 0.06em` |
+| `text-decoration` | `text-decoration: underline` |
 | `text-align` | `text-align: justify` |
 | `text-justify` | `text-justify: inter-character` |
 | `text-indent` | `text-indent: 1.2em` |
@@ -536,25 +541,30 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `list-style-type` | `list-style-type: decimal` |
 
 ```css
-font-family:         [ <family-name> | serif | sans-serif | monospace ]#;
-font-size:           <length> | <percentage>;
-font-style:          normal | italic | oblique;
-font-weight:         normal | bold | <number [1,1000]>;
-color:               <color>;
-line-height:         normal | <number> | <length> | <percentage>;
-letter-spacing:      normal | <length>;
-font-variant-caps:   normal | small-caps;
-text-transform:      none | uppercase | lowercase | capitalize;
-text-align:          left | right | center | justify | start | end;
-text-justify:        auto | inter-word | inter-character | distribute;
-text-indent:         <length> | <percentage>;
-hanging-punctuation: none | [ first || [ force-end | allow-end ] || last ];
-hyphens:             none | manual | auto;
-orphans:             <integer>;
-widows:              <integer>;
-page:                auto | <name>;
-border-collapse:     separate | collapse;
-list-style-type:     disc | circle | square | decimal | lower-roman | upper-roman | lower-alpha | upper-alpha | none;
+font-family:               [ <family-name> | serif | sans-serif | monospace ]#;
+font-size:                 <length> | <percentage>;
+font-style:                normal | italic | oblique;
+font-weight:               normal | bold | <number [1,1000]>;
+color:                     <color>;
+line-height:               normal | <number> | <length> | <percentage>;
+letter-spacing:            normal | <length>;
+font-variant-caps:         normal | small-caps;
+text-transform:            none | uppercase | lowercase | capitalize;
+text-decoration-line:      none | [ underline || overline || line-through ];
+text-decoration-color:     currentcolor | <color>;
+text-decoration-style:     solid | double;
+text-decoration-thickness: auto | from-font | <length>;
+text-decoration:           none | [ underline || overline || line-through ] || solid || double || <color> || <length>;
+text-align:                left | right | center | justify | start | end;
+text-justify:              auto | inter-word | inter-character | distribute;
+text-indent:               <length> | <percentage>;
+hanging-punctuation:       none | [ first || [ force-end | allow-end ] || last ];
+hyphens:                   none | manual | auto;
+orphans:                   <integer>;
+widows:                    <integer>;
+page:                      auto | <name>;
+border-collapse:           separate | collapse;
+list-style-type:           disc | circle | square | decimal | lower-roman | upper-roman | lower-alpha | upper-alpha | none;
 ```
 
 {/* end generated */}
@@ -622,6 +632,37 @@ h2 { color: rgb(140, 30, 30) }
 .epigraph { color: #6b6257 }
 ```
 
+### Rules across the text
+
+`text-decoration` draws a rule under, over, or through a run of text. `text-decoration-line` names which rules the engine draws:
+
+| value | draws |
+|---|---|
+| `none` | nothing |
+| `underline` | a rule under the text |
+| `overline` | a rule over the text |
+| `line-through` | a rule across the text |
+
+The font declares where an underline sits and how thick it is. The engine draws it there. Two faces put their underlines at different depths. A book that mixes them draws each rule at the depth of its own face. The position of a rule across the text comes from the font as well.
+
+`text-decoration-color` sets the color of the rules. The default is `currentcolor`, which is the color of the text. `text-decoration-thickness` gives a thickness of its own, in place of the one the font declares. `text-decoration-style: double` draws each rule twice, one thickness apart.
+
+These four properties inherit. A block that draws a rule draws it across every run inside it. A run inside that block can declare `text-decoration-line: none`, which drops the rule.
+
+The engine draws one rule for each run of text on each line. Where a line break splits a decorated run, each line carries a rule as wide as its own text. A rule crosses the descenders under it without a break.
+
+The built-in stylesheet draws a rule through `s`, which is what `~~struck~~` in the [manuscript](reference/markdown.mdx#inlines) becomes. The following example underlines a cross-reference in gray and draws a double rule through a deleted passage:
+
+```css
+a {
+  text-decoration: underline;
+  text-decoration-color: #808080;
+  text-decoration-thickness: 0.06em;
+}
+
+s { text-decoration: line-through double }
+```
+
 ### Hanging punctuation
 
 `hanging-punctuation` lets a punctuation mark sit outside the text width so the edge of the text block looks straight. A period or comma at the end of a line leaves a visible gap, and hanging it outside closes the gap.
@@ -637,7 +678,7 @@ How far a mark hangs depends on the mark: nearly all of a period or comma, less 
 
 ### Inline boxes
 
-An inline element is a link, emphasis, strong text, code, or a span. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
+An inline element is a link, emphasis, strong text, struck text, code, or a span. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
 
 The engine paints one box per line the element reaches. Padding and a border on the left and the right are width. They move the text after them, and the line breaks against them. Padding and a border above and below the text leave the height of the line alone. A box deeper than the text reaches over the lines around it.
 
@@ -1316,7 +1357,9 @@ h2 + p::first-letter {
 
 ```
 color font-size font-variant-caps letter-spacing
-text-transform
+text-transform text-decoration-line text-decoration-color
+text-decoration-style text-decoration-thickness
+text-decoration
 ```
 
 {/* end generated */}
@@ -1334,9 +1377,9 @@ h2 + p::first-line {
 }
 ```
 
-Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words end up on that line.
+Which words fall on that line depends on the style applied to it. `font-size`, `font-variant-caps`, `letter-spacing` and `text-transform` change the width of the text, which moves the break. The style then applies to whatever words end up on that line.
 
-`font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
+`font-size` grows the line around the baseline the paragraph shares. `color` and the rules `text-decoration` draws change no widths. Lines break the same way with them or without them.
 
 ## Cross-references
 
@@ -1582,6 +1625,7 @@ th {
 em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
+s { text-decoration: line-through }
 
 @page {
   size: 432pt 648pt;
@@ -1631,6 +1675,7 @@ code { font-family: monospace }
 | footnotes | `::footnote-call` and `::footnote-marker`, a note set in the margin or at the end of the book, `float: footnote`, a rule that reaches the area of one page rather than every page, and a note inside a block against the page |
 | generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
 | fonts | `font-variant` beyond `font-variant-caps: small-caps` |
+| text decorations | `text-decoration-skip-ink`, `text-underline-offset`, `text-underline-position`, `text-emphasis`, `text-shadow`, and the `dotted`, `dashed` and `wavy` values of `text-decoration-style` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width` |
 | inline boxes | a margin on an inline element, and a border or padding on `@page` |

@@ -147,6 +147,7 @@ enum InlineFor {
     Heading(HeadingLevel, Attributes),
     Emphasis,
     Strong,
+    Strikethrough,
     Link {
         url: String,
     },
@@ -353,13 +354,7 @@ impl<'a> Converter<'a> {
                 },
                 read,
             ),
-            Event::Start(Tag::Strikethrough) => {
-                self.warn(
-                    "Strikethrough is not supported. Falling back to plain text.",
-                    at,
-                );
-                self.push_inlines(InlineFor::Plain, read)
-            }
+            Event::Start(Tag::Strikethrough) => self.push_inlines(InlineFor::Strikethrough, read),
             Event::Start(Tag::Superscript) => {
                 self.warn(
                     "Superscript is not supported. Falling back to plain text.",
@@ -592,6 +587,13 @@ impl<'a> Converter<'a> {
                 span,
             }),
             InlineFor::Strong => self.inline(Inline::Strong {
+                id: Default::default(),
+                children,
+                attributes: Attributes::default(),
+                position: at,
+                span,
+            }),
+            InlineFor::Strikethrough => self.inline(Inline::Strikethrough {
                 id: Default::default(),
                 children,
                 attributes: Attributes::default(),
@@ -1360,6 +1362,7 @@ fn take_notes_in_inlines(
             Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } => {
                 take_notes_in_inlines(children, notes, called, missing)
             }
@@ -2436,6 +2439,39 @@ Ordinary prose.
             .map(|warning| warning.origin.as_deref().unwrap_or_default())
             .collect();
         assert_eq!(at, ["test.md:3:1", "test.md:9:1"], "{warnings:?}");
+    }
+
+    /// Part: `~~struck~~` under the `gfm` dialect is a strikethrough
+    /// inline, and nothing warns. Without the dialect the tildes are
+    /// prose, which is what every switch that is off does.
+    #[test]
+    fn a_strikethrough_becomes_an_inline_of_its_own() {
+        let gfm = Options {
+            dialect: Dialect::gfm(),
+            ..Options::default()
+        };
+        let (sections, warnings) = to_sections("He was ~~certain~~ of it.\n", "test.md", &gfm);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let inlines = inlines_of(&sections[0].blocks[0]);
+        let struck = inlines
+            .iter()
+            .find_map(|inline| match inline {
+                Inline::Strikethrough { children, .. } => Some(children),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("nothing was struck: {inlines:?}"));
+        assert_eq!(fleuron::content::text(struck), "certain");
+
+        let (plain, warnings) = to_sections(
+            "He was ~~certain~~ of it.\n",
+            "test.md",
+            &Options::default(),
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            fleuron::content::text(inlines_of(&plain[0].blocks[0])),
+            "He was ~~certain~~ of it.",
+        );
     }
 
     /// One manuscript with every construct the vocabulary has no room

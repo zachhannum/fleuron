@@ -282,6 +282,7 @@ impl Source {
             if let Inline::Emphasis { children, .. }
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
             | Inline::Span { children, .. } = inline
             {
                 self.collect_inlines(children);

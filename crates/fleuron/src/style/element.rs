@@ -133,7 +133,7 @@ impl ToCss for PseudoElement {
 /// The elements that sit inside a line of text rather than making
 /// one. `::before` and `::after` generate text inside the line on
 /// these.
-pub const INLINE_ELEMENTS: [&str; 5] = ["code", "em", "strong", "a", "span"];
+pub const INLINE_ELEMENTS: [&str; 6] = ["code", "em", "strong", "a", "s", "span"];
 
 /// The blocks that `::before` and `::after` generate a box inside.
 pub const BLOCK_ELEMENTS: [&str; 16] = [
@@ -179,7 +179,7 @@ impl SelectorImpl for Fleuron {
 /// Every element name the tree can hold, in the order the content
 /// tree introduces them. A selector names one of these or matches
 /// nothing.
-pub const ELEMENTS: [&str; 29] = [
+pub const ELEMENTS: [&str; 30] = [
     "book",
     "section",
     "notes",
@@ -208,6 +208,7 @@ pub const ELEMENTS: [&str; 29] = [
     "em",
     "strong",
     "a",
+    "s",
     "span",
 ];
 
@@ -522,6 +523,12 @@ impl ElementTree {
                     attributes,
                     ..
                 } => ("a", *id, attributes, Some(children)),
+                Inline::Strikethrough {
+                    id,
+                    children,
+                    attributes,
+                    ..
+                } => ("s", *id, attributes, Some(children)),
                 Inline::Span {
                     id,
                     children,

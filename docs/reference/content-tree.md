@@ -167,6 +167,7 @@ A row and a cell each take an optional `position`, `span` and `attributes`, the 
 | `text` | `value`. Plain Unicode, with the entities decoded by the frontend. |
 | `emphasis` | `children`. Italic, in the built-in sheet. |
 | `strong` | `children`. Bold, in the built-in sheet. |
+| `strikethrough` | `children`. A rule through the text, in the built-in sheet. |
 | `code` | `value`. Literal, with no markup inside, monospace and never hyphenated. |
 | `link` | `url` and `children`. The engine lays out the text. The url reaches the painters that can express one. |
 | `span` | `children`. A run a sheet names, with no meaning of its own. It takes the style of the element around it, in the built-in sheet. |

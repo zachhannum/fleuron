@@ -128,6 +128,7 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
         trail: 0.0,
         features: fleuron::fonts::Features::NONE,
         color: fleuron::style::Color::BLACK,
+        decoration: fleuron::style::TextDecoration::NONE,
         glyphs: Vec::new(),
         advance: 0,
     }

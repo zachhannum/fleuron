@@ -114,6 +114,18 @@ pub(super) fn border_color(input: &mut Parser<'_, '_>) -> Option<Option<Color>> 
     color(input).map(Some)
 }
 
+/// `text-decoration-color: currentcolor | <color>`. `currentcolor`
+/// is the colour of the text the rule is drawn across.
+pub(super) fn decoration_color(input: &mut Parser<'_, '_>) -> Option<Option<Color>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("currentcolor"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    color(input).map(Some)
+}
+
 /// The CSS named colours, sorted for binary search.
 pub(crate) const NAMED: [(&str, Color); 148] = [
     ("aliceblue", Color::rgb(240, 248, 255)),

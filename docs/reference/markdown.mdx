@@ -341,11 +341,14 @@ A link to a source or a heading that the book does not have also prints nothing.
 | text | `text`, entities decoded |
 | `*em*` | `emphasis` |
 | `**strong**` | `strong` |
+| `~~struck~~` | `strikethrough` |
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
 | `[text]{.class}` | `span` |
 | `[^label]`, with `[^label]:` elsewhere | `note`, holding the blocks of the note |
 | two spaces or `\` at the end of a line | `break` |
+
+`~~struck~~` needs the `gfm` dialect, which is off by default. The [dialects](#dialects) below say how to turn it on. The built-in stylesheet draws a rule through it.
 
 A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
 
@@ -398,7 +401,7 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | construct | becomes |
 |---|---|
 | a definition list | one paragraph per entry |
-| strikethrough, superscript, subscript | plain text |
+| superscript, subscript | plain text |
 | math | plain text |
 | an image among prose | a block after the paragraph |
 | html, a task marker | nothing. There is no prose in them |

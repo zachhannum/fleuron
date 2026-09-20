@@ -113,12 +113,16 @@ a::after {
 
 /* The cross-reference sits on a tinted chip: a background, a padding
    and a rounded border on a run rather than on a block. The chip
-   holds the link and the page number it prints. */
+   holds the link and the page number it prints, and a rule under
+   both of them reads as a cross-reference in a book set in one
+   colour. */
 a {
   padding: 1pt 3pt;
   background-color: #efe7d6;
   border: 0.5pt solid #8a7a5c;
   border-radius: 3pt;
+  text-decoration: underline;
+  text-decoration-color: #7a6a4c;
 }
 
 /* Every image except the map. The text wraps around the shape the
