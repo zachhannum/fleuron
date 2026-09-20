@@ -3,15 +3,16 @@
 
 use cssparser::{CowRcStr, ParseError, Parser, Token, match_ignore_ascii_case};
 
-use crate::fonts::GenericFamily;
+use crate::fonts::{FeatureSetting, GenericFamily};
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
     ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration,
-    DecorationLine, DecorationStyle, Edge, Family, FontStyle, FontVariantCaps, Hyphens,
-    LINE_WIDTHS, Length, LineHeight, ListStyleType, Position, ShapeSource, SizeSource, StringPiece,
-    StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
+    DecorationLine, DecorationStyle, Edge, Family, Figures, FontStyle, FontVariantAlternates,
+    FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions, Hyphens, LINE_WIDTHS,
+    Length, LineHeight, ListStyleType, NumericSpacing, Position, ShapeSource, SizeSource,
+    StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
 };
 
 use super::StyleError;
@@ -201,6 +202,108 @@ pub(super) fn variant_caps(input: &mut Parser<'_, '_>) -> Option<FontVariantCaps
     match_ignore_ascii_case! { &keyword,
         "normal" => Some(FontVariantCaps::Normal),
         "small-caps" => Some(FontVariantCaps::SmallCaps),
+        _ => None,
+    }
+}
+
+/// `font-feature-settings: normal | [ <string> [ <integer> | on |
+/// off ]? ]#`. `normal` asks for nothing, which is an empty list.
+pub(super) fn feature_settings(input: &mut Parser<'_, '_>) -> Option<Vec<FeatureSetting>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("normal"))
+        .is_ok()
+    {
+        return Some(Vec::new());
+    }
+    let mut settings = Vec::new();
+    loop {
+        settings.push(one_feature(input)?);
+        if input.try_parse(|input| input.expect_comma()).is_err() {
+            return Some(settings);
+        }
+    }
+}
+
+/// One `<feature-tag-value>`: a four-character tag, and what it is
+/// set to. A tag written on its own is on.
+fn one_feature(input: &mut Parser<'_, '_>) -> Option<FeatureSetting> {
+    let written = input.expect_string().ok()?.clone();
+    let tag = <[u8; 4]>::try_from(written.as_bytes()).ok()?;
+    // OpenType writes a tag in printable ASCII.
+    if !tag.iter().all(|byte| (0x20..=0x7e).contains(byte)) {
+        return None;
+    }
+    if let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        return match_ignore_ascii_case! { &keyword,
+            "on" => Some(FeatureSetting::new(tag, 1)),
+            "off" => Some(FeatureSetting::new(tag, 0)),
+            _ => None,
+        };
+    }
+    match input.try_parse(|input| input.expect_integer()) {
+        Ok(value) if value >= 0 => Some(FeatureSetting::new(tag, value as u32)),
+        Ok(_) => None,
+        Err(_) => Some(FeatureSetting::new(tag, 1)),
+    }
+}
+
+/// `font-variant-ligatures: normal | none | [ common-ligatures |
+/// no-common-ligatures ] || ...`, written as a set.
+pub(super) fn variant_ligatures(input: &mut Parser<'_, '_>) -> Option<FontVariantLigatures> {
+    let mut ligatures = FontVariantLigatures::NORMAL;
+    let mut seen = false;
+    while let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        let first = !seen;
+        seen = true;
+        match_ignore_ascii_case! { &keyword,
+            "normal" if first => return input.is_exhausted().then_some(ligatures),
+            "none" if first => return input
+                .is_exhausted()
+                .then_some(FontVariantLigatures::NONE),
+            "common-ligatures" => ligatures.common = Some(true),
+            "no-common-ligatures" => ligatures.common = Some(false),
+            "discretionary-ligatures" => ligatures.discretionary = Some(true),
+            "no-discretionary-ligatures" => ligatures.discretionary = Some(false),
+            "historical-ligatures" => ligatures.historical = Some(true),
+            "no-historical-ligatures" => ligatures.historical = Some(false),
+            "contextual" => ligatures.contextual = Some(true),
+            "no-contextual" => ligatures.contextual = Some(false),
+            _ => return None,
+        }
+    }
+    seen.then_some(ligatures)
+}
+
+/// `font-variant-numeric: normal | [ lining-nums | oldstyle-nums ] ||
+/// ...`, written as a set.
+pub(super) fn variant_numeric(input: &mut Parser<'_, '_>) -> Option<FontVariantNumeric> {
+    let mut numeric = FontVariantNumeric::NORMAL;
+    let mut seen = false;
+    while let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        let first = !seen;
+        seen = true;
+        match_ignore_ascii_case! { &keyword,
+            "normal" if first => return input.is_exhausted().then_some(numeric),
+            "lining-nums" => numeric.figures = Some(Figures::Lining),
+            "oldstyle-nums" => numeric.figures = Some(Figures::OldStyle),
+            "proportional-nums" => numeric.spacing = Some(NumericSpacing::Proportional),
+            "tabular-nums" => numeric.spacing = Some(NumericSpacing::Tabular),
+            "diagonal-fractions" => numeric.fractions = Some(Fractions::Diagonal),
+            "stacked-fractions" => numeric.fractions = Some(Fractions::Stacked),
+            "ordinal" => numeric.ordinal = true,
+            "slashed-zero" => numeric.slashed_zero = true,
+            _ => return None,
+        }
+    }
+    seen.then_some(numeric)
+}
+
+/// `font-variant-alternates: normal | historical-forms`.
+pub(super) fn variant_alternates(input: &mut Parser<'_, '_>) -> Option<FontVariantAlternates> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "normal" => Some(FontVariantAlternates::Normal),
+        "historical-forms" => Some(FontVariantAlternates::HistoricalForms),
         _ => None,
     }
 }

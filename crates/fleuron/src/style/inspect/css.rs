@@ -2,14 +2,16 @@
 
 use std::collections::BTreeMap;
 
+use crate::fonts::FeatureSetting;
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::sheet::PROPERTIES;
 use crate::style::{
     BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderRadius, BorderStyle,
     BoxDecorationBreak, Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord,
-    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edges, Family, FontStyle,
-    FontVariantCaps, Hyphens, Inset, ListStyleType, Position, ShapeOutside, StringPiece, StringSet,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edges, Family, Figures, FontStyle,
+    FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions,
+    Hyphens, Inset, ListStyleType, NumericSpacing, Position, ShapeOutside, StringPiece, StringSet,
     Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 
@@ -47,6 +49,14 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "font-variant-caps" => match style.font_variant_caps {
             FontVariantCaps::Normal => "normal",
             FontVariantCaps::SmallCaps => "small-caps",
+        }
+        .into(),
+        "font-feature-settings" => feature_settings(&style.font_feature_settings),
+        "font-variant-ligatures" => ligatures(style.font_variant_ligatures),
+        "font-variant-numeric" => numeric(style.font_variant_numeric),
+        "font-variant-alternates" => match style.font_variant_alternates {
+            FontVariantAlternates::Normal => "normal",
+            FontVariantAlternates::HistoricalForms => "historical-forms",
         }
         .into(),
         "text-transform" => match style.text_transform {
@@ -225,6 +235,71 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         }
         .into(),
         _ => String::new(),
+    }
+}
+
+/// The features asked for, as CSS writes them.
+fn feature_settings(settings: &[FeatureSetting]) -> String {
+    if settings.is_empty() {
+        return "normal".into();
+    }
+    settings
+        .iter()
+        .map(|setting| {
+            format!(
+                "\"{}\" {}",
+                String::from_utf8_lossy(&setting.tag),
+                setting.value
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Which ligatures are drawn, as CSS writes them.
+fn ligatures(ligatures: FontVariantLigatures) -> String {
+    let named = [
+        (ligatures.common, "common-ligatures"),
+        (ligatures.discretionary, "discretionary-ligatures"),
+        (ligatures.historical, "historical-ligatures"),
+        (ligatures.contextual, "contextual"),
+    ];
+    let written: Vec<String> = named
+        .iter()
+        .filter_map(|(asked, name)| match asked {
+            Some(true) => Some((*name).to_string()),
+            Some(false) => Some(format!("no-{name}")),
+            None => None,
+        })
+        .collect();
+    match written.is_empty() {
+        true => "normal".into(),
+        false => written.join(" "),
+    }
+}
+
+/// Which figures are drawn, as CSS writes them.
+fn numeric(numeric: FontVariantNumeric) -> String {
+    let named = [
+        numeric.figures.map(|figures| match figures {
+            Figures::Lining => "lining-nums",
+            Figures::OldStyle => "oldstyle-nums",
+        }),
+        numeric.spacing.map(|spacing| match spacing {
+            NumericSpacing::Proportional => "proportional-nums",
+            NumericSpacing::Tabular => "tabular-nums",
+        }),
+        numeric.fractions.map(|fractions| match fractions {
+            Fractions::Diagonal => "diagonal-fractions",
+            Fractions::Stacked => "stacked-fractions",
+        }),
+        numeric.ordinal.then_some("ordinal"),
+        numeric.slashed_zero.then_some("slashed-zero"),
+    ];
+    let written: Vec<&str> = named.into_iter().flatten().collect();
+    match written.is_empty() {
+        true => "normal".into(),
+        false => written.join(" "),
     }
 }
 

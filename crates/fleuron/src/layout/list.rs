@@ -62,7 +62,7 @@ impl Builder<'_, '_> {
     /// style. It ends where the item's border box starts.
     fn marker(&self, style: &ComputedStyle, number: u32, x: f32, measure: f32) -> Option<Marker> {
         let text = style.list_style_type.marker(number)?;
-        let line = self.paginator.line_of(&text, style.paragraph())?;
+        let line = self.paginator.line_of(&text, &style.paragraph())?;
         let (left, _) = style.border_box(x, measure);
         let x = left - self.paginator.line_width(&line);
         Some(Marker { line, x })

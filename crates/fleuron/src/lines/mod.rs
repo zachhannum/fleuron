@@ -75,7 +75,7 @@ impl<'a> LineLayout<'a> {
 impl LineLayout<'_> {
     /// The paragraph's strut: the minimum box every one of its lines
     /// occupies, whatever the runs on it.
-    pub fn strut(&self, style: ParagraphStyle) -> Strut {
+    pub fn strut(&self, style: &ParagraphStyle) -> Strut {
         self.registry
             .metrics(style.font_id)
             .map(|m| Strut::from_metrics(m, style.size, style.line_height))
@@ -84,7 +84,7 @@ impl LineLayout<'_> {
 
     /// The box one line occupies: the strut, grown by any run taller
     /// than it around the shared baseline.
-    pub fn line_box(&self, runs: &[ShapedRun], style: ParagraphStyle) -> LineBox {
+    pub fn line_box(&self, runs: &[ShapedRun], style: &ParagraphStyle) -> LineBox {
         let strut = self.strut(style);
         let mut above = strut.above;
         let mut below = strut.below;
@@ -107,7 +107,7 @@ impl LineLayout<'_> {
     pub fn layout(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         measure: impl Into<Measure>,
         options: LineBreakOptions,
     ) -> Vec<Line> {
@@ -127,7 +127,7 @@ impl LineLayout<'_> {
     pub fn layout_styled(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         measure: &Measure,
         options: LineBreakOptions,
@@ -145,7 +145,7 @@ impl LineLayout<'_> {
     pub fn layout_shaped(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         measure: &Measure,
         options: LineBreakOptions,
@@ -182,7 +182,7 @@ impl LineLayout<'_> {
     fn broken(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         measure: &Measure,
         options: LineBreakOptions,
@@ -197,7 +197,7 @@ impl LineLayout<'_> {
     fn broken_shaped(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         measure: &Measure,
         options: LineBreakOptions,
@@ -243,7 +243,7 @@ impl LineLayout<'_> {
     fn shaped(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         options: LineBreakOptions,
         lead: Lead,
@@ -258,7 +258,7 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: crate::content::NodeId,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         measure: &Measure,
         options: LineBreakOptions,
     ) -> Vec<Line> {
@@ -277,7 +277,7 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: crate::content::NodeId,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         measure: &Measure,
         options: LineBreakOptions,
     ) -> Vec<Line> {
@@ -292,7 +292,7 @@ impl LineLayout<'_> {
     fn shape_flat(
         &self,
         flat: flatten::FlatParagraph,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         options: LineBreakOptions,
         opening: Option<usize>,
     ) -> Option<Shaped> {
@@ -304,7 +304,7 @@ impl LineLayout<'_> {
         Some(Shaped {
             flat,
             spans,
-            style,
+            style: style.clone(),
             options,
             upem,
             opening,
@@ -331,7 +331,7 @@ impl LineLayout<'_> {
             upem,
             ..
         } = shaped;
-        let (style, options, upem) = (*style, *options, *upem);
+        let (options, upem) = (*options, *upem);
         // Points → font units: measure / size gives ems, ems *
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
@@ -472,8 +472,8 @@ impl std::fmt::Debug for Shaped {
 
 impl Shaped {
     /// The style the paragraph is set in.
-    pub fn style(&self) -> ParagraphStyle {
-        self.style
+    pub fn style(&self) -> &ParagraphStyle {
+        &self.style
     }
 }
 
@@ -509,7 +509,7 @@ mod tests {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &with_breaks("one\ntwo"),
-            body(),
+            &body(),
             divided_band(100.0, 20.0),
             LineBreakOptions::default(),
         );
@@ -527,7 +527,7 @@ mod tests {
         let measure = Measure::uniform(120.0);
         let (first, shaped) = layout.layout_shaped(
             &one_run(OPENING),
-            body(),
+            &body(),
             &Inherited,
             &measure,
             LineBreakOptions::default(),
@@ -553,7 +553,7 @@ mod tests {
         let layout = LineLayout::new(registry());
         let (wide, shaped) = layout.layout_shaped(
             &one_run(OPENING),
-            body(),
+            &body(),
             &Inherited,
             &Measure::uniform(200.0),
             LineBreakOptions::default(),
@@ -629,7 +629,7 @@ mod tests {
             layout
                 .broken(
                     &inlines,
-                    body(),
+                    &body(),
                     &Inherited,
                     &Measure::uniform(160.0),
                     LineBreakOptions::default(),

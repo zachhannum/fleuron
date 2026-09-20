@@ -71,7 +71,7 @@ impl Paginator<'_> {
 
     /// One string as a single shaped line: page furniture, and the
     /// ornaments and initial letters that are content but not prose.
-    pub(super) fn line_of(&self, text: &str, style: ParagraphStyle) -> Option<Line> {
+    pub(super) fn line_of(&self, text: &str, style: &ParagraphStyle) -> Option<Line> {
         // One line holds no hard break: the newline a heading's break
         // reads as is a word space here.
         let spaced;

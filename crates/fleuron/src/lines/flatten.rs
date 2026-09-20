@@ -296,7 +296,7 @@ impl FlatParagraph {
     /// Appends one styled stretch of text: `text-transform` first,
     /// then small capitals over what it produced, and the spans they
     /// come to.
-    pub(super) fn push_styled(&mut self, value: &str, style: ParagraphStyle, caps: SmallCaps) {
+    pub(super) fn push_styled(&mut self, value: &str, style: &ParagraphStyle, caps: SmallCaps) {
         if style.transform == TextTransform::None && caps != SmallCaps::Synthesized {
             let start = self.text.len();
             self.push_verbatim(value);
@@ -333,7 +333,7 @@ impl FlatParagraph {
     }
 
     /// Records the span that ends where the text now does.
-    fn span(&mut self, style: ParagraphStyle, caps: SmallCaps, small: bool, start: usize) {
+    fn span(&mut self, style: &ParagraphStyle, caps: SmallCaps, small: bool, start: usize) {
         if start >= self.text.len() {
             return;
         }
@@ -347,7 +347,7 @@ impl FlatParagraph {
             tracking: style.letter_spacing,
             features: Features {
                 small_caps: caps == SmallCaps::Feature,
-                settings: Vec::new(),
+                settings: style.features.clone(),
             },
             color: style.color,
             decoration: style.decoration,
@@ -440,7 +440,7 @@ impl LineLayout<'_> {
     pub(super) fn flatten(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         lead: Lead,
     ) -> FlatParagraph {
@@ -457,7 +457,7 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: NodeId,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
         let lead = Lead::default();
@@ -475,7 +475,7 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: NodeId,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
         if !text.is_empty() {
@@ -488,7 +488,7 @@ impl LineLayout<'_> {
     fn walk_inlines(
         &self,
         inlines: &[Inline],
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         styles: &dyn InlineStyles,
         lead: Lead,
         flat: &mut FlatParagraph,
@@ -502,7 +502,7 @@ impl LineLayout<'_> {
                     let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     let from = flat.text.len();
-                    self.push_text(flat, *id, value, styles.style(*id, style), lead);
+                    self.push_text(flat, *id, value, &styles.style(*id, style), lead);
                     flat.literal.push(from..flat.text.len());
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                     flat.close_inline(open);
@@ -518,7 +518,7 @@ impl LineLayout<'_> {
                     };
                     let open = flat.open_inline(*id, None);
                     flat.open(None, 0);
-                    self.push_run(flat, &call, style, lead);
+                    self.push_run(flat, &call, &style, lead);
                     flat.close_inline(open);
                 }
                 Inline::Emphasis { id, children, .. }
@@ -529,7 +529,7 @@ impl LineLayout<'_> {
                     let generated = styles.generated(inline);
                     let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
-                    self.walk_inlines(children, styles.style(*id, style), styles, lead, flat);
+                    self.walk_inlines(children, &styles.style(*id, style), styles, lead, flat);
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                     flat.close_inline(open);
                 }
@@ -560,13 +560,13 @@ impl LineLayout<'_> {
             value = value.replace('\n', " ");
         }
         flat.open(Some(element.pseudo(which)), 0);
-        self.push_run(flat, &value, style, lead);
+        self.push_run(flat, &value, &style, lead);
     }
 
     /// Appends a hard break as the newline the breaker ends a line
     /// at. No node's text holds the newline, and a drop cap passes
     /// over it as it does any other byte.
-    fn push_break(&self, flat: &mut FlatParagraph, style: ParagraphStyle, lead: Lead) {
+    fn push_break(&self, flat: &mut FlatParagraph, style: &ParagraphStyle, lead: Lead) {
         if flat.skip > 0 {
             flat.skip -= 1;
             return;
@@ -591,7 +591,7 @@ impl LineLayout<'_> {
         flat: &mut FlatParagraph,
         node: NodeId,
         value: &str,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         lead: Lead,
     ) {
         let mut at = flat.skip.min(value.len());
@@ -609,7 +609,7 @@ impl LineLayout<'_> {
 
     /// Appends one stretch of text, in the opening style as far as
     /// it reaches and in `style` after that.
-    fn push_run(&self, flat: &mut FlatParagraph, value: &str, style: ParagraphStyle, lead: Lead) {
+    fn push_run(&self, flat: &mut FlatParagraph, value: &str, style: &ParagraphStyle, lead: Lead) {
         let (opening, extent) = match lead.style {
             Some(first) if flat.text.len() < lead.reach() => (first.over(style), lead.reach()),
             _ => {
@@ -617,21 +617,21 @@ impl LineLayout<'_> {
                 return;
             }
         };
-        let (opening_caps, caps) = (self.small_caps(opening), self.small_caps(style));
+        let (opening_caps, caps) = (self.small_caps(&opening), self.small_caps(style));
         let from = flat.spans.len();
         for (at, letter) in value.char_indices() {
             if flat.text.len() >= extent {
                 flat.push_styled(&value[at..], style, caps);
                 break;
             }
-            flat.push_styled(&value[at..at + letter.len_utf8()], opening, opening_caps);
+            flat.push_styled(&value[at..at + letter.len_utf8()], &opening, opening_caps);
         }
         flat.merge_from(from);
     }
 
     /// Where a style's small capitals come from: the face's own where
     /// it has them, and a synthesis where it does not.
-    pub(super) fn small_caps(&self, style: ParagraphStyle) -> SmallCaps {
+    pub(super) fn small_caps(&self, style: &ParagraphStyle) -> SmallCaps {
         match style.caps {
             FontVariantCaps::Normal => SmallCaps::Off,
             FontVariantCaps::SmallCaps if self.registry.has_small_caps(style.font_id) => {
@@ -670,7 +670,7 @@ mod tests {
                 span: None,
             },
         ];
-        let lines = layout.layout(&inlines, body(), 200.0, Default::default());
+        let lines = layout.layout(&inlines, &body(), 200.0, Default::default());
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].runs.len(), 2);
         assert_eq!(line_text(&lines[0]), "body code");
@@ -715,7 +715,7 @@ mod tests {
             transform: TextTransform::Uppercase,
             ..body()
         };
-        let lines = layout_style("Lilliput", 400.0, style);
+        let lines = layout_style("Lilliput", 400.0, &style);
         assert_eq!(
             line_text(&lines[0]),
             "LILLIPUT",
@@ -725,7 +725,7 @@ mod tests {
             lines[0].runs[0].source, "Lilliput",
             "the run lost the source"
         );
-        let shouted = layout_style("LILLIPUT", 400.0, body());
+        let shouted = layout_style("LILLIPUT", 400.0, &body());
         assert_eq!(
             lines[0].runs[0]
                 .glyphs
@@ -742,7 +742,7 @@ mod tests {
 
         // A mapping that is not one for one: `ß` shapes as two
         // capitals, and both of them stand for the one letter.
-        let lines = layout_style("Straße", 400.0, style);
+        let lines = layout_style("Straße", 400.0, &style);
         let run = &lines[0].runs[0];
         assert_eq!(
             (run.text.as_str(), run.source.as_str()),
@@ -775,10 +775,10 @@ mod tests {
             ..body()
         };
         let source = "the well-known don't of it";
-        let lines = layout_style(source, 400.0, style);
+        let lines = layout_style(source, 400.0, &style);
         assert_eq!(line_text(&lines[0]), "The Well-Known Don't Of It");
         assert_eq!(lines[0].runs[0].source, source, "the run lost the source");
-        let shaped = layout_style("The Well-Known Don't Of It", 400.0, body());
+        let shaped = layout_style("The Well-Known Don't Of It", 400.0, &body());
         assert_eq!(
             lines[0].runs[0]
                 .glyphs

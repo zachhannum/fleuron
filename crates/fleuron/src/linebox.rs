@@ -123,7 +123,7 @@ mod tests {
     /// below.
     #[test]
     fn strut_splits_the_leading_in_half() {
-        let strut = layout().strut(body());
+        let strut = layout().strut(&body());
         assert_close(strut.above, 11.5995, "above");
         assert_close(strut.below, 3.8005, "below");
         assert_close(strut.height(), 15.4, "height");
@@ -151,8 +151,8 @@ mod tests {
     /// minimum height is independent of content.
     #[test]
     fn strut_is_the_minimum_independent_of_content() {
-        let strut = layout().strut(body());
-        let line_box = layout().line_box(&[run(6.0)], body());
+        let strut = layout().strut(&body());
+        let line_box = layout().line_box(&[run(6.0)], &body());
         assert_close(line_box.baseline, strut.above, "baseline");
         assert_close(line_box.height, strut.height(), "height");
     }
@@ -162,18 +162,18 @@ mod tests {
     /// height 33.6 = 24 × 1.4; the 12pt run changes nothing.
     #[test]
     fn mixed_sizes_share_one_baseline() {
-        let line_box = layout().line_box(&[run(12.0), run(24.0)], body());
+        let line_box = layout().line_box(&[run(12.0), run(24.0)], &body());
         assert_close(line_box.baseline, 25.308, "baseline");
         assert_close(line_box.height, 33.6, "height");
-        let alone = layout().line_box(&[run(24.0)], body());
+        let alone = layout().line_box(&[run(24.0)], &body());
         assert_eq!(alone, line_box, "the 12pt run moved the line");
     }
 
     /// No runs at all: the strut alone defines the line.
     #[test]
     fn empty_line_is_the_strut() {
-        let strut = layout().strut(body());
-        let line_box = layout().line_box(&[], body());
+        let strut = layout().strut(&body());
+        let line_box = layout().line_box(&[], &body());
         assert_close(line_box.baseline, strut.above, "baseline");
         assert_close(line_box.height, strut.height(), "height");
     }

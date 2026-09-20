@@ -43,10 +43,11 @@ pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
     Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
     ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
-    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, FontStyle,
-    FontVariantCaps, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, PageGeometry,
-    Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece, StringSet, Target,
-    TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, Figures,
+    FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric,
+    Fractions, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, NumericSpacing,
+    PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece,
+    StringSet, Target, TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
 pub use sheet::{Origin, Source};
 
@@ -599,10 +600,10 @@ fn apply_margin(entry: &mut MarginBoxStyle, declaration: &MarginDeclaration, roo
 }
 
 impl InlineStyles for StyleTree {
-    fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
+    fn style(&self, id: NodeId, block: &ParagraphStyle) -> ParagraphStyle {
         match self.by_node.get(id.get() as usize) {
             Some(index) => self.styles[*index as usize].paragraph(),
-            None => block,
+            None => block.clone(),
         }
     }
 
@@ -856,6 +857,7 @@ fn cascade(
         style.font_id = font_id;
         report(&mut warnings, warning);
         report(&mut warnings, synthesized_small_caps(&style, registry));
+        report_all(&mut warnings, missing_features(&style, registry));
 
         // A pseudo-element cascades over the style of the element it
         // belongs to, so each is a second matching pass rather than a
@@ -877,6 +879,7 @@ fn cascade(
                 pseudo.font_id = font_id;
                 report(warnings, warning);
                 report(warnings, synthesized_small_caps(&pseudo, registry));
+                report_all(warnings, missing_features(&pseudo, registry));
                 pseudo
             })
         };
@@ -1275,6 +1278,13 @@ fn report(warnings: &mut Vec<Warning>, warning: Option<Warning>) {
     }
 }
 
+/// Records each of a list of diagnostics once.
+fn report_all(warnings: &mut Vec<Warning>, found: Vec<Warning>) {
+    for warning in found {
+        report(warnings, Some(warning));
+    }
+}
+
 /// The face a computed style shapes with: the first family in the
 /// registry, at the nearest slope and weight it has.
 ///
@@ -1338,6 +1348,35 @@ fn synthesized_small_caps(style: &ComputedStyle, registry: &FontRegistry) -> Opt
     })
 }
 
+/// The diagnostic for a face that carries none of a feature the
+/// sheet asked for, one per style that asks for it. The run is set
+/// without the feature; nothing is synthesized.
+///
+/// A setting of zero asks for a feature to be left off, which a face
+/// that has nothing for it already does.
+fn missing_features(style: &ComputedStyle, registry: &FontRegistry) -> Vec<Warning> {
+    let family = || {
+        registry
+            .font_ref(style.font_id)
+            .map(|entry| entry.family.clone())
+            .unwrap_or_else(|| stack(&style.font_family))
+    };
+    style
+        .features()
+        .iter()
+        .filter(|setting| setting.value != 0)
+        .filter(|setting| !registry.has_feature(style.font_id, setting.tag))
+        .map(|setting| Warning {
+            message: format!(
+                "{} has no `{}` feature. The text is set without it.",
+                family(),
+                String::from_utf8_lossy(&setting.tag),
+            ),
+            origin: None,
+        })
+        .collect()
+}
+
 /// A slope as a stylesheet names it.
 /// A slope at the head of a sentence.
 fn sentence(slope: &str) -> String {
@@ -1368,7 +1407,9 @@ fn stack(families: &[Family]) -> String {
 mod tests {
     use super::*;
     use crate::content::{Attributes, Block, HeadingLevel, Inline, Metadata, Section, SourcePos};
-    use crate::fonts::{BUNDLED_FONT, FaceAttributes, GenericFamily, bundled_registry};
+    use crate::fonts::{
+        BUNDLED_FONT, FaceAttributes, FeatureSetting, GenericFamily, bundled_registry,
+    };
     use crate::lines::{HangEnd, HangingPunctuation};
 
     fn registry() -> &'static FontRegistry {
@@ -3299,6 +3340,112 @@ mod tests {
             }),
             "{:?}",
             tree.warnings(),
+        );
+    }
+
+    /// Part: `font-feature-settings` reads a tag and a value, in
+    /// each of the three ways a value is written, and it inherits.
+    #[test]
+    fn font_feature_settings_read_a_tag_and_a_value_and_inherit() {
+        let book = nested();
+        let tree = compile(
+            &book,
+            "book { font-feature-settings: \"ss01\" 1, \"liga\" off, \"onum\" }",
+        );
+        let asked = [
+            FeatureSetting::new(*b"ss01", 1),
+            FeatureSetting::new(*b"liga", 0),
+            FeatureSetting::new(*b"onum", 1),
+        ];
+        assert_eq!(first(&tree, "p").font_feature_settings, asked);
+        assert_eq!(
+            first(&tree, "em").font_feature_settings,
+            asked,
+            "emphasis did not inherit what the book asked for",
+        );
+        assert!(
+            first(&defaults(&book, registry()), "p")
+                .font_feature_settings
+                .is_empty(),
+            "a book that asks for nothing asks for nothing",
+        );
+
+        let tree = compile(&book, "p { font-feature-settings: normal }");
+        assert!(first(&tree, "p").font_feature_settings.is_empty());
+
+        let tree = compile(&book, "p { font-feature-settings: ss01 }");
+        assert!(
+            tree.warnings().iter().any(|warning| warning.message
+                == "Unsupported value for `font-feature-settings`. The declaration is ignored."),
+            "{:?}",
+            tree.warnings(),
+        );
+    }
+
+    /// Part: the `font-variant` longhands name a feature without
+    /// spelling its tag, and the computed list merges over what the
+    /// engine asks for, `font-feature-settings` last.
+    #[test]
+    fn the_font_variant_longhands_name_the_features_they_stand_for() {
+        let book = nested();
+        let tree = compile(
+            &book,
+            "p { font-variant-numeric: oldstyle-nums tabular-nums;
+                 font-variant-ligatures: no-common-ligatures discretionary-ligatures;
+                 font-variant-alternates: historical-forms;
+                 font-feature-settings: \"onum\" 0, \"ss01\" 1 }",
+        );
+        let paragraph = first(&tree, "p");
+        assert_eq!(
+            paragraph.features(),
+            [
+                FeatureSetting::new(*b"liga", 0),
+                FeatureSetting::new(*b"clig", 0),
+                FeatureSetting::new(*b"dlig", 1),
+                FeatureSetting::new(*b"onum", 1),
+                FeatureSetting::new(*b"tnum", 1),
+                FeatureSetting::new(*b"hist", 1),
+                FeatureSetting::new(*b"onum", 0),
+                FeatureSetting::new(*b"ss01", 1),
+            ],
+            "the sheet's own settings are read after the named forms",
+        );
+
+        let plain = first(&defaults(&book, registry()), "p");
+        assert!(plain.features().is_empty());
+    }
+
+    /// Part: a face that carries none of a feature the sheet asked
+    /// for is named once, and a feature turned off is not.
+    #[test]
+    fn a_face_without_a_requested_feature_is_named() {
+        let book = nested();
+        let tree = compile(
+            &book,
+            "book { font-feature-settings: \"zero\" 1 }
+             p { font-feature-settings: \"zero\" 1, \"ss01\" 1 }",
+        );
+        let named: Vec<&str> = tree
+            .warnings()
+            .iter()
+            .map(|warning| warning.message.as_str())
+            .filter(|message| message.contains("feature"))
+            .collect();
+        assert_eq!(
+            named,
+            ["eb garamond has no `zero` feature. The text is set without it."],
+            "{:?}",
+            tree.warnings(),
+        );
+
+        let quiet = compile(&book, "p { font-feature-settings: \"zero\" 0 }");
+        assert!(
+            !quiet
+                .warnings()
+                .iter()
+                .any(|warning| warning.message.contains("feature")),
+            "a feature asked to stay off is one the face need not carry: {:?}",
+            quiet.warnings(),
         );
     }
 

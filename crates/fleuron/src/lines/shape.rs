@@ -13,7 +13,7 @@ impl LineLayout<'_> {
     /// One string as shaped runs, set the way `style` asks for it.
     /// The counterpart of `layout` for text that is not broken into
     /// lines: page furniture, an ornament, an initial letter.
-    pub fn shape(&self, text: &str, style: ParagraphStyle) -> Option<Vec<ShapedRun>> {
+    pub fn shape(&self, text: &str, style: &ParagraphStyle) -> Option<Vec<ShapedRun>> {
         let upem = self.registry.metrics(style.font_id)?.units_per_em as f32;
         let mut flat = FlatParagraph::new();
         flat.push_styled(text, style, self.small_caps(style));
@@ -31,7 +31,7 @@ impl LineLayout<'_> {
     pub(super) fn shape_spans(
         &self,
         flat: &FlatParagraph,
-        style: ParagraphStyle,
+        style: &ParagraphStyle,
         upem: f32,
     ) -> Vec<ShapedSpan> {
         flat.spans
@@ -81,7 +81,7 @@ impl LineLayout<'_> {
     /// What a span's own font units are worth in the paragraph's.
     /// One em of a 6pt face is not one em of an 11pt one, and the
     /// measure is written in the paragraph's.
-    fn scale(&self, font_id: u16, size: f32, style: ParagraphStyle, upem: f32) -> f32 {
+    fn scale(&self, font_id: u16, size: f32, style: &ParagraphStyle, upem: f32) -> f32 {
         let span_upem = self
             .registry
             .metrics(font_id)
@@ -99,7 +99,7 @@ impl LineLayout<'_> {
     /// drawn in the same face the charge was read from: a hyphen
     /// taken from one face and paid for out of another is a line
     /// that measures one width and paints a different one.
-    pub(super) fn hyphenate(&self, runs: &mut Vec<ShapedRun>, style: ParagraphStyle) {
+    pub(super) fn hyphenate(&self, runs: &mut Vec<ShapedRun>, style: &ParagraphStyle) {
         let Some(id) = self.registry.char_glyph(style.font_id, '-') else {
             return;
         };
@@ -165,7 +165,7 @@ impl LineLayout<'_> {
         }
     }
 
-    pub(super) fn hyphen_advance(&self, style: ParagraphStyle) -> u32 {
+    pub(super) fn hyphen_advance(&self, style: &ParagraphStyle) -> u32 {
         self.registry
             .char_glyph(style.font_id, '-')
             .and_then(|g| self.registry.advance_width(style.font_id, g))
@@ -329,7 +329,7 @@ mod tests {
         };
         let lines = LineLayout::new(registry()).layout_styled(
             inlines,
-            styles.paragraph(*id),
+            &styles.paragraph(*id),
             &styles,
             &Measure::uniform(400.0),
             Default::default(),
@@ -367,12 +367,12 @@ mod tests {
     /// times one fewer than its glyphs.
     #[test]
     fn letter_spacing_opens_the_gaps_between_glyphs() {
-        let plain = layout_style("HANDGLOVES", 400.0, body());
+        let plain = layout_style("HANDGLOVES", 400.0, &body());
         let tracking = 0.08 * body().size;
         let tracked = layout_style(
             "HANDGLOVES",
             400.0,
-            ParagraphStyle {
+            &ParagraphStyle {
                 letter_spacing: tracking,
                 ..body()
             },
@@ -411,8 +411,8 @@ mod tests {
             caps: FontVariantCaps::SmallCaps,
             ..body()
         };
-        let plain = layout_style("hello", 400.0, body());
-        let feature = layout_style("hello", 400.0, style);
+        let plain = layout_style("hello", 400.0, &body());
+        let feature = layout_style("hello", 400.0, &style);
         assert_eq!(feature[0].runs.len(), 1, "the feature split the run");
         assert_eq!(feature[0].runs[0].size, body().size);
         assert_ne!(
@@ -439,7 +439,7 @@ mod tests {
             span: None,
         }];
         let synthesized =
-            LineLayout::new(&bare).layout(&inlines, style, 400.0, LineBreakOptions::default());
+            LineLayout::new(&bare).layout(&inlines, &style, 400.0, LineBreakOptions::default());
         let runs: Vec<(f32, &str, &str)> = synthesized[0]
             .runs
             .iter()

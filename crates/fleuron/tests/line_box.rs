@@ -55,7 +55,7 @@ proptest! {
             ..body()
         };
         let layout = LineLayout::new(registry());
-        let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
+        let lines = layout.layout(&inlines_of(&text), &style, measure, LineBreakOptions::default());
         let leading = line_height * style.size;
         let mut baselines = Vec::with_capacity(lines.len());
         let mut top = 0.0f32;
@@ -83,8 +83,8 @@ proptest! {
             ..body()
         };
         let layout = LineLayout::new(registry());
-        let strut = layout.strut(style);
-        let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
+        let strut = layout.strut(&style);
+        let lines = layout.layout(&inlines_of(&text), &style, measure, LineBreakOptions::default());
         for (i, line) in lines.iter().enumerate() {
             prop_assert!(line.box_.height >= strut.height() - 1e-5,
                 "line {i} is {}pt, strut is {}pt", line.box_.height, strut.height());
@@ -104,8 +104,8 @@ proptest! {
             ..body()
         };
         let layout = LineLayout::new(registry());
-        let strut = layout.strut(style);
-        let line_box = layout.line_box(&[run(big), run(small)], style);
+        let strut = layout.strut(&style);
+        let line_box = layout.line_box(&[run(big), run(small)], &style);
         let big_strut = fleuron::linebox::Strut::from_metrics(
             registry().metrics(0).unwrap(), big, style.line_height);
         prop_assert!(line_box.baseline >= big_strut.above - 1e-5);
@@ -139,6 +139,6 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
 #[test]
 fn line_box_baseline_sits_within_height() {
     let layout = LineLayout::new(registry());
-    let line_box: LineBox = layout.line_box(&[], body());
+    let line_box: LineBox = layout.line_box(&[], &body());
     assert!(line_box.baseline > 0.0 && line_box.baseline < line_box.height);
 }

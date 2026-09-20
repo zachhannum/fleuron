@@ -397,6 +397,10 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // What a custom property holds reaches layout only through the
         // properties that read it, which are hashed here already.
         custom: _,
+        font_feature_settings: _,
+        font_variant_ligatures: _,
+        font_variant_numeric: _,
+        font_variant_alternates: _,
     } = style;
     (border_collapse, list_style_type).hash(h);
     for size in [width, height, min_height, max_width, max_height] {

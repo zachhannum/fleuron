@@ -36,12 +36,12 @@ impl Paginator<'_> {
         }
         let body_metrics = self.registry.metrics(body.font_id)?;
         let body_cap = cap_height(body_metrics) / body_metrics.units_per_em as f32 * body.size;
-        let sunk = (sink - 1) as f32 * self.lines.strut(body).height() + body_cap;
+        let sunk = (sink - 1) as f32 * self.lines.strut(&body).height() + body_cap;
         let style = ParagraphStyle {
             size: sunk * cap_metrics.units_per_em as f32 / cap_units,
             ..cap_style.paragraph()
         };
-        let mut line = self.line_of(&initial.text, style)?;
+        let mut line = self.line_of(&initial.text, &style)?;
         // The cap stands for the letter it was taken from, so a
         // cursor on the manuscript's first word lands on it.
         if let Some(run) = line.runs.first_mut() {

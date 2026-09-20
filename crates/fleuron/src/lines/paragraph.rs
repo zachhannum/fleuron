@@ -2,12 +2,13 @@
 //! over the line it opens on, and what it hangs into the margin.
 
 use crate::content::{Inline, Metadata, NodeId};
+use crate::fonts::FeatureSetting;
 use crate::style::{Color, Edges, FontVariantCaps, TextDecoration, TextTransform};
 use serde::Serialize;
 
 /// Everything one paragraph's layout depends on, and the colour its
 /// runs are painted in. The style tree compiles down to this.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ParagraphStyle {
     /// Face id from the font registry.
     pub font_id: u16,
@@ -22,6 +23,9 @@ pub struct ParagraphStyle {
     pub letter_spacing: f32,
     /// Which capitals the text is drawn with.
     pub caps: FontVariantCaps,
+    /// The features the text is shaped with, beyond the ones the
+    /// shaper turns on for every run.
+    pub features: Vec<FeatureSetting>,
     /// What the text is transformed to before it is shaped.
     pub transform: TextTransform,
     /// What the run is painted in. Nothing measures it: a run
@@ -55,7 +59,7 @@ pub struct FirstLine {
 
 impl FirstLine {
     /// The style one run of the opening line is set in.
-    pub fn over(&self, style: ParagraphStyle) -> ParagraphStyle {
+    pub fn over(&self, style: &ParagraphStyle) -> ParagraphStyle {
         ParagraphStyle {
             size: self.size.unwrap_or(style.size),
             letter_spacing: self.letter_spacing.unwrap_or(style.letter_spacing),
@@ -63,7 +67,7 @@ impl FirstLine {
             transform: self.transform.unwrap_or(style.transform),
             color: self.color.unwrap_or(style.color),
             decoration: self.decoration.unwrap_or(style.decoration),
-            ..style
+            ..style.clone()
         }
     }
 }
@@ -152,7 +156,7 @@ impl InlineBox {
 /// what a caller with no tree in hand can supply.
 pub trait InlineStyles {
     /// The style of `id`, given the style of the block it sits in.
-    fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle;
+    fn style(&self, id: NodeId, block: &ParagraphStyle) -> ParagraphStyle;
 
     /// The box the inline element `id` paints around its runs, where
     /// it paints one. Nothing, for a caller with no tree to ask.
@@ -188,8 +192,8 @@ pub struct Generated {
 pub struct Inherited;
 
 impl InlineStyles for Inherited {
-    fn style(&self, _id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
-        block
+    fn style(&self, _id: NodeId, block: &ParagraphStyle) -> ParagraphStyle {
+        block.clone()
     }
 }
 

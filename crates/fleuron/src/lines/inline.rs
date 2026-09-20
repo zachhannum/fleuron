@@ -309,7 +309,7 @@ mod tests {
         inlines.extend(one_run(" more"));
         let lines = LineLayout::new(registry()).layout_styled(
             &inlines,
-            body(),
+            &body(),
             &Boxed(vec![(tag(), padded(4.0))]),
             &divided_band(100.0, 20.0),
             LineBreakOptions::default(),

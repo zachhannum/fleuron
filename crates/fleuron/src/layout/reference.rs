@@ -470,7 +470,7 @@ pub(super) struct Referring<'r, 'a> {
 }
 
 impl InlineStyles for Referring<'_, '_> {
-    fn style(&self, id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
+    fn style(&self, id: NodeId, block: &ParagraphStyle) -> ParagraphStyle {
         InlineStyles::style(self.paginator.styles, id, block)
     }
 

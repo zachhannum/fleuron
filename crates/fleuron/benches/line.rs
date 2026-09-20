@@ -67,7 +67,7 @@ fn line(c: &mut Criterion) {
             }
             let lines: usize = inlines
                 .iter()
-                .map(|p| layout.layout(p, body, measure, options).len())
+                .map(|p| layout.layout(p, &body, measure, options).len())
                 .sum();
             group.throughput(Throughput::Elements(lines as u64));
             group.bench_with_input(
@@ -76,7 +76,7 @@ fn line(c: &mut Criterion) {
                 |b, inlines| {
                     b.iter(|| {
                         for paragraph in inlines {
-                            black_box(layout.layout(paragraph, body, measure, options));
+                            black_box(layout.layout(paragraph, &body, measure, options));
                         }
                     })
                 },

@@ -524,6 +524,10 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `line-height` | `line-height: 1.4` |
 | `letter-spacing` | `letter-spacing: 0.05em` |
 | `font-variant-caps` | `font-variant-caps: small-caps` |
+| `font-feature-settings` | `font-feature-settings: "ss01" 1` |
+| `font-variant-ligatures` | `font-variant-ligatures: discretionary-ligatures` |
+| `font-variant-numeric` | `font-variant-numeric: oldstyle-nums` |
+| `font-variant-alternates` | `font-variant-alternates: historical-forms` |
 | `text-transform` | `text-transform: uppercase` |
 | `text-decoration-line` | `text-decoration-line: underline` |
 | `text-decoration-color` | `text-decoration-color: #808080` |
@@ -549,6 +553,10 @@ color:                     <color>;
 line-height:               normal | <number> | <length> | <percentage>;
 letter-spacing:            normal | <length>;
 font-variant-caps:         normal | small-caps;
+font-feature-settings:     normal | <feature-tag-value>#;
+font-variant-ligatures:    normal | none | [ common-ligatures | no-common-ligatures ] || [ discretionary-ligatures | no-discretionary-ligatures ] || [ historical-ligatures | no-historical-ligatures ] || [ contextual | no-contextual ];
+font-variant-numeric:      normal | [ lining-nums | oldstyle-nums ] || [ proportional-nums | tabular-nums ] || [ diagonal-fractions | stacked-fractions ] || ordinal || slashed-zero;
+font-variant-alternates:   normal | historical-forms;
 text-transform:            none | uppercase | lowercase | capitalize;
 text-decoration-line:      none | [ underline || overline || line-through ];
 text-decoration-color:     currentcolor | <color>;

@@ -2904,7 +2904,7 @@ mod tests {
         let style = styles.root().paragraph();
         let width = |text: &str| {
             paginator
-                .line_of(text, style)
+                .line_of(text, &style)
                 .map(|line| paginator.line_width(&line))
                 .unwrap_or_default()
         };

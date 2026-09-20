@@ -108,7 +108,7 @@ mod tests {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &one_run(OPENING),
-            body(),
+            &body(),
             divided_band(80.0, 20.0),
             LineBreakOptions::default(),
         );
@@ -142,7 +142,7 @@ mod tests {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &one_run(OPENING),
-            body(),
+            &body(),
             divided_band(80.0, 20.0),
             justified(),
         );
@@ -167,7 +167,7 @@ mod tests {
             position: None,
             span: None,
         }];
-        let lines = layout.layout(&inlines, body(), measure.clone(), Default::default());
+        let lines = layout.layout(&inlines, &body(), measure.clone(), Default::default());
         assert!(lines.len() > 3, "expected several lines: {lines:?}");
         let width_pt = |line: &Line| line.width as f32 / units_per_em() as f32 * body().size;
         for (index, line) in lines.iter().enumerate() {
@@ -185,7 +185,7 @@ mod tests {
             width_pt(&lines[2]) > measure.at(0).width,
             "the measure never widened"
         );
-        let uniform = layout.layout(&inlines, body(), 120.0, Default::default());
+        let uniform = layout.layout(&inlines, &body(), 120.0, Default::default());
         assert!(uniform.len() < lines.len());
         assert_eq!(
             lines.iter().map(line_text).collect::<Vec<_>>().join(" "),

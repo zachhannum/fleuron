@@ -4,7 +4,7 @@
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::fonts::GenericFamily;
+use crate::fonts::{FeatureSetting, GenericFamily};
 use crate::pages::{Side, fade};
 
 /// A CSS length, before it is resolved against what it is relative to.
@@ -213,6 +213,167 @@ pub enum FontVariantCaps {
     Normal,
     /// `small-caps`: lowercase letters set as small capitals.
     SmallCaps,
+}
+
+/// Which ligatures a run is set with, from
+/// `font-variant-ligatures`. A group left at `None` keeps whatever
+/// the shaper does with it, which is `liga`, `clig` and `calt` on
+/// and the rest off.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+pub struct FontVariantLigatures {
+    /// `common-ligatures` or `no-common-ligatures`: `liga` and
+    /// `clig`.
+    pub common: Option<bool>,
+    /// `discretionary-ligatures` or `no-discretionary-ligatures`:
+    /// `dlig`.
+    pub discretionary: Option<bool>,
+    /// `historical-ligatures` or `no-historical-ligatures`: `hlig`.
+    pub historical: Option<bool>,
+    /// `contextual` or `no-contextual`: `calt`.
+    pub contextual: Option<bool>,
+}
+
+impl FontVariantLigatures {
+    /// `normal`: every group left to the shaper.
+    pub const NORMAL: FontVariantLigatures = FontVariantLigatures {
+        common: None,
+        discretionary: None,
+        historical: None,
+        contextual: None,
+    };
+
+    /// `none`: every ligature off.
+    pub const NONE: FontVariantLigatures = FontVariantLigatures {
+        common: Some(false),
+        discretionary: Some(false),
+        historical: Some(false),
+        contextual: Some(false),
+    };
+
+    /// The features this value asks the face for.
+    pub fn settings(&self) -> Vec<FeatureSetting> {
+        let groups: [(Option<bool>, &[&[u8; 4]]); 4] = [
+            (self.common, &[b"liga", b"clig"]),
+            (self.discretionary, &[b"dlig"]),
+            (self.historical, &[b"hlig"]),
+            (self.contextual, &[b"calt"]),
+        ];
+        groups
+            .iter()
+            .filter_map(|(asked, tags)| Some((asked.as_ref()?, tags)))
+            .flat_map(|(on, tags)| {
+                tags.iter()
+                    .map(move |tag| FeatureSetting::new(**tag, u32::from(*on)))
+            })
+            .collect()
+    }
+}
+
+/// Which figures a run is set with, from `font-variant-numeric`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+pub struct FontVariantNumeric {
+    /// `lining-nums` or `oldstyle-nums`.
+    pub figures: Option<Figures>,
+    /// `proportional-nums` or `tabular-nums`.
+    pub spacing: Option<NumericSpacing>,
+    /// `diagonal-fractions` or `stacked-fractions`.
+    pub fractions: Option<Fractions>,
+    /// `ordinal`: the letters after a number in `1st`.
+    pub ordinal: bool,
+    /// `slashed-zero`.
+    pub slashed_zero: bool,
+}
+
+/// Which shape the figures take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Figures {
+    /// `lining-nums`: figures that stand on the baseline at cap
+    /// height.
+    Lining,
+    /// `oldstyle-nums`: figures that rise and fall around it.
+    OldStyle,
+}
+
+/// How much width each figure takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NumericSpacing {
+    /// `proportional-nums`: each figure takes the width it draws.
+    Proportional,
+    /// `tabular-nums`: every figure takes one width, so columns of
+    /// them line up.
+    Tabular,
+}
+
+/// How a fraction is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Fractions {
+    /// `diagonal-fractions`: the figures stand either side of a
+    /// slash.
+    Diagonal,
+    /// `stacked-fractions`: one figure over the other.
+    Stacked,
+}
+
+impl FontVariantNumeric {
+    /// `normal`: the face's own figures.
+    pub const NORMAL: FontVariantNumeric = FontVariantNumeric {
+        figures: None,
+        spacing: None,
+        fractions: None,
+        ordinal: false,
+        slashed_zero: false,
+    };
+
+    /// The features this value asks the face for.
+    pub fn settings(&self) -> Vec<FeatureSetting> {
+        let tags = [
+            self.figures.map(|figures| match figures {
+                Figures::Lining => b"lnum",
+                Figures::OldStyle => b"onum",
+            }),
+            self.spacing.map(|spacing| match spacing {
+                NumericSpacing::Proportional => b"pnum",
+                NumericSpacing::Tabular => b"tnum",
+            }),
+            self.fractions.map(|fractions| match fractions {
+                Fractions::Diagonal => b"frac",
+                Fractions::Stacked => b"afrc",
+            }),
+            self.ordinal.then_some(b"ordn"),
+            self.slashed_zero.then_some(b"zero"),
+        ];
+        tags.into_iter()
+            .flatten()
+            .map(|tag| FeatureSetting::new(*tag, 1))
+            .collect()
+    }
+}
+
+/// Which alternate glyphs a run is set with, from
+/// `font-variant-alternates`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FontVariantAlternates {
+    /// `normal`: the glyphs the face draws by default.
+    #[default]
+    Normal,
+    /// `historical-forms`: `hist`, such as the long s.
+    HistoricalForms,
+}
+
+impl FontVariantAlternates {
+    /// The features this value asks the face for.
+    pub fn settings(&self) -> Vec<FeatureSetting> {
+        match self {
+            FontVariantAlternates::Normal => Vec::new(),
+            FontVariantAlternates::HistoricalForms => {
+                vec![FeatureSetting::new(*b"hist", 1)]
+            }
+        }
+    }
 }
 
 /// What a run's letters are transformed to before they are shaped,

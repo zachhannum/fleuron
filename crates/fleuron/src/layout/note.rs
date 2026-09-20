@@ -249,7 +249,7 @@ impl Paginator<'_> {
         measure: f32,
     ) -> Option<Marker> {
         let text = style.list_style_type.marker(number)?;
-        let line = self.line_of(&text, style.paragraph())?;
+        let line = self.line_of(&text, &style.paragraph())?;
         let (left, _) = style.content_box(x, measure);
         let x = left - self.line_width(&line);
         Some(Marker { line, x })

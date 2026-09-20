@@ -11,6 +11,7 @@
 //! holds, `exclusion` a block placed against the page, and
 //! `computed` what one node comes to.
 
+use crate::fonts::FeatureSetting;
 use crate::lines::HangingPunctuation;
 
 mod background;
@@ -36,8 +37,9 @@ pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSourc
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
-    Family, FontStyle, FontVariantCaps, Hyphens, Length, LineHeight, TextAlign, TextDecoration,
-    TextJustify, TextTransform, Width,
+    Family, Figures, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
+    FontVariantNumeric, Fractions, Hyphens, Length, LineHeight, NumericSpacing, TextAlign,
+    TextDecoration, TextJustify, TextTransform, Width,
 };
 
 pub(crate) use background::no_background;
@@ -56,6 +58,11 @@ pub enum Declaration {
     LineHeight(LineHeight),
     LetterSpacing(Length),
     FontVariantCaps(FontVariantCaps),
+    /// The features a sheet asked the face for, in the order written.
+    FontFeatureSettings(Vec<FeatureSetting>),
+    FontVariantLigatures(FontVariantLigatures),
+    FontVariantNumeric(FontVariantNumeric),
+    FontVariantAlternates(FontVariantAlternates),
     TextTransform(TextTransform),
     TextDecorationLine(DecorationLine),
     /// `None` is `currentcolor`.
@@ -163,6 +170,10 @@ impl Declaration {
             Declaration::LineHeight(_) => "line-height",
             Declaration::LetterSpacing(_) => "letter-spacing",
             Declaration::FontVariantCaps(_) => "font-variant-caps",
+            Declaration::FontFeatureSettings(_) => "font-feature-settings",
+            Declaration::FontVariantLigatures(_) => "font-variant-ligatures",
+            Declaration::FontVariantNumeric(_) => "font-variant-numeric",
+            Declaration::FontVariantAlternates(_) => "font-variant-alternates",
             Declaration::TextTransform(_) => "text-transform",
             Declaration::TextDecorationLine(_) => "text-decoration-line",
             Declaration::TextDecorationColor(_) => "text-decoration-color",
