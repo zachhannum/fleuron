@@ -42,7 +42,7 @@ mod testing;
 pub use line::{InlineFragment, Line, LineSpan, ShapedRun, Spans};
 pub use measure::{Measure, Span};
 pub use paragraph::{
-    FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineBox, InlineStyles,
+    Face, FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineBox, InlineStyles,
     LineBreakOptions, Opening, ParagraphStyle, Patterns,
 };
 
@@ -493,13 +493,45 @@ pub struct Broken {
 
 #[cfg(test)]
 mod tests {
+    use crate::content::NodeId;
+    use crate::fonts::FaceAttributes;
     use crate::lines::flatten::SMALL_CAPS_RATIO;
     use crate::lines::testing::{
-        OPENING, body, divided_band, drawn, layout_body, layout_first, line_text, one_run,
-        registry, units_per_em, with_breaks,
+        DISPLAY, OPENING, body, divided_band, drawn, emphasis, layout_body, layout_first,
+        line_text, one_run, registry, two_families, units_per_em, with_breaks,
     };
-    use crate::lines::{FirstLine, Inherited, LineBreakOptions, LineLayout, Measure, Opening};
+    use crate::lines::{
+        Face, FirstLine, Inherited, InlineStyles, Line, LineBreakOptions, LineLayout, Measure,
+        Opening, ParagraphStyle,
+    };
     use crate::style::{FontVariantCaps, TextTransform};
+
+    /// The opening line set in `face` and nothing else.
+    fn faced(face: Face) -> Option<FirstLine> {
+        Some(FirstLine {
+            face: Some(face),
+            ..FirstLine::default()
+        })
+    }
+
+    /// The cut of the bundled family at one slope and weight.
+    fn cut(italic: bool, weight: u16) -> u16 {
+        registry()
+            .select("eb garamond", FaceAttributes { italic, weight })
+            .expect("the bundled family has cuts")
+            .id
+    }
+
+    /// The face every run of `line` is shaped with, where they agree.
+    fn face_of(line: &Line) -> u16 {
+        let first = line.runs[0].font_id;
+        assert!(
+            line.runs.iter().all(|run| run.font_id == first),
+            "the line is set in more than one face: {:?}",
+            line.runs.iter().map(|run| run.font_id).collect::<Vec<_>>(),
+        );
+        first
+    }
 
     /// A hard break ends the band it falls in. The text after a break
     /// in the first span of a divided band opens the band under it,
@@ -768,6 +800,148 @@ mod tests {
             "the opening run was not set larger",
         );
         assert_eq!(lines[1].runs[0].size, body().size);
+    }
+
+    /// Acceptance: `font-style: italic` on the opening line sets it
+    /// in the italic of the family the paragraph is set in, and
+    /// leaves the lines under it upright.
+    #[test]
+    fn an_italic_first_line_is_set_in_the_italic_cut() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(
+            &layout,
+            160.0,
+            faced(Face {
+                italic: Some(true),
+                ..Face::default()
+            }),
+        );
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert_eq!(face_of(&lines[0]), cut(true, 400));
+        assert_eq!(face_of(&lines[1]), body().font_id);
+    }
+
+    /// Acceptance: `font-family` on the opening line sets it in
+    /// another family, and the lines under it keep the paragraph's
+    /// own.
+    #[test]
+    fn a_first_line_takes_another_family() {
+        let registry = two_families();
+        let layout = LineLayout::new(registry);
+        let display = registry
+            .select(DISPLAY, FaceAttributes::REGULAR)
+            .expect("the second family is registered")
+            .id;
+        let lines = layout_first(
+            &layout,
+            160.0,
+            faced(Face {
+                family: Some(display),
+                ..Face::default()
+            }),
+        );
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert_eq!(face_of(&lines[0]), display);
+        assert_eq!(face_of(&lines[1]), body().font_id);
+    }
+
+    /// Acceptance: `font-weight` on the opening line picks another
+    /// cut of the same family.
+    #[test]
+    fn a_first_line_set_bold_picks_the_bold_cut() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(
+            &layout,
+            160.0,
+            faced(Face {
+                weight: Some(700),
+                ..Face::default()
+            }),
+        );
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert_eq!(face_of(&lines[0]), cut(false, 700));
+        assert_eq!(face_of(&lines[1]), body().font_id);
+    }
+
+    /// What the rule leaves alone an inline element keeps: an italic
+    /// opening line over an inline element set bold is set in the
+    /// bold italic, not in the regular one.
+    #[test]
+    fn a_face_on_the_first_line_keeps_the_cut_an_inline_element_brought() {
+        /// A style tree that sets one node bold and everything else
+        /// as the block is set.
+        struct Bold(NodeId);
+        impl InlineStyles for Bold {
+            fn style(&self, id: NodeId, block: &ParagraphStyle) -> ParagraphStyle {
+                let font_id = match id == self.0 {
+                    true => cut(false, 700),
+                    false => block.font_id,
+                };
+                ParagraphStyle {
+                    font_id,
+                    ..block.clone()
+                }
+            }
+        }
+
+        let bold = NodeId::new(3);
+        let mut inlines = one_run("she said ");
+        inlines.push(emphasis(bold, one_run("never")));
+        let layout = LineLayout::new(registry());
+        let lines = layout.layout_styled(
+            &inlines,
+            &body(),
+            &Bold(bold),
+            &Measure::uniform(200.0),
+            LineBreakOptions::default(),
+            Opening {
+                first_line: faced(Face {
+                    italic: Some(true),
+                    ..Face::default()
+                }),
+                ..Opening::default()
+            },
+        );
+        let faces: Vec<u16> = lines[0].runs.iter().map(|run| run.font_id).collect();
+        assert_eq!(
+            faces,
+            [cut(true, 400), cut(true, 700)],
+            "{:?}",
+            lines[0].runs
+        );
+    }
+
+    /// Acceptance: a face on the opening line re-breaks it. The bold
+    /// cut is wider, so the line holds less, and the word it dropped
+    /// opens the line under it.
+    #[test]
+    fn a_face_on_the_first_line_rebreaks_it() {
+        let layout = LineLayout::new(registry());
+        let plain = layout_first(&layout, 160.0, None);
+        let bold = layout_first(
+            &layout,
+            160.0,
+            faced(Face {
+                weight: Some(700),
+                ..Face::default()
+            }),
+        );
+        assert!(
+            line_text(&bold[0]).len() < line_text(&plain[0]).len(),
+            "the bold line held as much: {:?} against {:?}",
+            line_text(&bold[0]),
+            line_text(&plain[0]),
+        );
+        let dropped = line_text(&plain[0])
+            .split_whitespace()
+            .next_back()
+            .expect("a word")
+            .to_string();
+        assert!(
+            line_text(&bold[1]).starts_with(&dropped),
+            "the word the opening line dropped did not open the second: {:?}",
+            line_text(&bold[1]),
+        );
     }
 
     /// `text-transform` on the opening line changes what is shaped

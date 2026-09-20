@@ -608,7 +608,9 @@ impl LineLayout<'_> {
     /// it reaches and in `style` after that.
     fn push_run(&self, flat: &mut FlatParagraph, value: &str, style: &ParagraphStyle, lead: Lead) {
         let (opening, extent) = match lead.style {
-            Some(first) if flat.text.len() < lead.reach() => (first.over(style), lead.reach()),
+            Some(first) if flat.text.len() < lead.reach() => {
+                (first.over(style, self.registry), lead.reach())
+            }
             _ => {
                 flat.push_styled(value, style, self.small_caps(style));
                 return;

@@ -555,7 +555,16 @@ impl ComputedStyle {
         fn set<T>(differs: bool, value: T) -> Option<T> {
             differs.then_some(value)
         }
+        let face = crate::lines::Face {
+            family: set(self.font_family != element.font_family, self.font_id),
+            italic: set(
+                self.font_style != element.font_style,
+                self.font_style == FontStyle::Italic,
+            ),
+            weight: set(self.font_weight != element.font_weight, self.font_weight),
+        };
         crate::lines::FirstLine {
+            face: (face != crate::lines::Face::default()).then_some(face),
             size: set(self.font_size != element.font_size, self.font_size),
             letter_spacing: set(
                 self.letter_spacing != element.letter_spacing,

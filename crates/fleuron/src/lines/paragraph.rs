@@ -2,7 +2,7 @@
 //! over the line it opens on, and what it hangs into the margin.
 
 use crate::content::{Inline, Metadata, NodeId};
-use crate::fonts::FeatureSetting;
+use crate::fonts::{FaceAttributes, FeatureSetting, FontRegistry};
 use crate::style::{Color, Edges, FontVariantCaps, TextDecoration, TextTransform};
 use serde::Serialize;
 
@@ -43,6 +43,9 @@ pub struct ParagraphStyle {
 /// the opening line without replacing the rest of their style.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct FirstLine {
+    /// The cut the opening line is set in, where the rule asked for
+    /// another one.
+    pub face: Option<Face>,
     /// `font-size`, in points.
     pub size: Option<f32>,
     /// `letter-spacing`, in points.
@@ -57,10 +60,30 @@ pub struct FirstLine {
     pub decoration: Option<TextDecoration>,
 }
 
+/// The face `::first-line` asks its runs for: a family, a slope and
+/// a weight, each one set only where the rule set it.
+///
+/// A run of the opening line keeps what the rule left alone, so
+/// `font-style: italic` over a bold emphasis picks the bold italic
+/// rather than the regular one. The family is a face of the family
+/// asked for, because a family is named once in the style tree and
+/// carried here by one of its cuts.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Face {
+    /// A face of the family the line is set in.
+    pub family: Option<u16>,
+    /// Whether the line is italic.
+    pub italic: Option<bool>,
+    /// Weight on the CSS 1 to 1000 scale.
+    pub weight: Option<u16>,
+}
+
 impl FirstLine {
-    /// The style one run of the opening line is set in.
-    pub fn over(&self, style: &ParagraphStyle) -> ParagraphStyle {
+    /// The style one run of the opening line is set in, with `face`
+    /// matched against `registry`.
+    pub fn over(&self, style: &ParagraphStyle, registry: &FontRegistry) -> ParagraphStyle {
         ParagraphStyle {
+            font_id: self.font_id(style, registry),
             size: self.size.unwrap_or(style.size),
             letter_spacing: self.letter_spacing.unwrap_or(style.letter_spacing),
             caps: self.caps.unwrap_or(style.caps),
@@ -69,6 +92,33 @@ impl FirstLine {
             decoration: self.decoration.unwrap_or(style.decoration),
             ..style.clone()
         }
+    }
+
+    /// The face one run of the opening line is shaped with: the run's
+    /// own, where the rule asked for no other cut, and otherwise the
+    /// closest cut of the family asked for.
+    ///
+    /// A family with nothing at the slope or weight asked for answers
+    /// with what it has, which is CSS font matching. The run keeps
+    /// its own face where the family answers with nothing at all.
+    fn font_id(&self, style: &ParagraphStyle, registry: &FontRegistry) -> u16 {
+        let Some(face) = self.face else {
+            return style.font_id;
+        };
+        let Some(own) = registry.font_ref(style.font_id) else {
+            return style.font_id;
+        };
+        let want = FaceAttributes {
+            italic: face.italic.unwrap_or(own.attributes.italic),
+            weight: face.weight.unwrap_or(own.attributes.weight),
+        };
+        let family = face
+            .family
+            .and_then(|id| registry.font_ref(id))
+            .unwrap_or(own);
+        registry
+            .select(&family.family, want)
+            .map_or(style.font_id, |found| found.id)
     }
 }
 
