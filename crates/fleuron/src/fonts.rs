@@ -18,6 +18,7 @@ use skrifa::attribute::Style as SlopeStyle;
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::{GlyphMetrics, Metrics};
 use skrifa::prelude::GlyphId;
+use skrifa::raw::TableProvider;
 use skrifa::string::StringId;
 
 /// A font entering the engine: raw bytes and the identity the style
@@ -179,6 +180,25 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
+/// One OpenType feature the run asks the face for: the tag and the
+/// value, where 0 turns the feature off and 1 turns it on. A feature
+/// with alternates takes the number of the alternate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FeatureSetting {
+    /// The four-byte OpenType feature tag, e.g. `onum`.
+    #[serde(with = "tag")]
+    pub tag: [u8; 4],
+    /// What the feature is set to.
+    pub value: u32,
+}
+
+impl FeatureSetting {
+    /// A setting of `tag` at `value`.
+    pub const fn new(tag: [u8; 4], value: u32) -> FeatureSetting {
+        FeatureSetting { tag, value }
+    }
+}
+
 /// The OpenType features a run is shaped with, beyond the ones the
 /// shaper turns on for every run.
 ///
@@ -186,16 +206,28 @@ pub struct ShapedGlyph {
 /// already; one that draws characters has to ask the face for the
 /// same features, or it draws different glyphs at the positions the
 /// engine measured.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Features {
     /// `smcp`: the face's own small capitals, from
     /// `font-variant-caps`.
     pub small_caps: bool,
+    /// What the sheet asked for, from `font-feature-settings` and the
+    /// `font-variant` longhands, in the order the shaper reads them.
+    /// A later setting of one tag wins over an earlier one.
+    pub settings: Vec<FeatureSetting>,
 }
 
 impl Features {
     /// Nothing beyond the default set.
-    pub const NONE: Features = Features { small_caps: false };
+    pub const NONE: Features = Features {
+        small_caps: false,
+        settings: Vec::new(),
+    };
+
+    /// Whether the run asks for anything at all.
+    pub fn is_none(&self) -> bool {
+        !self.small_caps && self.settings.is_empty()
+    }
 }
 
 /// A font's identity in the engine's output.
@@ -273,6 +305,10 @@ struct Face {
     instance: Option<ShaperInstance>,
     /// Whether the file draws small capitals of its own.
     small_caps: bool,
+    /// The feature tags the file carries, sorted. A tag outside this
+    /// is one the face has nothing for, which a sheet asking for it
+    /// is told.
+    features: Vec<[u8; 4]>,
 }
 
 /// The registry: assigns `font_id`s, hands shaper access and metrics
@@ -328,6 +364,7 @@ impl FontRegistry {
                 },
                 metrics: read_metrics(&font, &cut.location),
                 small_caps: draws_small_caps(&harf, &shaper_data, instance.as_ref()),
+                features: feature_tags(&font),
                 shaper_data: shaper_data.clone(),
                 location: cut.location,
                 instance,
@@ -425,6 +462,14 @@ impl FontRegistry {
             .is_some_and(|face| face.small_caps)
     }
 
+    /// Whether a face carries one feature. A sheet that asks for a
+    /// feature the face has nothing for gets the run set without it.
+    pub fn has_feature(&self, id: u16, tag: [u8; 4]) -> bool {
+        self.faces
+            .get(id as usize)
+            .is_some_and(|face| face.features.binary_search(&tag).is_ok())
+    }
+
     /// The raw bytes of a face, for embedding at write time.
     ///
     /// Shared: the faces a variable file yielded are one file, and a
@@ -490,11 +535,11 @@ impl FontRegistry {
     /// text offsets (break opportunities) back to glyphs; offsets data
     /// stays in the shaper's buffer.
     pub fn shape(&self, id: u16, text: &str) -> Option<Vec<ShapedGlyph>> {
-        self.shape_with(id, text, Features::NONE)
+        self.shape_with(id, text, &Features::NONE)
     }
 
     /// The same, with the features a style asked for turned on.
-    pub fn shape_with(&self, id: u16, text: &str, features: Features) -> Option<Vec<ShapedGlyph>> {
+    pub fn shape_with(&self, id: u16, text: &str, features: &Features) -> Option<Vec<ShapedGlyph>> {
         let face = self.faces.get(id as usize)?;
         let font = HarfFontRef::new(&face.bytes).ok()?;
         Some(shape_text(
@@ -514,7 +559,7 @@ fn shape_text(
     data: &ShaperData,
     instance: Option<&ShaperInstance>,
     text: &str,
-    features: Features,
+    features: &Features,
 ) -> Vec<ShapedGlyph> {
     let shaper = data.shaper(font).instance(instance).build();
     let mut buffer = UnicodeBuffer::new();
@@ -526,6 +571,9 @@ fn shape_text(
     let mut wanted = Vec::new();
     if features.small_caps {
         wanted.push(Feature::new(Tag::new(b"smcp"), 1, ..));
+    }
+    for setting in &features.settings {
+        wanted.push(Feature::new(Tag::new(&setting.tag), setting.value, ..));
     }
     let shaped = shaper.shape(
         buffer,
@@ -545,6 +593,36 @@ fn shape_text(
         .collect()
 }
 
+/// Every feature tag a file lists, from both substitution and
+/// positioning, sorted for lookup.
+fn feature_tags(font: &skrifa::FontRef) -> Vec<[u8; 4]> {
+    let mut tags = Vec::new();
+    if let Ok(gsub) = font.gsub() {
+        collect_features(gsub.feature_list(), &mut tags);
+    }
+    if let Ok(gpos) = font.gpos() {
+        collect_features(gpos.feature_list(), &mut tags);
+    }
+    tags.sort_unstable();
+    tags.dedup();
+    tags
+}
+
+/// The tags of one feature list, added to `tags`.
+fn collect_features(
+    list: Result<skrifa::raw::tables::layout::FeatureList<'_>, skrifa::raw::ReadError>,
+    tags: &mut Vec<[u8; 4]>,
+) {
+    let Ok(list) = list else {
+        return;
+    };
+    tags.extend(
+        list.feature_records()
+            .iter()
+            .map(|record| record.feature_tag().into_bytes()),
+    );
+}
+
 /// Whether a face has small capitals of its own: shape a lowercase
 /// letter with `smcp` and see whether the face draws something else
 /// for it. A file that lists the feature and substitutes nothing has
@@ -555,8 +633,12 @@ fn draws_small_caps(
     instance: Option<&ShaperInstance>,
 ) -> bool {
     const PROBE: &str = "a";
-    let plain = shape_text(font, data, instance, PROBE, Features::NONE);
-    let small = shape_text(font, data, instance, PROBE, Features { small_caps: true });
+    let small_caps = Features {
+        small_caps: true,
+        settings: Vec::new(),
+    };
+    let plain = shape_text(font, data, instance, PROBE, &Features::NONE);
+    let small = shape_text(font, data, instance, PROBE, &small_caps);
     plain.iter().map(|g| g.id).ne(small.iter().map(|g| g.id))
 }
 
@@ -1050,6 +1132,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected,
             "harfrust disagrees with hb-shape on the reference string"
+        );
+    }
+
+    /// Part: the registry answers for the tags a face carries, so a
+    /// sheet asking for one the face has nothing for can be told.
+    #[test]
+    fn a_face_answers_for_the_features_it_carries() {
+        let registry = registry();
+        for tag in [b"onum", b"ss01", b"sups", b"liga", b"smcp"] {
+            assert!(registry.has_feature(0, *tag), "the face carries {tag:?}");
+        }
+        assert!(!registry.has_feature(0, *b"zero"));
+        assert!(!registry.has_feature(99, *b"onum"), "no such face");
+    }
+
+    /// Part: a setting the style asked for reaches the shaper, and
+    /// draws the glyphs of that feature rather than the default ones.
+    #[test]
+    fn a_requested_feature_draws_the_glyphs_of_that_feature() {
+        let registry = registry();
+        let plain = registry.shape(0, "1805").unwrap();
+        let old_style = Features {
+            small_caps: false,
+            settings: vec![FeatureSetting::new(*b"onum", 1)],
+        };
+        let shaped = registry.shape_with(0, "1805", &old_style).unwrap();
+        assert_ne!(
+            shaped.iter().map(|g| g.id).collect::<Vec<_>>(),
+            plain.iter().map(|g| g.id).collect::<Vec<_>>(),
+            "old-style figures draw other glyphs than the lining ones"
+        );
+    }
+
+    /// Part: a setting of zero turns off a feature the shaper would
+    /// otherwise apply, so the ligature falls back to its letters.
+    #[test]
+    fn a_setting_of_zero_turns_off_a_default_feature() {
+        let registry = registry();
+        let ligatures_off = Features {
+            small_caps: false,
+            settings: vec![FeatureSetting::new(*b"liga", 0)],
+        };
+        let shaped = registry.shape_with(0, "office", &ligatures_off).unwrap();
+        assert_eq!(shaped.len(), 6, "every letter draws its own glyph");
+        assert!(
+            registry.shape(0, "office").unwrap().len() < shaped.len(),
+            "the ffi ligature forms when nothing turns it off"
         );
     }
 

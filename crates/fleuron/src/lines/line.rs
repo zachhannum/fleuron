@@ -423,7 +423,7 @@ pub(super) fn cut_runs(
             inline: spec.inline,
             lead: 0.0,
             trail: 0.0,
-            features: spec.features,
+            features: spec.features.clone(),
             color: spec.color,
             decoration: spec.decoration,
             glyphs,

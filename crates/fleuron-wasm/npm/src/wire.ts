@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 15;
+export const WIRE_VERSION = 16;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -29,10 +29,20 @@ export const PAGE_FURNITURE = 2147483647;
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
 
+/** One OpenType feature a run asked the face for. */
+export interface FeatureSetting {
+  /** The four-character OpenType feature tag, e.g. `onum`. */
+  tag: string;
+  /** What the feature is set to: 0 is off, 1 is on. */
+  value: number;
+}
+
 /** The features beyond the default set a run was shaped with. */
 export interface Features {
   /** `smcp`: the face's own small capitals. */
   smallCaps: boolean;
+  /** What the stylesheet asked for, in the order the shaper read them. */
+  settings: FeatureSetting[];
 }
 
 /** One glyph: an id in its font, an absolute x, and the text it stands for. */
@@ -561,7 +571,10 @@ function item(r: Reader): DrawItem {
         sourceMap: r.seq(() => r.varint()),
         origin: r.option(() => sourceRange(r)),
         pseudoElement: r.option(() => r.varint()),
-        features: { smallCaps: r.bool() },
+        features: {
+          smallCaps: r.bool(),
+          settings: r.seq(() => ({ tag: r.string(), value: r.varint() })),
+        },
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),
         layer: r.signed(),

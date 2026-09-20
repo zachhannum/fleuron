@@ -347,6 +347,7 @@ impl FlatParagraph {
             tracking: style.letter_spacing,
             features: Features {
                 small_caps: caps == SmallCaps::Feature,
+                settings: Vec::new(),
             },
             color: style.color,
             decoration: style.decoration,

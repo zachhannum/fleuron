@@ -39,7 +39,7 @@ impl LineLayout<'_> {
             .map(|span| {
                 let mut glyphs = self
                     .registry
-                    .shape_with(span.font_id, &flat.text[span.range.clone()], span.features)
+                    .shape_with(span.font_id, &flat.text[span.range.clone()], &span.features)
                     .unwrap_or_default();
                 let track = self.tracking_units(span);
                 if track != 0 {
