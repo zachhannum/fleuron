@@ -160,11 +160,11 @@ pub struct FeatureSetting {
 }
 ```
 
-A run shaped with nothing beyond the features the shaper turns on for every run carries no set. A book is set in a handful of sets and holds hundreds of thousands of runs, so the runs share the set they carry. `Features::small_caps` and `Features::settings` read one whether it is there or not.
+The shaper turns a default set of features on for every run. [The fonts page](../library/fonts.md#font-features) lists them. A run that adds nothing to those defaults carries no `FeatureSet`, which is most of the text in a book. `Features::small_caps` and `Features::settings` answer for such a run too, so a painter reads them without testing for a set first. A book uses a handful of sets across hundreds of thousands of runs, so the runs share the sets between them.
 
 `small_caps` is the face's own small capitals, which `font-variant-caps: small-caps` asks for. The tag is `smcp`.
 
-`settings` is what the stylesheet asked for, in the order the shaper read them. `tag` is a four-character OpenType feature tag, and `value` is what the feature is set to: 0 is off, 1 is on, and a higher number is the alternate of that number. A tag that appears twice takes the value of the last one. [The CSS subset](../css-subset.mdx#font-features) says which properties a stylesheet writes these with.
+`settings` is what the stylesheet named, in the order the shaper reads them. `tag` is a four-character OpenType feature tag. `value` is the setting: 0 is off, 1 is on, and a higher number selects the alternate of that number. A tag that appears twice takes the value of the last one. [The CSS subset](../css-subset.mdx#font-features) says which properties a stylesheet writes these with.
 
 ### `Glyph`
 

@@ -110,15 +110,20 @@ See [diagnostics](diagnostics.mdx).
 
 ## Font features
 
-A font can carry OpenType features: alternate glyphs that a four-character tag names. The shaper turns these on for every run of text:
+A font can carry OpenType features: alternate glyphs that a four-character tag names. The engine
+turns these features on for every run of text:
 
 ```
 ccmp locl rlig liga clig calt rclt kern mark mkmk
 ```
 
-The engine asks for two more of its own. `font-variant-caps: small-caps` asks a font for `smcp`. The reference of a footnote asks for `sups`.
+Two more come from the engine itself. `font-variant-caps: small-caps` turns on `smcp`. The
+reference of a footnote turns on `sups`.
 
-A stylesheet adds to that list with `font-feature-settings` and the `font-variant` longhands. [The CSS subset](../css-subset.mdx#font-features) says how to write them. The engine reads what the stylesheet asked for after what it asks for itself, so `font-feature-settings: "liga" 0` turns off a ligature the shaper forms.
+A stylesheet adds to that list with `font-feature-settings` and the `font-variant` longhands.
+[The CSS subset](../css-subset.mdx#font-features) says how to write them. The engine reads the
+stylesheet after its own list, so `font-feature-settings: "liga" 0` turns off a ligature the
+engine forms by default.
 
 `registry.has_feature` answers whether a face carries one tag:
 
@@ -126,9 +131,12 @@ A stylesheet adds to that list with `font-feature-settings` and the `font-varian
 let carries = registry.has_feature(face.id, *b"onum");
 ```
 
-For a face that carries none of a feature the stylesheet asked for, the engine warns and names the family. The text is set without the feature. Nothing is synthesized, the same way nothing synthesizes a missing italic.
+For a face without a feature the stylesheet names, the engine warns and names the family. The
+text is laid out without the feature. Nothing is synthesized, as with a missing italic.
 
-The features a run was shaped with travel on the run, in the [display structure](../reference/display-structure.mdx). A painter that draws characters rather than glyph ids asks the font for the same features.
+Each run of the [display structure](../reference/display-structure.mdx) carries the features it
+was shaped with. A painter that draws characters rather than glyph ids asks the font for the
+same features.
 
 ## Metrics
 
