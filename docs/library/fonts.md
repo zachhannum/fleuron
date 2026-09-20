@@ -108,6 +108,28 @@ with no italic cut lays out upright, and a stack that resolves nothing falls bac
 first registered face. Both warn, naming what was asked for, and the book lays out either way. 
 See [diagnostics](diagnostics.mdx).
 
+## Font features
+
+A font can carry OpenType features: alternate glyphs that a four-character tag names. The shaper turns these on for every run of text:
+
+```
+ccmp locl rlig liga clig calt rclt kern mark mkmk
+```
+
+The engine asks for two more of its own. `font-variant-caps: small-caps` asks a font for `smcp`. The reference of a footnote asks for `sups`.
+
+A stylesheet adds to that list with `font-feature-settings` and the `font-variant` longhands. [The CSS subset](../css-subset.mdx#font-features) says how to write them. The engine reads what the stylesheet asked for after what it asks for itself, so `font-feature-settings: "liga" 0` turns off a ligature the shaper forms.
+
+`registry.has_feature` answers whether a face carries one tag:
+
+```rust
+let carries = registry.has_feature(face.id, *b"onum");
+```
+
+For a face that carries none of a feature the stylesheet asked for, the engine warns and names the family. The text is set without the feature. Nothing is synthesized, the same way nothing synthesizes a missing italic.
+
+The features a run was shaped with travel on the run, in the [display structure](../reference/display-structure.mdx). A painter that draws characters rather than glyph ids asks the font for the same features.
+
 ## Metrics
 
 `registry.select` resolves a family and the attributes wanted to a face, and `registry.metrics` 
