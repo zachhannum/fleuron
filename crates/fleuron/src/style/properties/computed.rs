@@ -529,6 +529,7 @@ impl ComputedStyle {
                 self.text_transform,
             ),
             color: set(self.color != element.color, self.color),
+            decoration: set(self.decoration() != element.decoration(), self.decoration()),
         }
     }
 

@@ -1357,7 +1357,9 @@ h2 + p::first-letter {
 
 ```
 color font-size font-variant-caps letter-spacing
-text-transform
+text-transform text-decoration-line text-decoration-color
+text-decoration-style text-decoration-thickness
+text-decoration
 ```
 
 {/* end generated */}
@@ -1375,9 +1377,9 @@ h2 + p::first-line {
 }
 ```
 
-Which words fall on that line depends on the style applied to it. Every property above except `color` changes the width of the text, which moves the break. The style then applies to whatever words end up on that line.
+Which words fall on that line depends on the style applied to it. `font-size`, `font-variant-caps`, `letter-spacing` and `text-transform` change the width of the text, which moves the break. The style then applies to whatever words end up on that line.
 
-`font-size` grows the line around the baseline the paragraph shares. `color` changes no widths, so lines break the same way with it or without it.
+`font-size` grows the line around the baseline the paragraph shares. `color` and the rules `text-decoration` draws change no widths. Lines break the same way with them or without them.
 
 ## Cross-references
 

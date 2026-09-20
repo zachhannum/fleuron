@@ -445,6 +445,7 @@ proptest! {
             caps: Some(FontVariantCaps::SmallCaps),
             transform: Some(TextTransform::Uppercase),
             color: None,
+            decoration: None,
         });
         let broken = || layout.layout_styled(
             &inlines_of(&text),

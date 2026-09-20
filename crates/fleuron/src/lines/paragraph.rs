@@ -49,6 +49,8 @@ pub struct FirstLine {
     pub transform: Option<TextTransform>,
     /// `color`.
     pub color: Option<Color>,
+    /// What `text-decoration` draws across the line.
+    pub decoration: Option<TextDecoration>,
 }
 
 impl FirstLine {
@@ -60,6 +62,7 @@ impl FirstLine {
             caps: self.caps.unwrap_or(style.caps),
             transform: self.transform.unwrap_or(style.transform),
             color: self.color.unwrap_or(style.color),
+            decoration: self.decoration.unwrap_or(style.decoration),
             ..style
         }
     }

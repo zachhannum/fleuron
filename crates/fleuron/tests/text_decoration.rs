@@ -375,3 +375,71 @@ fn a_rule_paints_after_the_glyphs_of_its_run() {
         .expect("the link took a rule");
     assert_eq!(rule, run + 1, "the rule does not follow its own run");
 }
+
+/// Part: `::first-line` takes the decoration properties. A rule
+/// across the opening line is paint alone, so it reaches the line
+/// the paragraph already broke to.
+#[test]
+fn a_first_line_draws_a_rule_of_its_own() {
+    let book = book_of(vec![text(
+        "He read the whole of the shipping office correspondence, \
+         and then he read it again from the beginning.",
+    )]);
+    let css = "@page { size: 200pt 300pt; margin: 12pt }\n\
+               p::first-line { text-decoration: underline }";
+    let pages = paginate(&book, css);
+    let baselines: Vec<f32> = pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Text { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    assert!(baselines.len() > 1, "the paragraph set on one line");
+    let opening = baselines[0];
+    let drawn = rules(&pages[0]);
+    assert!(!drawn.is_empty(), "the opening line took no rule");
+    for (_, top, ..) in &drawn {
+        assert!(
+            *top > opening && *top - opening < 2.0,
+            "a rule fell off the opening line: {drawn:?}",
+        );
+    }
+
+    // The rest of the paragraph carries none, and a paragraph the
+    // sheet does not reach carries none at all.
+    let plain = paginate(&book, "@page { size: 200pt 300pt; margin: 12pt }");
+    let undecorated = rules(&plain[0]);
+    assert!(undecorated.is_empty(), "a rule was drawn with no sheet");
+}
+
+/// Part: `::first-line` can drop a rule the paragraph draws. The
+/// opening line takes none and the lines under it keep theirs.
+#[test]
+fn a_first_line_drops_the_rule_the_paragraph_draws() {
+    let book = book_of(vec![text(
+        "He read the whole of the shipping office correspondence, \
+         and then he read it again from the beginning.",
+    )]);
+    let css = "@page { size: 200pt 300pt; margin: 12pt }\n\
+               p { text-decoration: underline }\n\
+               p::first-line { text-decoration-line: none }";
+    let pages = paginate(&book, css);
+    let opening = pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            DrawItem::Text { y, .. } => Some(*y),
+            _ => None,
+        })
+        .expect("the paragraph is set on the page");
+    let drawn = rules(&pages[0]);
+    assert!(!drawn.is_empty(), "the paragraph took no rule at all");
+    for (_, top, ..) in &drawn {
+        assert!(
+            *top > opening + 2.0,
+            "the opening line kept a rule: {drawn:?}",
+        );
+    }
+}
