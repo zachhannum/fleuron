@@ -63,14 +63,17 @@ pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[
     ("::after", "a::after"),
 ];
 
-/// What `::first-line` takes. `font-size`, `font-variant-caps`,
-/// `letter-spacing` and `text-transform` change the width of the
-/// shaped run, which is what the second breaking pass is for.
-/// `color` and the rules `text-decoration` draws are paint alone,
-/// and break the same either way.
+/// What `::first-line` takes. The font properties, `font-size`,
+/// `font-variant-caps`, `letter-spacing` and `text-transform` change
+/// the width of the shaped run, which is what the second breaking
+/// pass is for. `color` and the rules `text-decoration` draws are
+/// paint alone, and break the same either way.
 pub(crate) const FIRST_LINE_PROPERTIES: &[&str] = &[
     "color",
+    "font-family",
     "font-size",
+    "font-style",
+    "font-weight",
     "font-variant-caps",
     "letter-spacing",
     "text-transform",
