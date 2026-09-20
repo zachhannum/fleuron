@@ -506,7 +506,7 @@ impl InlineStyles for Referring<'_, '_> {
         let style = self.paginator.styles.style(id);
         let number = self.paginator.note_number(id);
         let call = style.list_style_type.numeral(number)?;
-        Some((call, style.paragraph()))
+        Some((call, self.paginator.superior(style.paragraph())))
     }
 }
 

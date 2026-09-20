@@ -9,7 +9,7 @@
 
 use fleuron::LayoutOutput;
 use fleuron::content::Book;
-use fleuron::fonts::{FontRegistry, bundled_registry};
+use fleuron::fonts::{FontRegistry, FontSource, bundled_registry};
 use fleuron::images::Assets;
 use fleuron::layout::{Paginator, layout_book};
 use fleuron::pages::{DrawItem, Page};
@@ -23,6 +23,25 @@ const FIXTURE: &str = include_str!("../../../fixtures/gulliver-excerpt.md");
 fn registry() -> &'static FontRegistry {
     static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
     REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
+}
+
+/// A face with no superior figures of its own, for the diagnostic
+/// that names one.
+const PLAIN_FACE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../fixtures/fonts/IMFellEnglishSC-Regular.ttf"
+);
+
+fn plain_registry() -> &'static FontRegistry {
+    static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        let mut registry = bundled_registry().expect("bundled font parses");
+        let bytes = std::fs::read(PLAIN_FACE).expect("the second face is checked in");
+        registry
+            .add(FontSource::from_bytes(bytes).expect("the second face parses"))
+            .expect("the second face registers");
+        registry
+    })
 }
 
 /// A manuscript read the way the frontend reads one.
@@ -94,6 +113,23 @@ fn is_mark(text: &str) -> bool {
         && mark.len() <= 3
         && mark.ends_with('.')
         && mark.starts_with(|first: char| first.is_alphanumeric())
+}
+
+/// The runs of a book that ask the face for one feature.
+fn asking_for(pages: &[Page], tag: &[u8; 4]) -> Vec<String> {
+    pages
+        .iter()
+        .flat_map(|page| {
+            page.items.iter().filter_map(|item| match item {
+                DrawItem::Text { text, features, .. }
+                    if features.settings.iter().any(|setting| setting.tag == *tag) =>
+                {
+                    Some(text.clone())
+                }
+                _ => None,
+            })
+        })
+        .collect()
 }
 
 /// A manuscript of `count` paragraphs, each one word of its own, with
@@ -384,6 +420,77 @@ fn the_note_is_set_under_the_text_of_the_page() {
     assert!(
         baseline("Line4") < baseline("note1"),
         "the note is above the last line of the page",
+    );
+}
+
+/// Acceptance: the reference of a note is set in the superior
+/// figures of a face that carries them, and the figures in the prose
+/// of the note are the ordinary ones.
+///
+/// `font-feature-settings` inherits, so the engine asks for the
+/// feature on the reference rather than leaving it to a rule on the
+/// note.
+#[test]
+fn the_reference_of_a_note_is_set_in_superior_figures() {
+    let pages = lay_out(&manuscript(4, 2, "Printed in 1805 at the foot."), "").pages;
+    assert_eq!(
+        asking_for(&pages, b"sups"),
+        ["1"],
+        "the reference of the note is the one run set in superiors",
+    );
+    let ordinary: Vec<String> = pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            DrawItem::Text { text, features, .. }
+                if text.contains("1805") && features.settings.is_empty() =>
+            {
+                Some(text.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        ordinary.len(),
+        1,
+        "the figures in the prose of the note ask for a feature: {:#?}",
+        pages[0].items,
+    );
+}
+
+/// Acceptance: a face that carries no superior figures sets the
+/// reference on the baseline, and is named once however many notes
+/// the book has.
+#[test]
+fn a_face_without_superior_figures_sets_the_reference_on_the_baseline() {
+    let markdown = format!(
+        "{}{}",
+        manuscript(4, 2, "note1 at the foot."),
+        "\nAnother line[^b] of the manuscript.\n\n[^b]: note2 at the foot.\n"
+    );
+    let book = read(&markdown);
+    let css = "book { font-family: \"IM Fell English SC\" }";
+    let styles =
+        Stylesheets::parse(&[Source::author("notes.css", css)]).compile(&book, plain_registry());
+    let output = layout_book(&book, &styles, plain_registry(), &Assets::none());
+    assert!(
+        asking_for(&output.pages, b"sups").is_empty(),
+        "the face has no superior figures to ask for",
+    );
+    let named: Vec<&str> = output
+        .warnings
+        .iter()
+        .map(|warning| warning.message.as_str())
+        .filter(|message| message.contains("superior figures"))
+        .collect();
+    assert_eq!(
+        named,
+        [
+            "im fell english sc has no superior figures. The reference of a note stands on the \
+          baseline."
+        ],
+        "{:?}",
+        output.warnings,
     );
 }
 
