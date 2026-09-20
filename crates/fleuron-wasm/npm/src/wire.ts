@@ -40,9 +40,9 @@ export interface FeatureSetting {
 /** The features beyond the default set a run was shaped with. */
 export interface Features {
   /** `smcp`: the face's own small capitals. */
-  smallCaps: boolean;
+  readonly smallCaps: boolean;
   /** What the stylesheet asked for, in the order the shaper read them. */
-  settings: FeatureSetting[];
+  readonly settings: readonly FeatureSetting[];
 }
 
 /** One glyph: an id in its font, an absolute x, and the text it stands for. */
@@ -536,6 +536,22 @@ const decoder = new TextDecoder();
 
 const SIDES: Side[] = ['recto', 'verso'];
 
+/** What a run shaped with nothing beyond the default set carries. */
+const NO_FEATURES: Features = Object.freeze({ smallCaps: false, settings: Object.freeze([]) });
+
+/**
+ * The features of one run. A run shaped with nothing beyond the
+ * default set carries none, and reads back as one shared value.
+ */
+function features(r: Reader): Features {
+  return (
+    r.option(() => ({
+      smallCaps: r.bool(),
+      settings: r.seq(() => ({ tag: r.string(), value: r.varint() })),
+    })) ?? NO_FEATURES
+  );
+}
+
 function glyph(r: Reader): Glyph {
   return { id: r.varint(), x: r.f32(), range: [r.varint(), r.varint()] };
 }
@@ -571,10 +587,7 @@ function item(r: Reader): DrawItem {
         sourceMap: r.seq(() => r.varint()),
         origin: r.option(() => sourceRange(r)),
         pseudoElement: r.option(() => r.varint()),
-        features: {
-          smallCaps: r.bool(),
-          settings: r.seq(() => ({ tag: r.string(), value: r.varint() })),
-        },
+        features: features(r),
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),
         layer: r.signed(),

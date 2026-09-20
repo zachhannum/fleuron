@@ -199,15 +199,10 @@ impl FeatureSetting {
     }
 }
 
-/// The OpenType features a run is shaped with, beyond the ones the
-/// shaper turns on for every run.
-///
-/// These travel on the run. A painter that draws glyphs has them
-/// already; one that draws characters has to ask the face for the
-/// same features, or it draws different glyphs at the positions the
-/// engine measured.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Features {
+/// What one run asks the face for beyond the default set: the
+/// engine's own `smcp`, and the features the sheet asked for.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FeatureSet {
     /// `smcp`: the face's own small capitals, from
     /// `font-variant-caps`.
     pub small_caps: bool,
@@ -217,17 +212,73 @@ pub struct Features {
     pub settings: Vec<FeatureSetting>,
 }
 
+/// The OpenType features a run is shaped with, beyond the ones the
+/// shaper turns on for every run.
+///
+/// These travel on the run. A painter that draws glyphs has them
+/// already; one that draws characters has to ask the face for the
+/// same features, or it draws different glyphs at the positions the
+/// engine measured.
+///
+/// A book is set in a handful of these and holds hundreds of
+/// thousands of runs, so the runs share one set rather than each
+/// carrying a list of its own.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Features(Option<Arc<FeatureSet>>);
+
+impl Serialize for Features {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.as_deref().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Features {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Features, D::Error> {
+        let set = Option::<FeatureSet>::deserialize(deserializer)?;
+        Ok(Features(set.map(Arc::new)))
+    }
+}
+
 impl Features {
     /// Nothing beyond the default set.
-    pub const NONE: Features = Features {
-        small_caps: false,
-        settings: Vec::new(),
-    };
+    pub const NONE: Features = Features(None);
 
-    /// Whether the run asks for anything at all.
-    pub fn is_none(&self) -> bool {
-        !self.small_caps && self.settings.is_empty()
+    /// The features of one run: `smcp` where the face draws the small
+    /// capitals, and whatever the sheet asked for.
+    pub fn new(small_caps: bool, settings: Vec<FeatureSetting>) -> Features {
+        match (small_caps, settings.is_empty()) {
+            (false, true) => Features::NONE,
+            (true, true) => Features(Some(small_caps_only())),
+            _ => Features(Some(Arc::new(FeatureSet {
+                small_caps,
+                settings,
+            }))),
+        }
     }
+
+    /// Whether the run is set in the face's own small capitals.
+    pub fn small_caps(&self) -> bool {
+        self.0.as_ref().is_some_and(|set| set.small_caps)
+    }
+
+    /// What the sheet asked for, in the order the shaper reads it.
+    pub fn settings(&self) -> &[FeatureSetting] {
+        self.0.as_ref().map_or(&[], |set| &set.settings)
+    }
+}
+
+/// The set a run of small capitals asks for, shared by every such
+/// run: a chapter opening in small capitals is one set, not one per
+/// line.
+fn small_caps_only() -> Arc<FeatureSet> {
+    static SET: std::sync::OnceLock<Arc<FeatureSet>> = std::sync::OnceLock::new();
+    SET.get_or_init(|| {
+        Arc::new(FeatureSet {
+            small_caps: true,
+            settings: Vec::new(),
+        })
+    })
+    .clone()
 }
 
 /// A font's identity in the engine's output.
@@ -569,10 +620,10 @@ fn shape_text(
     buffer.set_direction(harfrust::Direction::LeftToRight);
     buffer.set_language(Language::new("en").unwrap());
     let mut wanted = Vec::new();
-    if features.small_caps {
+    if features.small_caps() {
         wanted.push(Feature::new(Tag::new(b"smcp"), 1, ..));
     }
-    for setting in &features.settings {
+    for setting in features.settings() {
         wanted.push(Feature::new(Tag::new(&setting.tag), setting.value, ..));
     }
     let shaped = shaper.shape(
@@ -633,10 +684,7 @@ fn draws_small_caps(
     instance: Option<&ShaperInstance>,
 ) -> bool {
     const PROBE: &str = "a";
-    let small_caps = Features {
-        small_caps: true,
-        settings: Vec::new(),
-    };
+    let small_caps = Features::new(true, Vec::new());
     let plain = shape_text(font, data, instance, PROBE, &Features::NONE);
     let small = shape_text(font, data, instance, PROBE, &small_caps);
     plain.iter().map(|g| g.id).ne(small.iter().map(|g| g.id))
@@ -1153,10 +1201,7 @@ mod tests {
     fn a_requested_feature_draws_the_glyphs_of_that_feature() {
         let registry = registry();
         let plain = registry.shape(0, "1805").unwrap();
-        let old_style = Features {
-            small_caps: false,
-            settings: vec![FeatureSetting::new(*b"onum", 1)],
-        };
+        let old_style = Features::new(false, vec![FeatureSetting::new(*b"onum", 1)]);
         let shaped = registry.shape_with(0, "1805", &old_style).unwrap();
         assert_ne!(
             shaped.iter().map(|g| g.id).collect::<Vec<_>>(),
@@ -1170,10 +1215,7 @@ mod tests {
     #[test]
     fn a_setting_of_zero_turns_off_a_default_feature() {
         let registry = registry();
-        let ligatures_off = Features {
-            small_caps: false,
-            settings: vec![FeatureSetting::new(*b"liga", 0)],
-        };
+        let ligatures_off = Features::new(false, vec![FeatureSetting::new(*b"liga", 0)]);
         let shaped = registry.shape_with(0, "office", &ligatures_off).unwrap();
         assert_eq!(shaped.len(), 6, "every letter draws its own glyph");
         assert!(

@@ -345,10 +345,7 @@ impl FlatParagraph {
                 style.size
             },
             tracking: style.letter_spacing,
-            features: Features {
-                small_caps: caps == SmallCaps::Feature,
-                settings: style.features.clone(),
-            },
+            features: Features::new(caps == SmallCaps::Feature, style.features.clone()),
             color: style.color,
             decoration: style.decoration,
             inline: self.inline,

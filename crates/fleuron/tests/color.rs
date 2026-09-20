@@ -215,7 +215,7 @@ fn described(item: &DrawItem) -> String {
             format!(
                 "text {x:?} {y:?} font {font_id} at {size:?}pt {text:?} source {source:?} {source_map:?} \
                  written {written}{pseudo} small-caps {} glyphs {}{}",
-                features.small_caps,
+                features.small_caps(),
                 placed.join(" "),
                 layered(*layer)
             )

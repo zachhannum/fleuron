@@ -165,10 +165,7 @@ mod tests {
                             range: 3..9,
                         }),
                         pseudo_element: Some(NodeId::new(7).pseudo(PseudoElement::FirstLine)),
-                        features: Features {
-                            small_caps: true,
-                            settings: vec![FeatureSetting::new(*b"onum", 1)],
-                        },
+                        features: Features::new(true, vec![FeatureSetting::new(*b"onum", 1)]),
                         color: Color::rgb(180, 30, 30),
                         glyphs: vec![Glyph {
                             id: 42,

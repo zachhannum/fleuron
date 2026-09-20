@@ -546,7 +546,7 @@ pub(super) fn small_caps_lines(page: &Page) -> Vec<(f32, Vec<(&str, bool)>)> {
         if *size == folio_size() {
             continue;
         }
-        let run = (text.as_str(), features.small_caps);
+        let run = (text.as_str(), features.small_caps());
         match lines.last_mut() {
             Some((baseline, runs)) if (*baseline - y).abs() < 1e-3 => runs.push(run),
             _ => lines.push((*y, vec![run])),

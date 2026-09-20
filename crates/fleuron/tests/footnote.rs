@@ -122,7 +122,10 @@ fn asking_for(pages: &[Page], tag: &[u8; 4]) -> Vec<String> {
         .flat_map(|page| {
             page.items.iter().filter_map(|item| match item {
                 DrawItem::Text { text, features, .. }
-                    if features.settings.iter().any(|setting| setting.tag == *tag) =>
+                    if features
+                        .settings()
+                        .iter()
+                        .any(|setting| setting.tag == *tag) =>
                 {
                     Some(text.clone())
                 }
@@ -443,7 +446,7 @@ fn the_reference_of_a_note_is_set_in_superior_figures() {
         .iter()
         .filter_map(|item| match item {
             DrawItem::Text { text, features, .. }
-                if text.contains("1805") && features.settings.is_empty() =>
+                if text.contains("1805") && features.settings().is_empty() =>
             {
                 Some(text.clone())
             }

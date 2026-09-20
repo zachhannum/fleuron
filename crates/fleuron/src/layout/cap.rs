@@ -320,7 +320,7 @@ mod tests {
                     features,
                     ..
                 } if *size > 1.5 * body_size() && text != "A Voyage" => {
-                    Some((text.as_str(), features.small_caps))
+                    Some((text.as_str(), features.small_caps()))
                 }
                 _ => None,
             })

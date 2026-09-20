@@ -147,7 +147,9 @@ The text of `::before` and `::after` has an `origin`. See [ids of pseudo-element
 ### `Features`
 
 ```rust
-pub struct Features {
+pub struct Features(Option<Arc<FeatureSet>>);
+
+pub struct FeatureSet {
     pub small_caps: bool,
     pub settings: Vec<FeatureSetting>,
 }
@@ -157,6 +159,8 @@ pub struct FeatureSetting {
     pub value: u32,
 }
 ```
+
+A run shaped with nothing beyond the features the shaper turns on for every run carries no set. A book is set in a handful of sets and holds hundreds of thousands of runs, so the runs share the set they carry. `Features::small_caps` and `Features::settings` read one whether it is there or not.
 
 `small_caps` is the face's own small capitals, which `font-variant-caps: small-caps` asks for. The tag is `smcp`.
 
