@@ -682,12 +682,13 @@ await comparedWithTheExport('running text', COMPARED);
 await comparedWithTheExport('a bordered and tinted quotation', BOXED);
 await comparedWithTheExport('a chip on a cross-reference', CHIPPED);
 
-// The display-typography book, whose every page is set in the three
+// The display-typography book, whose every page is set in the
 // properties that change which glyphs a run is shaped from. The
-// opening page sets a title transformed to capitals and tracked,
-// a chapter title and the chapter's opening line in the face's own
-// small capitals, and tracked prose; the page after it sets a
-// small-capital running head.
+// opening page sets a title transformed to capitals, tracked and in
+// the face's first stylistic set, a chapter title and the chapter's
+// opening line in the face's own small capitals, and tracked prose
+// in old-style figures; the page after it sets a small-capital
+// running head.
 // A painter that drew the characters the manuscript spells, or asked
 // the face for none of its features, parts company with the export
 // here.

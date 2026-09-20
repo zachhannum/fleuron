@@ -54,7 +54,7 @@ pub(super) fn layout_body_opts(
         position: None,
         span: None,
     }];
-    layout.layout(&inlines, body(), measure_pt, options)
+    layout.layout(&inlines, &body(), measure_pt, options)
 }
 
 /// Text as one paragraph draws it, run by run.
@@ -104,7 +104,7 @@ pub(super) fn with_breaks(text: &str) -> Vec<Inline> {
 
 /// The same, laid out in the body style.
 pub(super) fn layout_verse(text: &str, measure_pt: f32, options: LineBreakOptions) -> Vec<Line> {
-    LineLayout::new(registry()).layout(&with_breaks(text), body(), measure_pt, options)
+    LineLayout::new(registry()).layout(&with_breaks(text), &body(), measure_pt, options)
 }
 
 /// One paragraph with `first_line` over the line it opens on,
@@ -116,7 +116,7 @@ pub(super) fn layout_first(
 ) -> Vec<Line> {
     layout.layout_styled(
         &one_run(OPENING),
-        body(),
+        &body(),
         &Inherited,
         &Measure::uniform(measure_pt),
         LineBreakOptions::default(),
@@ -129,7 +129,7 @@ pub(super) fn layout_first(
 
 /// One paragraph laid out under a style of the caller's, ragged
 /// and unhyphenated.
-pub(super) fn layout_style(text: &str, measure_pt: f32, style: ParagraphStyle) -> Vec<Line> {
+pub(super) fn layout_style(text: &str, measure_pt: f32, style: &ParagraphStyle) -> Vec<Line> {
     let layout = LineLayout::new(registry());
     let inlines = vec![Inline::Text {
         id: NodeId::UNASSIGNED,
@@ -189,8 +189,8 @@ pub(super) const OPENING: &str = "it was the best of times and the worst of them
 pub(super) struct Boxed(pub(super) Vec<(NodeId, InlineBox)>);
 
 impl InlineStyles for Boxed {
-    fn style(&self, _id: NodeId, block: ParagraphStyle) -> ParagraphStyle {
-        block
+    fn style(&self, _id: NodeId, block: &ParagraphStyle) -> ParagraphStyle {
+        block.clone()
     }
 
     fn inline_box(&self, id: NodeId) -> Option<InlineBox> {
@@ -247,7 +247,7 @@ pub(super) fn emphasis(id: NodeId, children: Vec<Inline>) -> Inline {
 pub(super) fn layout_boxed(inlines: &[Inline], measure_pt: f32, styles: &Boxed) -> Vec<Line> {
     LineLayout::new(registry()).layout_styled(
         inlines,
-        body(),
+        &body(),
         styles,
         &Measure::uniform(measure_pt),
         LineBreakOptions::default(),

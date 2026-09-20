@@ -408,7 +408,7 @@ proptest! {
         let pages = paginate(&book);
         let recto = master(Situation::Body(Side::Recto));
         let geometry = recto.geometry;
-        let (band_top, band_height) = margin_band(recto, Band::Bottom, folio_style());
+        let (band_top, band_height) = margin_band(recto, Band::Bottom, &folio_style());
         let (_, content_top) = geometry.content_origin();
         let content_bottom = content_top + geometry.content_size().1;
         for page in &pages {

@@ -339,13 +339,17 @@ function style(entry: FontRefEntry | undefined, item: TextItem): string {
   if (settings !== '') {
     rules.push(`font-variation-settings: ${settings}`);
   }
-  // The engine shaped the run with the face's own small capitals, so
-  // the browser is asked for the same feature rather than left to
-  // draw the lowercase the characters spell. `font-feature-settings`
-  // rather than `font-variant-caps`, which synthesises where the
-  // face has nothing and would draw a size the engine never measured.
-  if (item.features.smallCaps) {
-    rules.push('font-feature-settings: "smcp" 1');
+  // The engine shaped the run with these features, so the browser is
+  // asked for the same ones rather than left to draw the glyphs the
+  // characters spell. `font-feature-settings` rather than
+  // `font-variant-caps`, which synthesises where the face has
+  // nothing and would draw a size the engine never measured.
+  const features = [
+    ...(item.features.smallCaps ? ['"smcp" 1'] : []),
+    ...item.features.settings.map((feature) => `"${feature.tag}" ${feature.value}`),
+  ];
+  if (features.length > 0) {
+    rules.push(`font-feature-settings: ${features.join(', ')}`);
   }
   return rules.join('; ');
 }

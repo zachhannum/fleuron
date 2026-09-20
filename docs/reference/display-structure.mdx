@@ -144,6 +144,28 @@ The text of `::before` and `::after` has an `origin`. See [ids of pseudo-element
 
 `features` is what the run was shaped with beyond the features the shaper turns on for every run. A painter that draws characters asks the face for the same ones, as it pins the face's variations, or the browser picks its own glyphs and sets them at positions measured for others. A painter that draws glyphs has the answer already.
 
+### `Features`
+
+```rust
+pub struct Features(Option<Arc<FeatureSet>>);
+
+pub struct FeatureSet {
+    pub small_caps: bool,
+    pub settings: Vec<FeatureSetting>,
+}
+
+pub struct FeatureSetting {
+    pub tag: [u8; 4],
+    pub value: u32,
+}
+```
+
+The shaper turns a default set of features on for every run. [The fonts page](../library/fonts.md#font-features) lists them. A run that adds nothing to those defaults carries no `FeatureSet`, which is most of the text in a book. `Features::small_caps` and `Features::settings` answer for such a run too, so a painter reads them without testing for a set first. A book uses a handful of sets across hundreds of thousands of runs, so the runs share the sets between them.
+
+`small_caps` is the face's own small capitals, which `font-variant-caps: small-caps` asks for. The tag is `smcp`.
+
+`settings` is what the stylesheet named, in the order the shaper reads them. `tag` is a four-character OpenType feature tag. `value` is the setting: 0 is off, 1 is on, and a higher number selects the alternate of that number. A tag that appears twice takes the value of the last one. [The CSS subset](../css-subset.mdx#font-features) says which properties a stylesheet writes these with.
+
 ### `Glyph`
 
 ```rust

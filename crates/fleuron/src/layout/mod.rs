@@ -66,9 +66,9 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::BTreeSet;
 
 use crate::content::{Book, Metadata};
-use crate::fonts::FontRegistry;
+use crate::fonts::{FeatureSetting, FontRegistry};
 use crate::images::{Assets, Contours};
-use crate::lines::{LineLayout, Patterns};
+use crate::lines::{LineLayout, ParagraphStyle, Patterns};
 use crate::pages::{Page, Side};
 use crate::session::Session;
 use crate::style::{Background, PageStyle, Position, StyleTree};
@@ -279,6 +279,35 @@ impl Paginator<'_> {
         if !warnings.iter().any(|seen| seen.message == message) {
             warnings.push(Warning { message, origin });
         }
+    }
+
+    /// The style a note's reference is set in: the style of the
+    /// note, and the face's superior figures over it. The engine
+    /// asks for them, the way it asks for small capitals, because
+    /// `font-feature-settings` inherits and a rule on the note would
+    /// set the prose of the note in superiors as well.
+    ///
+    /// A face with no superior figures sets the reference on the
+    /// baseline at the size the note gives it, and says so once.
+    fn superior(&self, mut style: ParagraphStyle) -> ParagraphStyle {
+        const SUPS: [u8; 4] = *b"sups";
+        if self.registry.has_feature(style.font_id, SUPS) {
+            style.features.push(FeatureSetting::new(SUPS, 1));
+            return style;
+        }
+        let family = self
+            .registry
+            .font_ref(style.font_id)
+            .map(|entry| entry.family.clone())
+            .unwrap_or_default();
+        self.warn(
+            format!(
+                "{family} has no superior figures. The reference of a note stands on the \
+                 baseline."
+            ),
+            None,
+        );
+        style
     }
 
     /// Says so where the host supplied no image for a url. The table

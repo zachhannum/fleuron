@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::fonts::GenericFamily;
+use crate::fonts::{FeatureSetting, GenericFamily};
 use crate::lines::HangingPunctuation;
 
 use super::Declaration;
@@ -17,8 +17,9 @@ use super::edges::{Border, BorderRadius, CornerRadius, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
-    Family, FontStyle, FontVariantCaps, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign,
-    TextDecoration, TextJustify, TextTransform, Width,
+    Family, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
+    FontVariantNumeric, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign, TextDecoration,
+    TextJustify, TextTransform, Width,
 };
 
 /// One node's resolved style: what every downstream pass reads.
@@ -46,6 +47,20 @@ pub struct ComputedStyle {
     pub letter_spacing: f32,
     /// Which capitals the run is drawn with.
     pub font_variant_caps: FontVariantCaps,
+    /// The features the sheet asked the face for, from
+    /// `font-feature-settings`. They are asked for after the ones the
+    /// `font-variant` longhands name, so a tag in both is set here.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub font_feature_settings: Vec<FeatureSetting>,
+    /// Which ligatures the run is set with.
+    #[serde(skip_serializing_if = "default_ligatures")]
+    pub font_variant_ligatures: FontVariantLigatures,
+    /// Which figures the run is set with.
+    #[serde(skip_serializing_if = "default_numeric")]
+    pub font_variant_numeric: FontVariantNumeric,
+    /// Which alternate glyphs the run is set with.
+    #[serde(skip_serializing_if = "default_alternates")]
+    pub font_variant_alternates: FontVariantAlternates,
     /// What the run's letters are transformed to before shaping.
     pub text_transform: TextTransform,
     /// Which rules are drawn across the run, from
@@ -200,6 +215,10 @@ impl ComputedStyle {
             line_height: NORMAL_LINE_HEIGHT,
             letter_spacing: 0.0,
             font_variant_caps: FontVariantCaps::Normal,
+            font_feature_settings: Vec::new(),
+            font_variant_ligatures: FontVariantLigatures::NORMAL,
+            font_variant_numeric: FontVariantNumeric::NORMAL,
+            font_variant_alternates: FontVariantAlternates::Normal,
             text_transform: TextTransform::None,
             text_decoration_line: DecorationLine::NONE,
             text_decoration_color: None,
@@ -300,6 +319,16 @@ impl ComputedStyle {
                 self.letter_spacing = length.to_points(self.font_size, root_size)
             }
             Declaration::FontVariantCaps(caps) => self.font_variant_caps = *caps,
+            Declaration::FontFeatureSettings(settings) => {
+                self.font_feature_settings = settings.clone()
+            }
+            Declaration::FontVariantLigatures(ligatures) => {
+                self.font_variant_ligatures = *ligatures
+            }
+            Declaration::FontVariantNumeric(numeric) => self.font_variant_numeric = *numeric,
+            Declaration::FontVariantAlternates(alternates) => {
+                self.font_variant_alternates = *alternates
+            }
             Declaration::TextTransform(transform) => self.text_transform = *transform,
             Declaration::TextDecorationLine(line) => self.text_decoration_line = *line,
             Declaration::TextDecorationColor(color) => self.text_decoration_color = *color,
@@ -414,6 +443,18 @@ impl ComputedStyle {
             Declaration::LineHeight(_) => self.line_height = base.line_height,
             Declaration::LetterSpacing(_) => self.letter_spacing = base.letter_spacing,
             Declaration::FontVariantCaps(_) => self.font_variant_caps = base.font_variant_caps,
+            Declaration::FontFeatureSettings(_) => {
+                self.font_feature_settings = base.font_feature_settings.clone()
+            }
+            Declaration::FontVariantLigatures(_) => {
+                self.font_variant_ligatures = base.font_variant_ligatures
+            }
+            Declaration::FontVariantNumeric(_) => {
+                self.font_variant_numeric = base.font_variant_numeric
+            }
+            Declaration::FontVariantAlternates(_) => {
+                self.font_variant_alternates = base.font_variant_alternates
+            }
             Declaration::TextTransform(_) => self.text_transform = base.text_transform,
             Declaration::TextDecorationLine(_) => {
                 self.text_decoration_line = base.text_decoration_line
@@ -591,9 +632,23 @@ impl ComputedStyle {
             line_height: self.line_height,
             letter_spacing: self.letter_spacing,
             caps: self.font_variant_caps,
+            features: self.features(),
             transform: self.text_transform,
             decoration: self.decoration(),
         }
+    }
+
+    /// Every feature this style asks the face for, in the order the
+    /// shaper reads them: what the `font-variant` longhands name,
+    /// then what `font-feature-settings` spells out. A tag in both
+    /// takes the value written last, which is the one the sheet
+    /// spelled.
+    pub fn features(&self) -> Vec<FeatureSetting> {
+        let mut settings = self.font_variant_ligatures.settings();
+        settings.extend(self.font_variant_numeric.settings());
+        settings.extend(self.font_variant_alternates.settings());
+        settings.extend(self.font_feature_settings.iter().copied());
+        settings
     }
 
     /// What is drawn across this style's runs, the four longhands
@@ -623,6 +678,18 @@ pub(crate) fn computed_size(size: SizeSource, font_size: f32, root_size: f32) ->
             height: axis(height),
         },
     }
+}
+
+fn default_ligatures(ligatures: &FontVariantLigatures) -> bool {
+    *ligatures == FontVariantLigatures::NORMAL
+}
+
+fn default_numeric(numeric: &FontVariantNumeric) -> bool {
+    *numeric == FontVariantNumeric::NORMAL
+}
+
+fn default_alternates(alternates: &FontVariantAlternates) -> bool {
+    *alternates == FontVariantAlternates::Normal
 }
 
 fn in_flow(position: &Position) -> bool {

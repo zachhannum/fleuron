@@ -308,7 +308,7 @@ mod tests {
         let layout = LineLayout::new(registry());
         let set = |inlines: &[Inline]| {
             layout
-                .layout(inlines, body(), 44.0, hyphenated())
+                .layout(inlines, &body(), 44.0, hyphenated())
                 .iter()
                 .map(line_text)
                 .collect::<Vec<String>>()

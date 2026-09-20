@@ -138,7 +138,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            body(),
+            &body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -171,7 +171,7 @@ proptest! {
             inlines.extend(inlines_of(verse));
         }
         let layout = LineLayout::new(registry());
-        let lines = layout.layout(&inlines, body(), measure, LineBreakOptions::default());
+        let lines = layout.layout(&inlines, &body(), measure, LineBreakOptions::default());
         let mut set = lines
             .iter()
             .map(|line| line.runs.iter().map(|run| run.text.as_str()).collect::<String>());
@@ -195,13 +195,13 @@ proptest! {
         let layout = LineLayout::new(registry());
         let first = layout.layout(
             &inlines_of(&text),
-            body(),
+            &body(),
             measure,
             LineBreakOptions::default(),
         );
         let second = layout.layout(
             &inlines_of(&text),
-            body(),
+            &body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -219,7 +219,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            body(),
+            &body(),
             measure,
             LineBreakOptions::default(),
         );
@@ -250,7 +250,7 @@ proptest! {
     #[test]
     fn no_justified_line_exceeds_the_measure(text in text_strategy(), measure in 20.0f32..300.0) {
         let layout = LineLayout::new(registry());
-        let lines = layout.layout(&inlines_of(&text), body(), measure, justified());
+        let lines = layout.layout(&inlines_of(&text), &body(), measure, justified());
         for (i, line) in lines.iter().enumerate() {
             let width = width_pt(line);
             prop_assert!(
@@ -270,7 +270,7 @@ proptest! {
     #[test]
     fn justified_lines_hit_the_measure(text in text_strategy(), measure in 60.0f32..300.0) {
         let layout = LineLayout::new(registry());
-        let lines = layout.layout(&inlines_of(&text), body(), measure, justified());
+        let lines = layout.layout(&inlines_of(&text), &body(), measure, justified());
         if lines.len() < 2 {
             return Ok(());
         }
@@ -302,7 +302,7 @@ proptest! {
         );
         let layout = LineLayout::new(registry());
         for options in [LineBreakOptions::default(), justified()] {
-            let lines = layout.layout(&inlines_of(&text), body(), spec.clone(), options);
+            let lines = layout.layout(&inlines_of(&text), &body(), spec.clone(), options);
             for (i, line) in lines.iter().enumerate() {
                 if is_single_word(line) {
                     continue;
@@ -329,8 +329,8 @@ proptest! {
     #[test]
     fn justified_layout_is_deterministic(text in text_strategy(), measure in 20.0f32..300.0) {
         let layout = LineLayout::new(registry());
-        let first = layout.layout(&inlines_of(&text), body(), measure, justified());
-        let second = layout.layout(&inlines_of(&text), body(), measure, justified());
+        let first = layout.layout(&inlines_of(&text), &body(), measure, justified());
+        let second = layout.layout(&inlines_of(&text), &body(), measure, justified());
         prop_assert_eq!(first, second);
     }
 
@@ -344,7 +344,7 @@ proptest! {
         let layout = LineLayout::new(registry());
         let lines = layout.layout(
             &inlines_of(&text),
-            body(),
+            &body(),
             measure,
             LineBreakOptions {
                 hyphenate: true,
@@ -372,8 +372,8 @@ proptest! {
     ) {
         let layout = LineLayout::new(registry());
         let style = tracked(letter_spacing);
-        let plain = layout.layout(&inlines_of(&text), body(), 1.0e6, LineBreakOptions::default());
-        let wide = layout.layout(&inlines_of(&text), style, 1.0e6, LineBreakOptions::default());
+        let plain = layout.layout(&inlines_of(&text), &body(), 1.0e6, LineBreakOptions::default());
+        let wide = layout.layout(&inlines_of(&text), &style, 1.0e6, LineBreakOptions::default());
         // Tracking goes after a cluster, not after a glyph: a
         // ligature is one letter's worth of gap, not two.
         let mut clusters: Vec<u32> = plain[0]
@@ -392,7 +392,7 @@ proptest! {
             "a tracked title is not {gaps} gaps wider than an untracked one",
         );
 
-        let lines = layout.layout(&inlines_of(&text), style, measure, LineBreakOptions::default());
+        let lines = layout.layout(&inlines_of(&text), &style, measure, LineBreakOptions::default());
         for (i, line) in lines.iter().enumerate() {
             let width = width_of(line);
             prop_assert!(
@@ -412,7 +412,7 @@ proptest! {
         letter_spacing in 0.01f32..1.5,
     ) {
         let layout = LineLayout::new(registry());
-        let lines = layout.layout(&inlines_of(&text), tracked(letter_spacing), measure, justified());
+        let lines = layout.layout(&inlines_of(&text), &tracked(letter_spacing), measure, justified());
         if lines.len() < 2 {
             return Ok(());
         }
@@ -449,7 +449,7 @@ proptest! {
         });
         let broken = || layout.layout_styled(
             &inlines_of(&text),
-            body(),
+            &body(),
             &fleuron::lines::Inherited,
             &Measure::uniform(measure),
             LineBreakOptions::default(),
@@ -485,8 +485,8 @@ proptest! {
             transform: TextTransform::Capitalize,
             ..body()
         };
-        let first = layout.layout(&inlines_of(&text), style, measure, justified());
-        let second = layout.layout(&inlines_of(&text), style, measure, justified());
+        let first = layout.layout(&inlines_of(&text), &style, measure, justified());
+        let second = layout.layout(&inlines_of(&text), &style, measure, justified());
         prop_assert_eq!(first, second);
     }
 
@@ -503,7 +503,7 @@ proptest! {
         let spec = divided_band(width, gutter);
         let layout = LineLayout::new(registry());
         for options in [LineBreakOptions::default(), justified()] {
-            let lines = layout.layout(&inlines_of(&text), body(), spec.clone(), options);
+            let lines = layout.layout(&inlines_of(&text), &body(), spec.clone(), options);
             let mut slot = 0;
             for line in &lines {
                 for index in 0..line.spans.len() {
@@ -530,7 +530,7 @@ proptest! {
     ) {
         let spec = divided_band(width, gutter);
         let layout = LineLayout::new(registry());
-        let broken = || layout.layout(&inlines_of(&text), body(), spec.clone(), justified());
+        let broken = || layout.layout(&inlines_of(&text), &body(), spec.clone(), justified());
         prop_assert_eq!(broken(), broken());
     }
 
@@ -545,8 +545,8 @@ proptest! {
         let layout = LineLayout::new(registry());
         for options in [LineBreakOptions::default(), justified()] {
             prop_assert_eq!(
-                layout.layout(&inlines_of(&text), body(), spec.clone(), options),
-                layout.layout(&inlines_of(&text), body(), measure, options),
+                layout.layout(&inlines_of(&text), &body(), spec.clone(), options),
+                layout.layout(&inlines_of(&text), &body(), measure, options),
             );
         }
     }

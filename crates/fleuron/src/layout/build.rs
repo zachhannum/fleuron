@@ -719,7 +719,7 @@ impl Builder<'_, '_> {
         let (broken, shaped) = self
             .paginator
             .lines
-            .layout_shaped(inlines, style, &referring, &spec, options, opening);
+            .layout_shaped(inlines, &style, &referring, &spec, options, opening);
 
         let setting = Setting {
             x,
@@ -733,7 +733,7 @@ impl Builder<'_, '_> {
         let fragments = set_lines(self.paginator, broken.lines, &spec, &[], &setting);
         let reflow = shaped.filter(|_| self.paginator.wraps()).map(|shaped| {
             Arc::new(Reflow {
-                leading: self.paginator.lines.strut(style).height(),
+                leading: self.paginator.lines.strut(&style).height(),
                 shaped,
                 setting,
                 base: spec,
@@ -796,7 +796,7 @@ impl Builder<'_, '_> {
         let lines = self
             .paginator
             .lines
-            .layout_preformatted(text, id, style, &spec, options);
+            .layout_preformatted(text, id, &style, &spec, options);
         let over = lines
             .iter()
             .any(|line| self.paginator.line_width(line) > measure);
@@ -878,7 +878,7 @@ impl Builder<'_, '_> {
             let options = self.options(&style);
             self.paginator
                 .lines
-                .layout_generated(&text, id, style.paragraph(), &spec, options)
+                .layout_generated(&text, id, &style.paragraph(), &spec, options)
         };
         if lines.is_empty() {
             self.emit_one(x, 0.0, Piece::Blank);
@@ -911,7 +911,7 @@ impl Builder<'_, '_> {
         let paragraph = style.paragraph();
         let ornament = match &style.content {
             Content::Text(text) if !text.is_empty() => {
-                self.paginator.line_of(text, paragraph).map(|line| {
+                self.paginator.line_of(text, &paragraph).map(|line| {
                     let offset =
                         align_offset(style.text_align, self.paginator.line_width(&line), measure);
                     (offset, line.box_.height, Piece::Line { line, cap: None })
@@ -922,7 +922,7 @@ impl Builder<'_, '_> {
         let (offset, height, piece) = ornament.unwrap_or_else(|| {
             (
                 0.0,
-                self.paginator.lines.strut(paragraph).height(),
+                self.paginator.lines.strut(&paragraph).height(),
                 Piece::Blank,
             )
         });

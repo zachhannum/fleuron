@@ -56,6 +56,7 @@ export {
   type Edges,
   type AxisSetting,
   type FaceAttributes,
+  type FeatureSetting,
   type Features,
   type FontRefEntry,
   type Glyph,

@@ -118,8 +118,8 @@ impl Paginator<'_> {
             return None;
         }
         let style = box_style.style.paragraph();
-        let line = self.line_of(&text, style)?;
-        let (band_top, band_height) = margin_band(master, band, style);
+        let line = self.line_of(&text, &style)?;
+        let (band_top, band_height) = margin_band(master, band, &style);
         let text_width = self.line_width(&line);
         let x = match align {
             // Centred on the trim, not on the content box: a folio
@@ -173,7 +173,7 @@ impl Paginator<'_> {
 
 /// The band one margin box's line sits in: `(top, height)` in page
 /// coordinates, one line tall, centred in the margin it lives in.
-pub fn margin_band(master: &PageStyle, band: Band, style: ParagraphStyle) -> (f32, f32) {
+pub fn margin_band(master: &PageStyle, band: Band, style: &ParagraphStyle) -> (f32, f32) {
     let (start, margin) = match band {
         Band::Top => (0.0, master.geometry.margin.top),
         Band::Bottom => (
@@ -272,7 +272,7 @@ mod tests {
                 .expect("body pages have a folio")
                 .style
                 .paragraph();
-            let (band_top, band_height) = margin_band(master, Band::Bottom, folio_style);
+            let (band_top, band_height) = margin_band(master, Band::Bottom, &folio_style);
             let (_, content_top) = geometry.content_origin();
             let content_bottom = content_top + geometry.content_size().1;
             let Some((
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn running_head_slot_is_reserved_and_empty() {
         let master = master(Situation::Body(Side::Recto));
-        let head = margin_band(master, Band::Top, ua().root().paragraph());
+        let head = margin_band(master, Band::Top, &ua().root().paragraph());
         let (_, content_top) = master.geometry.content_origin();
         assert!(head.0 > 0.0);
         assert!(

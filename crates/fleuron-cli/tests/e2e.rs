@@ -57,7 +57,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "f2ae8592b77322eab07e9b13d3fbfb0f879188f07b11f69a70158d51788a5898";
+    "4b66e649704965f6cfb4550ddf33bdf80c031bb3977e328c70630fbd859024db";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -232,14 +232,16 @@ fn running_heads_and_roman_folios_reach_the_pdf() {
     );
 }
 
-/// The display-typography book: a title transformed to capitals, a
-/// chapter title and a chapter's opening line in the face's own small
-/// capitals, a small-capital running head and tracking throughout,
-/// all through the CLI.
+/// The display-typography book: a title transformed to capitals and
+/// set in the face's first stylistic set, a chapter title and a
+/// chapter's opening line in the face's own small capitals, prose in
+/// old-style figures, a small-capital running head and tracking
+/// throughout, all through the CLI.
 ///
 /// What a PDF can be asked is what a reader gets back, and what a
-/// reader gets back is the manuscript: the transform and the small
-/// capitals change which glyphs are drawn and neither changes a word.
+/// reader gets back is the manuscript: the transform, the small
+/// capitals and the features change which glyphs are drawn and none
+/// of them changes a word.
 /// That the drawn glyphs are the right ones is asked of the two
 /// painters together, in the bindings' browser run.
 #[test]

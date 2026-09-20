@@ -524,6 +524,10 @@ These properties inherit. A value set on `book` or `section` reaches the text be
 | `line-height` | `line-height: 1.4` |
 | `letter-spacing` | `letter-spacing: 0.05em` |
 | `font-variant-caps` | `font-variant-caps: small-caps` |
+| `font-feature-settings` | `font-feature-settings: "ss01" 1` |
+| `font-variant-ligatures` | `font-variant-ligatures: discretionary-ligatures` |
+| `font-variant-numeric` | `font-variant-numeric: oldstyle-nums` |
+| `font-variant-alternates` | `font-variant-alternates: historical-forms` |
 | `text-transform` | `text-transform: uppercase` |
 | `text-decoration-line` | `text-decoration-line: underline` |
 | `text-decoration-color` | `text-decoration-color: #808080` |
@@ -549,6 +553,10 @@ color:                     <color>;
 line-height:               normal | <number> | <length> | <percentage>;
 letter-spacing:            normal | <length>;
 font-variant-caps:         normal | small-caps;
+font-feature-settings:     normal | <feature-tag-value>#;
+font-variant-ligatures:    normal | none | [ common-ligatures | no-common-ligatures ] || [ discretionary-ligatures | no-discretionary-ligatures ] || [ historical-ligatures | no-historical-ligatures ] || [ contextual | no-contextual ];
+font-variant-numeric:      normal | [ lining-nums | oldstyle-nums ] || [ proportional-nums | tabular-nums ] || [ diagonal-fractions | stacked-fractions ] || ordinal || slashed-zero;
+font-variant-alternates:   normal | historical-forms;
 text-transform:            none | uppercase | lowercase | capitalize;
 text-decoration-line:      none | [ underline || overline || line-through ];
 text-decoration-color:     currentcolor | <color>;
@@ -619,6 +627,57 @@ h2 {
   letter-spacing: 0.08em;
   text-align: center;
   font-weight: normal;
+}
+```
+
+### Font features
+
+A font can carry OpenType features: alternate glyphs that a four-character tag names. Old-style figures, a stylistic set, and a discretionary ligature are all features. `font-feature-settings` turns a feature on by its tag.
+
+```css
+h2 { font-feature-settings: "ss01" 1 }
+```
+
+A value of `1` or `on` turns a feature on, and a value of `0` or `off` turns it off. A tag written on its own is on. A feature that draws more than one alternate takes the number of the alternate.
+
+Three properties name a feature without its tag. Each value below turns on the features beside it:
+
+| property | value | feature |
+|---|---|---|
+| `font-variant-ligatures` | `common-ligatures` | `liga`, `clig` |
+| `font-variant-ligatures` | `discretionary-ligatures` | `dlig` |
+| `font-variant-ligatures` | `historical-ligatures` | `hlig` |
+| `font-variant-ligatures` | `contextual` | `calt` |
+| `font-variant-numeric` | `lining-nums` | `lnum` |
+| `font-variant-numeric` | `oldstyle-nums` | `onum` |
+| `font-variant-numeric` | `proportional-nums` | `pnum` |
+| `font-variant-numeric` | `tabular-nums` | `tnum` |
+| `font-variant-numeric` | `diagonal-fractions` | `frac` |
+| `font-variant-numeric` | `stacked-fractions` | `afrc` |
+| `font-variant-numeric` | `ordinal` | `ordn` |
+| `font-variant-numeric` | `slashed-zero` | `zero` |
+| `font-variant-alternates` | `historical-forms` | `hist` |
+
+Each `font-variant-ligatures` value has a `no-` form that turns its feature off, such as `no-common-ligatures`. `font-variant-ligatures: none` turns off all four ligature features.
+
+The engine reads the `font-variant` longhands first and `font-feature-settings` after them. Where both name a tag, `font-feature-settings` sets it.
+
+The engine turns some features on for every run of text. [The fonts page](library/fonts.md#font-features) lists them. `font-feature-settings: "liga" 0` turns one of them off.
+
+A feature changes which glyphs the engine draws, so it changes the width of the text. The engine measures the glyphs a feature selects, and the lines break to that width.
+
+For a font without a feature the stylesheet names, the engine warns and names the font. The text is laid out without the feature. Nothing is synthesized.
+
+The following example sets a part title in the font's first stylistic set and the prose under it in old-style figures:
+
+```css
+h2 {
+  font-feature-settings: "ss01" 1;
+  letter-spacing: 0.08em;
+}
+
+p {
+  font-variant-numeric: oldstyle-nums;
 }
 ```
 
@@ -1304,6 +1363,8 @@ The blocks of a note are elements of their own, so `note p` selects the paragrap
 
 The engine prints the number twice: as the reference in the line, and as a mark beside the note. `list-style-type` on the note spells both, in the [values a list marker takes](#lists). The mark carries a point and a space after it, as a list marker does. It hangs in the padding to the left of the note, so `padding-left` is the indent it hangs in.
 
+The engine draws the reference in the font's superior figures, which are small raised figures. They are the `sups` [feature](#font-features). The feature reaches the reference alone, so the figures in the text of the note are the ordinary ones. The reference sits on the baseline of its line, at the size `note` gives it. For a font without superior figures, the engine warns and names the font, and draws the reference in the ordinary figures.
+
 ### The area and the page
 
 The engine takes the area off the column before it places a line. A column with notes under it holds fewer lines of text. A line that no longer fits moves on, and the note of a reference on that line moves with it.
@@ -1672,9 +1733,9 @@ s { text-decoration: line-through }
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |
 | counters | any counter other than `page` and `note`, and `counter-increment` |
-| footnotes | `::footnote-call` and `::footnote-marker`, a note set in the margin or at the end of the book, `float: footnote`, a rule that reaches the area of one page rather than every page, and a note inside a block against the page |
+| footnotes | `::footnote-call` and `::footnote-marker`, a note set in the margin or at the end of the book, `float: footnote`, a rule that reaches the area of one page rather than every page, a note inside a block against the page, and `vertical-align`, which raises a reference in a font with no superior figures |
 | generated content | `::before` and `::after` on the book, a table row, a table cell, `thead`, or `tbody`, `position: absolute` on `::before` and `::after` of an inline element, `target-counters()`, the second argument of `target-text()`, and `attr()` outside a reference |
-| fonts | `font-variant` beyond `font-variant-caps: small-caps` |
+| fonts | the `font-variant` shorthand, `font-variant-east-asian`, `font-variant-position`, `font-variation-settings`, `font-kerning`, `font-synthesis`, the functional values of `font-variant-alternates`, such as `styleset()`, and the `@font-feature-values` rule |
 | text decorations | `text-decoration-skip-ink`, `text-underline-offset`, `text-underline-position`, `text-emphasis`, `text-shadow`, and the `dotted`, `dashed` and `wavy` values of `text-decoration-style` |
 | backgrounds | the `background` shorthand, `background-attachment`, `background-clip`, `background-origin`, more than one layer in a background, and `background-repeat: repeat-x`, `repeat-y`, `space` and `round` |
 | borders | longhands naming both an edge and a value, such as `border-top-width` |

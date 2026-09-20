@@ -17,10 +17,11 @@ use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
     border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
     decoration_break, decoration_keyword, decoration_line, decoration_style, decoration_thickness,
-    edges, families, font_style, generated, hanging, hyphens, inset, keyword_or, length,
-    letter_spacing, line_height, line_style, line_width, list_style_type, opacity, page_name,
-    positioning, property, shape_outside, string_set, text_align, text_justify, text_transform,
-    variant_caps, weight, width, wrap_flow, z_index,
+    edges, families, feature_settings, font_style, generated, hanging, hyphens, inset, keyword_or,
+    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
+    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
+    text_transform, variant_alternates, variant_caps, variant_ligatures, variant_numeric, weight,
+    width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, StyleError, Written, position, warning};
@@ -422,6 +423,67 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "normal | small-caps",
         examples: &["small-caps"],
         read: |name, input| longhand(name, input, variant_caps, Declaration::FontVariantCaps),
+    },
+    Spec {
+        name: "font-feature-settings",
+        inherited: true,
+        syntax: "normal | <feature-tag-value>#",
+        examples: &["\"ss01\" 1", "\"liga\" 0", "\"onum\"", "normal"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                feature_settings,
+                Declaration::FontFeatureSettings,
+            )
+        },
+    },
+    Spec {
+        name: "font-variant-ligatures",
+        inherited: true,
+        syntax: "normal | none | [ common-ligatures | no-common-ligatures ] || \
+                 [ discretionary-ligatures | no-discretionary-ligatures ] || \
+                 [ historical-ligatures | no-historical-ligatures ] || \
+                 [ contextual | no-contextual ]",
+        examples: &["discretionary-ligatures", "no-common-ligatures contextual"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                variant_ligatures,
+                Declaration::FontVariantLigatures,
+            )
+        },
+    },
+    Spec {
+        name: "font-variant-numeric",
+        inherited: true,
+        syntax: "normal | [ lining-nums | oldstyle-nums ] || \
+                 [ proportional-nums | tabular-nums ] || \
+                 [ diagonal-fractions | stacked-fractions ] || ordinal || slashed-zero",
+        examples: &["oldstyle-nums", "lining-nums tabular-nums"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                variant_numeric,
+                Declaration::FontVariantNumeric,
+            )
+        },
+    },
+    Spec {
+        name: "font-variant-alternates",
+        inherited: true,
+        syntax: "normal | historical-forms",
+        examples: &["historical-forms"],
+        read: |name, input| {
+            longhand(
+                name,
+                input,
+                variant_alternates,
+                Declaration::FontVariantAlternates,
+            )
+        },
     },
     Spec {
         name: "text-transform",

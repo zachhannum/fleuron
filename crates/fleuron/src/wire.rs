@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 15;
+pub const VERSION: u16 = 16;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -138,7 +138,7 @@ mod tests {
     use super::*;
     use crate::Warning;
     use crate::content::{NodeId, PseudoElement, SourceRange};
-    use crate::fonts::{AxisSetting, FaceAttributes, Features, FontRefEntry};
+    use crate::fonts::{AxisSetting, FaceAttributes, FeatureSetting, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
     use crate::pages::{Corners, DrawItem, Glyph, Link, LinkTo, Page, PageBox, Radius, Side};
     use crate::style::{Color, Edges};
@@ -165,7 +165,7 @@ mod tests {
                             range: 3..9,
                         }),
                         pseudo_element: Some(NodeId::new(7).pseudo(PseudoElement::FirstLine)),
-                        features: Features { small_caps: true },
+                        features: Features::new(true, vec![FeatureSetting::new(*b"onum", 1)]),
                         color: Color::rgb(180, 30, 30),
                         glyphs: vec![Glyph {
                             id: 42,

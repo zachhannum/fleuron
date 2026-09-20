@@ -1,11 +1,12 @@
-/* Author styling for `display-typography.md`, in the three properties
-   that change which glyphs a run is shaped from: tracking, small
-   capitals and a case transform. The manuscript is titled in the case
-   an author writes in, because a transform over text already set in
-   capitals changes nothing and proves nothing.
+/* Author styling for `display-typography.md`, in the properties that
+   change which glyphs a run is shaped from: tracking, small capitals,
+   a case transform, and the features a face carries of its own. The
+   manuscript is titled in the case an author writes in, because a
+   transform over text already set in capitals changes nothing and
+   proves nothing.
 
    Every rule here lands on the chapter's opening page, so one page
-   compared between the two painters covers all three. The engine chooses
+   compared between the two painters covers them all. The engine chooses
    glyphs once and both painters have to reach the same ones: the
    preview draws characters and asks the face for the run's features,
    the export draws the glyph ids themselves. A page where the two
@@ -44,6 +45,11 @@ h2 {
   letter-spacing: 0.12em;
   font-size: 16pt;
   text-align: center;
+
+  /* The face's first stylistic set, which is how a display face is
+     set apart from the text under it. The alternates are wider than
+     the glyphs they stand for, so the title breaks against them. */
+  font-feature-settings: "ss01" 1;
 }
 
 /* A chapter title in the face's own small capitals, over the case
@@ -66,4 +72,9 @@ h3 + p::first-line {
 p {
   letter-spacing: 0.01em;
   text-indent: 1.2em;
+
+  /* Old-style figures through the prose, named rather than spelled.
+     A date on the opening page is where the two painters compare
+     them. */
+  font-variant-numeric: oldstyle-nums;
 }
