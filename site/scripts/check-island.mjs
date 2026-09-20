@@ -205,9 +205,9 @@ const features = await page.evaluate(async () => {
   await document.fonts.ready;
   // Measured the way the painter draws: `font-feature-settings` on
   // an element set in the family the site serves the book face under.
-  const width = (settings) => {
+  const width = (settings, words = 'handgloves') => {
     const span = document.createElement('span');
-    span.textContent = 'handgloves';
+    span.textContent = words;
     span.setAttribute(
       'style',
       `position: absolute; white-space: pre; font: 32px "EB Garamond Subset";` +
@@ -222,6 +222,8 @@ const features = await page.evaluate(async () => {
     loaded: document.fonts.check('32px "EB Garamond Subset"'),
     plain: width('normal'),
     small: width('"smcp" 1'),
+    figures: width('normal', '1805'),
+    superior: width('"sups" 1', '1805'),
   };
 });
 check(
@@ -229,6 +231,13 @@ check(
   features.loaded && features.plain !== features.small,
   `${features.loaded ? 'loaded' : 'NOT loaded'},` +
     ` ${features.plain}px plain, ${features.small}px small`,
+);
+// The engine shapes the reference of a footnote with `sups`, the way
+// it shapes small capitals with `smcp`.
+check(
+  'and the superior figures it asks for on the reference of a footnote',
+  features.loaded && features.figures !== features.superior,
+  `${features.figures}px ordinary, ${features.superior}px superior`,
 );
 
 // An edit reaches the engine and comes back as a different book.
