@@ -320,7 +320,10 @@ export const SUBSET: Subset = {
     ],
     first_line_properties: [
       'color',
+      'font-family',
       'font-size',
+      'font-style',
+      'font-weight',
       'font-variant-caps',
       'letter-spacing',
       'text-transform',
