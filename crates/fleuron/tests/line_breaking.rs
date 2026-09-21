@@ -4,7 +4,7 @@
 use fleuron::content::{Attributes, Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::lines::{
-    FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Span,
+    Face, FirstLine, Line, LineBreakOptions, LineLayout, Measure, ParagraphStyle, Span,
 };
 use fleuron::style::{FontVariantCaps, TextTransform};
 use proptest::prelude::*;
@@ -437,9 +437,11 @@ proptest! {
         text in text_strategy(),
         measure in 20.0f32..300.0,
         letter_spacing in 0.0f32..1.5,
+        italic in proptest::bool::ANY,
     ) {
         let layout = LineLayout::new(registry());
         let first_line = Some(FirstLine {
+            face: Some(Face { family: None, italic: Some(italic), weight: Some(700) }),
             size: Some(body().size * 1.4),
             letter_spacing: Some(letter_spacing),
             caps: Some(FontVariantCaps::SmallCaps),

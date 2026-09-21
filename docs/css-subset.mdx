@@ -1417,8 +1417,9 @@ h2 + p::first-letter {
 `::first-line` accepts only these properties:
 
 ```
-color font-size font-variant-caps letter-spacing
-text-transform text-decoration-line text-decoration-color
+color font-family font-size font-style font-weight
+font-variant-caps letter-spacing text-transform
+text-decoration-line text-decoration-color
 text-decoration-style text-decoration-thickness
 text-decoration
 ```
@@ -1438,7 +1439,17 @@ h2 + p::first-line {
 }
 ```
 
-Which words fall on that line depends on the style applied to it. `font-size`, `font-variant-caps`, `letter-spacing` and `text-transform` change the width of the text, which moves the break. The style then applies to whatever words end up on that line.
+The following example opens a chapter on an italic line:
+
+```css
+h2 + p::first-line {
+  font-style: italic;
+}
+```
+
+`font-family`, `font-style`, and `font-weight` are separate properties, and a rule can set one of them alone. A word inside the line that carries a weight of its own keeps that weight. An italic first line over a bold word sets that word in the bold italic.
+
+Which words fall on that line depends on the style applied to it. A property that changes the width of the text moves the break, and the style then applies to whatever words end up on the line. The properties that pick a face or a size change widths. So do `font-variant-caps`, `letter-spacing`, and `text-transform`.
 
 `font-size` grows the line around the baseline the paragraph shares. `color` and the rules `text-decoration` draws change no widths. Lines break the same way with them or without them.
 

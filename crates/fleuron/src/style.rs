@@ -3156,12 +3156,12 @@ mod tests {
         let book = sample();
         let tree = compile(
             &book,
-            "p::first-line { font-family: monospace; text-transform: uppercase }",
+            "p::first-line { line-height: 2; text-transform: uppercase }",
         );
         assert!(
             tree.warnings().iter().any(|warning| {
                 warning.message
-                    == "Unsupported property `font-family` on `::first-line`. \
+                    == "Unsupported property `line-height` on `::first-line`. \
                         The declaration is ignored."
             }),
             "{:?}",
@@ -3173,9 +3173,52 @@ mod tests {
         let opening = tree.opening_line(*id).expect("the opening line's overlay");
         assert_eq!(opening.transform, Some(TextTransform::Uppercase));
         assert_eq!(
-            tree.first_line(*id).unwrap().font_id,
-            first(&tree, "p").font_id,
-            "the family the rule asked for was dropped",
+            tree.first_line(*id).unwrap().line_height,
+            first(&tree, "p").line_height,
+            "the line height the rule asked for was dropped",
+        );
+    }
+
+    /// Acceptance: `font-family`, `font-style` and `font-weight` on
+    /// `::first-line` warn about none of themselves, and each one
+    /// reaches the overlay line layout reads.
+    #[test]
+    fn the_font_properties_set_on_a_first_line() {
+        let book = sample();
+        let mut registry = bundled_registry().expect("bundled font parses");
+        let mut display =
+            crate::fonts::FontSource::from_bytes(crate::fonts::BUNDLED_ITALIC.to_vec())
+                .expect("the face parses");
+        display.family = "display".into();
+        registry.add(display).expect("the face registers");
+        let css = "p { font-family: \"EB Garamond\" }
+                   p::first-line { font-family: display; font-style: italic;
+                                   font-weight: bold }";
+        let tree =
+            Stylesheets::parse(&[Source::author("author.css", css)]).compile(&book, &registry);
+        assert_eq!(
+            tree.warnings()
+                .iter()
+                .filter(|warning| warning.message.contains("`::first-line`"))
+                .collect::<Vec<_>>(),
+            Vec::<&Warning>::new(),
+        );
+
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let face = tree
+            .opening_line(*id)
+            .expect("the opening line's overlay")
+            .face
+            .expect("the rule asked for another face");
+        assert_eq!(face.italic, Some(true));
+        assert_eq!(face.weight, Some(700));
+        assert_eq!(
+            registry
+                .font_ref(face.family.expect("the rule named a family"))
+                .map(|entry| entry.family.as_str()),
+            Some("display"),
         );
     }
 

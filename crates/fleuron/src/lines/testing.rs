@@ -14,6 +14,24 @@ pub(super) fn registry() -> &'static FontRegistry {
     REGISTRY.get_or_init(|| crate::fonts::bundled_registry().expect("bundled font parses"))
 }
 
+/// The bundled family, and its italic file registered again under a
+/// family name of its own, so a test can ask for another family.
+pub(super) fn two_families() -> &'static FontRegistry {
+    static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        let mut registry = crate::fonts::bundled_registry().expect("bundled font parses");
+        let mut display =
+            crate::fonts::FontSource::from_bytes(crate::fonts::BUNDLED_ITALIC.to_vec())
+                .expect("the face parses");
+        display.family = DISPLAY.into();
+        registry.add(display).expect("the face registers");
+        registry
+    })
+}
+
+/// The family `two_families` adds beside the bundled one.
+pub(super) const DISPLAY: &str = "display";
+
 /// The body style the built-in sheet computes.
 pub(super) fn body() -> ParagraphStyle {
     crate::style::defaults(&crate::content::Book::default(), registry())
