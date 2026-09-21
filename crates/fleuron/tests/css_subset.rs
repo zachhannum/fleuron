@@ -729,3 +729,264 @@ const CSS_PROPERTIES: &[&str] = &[
     "vertical-align", "visibility", "white-space", "widows", "width", "will-change",
     "word-break", "word-spacing", "word-wrap", "writing-mode", "z-index",
 ];
+
+/// The module a host embeds carries the description, so a style
+/// editor completes from the engine rather than from a page of prose.
+/// The file is generated; `FLEURON_UPDATE_DOCS=1` rewrites it.
+#[test]
+fn the_module_ships_the_description() {
+    let path = workspace_root().join("crates/fleuron-wasm/npm/src/subset.ts");
+    let module = typescript(&Subset::describe());
+    if std::env::var_os("FLEURON_UPDATE_DOCS").is_some() {
+        std::fs::write(&path, &module).expect("write the module");
+        return;
+    }
+    let shipped = std::fs::read_to_string(&path).expect("the module");
+    assert_eq!(
+        module, shipped,
+        "crates/fleuron-wasm/npm/src/subset.ts is stale; \
+         FLEURON_UPDATE_DOCS=1 cargo test -p fleuron --test css_subset"
+    );
+}
+
+/// The description the module ships names the version the package
+/// ships under, so a host reads one number for both.
+#[test]
+fn the_description_carries_the_version_the_package_ships_under() {
+    let path = workspace_root().join("crates/fleuron-wasm/npm/package.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("the package manifest"))
+            .expect("the package manifest as JSON");
+    assert_eq!(
+        Subset::describe().version,
+        manifest["version"].as_str().expect("a version"),
+    );
+}
+
+/// The description as a TypeScript module: the types a host reads it
+/// through, then the description itself.
+fn typescript(subset: &Subset) -> String {
+    let data = serde_json::to_string_pretty(subset).expect("the description as JSON");
+    format!("{SUBSET_TYPES}\nexport const SUBSET: Subset = {};\n", literal(&data))
+}
+
+/// JSON as a TypeScript object literal: an identifier key loses its
+/// quotes, and a string takes the quote the package is written in.
+fn literal(json: &str) -> String {
+    let mut out = String::with_capacity(json.len());
+    let mut chars = json.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '"' {
+            out.push(c);
+            continue;
+        }
+        let mut raw = String::new();
+        let mut escaped = false;
+        for c in chars.by_ref() {
+            if escaped {
+                raw.push(c);
+                escaped = false;
+            } else if c == '\\' {
+                raw.push(c);
+                escaped = true;
+            } else if c == '"' {
+                break;
+            } else {
+                raw.push(c);
+            }
+        }
+        let text: String =
+            serde_json::from_str(&format!("\"{raw}\"")).expect("a JSON string");
+        if chars.peek() == Some(&':') && identifier(&text) {
+            out.push_str(&text);
+        } else {
+            out.push_str(&quoted(&text));
+        }
+    }
+    out
+}
+
+/// A string in the quote the package is written in.
+fn quoted(text: &str) -> String {
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t");
+    format!("'{escaped}'")
+}
+
+/// Whether a key can be written without quotes.
+fn identifier(key: &str) -> bool {
+    let mut chars = key.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The head of the generated module: what it is, and the types a
+/// host reads the description through. The names follow the `subset`
+/// module, except where one is already taken by the wire.
+const SUBSET_TYPES: &str = r##"/**
+ * The CSS the engine accepts, as data: the properties, the values
+ * each one takes, the selectors the vocabulary names, and the
+ * at-rules that parse.
+ *
+ * A host with a style editor completes from this. It needs no book
+ * laid out and no file beside the package, and it describes the
+ * engine in the module it is read from rather than the engine of
+ * some other release.
+ *
+ * The `syntax` strings are written in CSS value-definition syntax. A
+ * bare word is a keyword, `<name>` is a type, and `name()` is a
+ * function. The keywords are listed on their own as well, for a host
+ * that completes them rather than reads the grammar.
+ *
+ * This file is generated from the parser's own tables, and it holds
+ * the description that `fleuron --css-subset` writes. Do not edit it.
+ * Run `FLEURON_UPDATE_DOCS=1 cargo test -p fleuron --test css_subset`.
+ */
+
+/** What the engine accepts, from the version that produced it. */
+export interface Subset {
+  /** The engine version this description came from. */
+  version: string;
+  /** What a style rule selects. */
+  selectors: Selectors;
+  /** The shape of one declaration, in value-definition syntax. */
+  declaration: string;
+  /**
+   * The shape of one custom property declaration, in
+   * value-definition syntax.
+   */
+  custom_property: string;
+  /**
+   * The function that puts a custom property's value in a
+   * declaration, in value-definition syntax.
+   */
+  var: string;
+  /** The properties a style rule declares. */
+  properties: Property[];
+  /** The `@page` rule. */
+  page: PageRule;
+  /** The `@font-face` rule. */
+  font_face: FontFaceRule;
+  /** The units a `<length>` carries. */
+  units: string[];
+  /** The names a `<color>` takes. */
+  color_names: string[];
+}
+
+/** The selector vocabulary. */
+export interface Selectors {
+  /** The element names, as the content tree produces them. */
+  elements: string[];
+  /** What a compound is made of besides pseudo-classes. */
+  compounds: Selector[];
+  /** The combinators between two compounds. */
+  combinators: Selector[];
+  /** How selectors join in a list. */
+  list: Selector;
+  /** The pseudo-classes, functional ones with their parentheses. */
+  pseudo_classes: Selector[];
+  /** The pseudo-elements. */
+  pseudo_elements: Selector[];
+  /**
+   * The properties `::first-line` takes, out of the properties a
+   * style rule declares.
+   */
+  first_line_properties: string[];
+}
+
+/** One piece of selector syntax, with a selector that uses it. */
+export interface Selector {
+  /** The syntax as it is written. */
+  name: string;
+  /** A whole selector that parses. */
+  example: string;
+}
+
+/** One property. */
+export interface Property {
+  /** The property name. */
+  name: string;
+  /** Whether a child starts from the parent's value. */
+  inherited: boolean;
+  /** The values it accepts, in CSS value-definition syntax. */
+  syntax: string;
+  /**
+   * The keywords in `syntax`, wherever they stand in it. One that
+   * only follows another value, like `landscape` after a page size,
+   * is not a value on its own.
+   */
+  keywords: string[];
+  /** Values that parse. */
+  examples: string[];
+}
+
+/** One `@font-face` descriptor. */
+export interface Descriptor {
+  /** The descriptor name. */
+  name: string;
+  /** The values it accepts, in CSS value-definition syntax. */
+  syntax: string;
+  /** The keywords in `syntax`, wherever they stand in it. */
+  keywords: string[];
+  /** Values that parse. */
+  examples: string[];
+}
+
+/** The `@page` rule. */
+export interface PageRule {
+  /**
+   * What follows `@page`, in value-definition syntax: a page name,
+   * then any of the page selectors.
+   */
+  prelude: string;
+  /** The page selectors, without their colon. */
+  selectors: string[];
+  /** The properties a page body declares. */
+  properties: Property[];
+  /** The margin boxes a page body opens. */
+  margin_boxes: MarginBoxDescription[];
+  /**
+   * The properties a margin box declares on top of the style
+   * properties, which it also accepts.
+   */
+  margin_box_properties: Property[];
+  /** The named sheets `size` accepts, portrait. */
+  sizes: PageSize[];
+  /** The counter styles `counter(page, ...)` accepts. */
+  counter_styles: string[];
+}
+
+/** One margin box. */
+export interface MarginBoxDescription {
+  /** The at-rule name, without the `@`. */
+  name: string;
+  /**
+   * Whether the engine draws it. A box it does not draw is read and
+   * dropped.
+   */
+  paints: boolean;
+}
+
+/** One named page size. */
+export interface PageSize {
+  /** The keyword. */
+  name: string;
+  /** Width in points, portrait. */
+  width: number;
+  /** Height in points, portrait. */
+  height: number;
+}
+
+/** The `@font-face` rule. */
+export interface FontFaceRule {
+  /** The descriptors a face body declares. */
+  descriptors: Descriptor[];
+}
+
+"##;
