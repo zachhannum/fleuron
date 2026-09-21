@@ -2,10 +2,10 @@
  * One version, in every place a version appears.
  *
  * The crates, the two packages, the peer range between them, the
- * constant the package reports itself by and the lockfiles that
- * mirror all of it name the same release. A tag argument is checked
- * against them as well, which is what a release runs before it publishes
- * anything.
+ * constant the package reports itself by, the CSS subset it ships
+ * and the lockfiles that mirror all of it name the same release. A
+ * tag argument is checked against them as well, which is what a
+ * release runs before it publishes anything.
  *
  *   node scripts/version.mjs            compare
  *   node scripts/version.mjs v0.1.0     compare, and against the tag
@@ -32,6 +32,11 @@ const places = [
   json('crates/fleuron-wasm/npm/package-lock.json', ['version']),
   json('crates/fleuron-wasm/npm/package-lock.json', ['packages', '', 'version']),
   text('crates/fleuron-wasm/npm/src/version.ts', 'VERSION', /(VERSION = ')([^']+)(')/),
+  text(
+    'crates/fleuron-wasm/npm/src/subset.ts',
+    'SUBSET',
+    /(export const SUBSET: Subset = \{\n  version: ')([^']+)(')/,
+  ),
   json('packages/react/package.json', ['version']),
   json('packages/react/package.json', ['peerDependencies', 'fleuron']),
   json('packages/react/package-lock.json', ['version']),
