@@ -767,7 +767,10 @@ fn the_description_carries_the_version_the_package_ships_under() {
 /// through, then the description itself.
 fn typescript(subset: &Subset) -> String {
     let data = serde_json::to_string_pretty(subset).expect("the description as JSON");
-    format!("{SUBSET_TYPES}\nexport const SUBSET: Subset = {};\n", literal(&data))
+    format!(
+        "{SUBSET_TYPES}\nexport const SUBSET: Subset = {};\n",
+        literal(&data)
+    )
 }
 
 /// JSON as a TypeScript object literal: an identifier key loses its
@@ -795,8 +798,7 @@ fn literal(json: &str) -> String {
                 raw.push(c);
             }
         }
-        let text: String =
-            serde_json::from_str(&format!("\"{raw}\"")).expect("a JSON string");
+        let text: String = serde_json::from_str(&format!("\"{raw}\"")).expect("a JSON string");
         if chars.peek() == Some(&':') && identifier(&text) {
             out.push_str(&text);
         } else {

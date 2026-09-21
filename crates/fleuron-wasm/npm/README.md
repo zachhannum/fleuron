@@ -156,6 +156,29 @@ mounted. In a worker of your own, the op is `{ op: 'font', url, bytes }`.
 A rule whose url has no bytes gives a warning, and the text uses the
 next family in its `font-family` list.
 
+## The CSS the engine accepts
+
+`SUBSET` is the vocabulary of the engine in the module: every property
+with the values it takes, the selectors, the units, and the at-rules
+that parse. A host with a style editor completes from it. You read it
+with no book laid out and no file of your own.
+
+The following example lists every property a style rule takes, with
+the values it accepts:
+
+```js
+import { SUBSET } from 'fleuron';
+
+for (const property of SUBSET.properties) {
+  console.log(`${property.name}: ${property.syntax}`);
+}
+```
+
+`SUBSET.version` is the engine version the description came from,
+which is the version the package ships under. The
+[CSS subset](https://fleuron.typeworks.dev/css-subset/) page describes
+the same vocabulary in prose.
+
 ## Batch
 
 ```js

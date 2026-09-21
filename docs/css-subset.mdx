@@ -1760,3 +1760,15 @@ The engine reports each unsupported declaration on its own, naming the line and 
 ## The subset as data
 
 `fleuron --css-subset` writes this page's vocabulary as JSON: every selector, property, value, and at-rule, with the engine version it came from. A host that embeds the engine can pin that file for its version and drive its own editor from it. The library exposes the same description as `fleuron::style::subset::Subset::describe()`, and the tables on this page are generated from it.
+
+The `fleuron` npm package ships the description as well, under the name `SUBSET`. It describes the engine in the module it is read from. A host reads it with no book laid out and no file of its own. `SUBSET.version` is the engine version the description came from.
+
+The following example lists every property a style rule takes, with the values it accepts:
+
+```js
+import { SUBSET } from 'fleuron';
+
+for (const property of SUBSET.properties) {
+  console.log(`${property.name}: ${property.syntax}`);
+}
+```
