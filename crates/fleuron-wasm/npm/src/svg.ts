@@ -96,10 +96,12 @@ export function faceFamily(fontId: number): string {
 export function paintPage(page: Page, options: PaintOptions = {}): string {
   const zoom = options.zoom ?? 1;
   const paper = options.paper === undefined ? '#ffffff' : options.paper;
-  // A background needs a definition of its own, and two of them on
-  // one page must not share a name.
+  // A background needs a definition of its own, and ids are global to
+  // the document a host puts the page in. Two pages of a spread, or two
+  // backgrounds on one page, must not share a name.
   let next = 0;
-  const body = page.items.map((item) => paint(item, options, () => (next += 1))).join('');
+  const id = (): string => `fleuron-background-${page.number}-${(next += 1)}`;
+  const body = page.items.map((item) => paint(item, options, id)).join('');
   const overlay = selectionOverlay(page.items);
   const marks = options.links === false ? '' : linkMarks(page);
   const ground =
@@ -116,7 +118,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   );
 }
 
-function paint(item: DrawItem, options: PaintOptions, id: () => number): string {
+function paint(item: DrawItem, options: PaintOptions, id: () => string): string {
   switch (item.kind) {
     case 'text':
       return text(item, options);
@@ -278,7 +280,7 @@ function faded(alpha: number): string {
  * behind the text, and the dashed box a missing plate is drawn as
  * would be read as a rule around the page.
  */
-function background(item: BackgroundItem, options: PaintOptions, id: number): string {
+function background(item: BackgroundItem, options: PaintOptions, name: string): string {
   const asset = options.assets?.[item.asset];
   const href = asset === undefined ? undefined : options.asset?.(asset, item.asset);
   if (href === null || href === undefined) {
@@ -289,7 +291,6 @@ function background(item: BackgroundItem, options: PaintOptions, id: number): st
   const shape = square(item.radii)
     ? `rect x="${num(item.x)}" y="${num(item.y)}" width="${num(item.w)}" height="${num(item.h)}"`
     : `path d="${outline(item.x, item.y, item.w, item.h, item.radii)}"`;
-  const name = `fleuron-background-${id}`;
   if (!item.repeat) {
     return (
       `<defs><clipPath id="${name}"><${shape}/></clipPath></defs>` +

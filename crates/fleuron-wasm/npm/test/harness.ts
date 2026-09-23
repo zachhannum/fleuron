@@ -1261,6 +1261,56 @@ check(
   JSON.stringify(clipped),
 );
 
+// A spread. A host puts two pages of one run in one document, so an id
+// on the left page and an id on the right page are in one namespace.
+// Each page's backgrounds, clipped and tiled, must refer to its own
+// definitions.
+const tiled = await client.preview([
+  styleOp('@page { background-image: url("images/plate.jpg"); background-size: 20pt 20pt; ' +
+    'background-repeat: repeat }'),
+]);
+const spread = (output: typeof scanned): string[] =>
+  (output?.pages.slice(0, 2) ?? []).map((page) =>
+    paintPage(page, {
+      fonts: output?.fonts ?? [],
+      assets: output?.assets ?? [],
+      asset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+    }),
+  );
+const ids = (svg: string): string[] => [...svg.matchAll(/\bid="([^"]*)"/g)].map((match) => match[1] ?? '');
+const references = (svg: string): string[] =>
+  [...svg.matchAll(/url\(#([^)]*)\)/g)].map((match) => match[1] ?? '');
+const spreads = [spread(scanned), spread(tiled)];
+const spreadIds = spreads.map((pages) => pages.flatMap(ids));
+check(
+  'two pages of one run, painted into one document, use no id twice',
+  spreads.every((pages) => pages.length === 2) &&
+    spreadIds.every((all) => all.length >= 2 && new Set(all).size === all.length),
+  JSON.stringify(spreadIds),
+);
+check(
+  "and each page's backgrounds, with `repeat` and with `no-repeat`, refer to definitions on that page",
+  spreads[0]?.every((svg) => svg.includes('<clipPath')) === true &&
+    spreads[1]?.every((svg) => svg.includes('<pattern')) === true &&
+    // A browser resolves a reference to the first element in the
+    // document with that id, so the first one has to be on this page.
+    spreads.every((pages) => {
+      const document = pages.join('');
+      let start = 0;
+      return pages.every((svg) => {
+        const end = start + svg.length;
+        const used = references(svg);
+        const own = used.every((name) => {
+          const at = document.indexOf(`id="${name}"`);
+          return at >= start && at < end;
+        });
+        start = end;
+        return used.length > 0 && own;
+      });
+    }),
+  JSON.stringify(spreads.map((pages) => pages.map(references))),
+);
+
 // Alpha, opacity and rounded corners. A tint with an alpha over the
 // scan behind a page leaves the scan showing, so the painter writes the
 // alpha as an opacity rather than as an opaque fill. The tint has
