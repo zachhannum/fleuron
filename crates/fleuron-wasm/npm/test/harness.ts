@@ -279,11 +279,14 @@ function texts(svg: string): { x: string[]; content: string }[] {
 }
 
 /** The selection layer's own `<text>` elements, one per line. */
-function selectionLines(svg: string): { x: string[]; content: string }[] {
+function selectionLines(
+  svg: string,
+): { x: string[]; attribute: (name: string) => string | undefined; content: string }[] {
   return [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
     .filter((element) => (element[1] ?? '').includes('data-selection-line'))
     .map((element) => ({
       x: (/ x="([^"]*)"/.exec(element[1] ?? '')?.[1] ?? '').split(' ').filter((n) => n !== ''),
+      attribute: (name: string) => new RegExp(` ${name}="([^"]*)"`).exec(element[1] ?? '')?.[1],
       content: unescape_(element[2] ?? ''),
     }));
 }
@@ -351,6 +354,43 @@ function misplacedSelection(page: Page, output: LayoutOutput): string | null {
     const element = lines[at];
     if (element === undefined || element.content !== expected) {
       return `page ${page.number} line ${at} reads back ${JSON.stringify(element?.content)}, not ${JSON.stringify(expected)}`;
+    }
+    const first = group[0] as TextItem;
+    const width = Math.max(...group.map((run) => run.x + run.width)) - first.x;
+    const length = Number(element.attribute('textLength'));
+    if (element.x.length !== 1 || Math.fround(Number(element.x[0])) !== first.x) {
+      return `page ${page.number} line ${at} starts at ${JSON.stringify(element.x.slice(0, 3))}, not at ${first.x} alone`;
+    }
+    if (Math.abs(length - width) > 0.001) {
+      return `page ${page.number} line ${at} stretches over ${length}, not ${width}`;
+    }
+    const largest = group.reduce((best, run) => (run.size > best.size ? run : best));
+    if (
+      Math.fround(Number(element.attribute('font-size'))) !== largest.size ||
+      !(element.attribute('font-family') ?? '').includes(faceFamily(largest.fontId))
+    ) {
+      return `page ${page.number} line ${at} is set at ${element.attribute('font-size')} in ${element.attribute('font-family')}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every run's width checked against its glyphs: the run ends past its
+ * last glyph's origin, and no later than the next run on its line
+ * begins.
+ */
+function misplacedWidth(page: Page): string | null {
+  const runs = page.items.filter((item): item is TextItem => item.kind === 'text');
+  for (const [at, run] of runs.entries()) {
+    const end = run.x + run.width;
+    const last = Math.max(run.x, ...run.glyphs.map((glyph) => glyph.x));
+    if (run.glyphs.length > 0 && end <= last) {
+      return `page ${page.number} run ${at} ends at ${end}, before its last glyph at ${last}`;
+    }
+    const next = runs[at + 1];
+    if (next !== undefined && Math.abs(next.y - run.y) < 0.01 && end > next.x + 0.01) {
+      return `page ${page.number} run ${at} ends at ${end}, past the next run at ${next.x}`;
     }
   }
   return null;
@@ -658,10 +698,12 @@ const wrongSelection = preview.pages
   .map((page) => misplacedSelection(page, preview))
   .find((bad) => bad !== null);
 check(
-  "the selection layer's own lines read back every run in the manuscript's own casing",
+  "the selection layer's own lines read back every run in the manuscript's own casing, each one chunk from its first glyph to its end, in the face and size of its largest run",
   wrongSelection === undefined,
   wrongSelection ?? '',
 );
+const wrongWidth = preview.pages.map((page) => misplacedWidth(page)).find((bad) => bad !== null);
+check('every run says how far its glyphs advance', wrongWidth === undefined, wrongWidth ?? '');
 check(
   'every page paints',
   preview.pages.every((page) => {

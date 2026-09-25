@@ -61,6 +61,7 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         coordinate(),
         any::<u16>(),
         1.0f32..200.0,
+        0.0f32..600.0,
         ".{0,40}",
         proptest::collection::vec(glyph(), 0..12),
         color(),
@@ -68,11 +69,12 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         layer(),
     )
         .prop_map(
-            |(x, y, font_id, size, text, glyphs, color, origin, layer)| DrawItem::Text {
+            |(x, y, font_id, size, width, text, glyphs, color, origin, layer)| DrawItem::Text {
                 x,
                 y,
                 font_id,
                 size,
+                width,
                 // A run nothing transformed has no source of its
                 // own; one that was is covered where the transform is.
                 source: String::new(),

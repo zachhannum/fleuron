@@ -179,6 +179,7 @@ fn described(item: &DrawItem) -> String {
             y,
             font_id,
             size,
+            width,
             text,
             source,
             source_map,
@@ -213,7 +214,7 @@ fn described(item: &DrawItem) -> String {
                 None => "nothing".to_string(),
             };
             format!(
-                "text {x:?} {y:?} font {font_id} at {size:?}pt {text:?} source {source:?} {source_map:?} \
+                "text {x:?} {y:?} font {font_id} at {size:?}pt wide {width:?} {text:?} source {source:?} {source_map:?} \
                  written {written}{pseudo} small-caps {} glyphs {}{}",
                 features.small_caps(),
                 placed.join(" "),

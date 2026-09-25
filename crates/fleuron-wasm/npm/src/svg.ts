@@ -16,11 +16,11 @@
  * A second, invisible layer sits over the glyphs: one `<text>` per
  * line, in the manuscript's own casing rather than what a
  * `text-transform` or small capitals drew, and marked so a host can
- * find it and read it back. It is what a drag actually selects — the
- * glyph layer below takes no pointer events — so what native
- * selection highlights lines up with what is on screen, and what
- * copy yields is what the author wrote, in reading order, the pdf.js
- * pattern over glyphs rather than a canvas.
+ * find it and read it back. It is what a drag actually selects. Nothing
+ * painted below it takes pointer events, so a drag that starts off the
+ * text lands on the page and the browser starts it at the nearest
+ * line. What copy yields is what the author wrote, in reading order,
+ * the pdf.js pattern over glyphs rather than a canvas.
  *
  * Over that layer is one transparent `<rect>` for each line of each
  * link, marked with the link's index in `page.links`. A mark takes no
@@ -102,7 +102,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   let next = 0;
   const id = (): string => `fleuron-background-${page.number}-${(next += 1)}`;
   const body = page.items.map((item) => paint(item, options, id)).join('');
-  const overlay = selectionOverlay(page.items);
+  const overlay = selectionOverlay(page.items, options);
   const marks = options.links === false ? '' : linkMarks(page);
   const ground =
     paper === null
@@ -114,7 +114,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
     ` width="${num(page.width * zoom)}" height="${num(page.height * zoom)}"` +
     ` fill="${escape(options.ink ?? '#000000')}"` +
     ` data-page="${page.number}" data-side="${page.side}">` +
-    `${ground}${body}${overlay}${marks}</svg>`
+    `<g style="pointer-events: none">${ground}${body}</g>${overlay}${marks}</svg>`
   );
 }
 
@@ -332,11 +332,7 @@ function style(entry: FontRefEntry | undefined, item: TextItem): string {
   // A run includes the spaces the line was justified around, and SVG
   // collapses them by default, which would slide every character
   // after the first space one position along the x list.
-  //
-  // The selection overlay is what a drag is meant to hit, not this:
-  // its own glyphs take no pointer events, so a click always reaches
-  // the overlay's line rather than a glyph.
-  const rules = ['white-space: pre', 'pointer-events: none'];
+  const rules = ['white-space: pre'];
   if (settings !== '') {
     rules.push(`font-variation-settings: ${settings}`);
   }
@@ -444,42 +440,6 @@ function readText(item: TextItem): string {
 }
 
 /**
- * An x for each character of {@link readText}, the same technique as
- * {@link positions} but through {@link TextItem.sourceMap}: a glyph's
- * range is in the shaped text's bytes, and the map carries a byte
- * there to the source's own, which is the string this positions.
- */
-function readPositions(item: TextItem): number[] {
-  const transformed = item.sourceMap.length > 0;
-  const read = readText(item);
-  const starts = characters(read);
-  const index = new Map(starts.map((byte, at) => [byte, at]));
-  const xs: (number | undefined)[] = new Array<number | undefined>(starts.length);
-  for (const glyph of item.glyphs) {
-    const mapped = transformed ? (item.sourceMap[glyph.range[0]] ?? byteLength(read)) : glyph.range[0];
-    const at = index.get(mapped);
-    if (at === undefined) {
-      continue;
-    }
-    const seen = xs[at];
-    if (seen === undefined || glyph.x < seen) {
-      xs[at] = glyph.x;
-    }
-  }
-  return fill(xs, item.x);
-}
-
-/** How many UTF-8 bytes a string is, the unit {@link TextItem.sourceMap} counts in. */
-function byteLength(text: string): number {
-  let bytes = 0;
-  for (const character of text) {
-    const code = character.codePointAt(0) ?? 0;
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-  }
-  return bytes;
-}
-
-/**
  * The page's text runs, grouped into the lines a reader thinks in:
  * consecutive runs sharing one baseline. What breaks a run in two —
  * a mid-line style change — does not break a line, so a selection
@@ -508,22 +468,39 @@ function lineGroups(items: DrawItem[]): TextItem[][] {
  * the browser selects and copies from what is on screen, not what is
  * painted, so hiding it this way would hide it from that too.
  */
-function selectionOverlay(items: DrawItem[]): string {
+function selectionOverlay(items: DrawItem[], options: PaintOptions): string {
   const body = lineGroups(items)
-    .map((runs) => selectionLine(runs))
+    .map((runs) => selectionLine(runs, options))
     .join('');
   return body === '' ? '' : `<g data-selection-layer="true">${body}</g>`;
 }
 
-function selectionLine(runs: TextItem[]): string {
-  const y = runs[0]?.y ?? 0;
+/**
+ * One line of the selection layer, as one chunk stretched from the
+ * line's first glyph to the end of its last run. A browser draws one
+ * highlight box per chunk, so an x per character would highlight a
+ * row of boxes that overlap or leave gaps.
+ *
+ * The line is set in the face and size of its largest run, which is
+ * what the height of the highlight comes from.
+ */
+function selectionLine(runs: TextItem[], options: PaintOptions): string {
   const text = runs.map((run) => readText(run)).join('');
-  const xs = runs.flatMap((run) => readPositions(run));
-  if (text === '') {
+  const first = runs[0];
+  if (first === undefined || text === '') {
     return '';
   }
+  const largest = runs.reduce((best, run) => (run.size > best.size ? run : best));
+  const entry = options.fonts?.[largest.fontId];
+  const right = Math.max(...runs.map((run) => run.x + run.width));
+  const width = right - first.x;
   return (
-    `<text x="${xs.map(num).join(' ')}" y="${num(y)}"` +
+    `<text x="${num(first.x)}" y="${num(first.y)}"` +
+    (width > 0 ? ` textLength="${num(width)}" lengthAdjust="spacingAndGlyphs"` : '') +
+    ` font-family="${escape(stack(largest.fontId, entry))}"` +
+    ` font-size="${num(largest.size)}"` +
+    ` font-weight="${entry?.attributes.weight ?? 400}"` +
+    ` font-style="${entry?.attributes.italic === true ? 'italic' : 'normal'}"` +
     ` fill="transparent" style="pointer-events: all; white-space: pre" xml:space="preserve"` +
     ` data-selection-line="true">${escape(text)}</text>`
   );

@@ -164,6 +164,7 @@ impl Paginator<'_> {
                     y: baseline,
                     font_id: run.font_id,
                     size: run.size,
+                    width: glyph_x - x_cursor,
                     text: run.text.clone(),
                     source: run.source.clone(),
                     source_map: run.source_map.clone(),

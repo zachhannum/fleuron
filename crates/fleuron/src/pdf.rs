@@ -296,6 +296,8 @@ fn paint(
             features: _,
             origin: _,
             pseudo_element: _,
+            // Each glyph carries its own x.
+            width: _,
             // The page's items arrived in paint order, so the layer
             // that put them in it is spent.
             layer: _,
@@ -877,6 +879,7 @@ mod tests {
             y: 20.0,
             font_id: 0,
             size: 10.0,
+            width: advance * 2.0 - 1.0,
             text: "dd".into(),
             source: String::new(),
             source_map: Vec::new(),

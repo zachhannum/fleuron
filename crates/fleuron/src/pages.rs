@@ -128,6 +128,9 @@ pub enum DrawItem {
         font_id: u16,
         /// Em size in points.
         size: f32,
+        /// How far the run's glyphs advance, in points: the run ends
+        /// at `x + width`.
+        width: f32,
         /// The text the glyphs were shaped from, which the glyphs'
         /// ranges index. A painter that draws characters rather than
         /// glyphs draws these.

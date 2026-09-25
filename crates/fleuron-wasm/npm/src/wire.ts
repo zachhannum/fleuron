@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 16;
+export const WIRE_VERSION = 17;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -74,6 +74,8 @@ export interface TextItem {
   fontId: number;
   /** Em size in points. */
   size: number;
+  /** How far the run's glyphs advance, in points: the run ends at `x + width`. */
+  width: number;
   /**
    * The text the glyphs were shaped from, which each glyph's range
    * indexes. A painter that draws characters rather than glyphs
@@ -582,6 +584,7 @@ function item(r: Reader): DrawItem {
         y: r.f32(),
         fontId: r.varint(),
         size: r.f32(),
+        width: r.f32(),
         text: r.string(),
         source: r.string(),
         sourceMap: r.seq(() => r.varint()),
