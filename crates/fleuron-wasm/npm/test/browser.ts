@@ -778,6 +778,137 @@ check(
   JSON.stringify(selection.crossLine),
 );
 
+// The highlight follows the set line. Every character of a selection
+// line is measured as the browser highlights it: each box meets the
+// one before it, and all of them are as tall as the glyphs of the
+// line's largest run, whatever its face and size.
+const highlight = await page.evaluate(async () => {
+  const faults: string[] = [];
+  let lines = 0;
+  const sizes = new Set<string>();
+  for (const number of [1, 2]) {
+    globalThis.preview.page = number;
+    await globalThis.__settledOnPage(number);
+    await document.fonts.ready;
+    const svg = document.querySelector('#preview svg') as SVGSVGElement;
+    const painted = [...svg.querySelectorAll('text:not([data-selection-line])')] as SVGTextElement[];
+    for (const line of svg.querySelectorAll('text[data-selection-line]') as NodeListOf<SVGTextElement>) {
+      const node = line.firstChild;
+      const text = line.textContent ?? '';
+      if (line.childNodes.length !== 1 || node === null) {
+        faults.push(`page ${number}: a line of ${line.childNodes.length} nodes`);
+        continue;
+      }
+      const y = line.getAttribute('y');
+      const size = line.getAttribute('font-size') ?? '';
+      const glyphs = painted.find(
+        (run) => run.getAttribute('y') === y && run.getAttribute('font-size') === size,
+      );
+      if (glyphs === undefined) {
+        faults.push(`page ${number}: no run at ${size}pt on the baseline ${y}`);
+        continue;
+      }
+      const set = glyphs.getBoundingClientRect();
+      const range = document.createRange();
+      let previous: DOMRect | null = null;
+      for (let at = 0; at < text.length; at += 1) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const box = range.getBoundingClientRect();
+        if (Math.abs(box.top - set.top) > 0.5 || Math.abs(box.height - set.height) > 0.5) {
+          faults.push(
+            `page ${number} ${JSON.stringify(text.slice(0, 20))} character ${at} is ${box.height.toFixed(2)}px tall at ${box.top.toFixed(2)}, the set line ${set.height.toFixed(2)}px at ${set.top.toFixed(2)}`,
+          );
+          break;
+        }
+        if (previous !== null && Math.abs(box.left - previous.right) > 0.5) {
+          faults.push(
+            `page ${number} ${JSON.stringify(text.slice(0, 20))} character ${at} starts at ${box.left.toFixed(2)}, the one before ends at ${previous.right.toFixed(2)}`,
+          );
+          break;
+        }
+        previous = box;
+      }
+      lines += 1;
+      sizes.add(size);
+    }
+  }
+  return { faults, lines, sizes: [...sizes] };
+});
+check(
+  'the highlight on a selected line is one band from its first character to its last',
+  highlight.lines > 0 && !highlight.faults.some((fault) => fault.includes('starts at')),
+  highlight.faults.filter((fault) => fault.includes('starts at')).slice(0, 3).join('; '),
+);
+check(
+  'the highlight on each line is as tall as the set line, for every face and size on the page',
+  highlight.sizes.length >= 3 && highlight.faults.length === 0,
+  `sizes ${highlight.sizes.join(', ')}; ${highlight.faults.slice(0, 3).join('; ')}`,
+);
+
+// A drag that starts off the glyphs still selects: in the gap between
+// two lines of a paragraph, from the line nearer to where it starts,
+// and in the margin beside a line.
+const between = await page.evaluate(async () => {
+  globalThis.preview.page = 1;
+  await globalThis.__settledOnPage(1);
+  const lines = [...document.querySelectorAll('#preview svg text[data-selection-line]')] as SVGTextElement[];
+  const at = lines.findIndex((line) => (line.textContent ?? '').includes('Nottinghamshire'));
+  const first = lines[at]?.getBoundingClientRect();
+  const second = lines[at + 1]?.getBoundingClientRect();
+  return first === undefined || second === undefined
+    ? null
+    : {
+        left: first.left,
+        right: Math.min(first.right, second.right),
+        above: first.bottom + (second.top - first.bottom) / 4,
+        below: second.top - (second.top - first.bottom) / 4,
+        opened: first.bottom < second.top,
+        baseline: first.top + first.height / 2,
+        next: lines[at + 1]?.textContent ?? '',
+        line: lines[at]?.textContent ?? '',
+      };
+});
+async function dragged(fromX: number, fromY: number, toX: number, toY: number): Promise<string> {
+  await page.evaluate(() => document.getSelection()?.removeAllRanges());
+  await page.mouse.move(fromX, fromY);
+  await page.mouse.down();
+  await page.mouse.move(toX, toY, { steps: 8 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => {
+    const selection = document.getSelection();
+    const inLayer = (node: Node | null | undefined): boolean =>
+      node?.parentElement?.closest('[data-selection-layer]') !== null &&
+      node?.parentElement?.closest('[data-selection-layer]') !== undefined;
+    return selection !== null && inLayer(selection.anchorNode) && inLayer(selection.focusNode)
+      ? selection.toString()
+      : '';
+  });
+  await page.evaluate(() => document.getSelection()?.removeAllRanges());
+  return selected;
+}
+if (between === null) {
+  check('the display-typography book has two lines of a paragraph on its opening page', false);
+} else {
+  const fromAbove = await dragged(between.left + 30, between.above, between.right - 20, between.above);
+  const fromBelow = await dragged(between.left + 30, between.below, between.right - 20, between.below);
+  const fromMargin = await dragged(between.left - 12, between.baseline, between.right - 20, between.baseline);
+  check(
+    'a drag that starts between two lines selects text',
+    between.opened &&
+      fromAbove.length > 0 &&
+      between.line.includes(fromAbove) &&
+      fromBelow.length > 0 &&
+      between.next.includes(fromBelow),
+    `${JSON.stringify(fromAbove)} and ${JSON.stringify(fromBelow)}`,
+  );
+  check(
+    "a drag that starts inside a line's box, off its glyphs, selects that line",
+    fromMargin.length > 0 && between.line.includes(fromMargin.trim()) && between.line.startsWith(fromMargin.slice(0, 5)),
+    JSON.stringify(fromMargin),
+  );
+}
+
 // The list form, driven: the same sheet as the second of two
 // layers, over a preset it overrides and a declaration the engine
 // does not honour. What the layers set is what the one string set,

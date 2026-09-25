@@ -221,7 +221,9 @@ The PDF writer reads the same display structure, so the two painters draw the sa
 
 ## Selection and copy
 
-A drag over the page selects text from the invisible layer, one `<text>` per line rather than per run, laid over the glyphs. The glyph layer beneath takes no pointer events, so the drag always lands on the line rather than a glyph.
+A drag over the page selects text from an invisible layer over the glyphs. The layer has one `<text>` for each line rather than for each run. Nothing that the painter draws under it takes pointer events. A drag that starts between two lines or beside a line starts at the nearest line.
+
+The highlight on a selected line is one band from the first selected character to the last. The band is as tall as the glyphs of the largest run on the line.
 
 Copy answers from that layer's own selection rather than the browser's default serialization across it: a selection spanning several lines joins them in reading order, with nothing duplicated or dropped.
 
