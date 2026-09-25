@@ -21,6 +21,8 @@ import {
   Client,
   Session,
   isRendered,
+  SUBSET,
+  VERSION,
   WIRE_VERSION,
   decodeDisplayList,
   faceFamily,
@@ -1760,6 +1762,11 @@ once.setMarkdown('gulliver-excerpt.md', markdown);
 const direct = decodeDisplayList(once.preview());
 check('the same module used once agrees with the worker', direct.pages.length === cli.pages);
 check('the module and the reader agree on the wire version', wireVersion() === WIRE_VERSION);
+check(
+  'the description and the package name one version',
+  SUBSET.version === VERSION,
+  `${SUBSET.version} described, ${VERSION} shipped`,
+);
 once.free();
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

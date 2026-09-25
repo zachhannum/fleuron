@@ -9,6 +9,9 @@
  *
  * {@link Preview} is all of that behind one object: an element, a
  * manuscript, and a page on screen.
+ *
+ * {@link SUBSET} is the CSS this build of the engine accepts, for a
+ * host that offers a style editor.
  */
 
 export { Client, SUPERSEDED, type Transport } from './client.js';
@@ -40,6 +43,18 @@ export {
 } from './protocol.js';
 export { Preview, type PreviewOptions } from './preview.js';
 export { VERSION } from './version.js';
+export {
+  SUBSET,
+  type Descriptor,
+  type FontFaceRule,
+  type MarginBoxDescription,
+  type PageRule,
+  type PageSize,
+  type Property,
+  type Selector,
+  type Selectors,
+  type Subset,
+} from './subset.js';
 export { faceFamily, paintPage, type PaintOptions } from './svg.js';
 export {
   PAGE_BACKGROUND,
