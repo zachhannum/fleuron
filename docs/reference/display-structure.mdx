@@ -104,6 +104,7 @@ Text {
     y: f32,
     font_id: u16,
     size: f32,
+    width: f32,
     text: String,
     source: String,
     source_map: Vec<u32>,
@@ -117,6 +118,8 @@ Text {
 ```
 
 One run of shaped glyphs sharing a font, a size and a baseline. `y` is the baseline, not the top of the line box.
+
+`width` is how far the glyphs of the run advance, in points. The run ends at `x + width`. A painter that puts selectable text over the glyphs needs it to find where the last glyph ends.
 
 <Playground
   demo="display-structure"

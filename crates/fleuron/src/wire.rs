@@ -30,7 +30,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 16;
+pub const VERSION: u16 = 17;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -157,6 +157,7 @@ mod tests {
                         y: 96.5,
                         font_id: 0,
                         size: 11.0,
+                        width: 18.5,
                         text: "FI ❦".into(),
                         source: "fi ❦".into(),
                         source_map: vec![0, 1, 2, 3, 4, 5, 6],
