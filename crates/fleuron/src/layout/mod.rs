@@ -281,7 +281,7 @@ impl Paginator<'_> {
     }
 
     /// Whether the sheet floats anything.
-    fn floats(&self) -> bool {
+    pub(super) fn floats(&self) -> bool {
         *self.floats.get_or_init(|| {
             self.styles
                 .styles()
