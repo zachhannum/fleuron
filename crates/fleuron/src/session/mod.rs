@@ -45,7 +45,7 @@
 
 use std::borrow::Cow;
 
-use crate::content::{Book, NodeId, SourceRange};
+use crate::content::{Book, Names, NodeId, SourceRange};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::layout::{Fragment, Numbering, PageInfo, Piece, References, no_assets};
@@ -420,6 +420,14 @@ impl Session<'_> {
     /// The session's own copy of the book, node ids assigned.
     pub fn book(&self) -> &Book {
         &self.book
+    }
+
+    /// The classes and the ids the blocks and inlines of one source
+    /// carry, or of the whole book when `source` is `None`, as the
+    /// book holds them now. A section's own names are not in the
+    /// answer.
+    pub fn names(&self, source: Option<&str>) -> Names {
+        self.book.names(source)
     }
 
     /// The compiled styling behind the last update.

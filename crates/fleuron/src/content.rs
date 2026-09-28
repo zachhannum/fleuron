@@ -225,6 +225,16 @@ impl Attributes {
     }
 }
 
+/// The classes and the ids some part of a book carries, each once and
+/// in sorted order, as a sheet names them: without the `.` or the `#`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Names {
+    /// Every class.
+    pub classes: Vec<String>,
+    /// Every id.
+    pub ids: Vec<String>,
+}
+
 /// A 1-based position in the frontend's source document.
 ///
 /// Line and column are as the markdown parser reported them. This is
@@ -939,6 +949,31 @@ impl Book {
         Some((source, span))
     }
 
+    /// The classes and the ids the blocks and inlines of one source
+    /// carry, or of every source when `source` is `None`. A list
+    /// item, a table row or cell, and a note count as blocks and
+    /// inlines here.
+    ///
+    /// A section's own names are not in the answer. A host sets them
+    /// beside the source, or frontmatter writes them.
+    pub fn names(&self, source: Option<&str>) -> Names {
+        let mut classes = std::collections::BTreeSet::new();
+        let mut ids = std::collections::BTreeSet::new();
+        let mut add = |attributes: &Attributes| {
+            classes.extend(attributes.classes.iter().cloned());
+            ids.extend(attributes.id.iter().cloned());
+        };
+        for section in &self.sections {
+            if source.is_none_or(|source| section.source.as_deref() == Some(source)) {
+                names_in_blocks(&section.blocks, &mut add);
+            }
+        }
+        Names {
+            classes: classes.into_iter().collect(),
+            ids: ids.into_iter().collect(),
+        }
+    }
+
     /// The ids one node and its descendants hold.
     ///
     /// Ids are assigned in document order, a node before its
@@ -965,6 +1000,56 @@ impl Book {
             return None;
         }
         subtree_in_blocks(&section.blocks, node)
+    }
+}
+
+/// Hands the names of every block and inline under these blocks to
+/// `add`.
+fn names_in_blocks(blocks: &[Block], add: &mut impl FnMut(&Attributes)) {
+    for block in blocks {
+        add(block_attributes(block));
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                names_in_inlines(inlines, add)
+            }
+            Block::Blockquote { blocks, .. } => names_in_blocks(blocks, add),
+            Block::List { items, .. } => {
+                for item in items {
+                    add(&item.attributes);
+                    names_in_blocks(&item.blocks, add);
+                }
+            }
+            Block::Table { head, body, .. } => {
+                for row in rows(head, body) {
+                    add(&row.attributes);
+                    for cell in &row.cells {
+                        add(&cell.attributes);
+                        names_in_blocks(&cell.blocks, add);
+                    }
+                }
+            }
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
+            | Block::PageBreak { .. }
+            | Block::ColumnBreak { .. }
+            | Block::Image { .. } => {}
+        }
+    }
+}
+
+/// The same, over inlines.
+fn names_in_inlines(inlines: &[Inline], add: &mut impl FnMut(&Attributes)) {
+    for inline in inlines {
+        add(inline_attributes(inline));
+        match inline {
+            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } => {}
+            Inline::Note { blocks, .. } => names_in_blocks(blocks, add),
+            Inline::Emphasis { children, .. }
+            | Inline::Strong { children, .. }
+            | Inline::Link { children, .. }
+            | Inline::Strikethrough { children, .. }
+            | Inline::Span { children, .. } => names_in_inlines(children, add),
+        }
     }
 }
 
@@ -2449,5 +2534,64 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
         assert_eq!(origin(Some("chapter-01.md"), None), "chapter-01.md");
         assert_eq!(origin(None, Some(pos)), "12:3");
         assert_eq!(origin(None, None), "");
+    }
+
+    /// The names a book reports are the ones its blocks and inlines
+    /// carry, down to a list item, a table cell and a note, each once
+    /// and sorted. A section's own names are left out, and a source
+    /// answers for its own sections alone.
+    #[test]
+    fn a_source_reports_the_names_its_blocks_and_inlines_carry() {
+        let text = |value: &str| serde_json::json!({"type": "text", "value": value});
+        let book: Book = serde_json::from_value(serde_json::json!({
+            "metadata": {},
+            "sections": [
+                {
+                    "source": "one.md",
+                    "attributes": {"id": "front", "classes": ["chapter"]},
+                    "blocks": [
+                        {"type": "heading", "level": 1, "inlines": [text("One")],
+                         "attributes": {"id": "ch1", "classes": ["opening"]}},
+                        {"type": "paragraph", "inlines": [
+                            {"type": "span", "children": [text("aside")],
+                             "attributes": {"classes": ["smallcaps"]}},
+                            {"type": "note", "blocks": [
+                                {"type": "paragraph", "inlines": [text("n")],
+                                 "attributes": {"classes": ["gloss"]}}
+                            ]}
+                        ]},
+                        {"type": "list", "items": [
+                            {"blocks": [], "attributes": {"id": "first-item", "classes": ["opening"]}}
+                        ]},
+                        {"type": "table", "body": [
+                            {"cells": [{"blocks": [], "attributes": {"classes": ["total"]}}],
+                             "attributes": {"classes": ["sum"]}}
+                        ]}
+                    ]
+                },
+                {
+                    "source": "two.md",
+                    "blocks": [
+                        {"type": "blockquote", "blocks": [], "attributes": {"classes": ["epigraph"]}}
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+
+        let one = book.names(Some("one.md"));
+        assert_eq!(
+            one.classes,
+            ["gloss", "opening", "smallcaps", "sum", "total"]
+        );
+        assert_eq!(one.ids, ["ch1", "first-item"]);
+        assert_eq!(book.names(Some("two.md")).classes, ["epigraph"]);
+        assert_eq!(book.names(Some("three.md")), Names::default());
+        let all = book.names(None);
+        assert_eq!(
+            all.classes,
+            ["epigraph", "gloss", "opening", "smallcaps", "sum", "total"]
+        );
+        assert_eq!(all.ids, ["ch1", "first-item"]);
     }
 }

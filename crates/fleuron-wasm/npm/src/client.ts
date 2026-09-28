@@ -9,6 +9,7 @@ import {
   type Folios,
   type Inspection,
   type MarginBoxName,
+  type Names,
   type NodeSource,
   type Op,
   type Request,
@@ -214,6 +215,23 @@ export class Client {
    */
   async hit(page: number, x: number, y: number): Promise<number | null> {
     return this.ask<number | null>({ ops: [], want: 'hit', page, x, y });
+  }
+
+  /**
+   * The classes and the ids the blocks and inlines of one source
+   * carry, each once and in sorted order, or of the whole book when
+   * `source` is left out. These are the names a selector reaches
+   * with `.` and `#`, as the engine read them: a brace run that
+   * stayed prose names nothing, and neither does a dialect with
+   * attributes off. A section's own names, from frontmatter or from
+   * an `attributes` op, are not in the answer.
+   *
+   * A question rather than a render: nothing overtakes it. The answer
+   * is about the book as the worker holds it, so an edit still in
+   * flight is an edit this has not seen.
+   */
+  async names(source?: string): Promise<Names> {
+    return this.ask<Names>(source === undefined ? { ops: [], want: 'names' } : { ops: [], want: 'names', source });
   }
 
   /** Applies inputs and asks for nothing back. */

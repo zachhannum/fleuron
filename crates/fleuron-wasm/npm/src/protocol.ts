@@ -104,6 +104,18 @@ export interface NodeSource {
 }
 
 /**
+ * The classes and the ids the blocks and inlines of a source carry,
+ * each once and in sorted order, as a sheet names them: without the
+ * `.` or the `#`.
+ */
+export interface Names {
+  /** Every class. */
+  classes: string[];
+  /** Every id. */
+  ids: string[];
+}
+
+/**
  * Where one node's content is set: the folios it runs between, and
  * the pages of the book those folios are.
  *
@@ -229,13 +241,22 @@ export type MarginBoxName =
  * What a request wants back, if anything: a display structure, a PDF,
  * the file a face was registered from, the node one byte of a source
  * was read into, the source one node was read from, the folios some
- * nodes are set on, what styled one element or margin box, or the
- * element at a point.
+ * nodes are set on, what styled one element or margin box, the
+ * element at a point, or the classes and ids a source writes.
  *
  * The first two are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
  */
-export type Want = 'preview' | 'pdf' | 'font' | 'node' | 'source' | 'folios' | 'inspect' | 'hit';
+export type Want =
+  | 'preview'
+  | 'pdf'
+  | 'font'
+  | 'node'
+  | 'source'
+  | 'folios'
+  | 'inspect'
+  | 'hit'
+  | 'names';
 
 /** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
@@ -249,7 +270,11 @@ export interface Request {
   want?: Want;
   /** Which face `want: 'font'` is asking for. */
   font?: number;
-  /** Which source, with `byte`, `want: 'node'` is asking about. */
+  /**
+   * Which source, with `byte`, `want: 'node'` is asking about, or
+   * which source `want: 'names'` is asking about. `want: 'names'`
+   * without it asks about the whole book.
+   */
   source?: string;
   /** Which byte of it. */
   byte?: number;

@@ -1752,6 +1752,65 @@ check(
   widths(stripped),
 );
 
+// The classes and ids a source writes, for a style editor that
+// completes a selector. The engine read the brace syntax, so the
+// answer is the names a sheet can reach and no others.
+const epigraph = [
+  '# Chapter One {.opening #ch1}',
+  '',
+  '{.epigraph}',
+  '> It is a truth universally acknowledged.',
+  '',
+  'The first paragraph.',
+  '',
+].join('\n');
+await client.apply([
+  {
+    op: 'book',
+    sources: [
+      { name: 'chapter.md', text: epigraph, attributes: { classes: ['front'], id: 'preface' } },
+      { name: 'coda.md', text: '# Coda {.closing #end}\n' },
+    ],
+  },
+]);
+const writes = await client.names('chapter.md');
+check(
+  'a source reports the classes and the id it writes, and not the names a host sets',
+  JSON.stringify(writes) === JSON.stringify({ classes: ['epigraph', 'opening'], ids: ['ch1'] }),
+  JSON.stringify(writes),
+);
+const everyName = await client.names();
+check(
+  'the book reports the names every source writes',
+  JSON.stringify(everyName) ===
+    JSON.stringify({ classes: ['closing', 'epigraph', 'opening'], ids: ['ch1', 'end'] }),
+  JSON.stringify(everyName),
+);
+await client.apply([{ op: 'edit', name: 'chapter.md', text: epigraph.replace('{.epigraph}\n', '') }]);
+const unwritten = await client.names('chapter.md');
+check(
+  'an edit that removes the attribute line removes its class',
+  JSON.stringify(unwritten.classes) === JSON.stringify(['opening']),
+  JSON.stringify(unwritten),
+);
+await client.apply([{ op: 'edit', name: 'chapter.md', text: 'The last paragraph.\n\n{.coda}\n' }]);
+const dangling = await client.names('chapter.md');
+check(
+  'an attribute line that names nothing reports no name',
+  dangling.classes.length === 0 && dangling.ids.length === 0,
+  JSON.stringify(dangling),
+);
+await client.apply([
+  { op: 'dialect', dialect: 'commonmark' },
+  { op: 'edit', name: 'chapter.md', text: epigraph },
+]);
+const plain = await client.names('chapter.md');
+check(
+  'under CommonMark the same source reports no name',
+  plain.classes.length === 0 && plain.ids.length === 0,
+  JSON.stringify(plain),
+);
+
 await worker.terminate();
 
 // The module also answers with no worker around it: the batch case,
