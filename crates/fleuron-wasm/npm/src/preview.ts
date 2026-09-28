@@ -30,6 +30,7 @@ import {
 import { faceFamily, paintPage } from './svg.js';
 import {
   linkAt,
+  sheetOf,
   type Asset,
   type FontRefEntry,
   type LayoutOutput,
@@ -685,8 +686,9 @@ export class Preview {
     if (box.width === 0 || box.height === 0) {
       return null;
     }
-    const x = ((event.clientX - box.left) * page.width) / box.width;
-    const y = ((event.clientY - box.top) * page.height) / box.height;
+    const sheet = sheetOf(page);
+    const x = sheet.x + ((event.clientX - box.left) * sheet.width) / box.width;
+    const y = sheet.y + ((event.clientY - box.top) * sheet.height) / box.height;
     return linkAt(page, x, y);
   }
 

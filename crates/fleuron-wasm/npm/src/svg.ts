@@ -10,8 +10,13 @@
  * nowhere else.
  *
  * The coordinate system is the display structure's: points, origin top
- * left, on a `viewBox` the size of the trim. Zoom is the width and
- * height the element is given, and moves nothing inside it.
+ * left, on a `viewBox` the size of the sheet. On a page with no bleed
+ * and no marks the sheet is the trim. On one with either, the `viewBox`
+ * starts at negative coordinates and the whole sheet shows, art past
+ * the trim and marks included, the same as the PDF page. A hairline
+ * shows the trim edge, so the page the reader gets after the cut is
+ * visible inside the sheet. Zoom is the width and height the element
+ * is given, and moves nothing inside it.
  *
  * A second, invisible layer sits over the glyphs: one `<text>` per
  * line, in the manuscript's own casing rather than what a
@@ -43,6 +48,7 @@ import type {
   RoundedItem,
   TextItem,
 } from './wire.js';
+import { sheetOf } from './wire.js';
 
 /** How a page is painted. */
 export interface PaintOptions {
@@ -104,17 +110,33 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   const body = page.items.map((item) => paint(item, options, id)).join('');
   const overlay = selectionOverlay(page.items, options);
   const marks = options.links === false ? '' : linkMarks(page);
+  const sheet = sheetOf(page);
   const ground =
     paper === null
       ? ''
-      : `<rect x="0" y="0" width="${num(page.width)}" height="${num(page.height)}" fill="${escape(paper)}"/>`;
+      : `<rect x="${num(sheet.x)}" y="${num(sheet.y)}" width="${num(sheet.width)}" height="${num(sheet.height)}" fill="${escape(paper)}"/>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg"` +
-    ` viewBox="0 0 ${num(page.width)} ${num(page.height)}"` +
-    ` width="${num(page.width * zoom)}" height="${num(page.height * zoom)}"` +
+    ` viewBox="${num(sheet.x)} ${num(sheet.y)} ${num(sheet.width)} ${num(sheet.height)}"` +
+    ` width="${num(sheet.width * zoom)}" height="${num(sheet.height * zoom)}"` +
     ` fill="${escape(options.ink ?? '#000000')}"` +
     ` data-page="${page.number}" data-side="${page.side}">` +
-    `<g style="pointer-events: none">${ground}${body}</g>${overlay}${marks}</svg>`
+    `<g style="pointer-events: none">${ground}${body}${trimEdge(page)}</g>${overlay}${marks}</svg>`
+  );
+}
+
+/**
+ * The edge the sheet is cut along, as a hairline over everything on the
+ * page, marked `data-trim`. Nothing on a page whose sheet is its trim.
+ */
+function trimEdge(page: Page): string {
+  if (page.bleed + page.slug <= 0) {
+    return '';
+  }
+  return (
+    `<rect data-trim="" x="0" y="0" width="${num(page.width)}" height="${num(page.height)}"` +
+    ` fill="none" stroke="#e0218a" stroke-width="0.5" stroke-dasharray="3 2"` +
+    ` vector-effect="non-scaling-stroke"/>`
   );
 }
 
