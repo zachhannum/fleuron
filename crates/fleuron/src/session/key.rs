@@ -385,6 +385,10 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         mix_blend_mode,
         blend_around,
         wrap_flow: _,
+        // A float is a fragment of its own, and a block that clears
+        // one carries that on its first fragment.
+        float,
+        clear,
         shape_outside: _,
         shape_margin: _,
         margin,
@@ -453,6 +457,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         .hash(h);
     (position, z_index, opacity.to_bits()).hash(h);
     (mix_blend_mode, blend_around).hash(h);
+    (float, clear).hash(h);
     hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);

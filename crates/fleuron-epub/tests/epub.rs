@@ -623,19 +623,19 @@ section > pagebreak { color: red }
 /// and a column, and does not reach the EPUB's sheet.
 #[test]
 fn a_property_outside_the_subset_warns_where_it_was_written() {
-    let css = "p {\n  color: #333;\n  float: left;\n  orphans: 3;\n}\n";
+    let css = "p {\n  color: #333;\n  display: flex;\n  orphans: 3;\n}\n";
     let epub = write(&read(EVERY_VARIANT), css);
     assert_eq!(epub.warnings.len(), 1, "{:?}", epub.warnings);
     assert_eq!(epub.warnings[0].origin.as_deref(), Some("author.css:3:3"));
     assert!(
-        epub.warnings[0].message.contains("`float`"),
+        epub.warnings[0].message.contains("`display`"),
         "{:?}",
         epub.warnings
     );
 
     let sheet = entry(&epub.bytes, "EPUB/book.css");
     assert!(sheet.contains("color: #333;"), "{sheet}");
-    assert!(!sheet.contains("float"), "{sheet}");
+    assert!(!sheet.contains("flex"), "{sheet}");
 }
 
 /// Acceptance: an image or a font file that is missing, or of a type

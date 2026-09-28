@@ -42,13 +42,14 @@ pub(crate) use inspect::element_of;
 pub use inspect::{Ancestor, InspectedDeclaration, Inspection, MatchedRule};
 pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
-    BlendMode, Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
-    ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
+    BlendMode, Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Clear,
+    Color, ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
     CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, Figures,
-    FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric,
-    Fractions, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, NumericSpacing,
-    PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece,
-    StringSet, Target, TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
+    Float, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
+    FontVariantNumeric, Fractions, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox,
+    NumericSpacing, PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource,
+    StringPiece, StringSet, Target, TextAlign, TextDecoration, TextJustify, TextTransform, Url,
+    Width, WrapFlow,
 };
 pub use sheet::{FontFace, Origin, SheetPosition, Source, Src, Written};
 
@@ -1497,7 +1498,7 @@ mod tests {
     #[test]
     fn a_sheet_reads_back_as_it_was_written() {
         let css = "@page :left { margin: 1in }\n\
-                   h1 + p, NOTE::first-letter {\n  color: red;\n  float: left;\n  --x: 1pt;\n}\n\
+                   h1 + p, NOTE::first-letter {\n  color: red;\n  display: flex;\n  --x: 1pt;\n}\n\
                    @font-face { font-family: Author; src: url(a.otf), local(\"B\") }";
         let sheets = Stylesheets::parse(&[Source::author("a.css", css)]);
         let written = sheets.written();
@@ -1778,6 +1779,27 @@ mod tests {
         // The paragraph inside the blockquote is the last of them.
         assert_eq!(nth(&tree, "p", 2).z_index, 0);
         assert_eq!(first(&tree, "section").z_index, 0);
+    }
+
+    /// Part: `float` and `clear` are a block's own, and neither
+    /// passes to the blocks inside it.
+    #[test]
+    fn float_and_clear_are_read_and_not_inherited() {
+        let tree = compile(
+            &sample(),
+            "blockquote { float: right; clear: both }
+             h1 { clear: left }
+             p { float: left }
+             p + p { float: none }",
+        );
+        assert_eq!(first(&tree, "blockquote").float, Float::Right);
+        assert_eq!(first(&tree, "blockquote").clear, Clear::Both);
+        assert_eq!(first(&tree, "h1").clear, Clear::Left);
+        assert_eq!(first(&tree, "p").float, Float::Left);
+        assert_eq!(nth(&tree, "p", 2).clear, Clear::None);
+        assert_eq!(first(&tree, "section").float, Float::None);
+        assert!(Clear::Both.clears(Float::Right));
+        assert!(!Clear::Left.clears(Float::Right));
     }
 
     /// Acceptance: `tbody tr:nth-child(odd)` counts the rows of the
