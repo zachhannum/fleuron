@@ -195,6 +195,8 @@ element.innerHTML = paintPage(output.pages[0], { fonts: output.fonts, zoom: 2 })
 
 `paintPage` returns the markup of one `<svg>` element. Its `viewBox` is the page size in points with the origin at the top left, which is the display structure's own coordinate system, so nothing is rescaled on the way out.
 
+On a page with a bleed or marks, the `viewBox` is the whole sheet that the PDF page holds: the page grown by `page.bleed + page.slug` on each edge. It starts at negative coordinates, and the page itself still starts at 0. A thin dashed `rect[data-trim]` shows where the printer cuts. `sheetOf(page)` gives the sheet as `{ x, y, width, height }`. On a page with no bleed and no marks, the sheet is the page.
+
 The second argument is all optional:
 
 | option | default | |
@@ -276,15 +278,16 @@ Each page has `links`. A link has `areas`, one box for each line of the link on 
 `linkAt(page, x, y)` gives the link at a point in page points, or `null`. It reads the boxes and not the DOM, so the order of the layers in the SVG does not change the answer. The following example follows a click on a page that the host drew, to a page that the host did not fetch yet:
 
 ```js
-import { linkAt, paintPage } from 'fleuron';
+import { linkAt, paintPage, sheetOf } from 'fleuron';
 
 frame.innerHTML = paintPage(page, { fonts: output.fonts });
 const svg = frame.querySelector('svg');
 
 svg.addEventListener('click', async (event) => {
   const box = svg.getBoundingClientRect();
-  const x = ((event.clientX - box.left) * page.width) / box.width;
-  const y = ((event.clientY - box.top) * page.height) / box.height;
+  const sheet = sheetOf(page);
+  const x = sheet.x + ((event.clientX - box.left) * sheet.width) / box.width;
+  const y = sheet.y + ((event.clientY - box.top) * sheet.height) / box.height;
   const link = linkAt(page, x, y);
   if (link?.to.kind === 'place') {
     event.preventDefault();
