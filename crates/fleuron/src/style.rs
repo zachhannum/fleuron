@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 use selectors::context::{
     MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode, SelectorCaches,
 };
+use cssparser::ToCss;
 use selectors::matching::{MatchingContext, matches_selector};
 use serde::Serialize;
 
@@ -49,11 +50,11 @@ pub use properties::{
     PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece,
     StringSet, Target, TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
-pub use sheet::{Origin, Source};
+pub use sheet::{FontFace, Origin, SheetPosition, Source, Src, Written};
 
 use element::{BLOCK_ELEMENTS, ElementTree, INLINE_ELEMENTS};
 use properties::{Custom, Declaration};
-use sheet::{FontFace, Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet, Src};
+use sheet::{Importance, MarginDeclaration, PageDeclaration, PageRule, Sheet};
 
 /// The defaults, as a stylesheet. There are no style constants in the
 /// engine; this file is where the trade paperback lives.
@@ -720,10 +721,82 @@ impl Stylesheets {
         &self.warnings
     }
 
+    /// Every sheet as it was written, the built-in sheet first: what
+    /// a writer reads that hands the CSS to a renderer of its own
+    /// rather than laying it out.
+    ///
+    /// Only what the parser accepted is here. A rule or a declaration
+    /// outside the subset is in [`Stylesheets::warnings`] instead.
+    pub fn written(&self) -> Vec<WrittenSheet> {
+        self.sheets
+            .iter()
+            .map(|sheet| WrittenSheet {
+                origin: sheet.origin,
+                rules: sheet
+                    .rules
+                    .iter()
+                    .map(|rule| WrittenRule {
+                        selectors: rule
+                            .selectors
+                            .slice()
+                            .iter()
+                            .map(|selector| selector.to_css_string())
+                            .collect(),
+                        declarations: rule.written.clone(),
+                        position: rule.position.clone(),
+                    })
+                    .collect(),
+                pages: sheet
+                    .pages
+                    .iter()
+                    .map(|page| WrittenPage {
+                        selector: page.selector.clone(),
+                        position: page.position.clone(),
+                    })
+                    .collect(),
+                faces: sheet.faces.clone(),
+            })
+            .collect()
+    }
+
     /// Compiles one book's styling against the faces in the registry.
     pub fn compile(&self, book: &Book, registry: &FontRegistry) -> StyleTree {
         cascade(book, &self.sheets, registry, self.warnings.clone())
     }
+}
+
+/// One sheet as it was written. See [`Stylesheets::written`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrittenSheet {
+    /// Which origin the sheet cascades at.
+    pub origin: Origin,
+    /// The style rules, in the order they were written.
+    pub rules: Vec<WrittenRule>,
+    /// The `@page` rules, in the order they were written.
+    pub pages: Vec<WrittenPage>,
+    /// The `@font-face` rules, in the order they were written.
+    pub faces: Vec<FontFace>,
+}
+
+/// One style rule as it was written.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrittenRule {
+    /// Each selector of the list, as CSS.
+    pub selectors: Vec<String>,
+    /// The declarations the parser accepted, in the order they were
+    /// written.
+    pub declarations: Vec<Written>,
+    /// Where the rule begins.
+    pub position: SheetPosition,
+}
+
+/// One `@page` rule as it was written.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrittenPage {
+    /// The prelude, `@page` included.
+    pub selector: String,
+    /// Where the rule begins.
+    pub position: SheetPosition,
 }
 
 /// One book's styling under the built-in sheet alone.
@@ -1415,6 +1488,53 @@ mod tests {
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
         REGISTRY.get_or_init(|| bundled_registry().expect("bundled font parses"))
+    }
+
+    /// A sheet reads back as it was written: selectors as CSS, the
+    /// declarations the parser kept with their positions, and the
+    /// at-rules. What the parser refused is a warning and not here.
+    #[test]
+    fn a_sheet_reads_back_as_it_was_written() {
+        let css = "@page :left { margin: 1in }\n\
+                   h1 + p, NOTE::first-letter {\n  color: red;\n  float: left;\n  --x: 1pt;\n}\n\
+                   @font-face { font-family: Author; src: url(a.otf), local(\"B\") }";
+        let sheets = Stylesheets::parse(&[Source::author("a.css", css)]);
+        let written = sheets.written();
+        assert_eq!(written.len(), 2);
+        assert_eq!(written[0].origin, Origin::UserAgent);
+
+        let author = &written[1];
+        assert_eq!(author.origin, Origin::Author);
+        assert_eq!(author.pages[0].selector, "@page :left");
+        assert_eq!(author.pages[0].position.to_string(), "a.css:1:1");
+        let rule = &author.rules[0];
+        assert_eq!(rule.selectors, ["h1 + p", "NOTE::first-letter"]);
+        assert_eq!(rule.position.to_string(), "a.css:2:1");
+        let kept: Vec<(&str, &str, String)> = rule
+            .declarations
+            .iter()
+            .map(|d| (&*d.property, &*d.value, d.position.to_string()))
+            .collect();
+        assert_eq!(
+            kept,
+            [
+                ("color", "red", "a.css:3:3".to_string()),
+                ("--x", "1pt", "a.css:5:3".to_string()),
+            ]
+        );
+        assert!(
+            sheets
+                .warnings()
+                .iter()
+                .any(|w| w.origin.as_deref() == Some("a.css:4:3")),
+            "{:?}",
+            sheets.warnings()
+        );
+        assert_eq!(author.faces[0].family, "Author");
+        assert_eq!(
+            author.faces[0].src,
+            [Src::Url("a.otf".into()), Src::Local("B".into())]
+        );
     }
 
     fn text(value: &str) -> Inline {

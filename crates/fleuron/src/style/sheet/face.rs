@@ -20,9 +20,13 @@ use super::{StyleError, warning};
 /// to describe its own cuts.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontFace {
+    /// The family a selector names the face by.
     pub family: String,
+    /// The declared slope, if the sheet declared one.
     pub style: Option<FontStyle>,
+    /// The declared weight, if the sheet declared one.
     pub weight: Option<u16>,
+    /// The sources, in the order to try them.
     pub src: Vec<Src>,
 }
 

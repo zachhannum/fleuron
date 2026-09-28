@@ -18,7 +18,8 @@ use super::value::{
     column_count, column_gap, column_width, length, line_style, line_width, property,
 };
 use super::{
-    Importance, MarginDeclaration, MarginRule, PageDeclaration, PageRule, StyleError, warning,
+    Importance, MarginDeclaration, MarginRule, PageDeclaration, PageRule, SheetPosition,
+    StyleError, warning,
 };
 
 /// `@page` prelude: an optional page name, then any of `:first`,
@@ -416,6 +417,7 @@ impl<'i> DeclarationParser<'i> for MarginBoxBody {
                 importance: Importance::Normal,
                 property: name.to_ascii_lowercase(),
                 value,
+                position: SheetPosition::at(&self.sheet, start.source_location()),
             })
         })(input)
     }
