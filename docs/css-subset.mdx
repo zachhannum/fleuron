@@ -1428,7 +1428,7 @@ img {
 
 The top of a float is at the place you wrote it. If the new float covers part of a float that is already there, it starts under that float. The engine shortens every line the float reaches to the space the float leaves. It chooses the line breaks of a paragraph beside the float over the whole paragraph at once, as it does for every paragraph. The lines under the float run the full width. Where the space beside the float is too narrow for text, the text continues below the float.
 
-Only the lines of a paragraph, a heading, or a list item go beside a float. A table, a code block, another image, and the text of `::before` and `::after` start below it. A background or a border on a block beside a float still covers the full width of that block.
+Only the lines of a paragraph, a heading, or a list item go beside a float. A table, a code block, an image that does not float, and the text of `::before` and `::after` start below it. A background or a border on a block beside a float still covers the full width of that block.
 
 `float` works only on an image among the paragraphs. It does nothing on any other block. A float inside a table cell or inside a block against the page gets a line of its own.
 
