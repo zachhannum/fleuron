@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/fleuron",
     "crates/fleuron-cli",
+    "crates/fleuron-epub",
     "crates/fleuron-fixtures",
     "crates/fleuron-markdown",
     "crates/fleuron-wasm",
@@ -50,6 +51,11 @@ krilla = { version = "0.5", default-features = false, features = ["raster-images
 png = "0.17"
 gif = "0.13"
 image-webp = "0.2"
+
+# epub: the container is a zip, written here rather than through a
+# zip crate so that its bytes are pinned. Both already arrive with png.
+miniz_oxide = "0.8"
+crc32fast = "1"
 
 # diagnostics & errors
 thiserror = "2"

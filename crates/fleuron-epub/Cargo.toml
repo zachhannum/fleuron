@@ -1,0 +1,20 @@
+[package]
+name = "fleuron-epub"
+description = "Reflowable EPUB for fleuron: a content tree and its stylesheets in, an EPUB 3 out, with nothing laid out on the way"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+
+[dependencies]
+fleuron = { path = "../fleuron" }
+cssparser.workspace = true
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+
+[dev-dependencies]
+fleuron-markdown = { path = "../fleuron-markdown" }
+insta = "1"

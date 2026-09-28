@@ -488,6 +488,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleuron-epub"
+version = "0.18.0"
+dependencies = [
+ "crc32fast",
+ "cssparser",
+ "fleuron",
+ "fleuron-markdown",
+ "insta",
+ "miniz_oxide",
+]
+
+[[package]]
 name = "fleuron-fixtures"
 version = "0.19.0"
 dependencies = [
