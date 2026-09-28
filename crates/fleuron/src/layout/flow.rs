@@ -12,6 +12,7 @@ use super::Paginator;
 use super::background::Backdrop;
 use super::build::Reflow;
 use super::exclusion::{AnchoredBoxes, Settling};
+use super::float::Aside;
 use super::fragment::{BreakPoint, Decoration, Decorations, Fragment, Marks, Piece};
 use super::furniture::Strings;
 use super::note::Note;
@@ -103,6 +104,9 @@ pub(super) struct Placed {
     /// The border boxes inside it, already positioned on this page: a
     /// table row's own, its cells', and their blocks'.
     boxes: Vec<(NodeId, PageBox)>,
+    /// What a float keeps to itself. A float takes no height in the
+    /// column, so `height` is zero on one.
+    pub(super) float: Option<Aside>,
 }
 
 /// The flow as it stood before one item of the book was placed, and
@@ -153,7 +157,7 @@ pub(super) struct Tier {
     /// Whether it holds blocks that span the columns.
     pub(super) spanning: bool,
     /// Where in `placed` it begins.
-    start: usize,
+    pub(super) start: usize,
 }
 
 impl Tier {
@@ -311,13 +315,14 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Places the item of `fragments` that starts at `index`, and
     /// answers where the next one starts.
     ///
-    /// A book with nothing anchored places one fragment at a time.
-    /// One with an image on the page places a paragraph at a time,
-    /// because an image narrows the bands the paragraph is set in.
-    /// The whole of it is then broken again.
+    /// A book with nothing anchored and nothing floated places one
+    /// fragment at a time. One with an image on the page or a float
+    /// places a paragraph at a time, because an image narrows the
+    /// bands the paragraph is set in. The whole of it is then broken
+    /// again.
     pub(super) fn item(&mut self, fragments: &[Fragment], index: usize) -> usize {
         match fragments[index].reflow.as_ref() {
-            Some(reflow) if !self.anchored.is_empty() => {
+            Some(reflow) if !self.anchored.is_empty() || self.paginator.floats() => {
                 let end = paragraph_end(fragments, index, reflow);
                 self.paragraph(&fragments[index..end], reflow);
                 end
@@ -447,6 +452,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             if fragment.spanning != self.tier().spanning {
                 self.open_tier(fragment.spanning, fragment.lead);
             }
+            self.clearance(fragment);
             let opening = self.opening();
             let lead = self.lead(fragment);
             let room = self.room(fragment);
@@ -479,16 +485,40 @@ impl<'a, 'p> Flow<'a, 'p> {
         } else {
             Vec::new()
         };
+        let (dx, dy) = fragment.offset;
         let boxes = match &fragment.piece {
             Piece::Row(row) if self.paints => {
                 let mut boxes = row.boxes.clone();
-                let (dx, dy) = fragment.offset;
                 shift_boxes(&mut boxes, x + dx + fragment.x, y + top + dy);
                 boxes
             }
+            Piece::Float(float) if self.paints => vec![(
+                float.node,
+                PageBox {
+                    page: 0,
+                    x: x + dx + fragment.x + float.x,
+                    y: y + top + dy + float.y,
+                    width: float.width,
+                    height: float.height,
+                },
+            )],
             _ => Vec::new(),
         };
-        self.cursor = top + fragment.height;
+        let float = match &fragment.piece {
+            Piece::Float(float) => Some(Aside {
+                x: fragment.x,
+                width: float.outer,
+                height: fragment.height,
+                side: float.side,
+            }),
+            _ => None,
+        };
+        let height = if float.is_some() {
+            0.0
+        } else {
+            fragment.height
+        };
+        self.cursor = top + height;
         let notes = fragment
             .notes
             .clone()
@@ -502,7 +532,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             column: self.column,
             tier: self.tiers.len() - 1,
             top,
-            height: fragment.height,
+            height,
             break_before: fragment.break_before,
             items,
             marks: fragment.marks.clone(),
@@ -511,6 +541,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             repeats: repeats(fragment),
             boxes,
             notes,
+            float,
         });
     }
 
@@ -543,6 +574,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 repeats: false,
                 boxes: Vec::new(),
                 notes: Vec::new(),
+                float: None,
             });
             self.cursor = top + height;
         }
@@ -565,11 +597,7 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// The space above the next fragment. The head of a column has
     /// none: a break dropped it, or the tier took it for every column.
     pub(super) fn lead(&self, fragment: &Fragment) -> f32 {
-        if self.column_empty() {
-            0.0
-        } else {
-            fragment.lead
-        }
+        if self.at_head() { 0.0 } else { fragment.lead }
     }
 
     /// The tier being filled.
@@ -585,7 +613,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         let tier = self.tier();
         let foot = self.placed[tier.start..]
             .iter()
-            .map(|placed| placed.top + placed.height)
+            .map(Placed::foot)
             .fold(tier.top, f32::max);
         // A tier with nothing in it yet becomes the one asked for,
         // where it stands.
@@ -747,7 +775,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             .iter()
             .map(|(_, area)| area.height)
             .fold(0.0, f32::max);
-        if self.paints && ending == Ending::Short {
+        // A page whose prose sets beside a float stays at the top, for
+        // the reason one beside an anchored box does.
+        let floats = placed.iter().any(|placed| placed.float.is_some());
+        if self.paints && ending == Ending::Short && !floats {
             self.align(&mut placed, under);
         }
         // Backgrounds, borders, column rules and images go in front
@@ -1143,7 +1174,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             let mut filled = vec![false; self.columns as usize];
             for entry in placed.iter().filter(|entry| entry.tier == index) {
                 let column = entry.column as usize;
-                feet[column] = feet[column].max(entry.top + entry.height);
+                feet[column] = feet[column].max(entry.foot());
                 filled[column] = true;
             }
             items.extend(

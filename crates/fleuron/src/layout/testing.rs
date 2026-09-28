@@ -5,7 +5,7 @@
 use crate::LayoutOutput;
 use crate::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Section, SourcePos};
 use crate::fonts::FontRegistry;
-use crate::pages::{DrawItem, Glyph, Page};
+use crate::pages::{DrawItem, Glyph, Page, Side};
 use crate::style::{Color, Content, MarginBox, PageQuery, PageStyle, Situation, StyleTree};
 
 use super::{Paginator, layout_book};
@@ -569,4 +569,88 @@ pub(super) fn under_h3(prose: &str) -> Vec<Section> {
         },
         paragraph(prose),
     ])]
+}
+
+/// The paragraph beside the 2in image, laid out under `css`, is broken
+/// by total fit and not filled band by band. The image takes `taken`
+/// of the measure at the top of the first page.
+///
+/// The greedy break of the same text against the same bands packs
+/// every line as far as it goes. The break the flow chose does not,
+/// and its lines sit closer to the bands they were set in: the slack a
+/// break leaves is what its demerits are read from.
+pub(super) fn assert_broken_by_total_fit(css: &str, taken: f32) {
+    const IMAGE: f32 = 144.0;
+    let text = "my father had a small estate in nottinghamshire and i was the third \
+                of five sons he sent me to emanuel college in cambridge at fourteen \
+                years old where i resided three years and applied myself close to my \
+                studies but the charge of maintaining me was too great for a narrow \
+                fortune";
+    let book = book_of(vec![section(vec![image(), paragraph(text)])]);
+    let styles = styled(css, &book);
+    let output = with_image(css, vec![section(vec![image(), paragraph(text)])]);
+    let page = &output.pages[0];
+
+    let geometry = master(Situation::First(Side::Recto)).geometry;
+    let measure = geometry.measure();
+    let narrow = measure - taken;
+    let foot = geometry.content_origin().1 + IMAGE;
+    let lines = content_lines(page);
+    let bands: Vec<f32> = lines
+        .iter()
+        .map(|(baseline, _)| if *baseline < foot { narrow } else { measure })
+        .collect();
+    let set: Vec<String> = lines
+        .iter()
+        .map(|(_, runs)| runs.iter().map(|run| run.2).collect::<String>())
+        .collect();
+    assert!(set.len() > 4, "too few lines to disagree over: {set:?}");
+
+    let paginator = Paginator::new(registry(), &styles);
+    let style = styles.root().paragraph();
+    let width = |text: &str| {
+        paginator
+            .line_of(text, &style)
+            .map(|line| paginator.line_width(&line))
+            .unwrap_or_default()
+    };
+    // What filling each band as far as it goes comes to.
+    let mut greedy: Vec<String> = Vec::new();
+    let mut band = 0;
+    for word in text.split_whitespace() {
+        let room = bands.get(band).copied().unwrap_or(measure);
+        match greedy.last_mut() {
+            Some(line) if width(&format!("{line} {word}")) <= room => {
+                line.push(' ');
+                line.push_str(word);
+            }
+            _ => {
+                greedy.push(word.to_string());
+                band = greedy.len() - 1;
+            }
+        }
+    }
+    let chose: Vec<&str> = set.iter().map(|line| line.trim()).collect();
+    let packed: Vec<&str> = greedy.iter().map(String::as_str).collect();
+    assert_ne!(chose, packed, "the two breaks agree, so nothing is proved");
+
+    // The last line of a break fills what it fills, so the slack under
+    // it is not a fault either break is charged for.
+    let slack = |broken: &[String]| -> f64 {
+        broken
+            .iter()
+            .take(broken.len() - 1)
+            .enumerate()
+            .map(|(index, line)| {
+                let room = bands.get(index).copied().unwrap_or(measure);
+                let gap = (room - width(line.trim())) as f64;
+                gap * gap
+            })
+            .sum()
+    };
+    let (chosen, filled) = (slack(&set), slack(&greedy));
+    assert!(
+        chosen < filled,
+        "the break the flow chose leaves {chosen} of slack against the greedy {filled}",
+    );
 }

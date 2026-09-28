@@ -74,7 +74,7 @@ impl Builder<'_, '_> {
     pub(super) fn hang(&mut self, start: usize, marker: Marker) {
         let first = self.fragments[start..]
             .iter_mut()
-            .find(|fragment| !matches!(fragment.piece, Piece::Anchor(_)));
+            .find(|fragment| !fragment.aside());
         match first {
             Some(fragment) => fragment
                 .markers
