@@ -456,7 +456,11 @@ impl<'a, 'p> Flow<'a, 'p> {
             let opening = self.opening();
             let lead = self.lead(fragment);
             let room = self.room(fragment);
-            if opening || self.cursor + lead + fragment.fixed + fragment.height <= room {
+            let top = match fragment.piece {
+                Piece::Float(_) => self.float_top(fragment),
+                _ => self.cursor + lead + fragment.fixed,
+            };
+            if opening || top + fragment.height <= room {
                 let headed = opening && repeats(fragment) && self.head_rows();
                 self.emit(fragment, lead);
                 // A page cannot end between the header rows and the
@@ -479,7 +483,10 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Paints one fragment onto the page being built.
     fn emit(&mut self, fragment: &Fragment, lead: f32) {
         let (x, y) = self.origin();
-        let top = self.cursor + lead + fragment.fixed;
+        let top = match fragment.piece {
+            Piece::Float(_) => self.float_top(fragment),
+            _ => self.cursor + lead + fragment.fixed,
+        };
         let items = if self.paints {
             self.paginator.fragment_items(fragment, x, y + top)
         } else {
@@ -516,9 +523,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         let height = if float.is_some() {
             0.0
         } else {
+            self.cursor = top + fragment.height;
             fragment.height
         };
-        self.cursor = top + height;
         let notes = fragment
             .notes
             .clone()
@@ -727,7 +734,9 @@ impl<'a, 'p> Flow<'a, 'p> {
             placed.tier = self.tiers.len() - 1;
             shift(&mut placed.items, to_x - from_x, to_y - from_y + down);
             shift_boxes(&mut placed.boxes, to_x - from_x, to_y - from_y + down);
-            self.cursor = placed.top + placed.height;
+            if placed.float.is_none() {
+                self.cursor = placed.top + placed.height;
+            }
             self.placed.push(placed);
         }
     }

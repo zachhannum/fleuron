@@ -1135,8 +1135,9 @@ pub(super) fn set_lines(
 
 /// Moves what the flow reads off the fragments a paragraph arrived as
 /// onto the ones it was set again as: the paragraph they came out of,
-/// the space and the break above the first of them, what it tells the page furniture, and the
-/// decorations that open and close over the paragraph.
+/// the space and the break above the first of them, what it tells the
+/// page furniture, and the decorations that open and close over the
+/// paragraph.
 ///
 /// `fixed` is the paragraph's own space above the first of them.
 pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment], fixed: f32) {

@@ -41,6 +41,24 @@ impl Flow<'_, '_> {
             .all(|placed| placed.float.is_some())
     }
 
+    /// Where `fragment`, a float, starts: at the cursor, or under the
+    /// floats already in the column that it would overlap.
+    pub(super) fn float_top(&self, fragment: &Fragment) -> f32 {
+        let Piece::Float(float) = &fragment.piece else {
+            return self.cursor;
+        };
+        let (left, right) = (fragment.x, fragment.x + float.outer);
+        self.placed[self.column_start..]
+            .iter()
+            .filter(|placed| {
+                placed
+                    .float
+                    .is_some_and(|other| other.x < right && left < other.x + other.width)
+            })
+            .map(Placed::foot)
+            .fold(self.cursor, f32::max)
+    }
+
     /// Moves the cursor down past the floats in the column being
     /// filled that `fragment` starts below: the ones its block clears,
     /// or every one for a fragment that is not a line of prose, which
@@ -283,6 +301,34 @@ mod tests {
         crate::layout::testing::assert_broken_by_total_fit(
             "img { float: left; margin-right: 12pt } p { text-indent: 0 }",
             IMAGE + 12.0,
+        );
+    }
+
+    /// Part: a float met while another stands at the same edge starts
+    /// under it rather than over it, and the text still starts beside
+    /// the first.
+    #[test]
+    fn a_second_float_at_the_same_edge_starts_under_the_first() {
+        let css = "img { float: left; width: 30%; margin-right: 12pt } p { text-indent: 0 }";
+        let page = &with_image(css, vec![section(vec![image(), image(), beside()])]).pages[0];
+        let images = painted(page);
+        assert_eq!(images.len(), 2, "the page paints {images:?}");
+        let ((x, y, w, h), (next_x, next_y, ..)) = (images[0], images[1]);
+        assert_eq!(next_x, x);
+        assert!(
+            (next_y - (y + h)).abs() < 1e-3,
+            "the second float is at {next_y}"
+        );
+        let first = spans(page)[0];
+        assert!(
+            first.0 < y + h,
+            "the text starts at {}, under the first float",
+            first.0
+        );
+        assert!(
+            first.1 >= x + w + 12.0 - 1e-3,
+            "the text starts at {}",
+            first.1
         );
     }
 
