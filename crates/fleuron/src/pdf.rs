@@ -96,15 +96,24 @@ fn write_with(
     let mut document = Document::new_with(settings);
     document.set_metadata(document_metadata(metadata));
     for page in &output.pages {
-        let mut pdf_page = document.start_page_with(PageSettings::new(page.width, page.height));
+        let outset = page.outset();
+        let mut pdf_page = document.start_page_with(settings_of(page));
         let mut surface = pdf_page.surface();
+        // Layout measures from the corner of the trim, and the sheet
+        // begins `outset` above and to the left of it.
+        if outset > 0.0 {
+            surface.push_transform(&Transform::from_translate(outset, outset));
+        }
         for item in &page.items {
             paint(&mut surface, item, page, &fonts, &images, registry)?;
+        }
+        if outset > 0.0 {
+            surface.pop();
         }
         surface.finish();
         for link in &page.links {
             for area in &link.areas {
-                if let Some(annotation) = annotation(area, &link.to) {
+                if let Some(annotation) = annotation(area, &link.to, outset, &output.pages) {
                     pdf_page.add_annotation(annotation);
                 }
             }
@@ -114,7 +123,7 @@ fn write_with(
     if !output.navigation.outline.is_empty() {
         let mut outline = Outline::new();
         for entry in &output.navigation.outline {
-            outline.push_child(outline_node(entry));
+            outline.push_child(outline_node(entry, &output.pages));
         }
         document.set_outline(outline);
     }
@@ -123,27 +132,53 @@ fn write_with(
         .map_err(|e| PdfError::Serialize(format!("{e:?}")))
 }
 
+/// The sheet a page is printed on. A page with no bleed and no marks
+/// is its trim and nothing else. One with either grows by its outset
+/// on every edge and names its trim and its bleed inside that.
+fn settings_of(page: &Page) -> PageSettings {
+    let outset = page.outset();
+    let settings = PageSettings::new(page.width + 2.0 * outset, page.height + 2.0 * outset);
+    if outset <= 0.0 {
+        return settings;
+    }
+    let bleed = page.bleed;
+    let trim = Rect::from_xywh(outset, outset, page.width, page.height);
+    let bled = Rect::from_xywh(
+        outset - bleed,
+        outset - bleed,
+        page.width + 2.0 * bleed,
+        page.height + 2.0 * bleed,
+    );
+    settings.with_trim_box(trim).with_bleed_box(bled)
+}
+
 /// One line of a link as the annotation a viewer follows. An empty
 /// area is none.
-fn annotation(area: &PageBox, to: &LinkTo) -> Option<Annotation> {
-    let rect = Rect::from_xywh(area.x, area.y, area.width, area.height)?;
+fn annotation(area: &PageBox, to: &LinkTo, outset: f32, pages: &[Page]) -> Option<Annotation> {
+    let rect = Rect::from_xywh(area.x + outset, area.y + outset, area.width, area.height)?;
     let target = match to {
-        LinkTo::Place { place, .. } => Target::Destination(destination(place).into()),
+        LinkTo::Place { place, .. } => Target::Destination(destination(place, pages).into()),
         LinkTo::Uri(uri) => Target::Action(LinkAction::new(uri.clone()).into()),
     };
     Some(LinkAnnotation::new(rect, target).into())
 }
 
 /// The top left corner of a box, on its page.
-fn destination(place: &PageBox) -> XyzDestination {
-    XyzDestination::new(place.page as usize, Point::from_xy(place.x, place.y))
+fn destination(place: &PageBox, pages: &[Page]) -> XyzDestination {
+    let outset = pages
+        .get(place.page as usize)
+        .map_or(0.0, |page| page.outset());
+    XyzDestination::new(
+        place.page as usize,
+        Point::from_xy(place.x + outset, place.y + outset),
+    )
 }
 
 /// One heading of the outline, and the headings under it.
-fn outline_node(entry: &OutlineEntry) -> OutlineNode {
-    let mut node = OutlineNode::new(entry.title.clone(), destination(&entry.place));
+fn outline_node(entry: &OutlineEntry, pages: &[Page]) -> OutlineNode {
+    let mut node = OutlineNode::new(entry.title.clone(), destination(&entry.place, pages));
     for child in &entry.children {
-        node.push_child(outline_node(child));
+        node.push_child(outline_node(child, pages));
     }
     node
 }
@@ -851,6 +886,8 @@ mod tests {
                 side: Side::Recto,
                 width,
                 height,
+                bleed: 0.0,
+                slug: 0.0,
                 sections: Vec::new(),
                 items,
                 links: Vec::new(),
@@ -939,6 +976,88 @@ mod tests {
             pdf.contains("/MediaBox [0 0 432 648]"),
             "media box missing from:\n{pdf}"
         );
+    }
+
+    /// The four numbers of one page box, where the file names it.
+    fn page_box(pdf: &str, name: &str) -> Option<[f32; 4]> {
+        let key = format!("/{name} [");
+        let rest = &pdf[pdf.find(&key)? + key.len()..];
+        let numbers: Vec<f32> = rest[..rest.find(']')?]
+            .split_whitespace()
+            .map(|number| number.parse().expect("a number"))
+            .collect();
+        numbers.try_into().ok()
+    }
+
+    /// A book laid out under one author sheet.
+    fn styled(book: &Book, css: &str) -> LayoutOutput {
+        let styles =
+            crate::style::Stylesheets::parse(&[crate::style::Source::author("author.css", css)])
+                .compile(book, registry());
+        crate::layout::layout_book(book, &styles, registry(), &Assets::none())
+    }
+
+    /// Acceptance: `@page { bleed: 3mm; marks: crop }` writes a sheet
+    /// whose MediaBox is larger than its TrimBox by the bleed plus the
+    /// room for the marks, with the BleedBox between the two.
+    #[test]
+    fn a_bled_page_writes_media_trim_and_bleed_boxes() {
+        let output = styled(
+            &book("Some prose."),
+            "@page { size: 432pt 648pt; bleed: 3mm; marks: crop }",
+        );
+        let page = &output.pages[0];
+        let (bleed, outset) = (page.bleed, page.outset());
+        assert!((bleed - 3.0 * 72.0 / 25.4).abs() < 1e-3);
+        assert!(outset > bleed, "no room for the marks");
+
+        let pdf = readable(&output, &Metadata::default());
+        let near = |a: [f32; 4], b: [f32; 4]| a.iter().zip(b).all(|(a, b)| (a - b).abs() < 0.01);
+        let media = page_box(&pdf, "MediaBox").expect("a media box");
+        let trim = page_box(&pdf, "TrimBox").expect("a trim box");
+        let bled = page_box(&pdf, "BleedBox").expect("a bleed box");
+        let (w, h) = (432.0 + 2.0 * outset, 648.0 + 2.0 * outset);
+        assert!(near(media, [0.0, 0.0, w, h]), "{media:?}");
+        assert!(
+            near(trim, [outset, outset, w - outset, h - outset]),
+            "{trim:?}"
+        );
+        let edge = outset - bleed;
+        assert!(near(bled, [edge, edge, w - edge, h - edge]), "{bled:?}");
+    }
+
+    /// Acceptance: a book naming no bleed writes the same single-box
+    /// pages it writes today.
+    #[test]
+    fn a_book_naming_no_bleed_writes_one_box() {
+        let output = styled(&book("Some prose."), "@page { size: 432pt 648pt }");
+        let pdf = readable(&output, &Metadata::default());
+        assert_eq!(page_box(&pdf, "MediaBox"), Some([0.0, 0.0, 432.0, 648.0]));
+        assert!(page_box(&pdf, "TrimBox").is_none());
+        assert!(page_box(&pdf, "BleedBox").is_none());
+    }
+
+    /// A link on a bled page covers its text on the sheet, which sits
+    /// the outset in from the sheet's corner.
+    #[test]
+    fn a_link_on_a_bled_page_moves_with_its_text() {
+        let area = PageBox {
+            page: 0,
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 5.0,
+        };
+        let mut output = page_of(Vec::new(), 100.0, 200.0);
+        let page = &mut output.pages[0];
+        page.bleed = 9.0;
+        page.links.push(crate::pages::Link {
+            areas: vec![area],
+            to: LinkTo::Uri("https://example.org".into()),
+        });
+        let pdf = readable(&output, &Metadata::default());
+        // Up from the foot of a sheet 218pt tall: 218 - 9 - 20 - 5.
+        assert_eq!(page_box(&pdf, "Rect"), Some([19.0, 184.0, 49.0, 189.0]));
     }
 
     /// Glyphs show where layout put them. A run whose second glyph

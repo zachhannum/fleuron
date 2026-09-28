@@ -42,6 +42,7 @@ mod list;
 mod navigation;
 mod note;
 mod reference;
+mod sheet;
 mod table;
 mod text;
 
@@ -71,9 +72,9 @@ use crate::content::{Book, Metadata, origin};
 use crate::fonts::{FeatureSetting, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::lines::{LineLayout, ParagraphStyle, Patterns};
-use crate::pages::{Page, Side};
+use crate::pages::{DrawItem, Page, Side};
 use crate::session::Session;
-use crate::style::{Background, Float, PageStyle, Position, StyleTree};
+use crate::style::{Background, Float, PageGeometry, PageStyle, Position, StyleTree};
 use crate::{LayoutOutput, Warning};
 
 use flow::{Flow, PageSlot};
@@ -567,16 +568,28 @@ impl Paginator<'_> {
     /// A page of the master's trim size with nothing on it. Numbering
     /// and side are settled once the whole flow is assembled.
     fn blank_page(&self, slot: &PageSlot) -> Page {
-        let geometry = self.styles.page(slot.query(Side::Verso)).geometry;
+        let geometry = self.sheet(slot);
         Page {
             number: 0,
             side: Side::Verso,
             width: geometry.width,
             height: geometry.height,
+            bleed: geometry.bleed(),
+            slug: geometry.slug(),
             sections: Vec::new(),
             items: Vec::new(),
             links: Vec::new(),
         }
+    }
+
+    /// The printer's marks around a page of the master's trim size.
+    fn marks(&self, slot: &PageSlot) -> Vec<DrawItem> {
+        sheet::marks(self.sheet(slot))
+    }
+
+    /// The geometry a page's trim, bleed and marks are read from.
+    fn sheet(&self, slot: &PageSlot) -> PageGeometry {
+        self.styles.page(slot.query(Side::Verso)).geometry
     }
 }
 

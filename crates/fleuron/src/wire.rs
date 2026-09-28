@@ -35,7 +35,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 21;
+pub const VERSION: u16 = 22;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -231,6 +231,8 @@ mod tests {
                 side: Side::Recto,
                 width: 396.0,
                 height: 612.0,
+                bleed: 9.0,
+                slug: 24.0,
                 sections: vec![NodeId::UNASSIGNED],
                 items: vec![
                     DrawItem::Text {
@@ -417,6 +419,8 @@ mod tests {
             side: Side::Verso,
             width: 396.0,
             height: 612.0,
+            bleed: 0.0,
+            slug: 0.0,
             sections: vec![],
             items: vec![],
             links: vec![],

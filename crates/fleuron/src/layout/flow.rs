@@ -856,6 +856,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         page.side = Side::of_number(self.pages.len() as u32 + 1);
         page.sections = sections;
         page.items = items;
+        if self.paints {
+            page.items.append(&mut self.paginator.marks(&self.slot));
+        }
         page.sort_by_layer();
         let content_items = page.items.len();
         self.pages.push(page);
@@ -926,6 +929,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             let mut page = self.paginator.blank_page(&blank);
             if self.paints {
                 page.items = self.page_background(self.pages.len(), &self.slot);
+                page.items.append(&mut self.paginator.marks(&blank));
             }
             let content_items = page.items.len();
             self.pages.push(page);
@@ -978,8 +982,9 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// What the page at `index` paints behind everything else on it:
-    /// the whole page box, margins included, so a scan reaches the
-    /// trim and the margin boxes sit over it.
+    /// the whole page box, margins included, and out past the trim to
+    /// the edge of the bleed, so a scan reaches the cut and the margin
+    /// boxes sit over it.
     ///
     /// It paints in the lowest layer there is, so the text of the
     /// page sits over it whatever the sheet says about the blocks.
@@ -994,11 +999,12 @@ impl<'a, 'p> Flow<'a, 'p> {
             return Vec::new();
         }
         let geometry = master.geometry;
+        let bleed = geometry.bleed();
         backdrop.items(
-            0.0,
-            0.0,
-            geometry.width,
-            geometry.height,
+            -bleed,
+            -bleed,
+            geometry.width + 2.0 * bleed,
+            geometry.height + 2.0 * bleed,
             DrawItem::PAGE_BACKGROUND,
         )
     }
@@ -2774,5 +2780,106 @@ mod tests {
             .find(|page| page.sections.len() > 1)
             .expect("two short chapters running on share a page");
         assert_eq!(shared.sections, ids);
+    }
+
+    /// A book of several pages with a blank leaf in it: a short
+    /// chapter ends on its opening recto and leaves a verso behind.
+    fn two_chapters() -> Vec<crate::content::Section> {
+        vec![
+            chapter("One", 14),
+            section(vec![heading("Two"), paragraph("A short chapter.")]),
+            chapter("Three", 14),
+        ]
+    }
+
+    /// Acceptance: a page background paints past the trim edge to the
+    /// bleed edge, on a page of text and on a blank leaf alike.
+    #[test]
+    fn a_page_background_paints_to_the_bleed_edge() {
+        let css = "@page { background-color: #e8e0d0; bleed: 9pt }";
+        let pages = paginate_styled(css, two_chapters());
+        assert!(pages.len() > 3);
+        for page in &pages {
+            assert_eq!(page.bleed, 9.0);
+            let ground = page.items.iter().find_map(|item| match item {
+                DrawItem::Rect {
+                    x, y, w, h, layer, ..
+                } if *layer == DrawItem::PAGE_BACKGROUND => Some((*x, *y, *w, *h)),
+                _ => None,
+            });
+            assert_eq!(
+                ground,
+                Some((-9.0, -9.0, page.width + 18.0, page.height + 18.0)),
+                "page {}",
+                page.number
+            );
+        }
+    }
+
+    /// Acceptance: the text on a bled page falls in the same place
+    /// relative to the trim as on an unbled one, and the folio with it.
+    #[test]
+    fn a_bled_page_sets_its_text_where_an_unbled_one_does() {
+        let plain = paginate(two_chapters());
+        let bled = paginate_styled("@page { bleed: 3mm; marks: crop cross }", two_chapters());
+        assert_eq!(plain.len(), bled.len(), "the page count moved");
+        let text = |page: &Page| {
+            page.items
+                .iter()
+                .filter_map(|item| match item {
+                    DrawItem::Text { x, y, text, .. } => Some((*x, *y, text.clone())),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        for (was, now) in plain.iter().zip(&bled) {
+            assert_eq!((was.width, was.height), (now.width, now.height));
+            assert_eq!(text(was), text(now), "page {} moved", now.number);
+        }
+    }
+
+    /// Acceptance: a book naming no bleed has no bleed, no slug and no
+    /// mark on any page.
+    #[test]
+    fn a_book_naming_no_bleed_has_pages_of_its_trim_alone() {
+        for page in paginate(two_chapters()) {
+            assert_eq!((page.bleed, page.slug), (0.0, 0.0));
+            let outside = page.items.iter().any(|item| match item {
+                DrawItem::Rect { x, y, .. } | DrawItem::Rounded { x, y, .. } => {
+                    *x < 0.0 || *y < 0.0
+                }
+                _ => false,
+            });
+            assert!(!outside, "page {} paints off the trim", page.number);
+        }
+    }
+
+    /// Part: every page carries the marks its master asks for, a blank
+    /// leaf included, and they survive the furniture being painted.
+    #[test]
+    fn every_page_carries_its_marks() {
+        let css = "@page { marks: crop }";
+        let pages = paginate_styled(css, two_chapters());
+        assert!(
+            pages.iter().any(|page| page.sections.is_empty()),
+            "no blank leaf"
+        );
+        for page in &pages {
+            assert_eq!(page.bleed, 6.0);
+            assert!(page.slug > 0.0);
+            let marks = page
+                .items
+                .iter()
+                .filter(|item| match item {
+                    DrawItem::Rect { x, y, .. } => *x < 0.0 || *y < 0.0,
+                    _ => false,
+                })
+                .count();
+            assert!(
+                marks >= 4,
+                "page {} has {marks} marks off its trim",
+                page.number
+            );
+        }
     }
 }
