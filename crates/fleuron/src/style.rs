@@ -22,10 +22,10 @@ mod substitution;
 
 use std::collections::BTreeMap;
 
+use cssparser::ToCss;
 use selectors::context::{
     MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode, SelectorCaches,
 };
-use cssparser::ToCss;
 use selectors::matching::{MatchingContext, matches_selector};
 use serde::Serialize;
 

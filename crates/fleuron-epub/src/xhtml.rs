@@ -366,8 +366,11 @@ impl<'s> Writer<'s, '_, '_> {
     /// names of their own are its text rather than elements.
     fn blocks(&mut self, blocks: &'s [Block], bare: bool) {
         for block in blocks {
+            let before = self.out.len();
             self.block(block, bare);
-            self.out.push('\n');
+            if self.out.len() > before {
+                self.out.push('\n');
+            }
         }
     }
 

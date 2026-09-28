@@ -18,3 +18,4 @@ crc32fast.workspace = true
 [dev-dependencies]
 fleuron-markdown = { path = "../fleuron-markdown" }
 insta = "1"
+miniz_oxide.workspace = true

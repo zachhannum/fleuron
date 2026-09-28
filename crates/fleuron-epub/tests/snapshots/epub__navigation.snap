@@ -1,0 +1,13 @@
+---
+source: crates/fleuron-epub/tests/epub.rs
+expression: tree
+---
+<ol>
+<li><a href="section-001.xhtml#n2">Part</a>
+<ol>
+<li><a href="section-001.xhtml#n4">One</a></li>
+<li><a href="section-001.xhtml#n8">Two</a></li>
+</ol>
+</li>
+<li><a href="section-002.xhtml#n13">Coda</a></li>
+</ol>
