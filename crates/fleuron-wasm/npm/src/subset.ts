@@ -1546,6 +1546,35 @@ export const SUBSET: Subset = {
         ]
       },
       {
+        name: 'bleed',
+        inherited: false,
+        syntax: 'auto | <length>',
+        keywords: [
+          'auto'
+        ],
+        examples: [
+          'auto',
+          '3mm',
+          '9pt'
+        ]
+      },
+      {
+        name: 'marks',
+        inherited: false,
+        syntax: 'none | [ crop || cross ]',
+        keywords: [
+          'none',
+          'crop',
+          'cross'
+        ],
+        examples: [
+          'none',
+          'crop',
+          'cross',
+          'crop cross'
+        ]
+      },
+      {
         name: 'background-color',
         inherited: false,
         syntax: '<color> | transparent',
