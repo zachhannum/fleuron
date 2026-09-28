@@ -77,6 +77,28 @@ A content edit re-breaks only the sections it changed. The rest keep their lines
 and the whole book is fragmented from the top. Page assembly then resolves counters, recto opens, 
 running heads and blank pages.
 
+## The classes and ids a source writes
+
+A style editor completes a selector from the names that the book already uses. `Session::names(Some(source))` answers with the classes and the ids that the blocks and inlines of one source carry. `Session::names(None)` answers for the whole book.
+
+The answer is a `Names`: two sorted lists, `classes` and `ids`. Each name is in its list once, without the `.` or the `#`.
+
+The answer comes from the content tree that the engine read. A brace run that stayed prose names nothing. Under `Dialect::common_mark()`, attributes are off, so the source names nothing. The classes and the id of a section are not in the answer, because the frontmatter or `set_source_attributes` sets them.
+
+The following example reads a chapter and gets the names that it writes:
+
+```rust
+let text = "# Chapter One {.opening #ch1}\n\n{.epigraph}\n> It is a truth universally acknowledged.\n";
+let (sections, _) = to_sections(text, "ch01.md", &Options::default());
+session.replace_source("ch01.md", sections);
+
+let names = session.names(Some("ch01.md"));
+assert_eq!(names.classes, ["epigraph", "opening"]);
+assert_eq!(names.ids, ["ch1"]);
+```
+
+In the npm package, `Client.names(source)` asks the same question of the worker. If you leave out `source`, the answer is about the whole book.
+
 ## Which pages a node is on
 
 `Session::folios(nodes)` answers where each node's content is set, one answer per node, in the order asked about.
