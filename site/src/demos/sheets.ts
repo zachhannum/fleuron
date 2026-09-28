@@ -67,6 +67,6 @@ p {
 }
 
 blockquote {
-  float: left;
+  display: flex;
 }
 `;
