@@ -943,7 +943,8 @@ impl Flow<'_, '_> {
             self.pending_anchors.extend(placed.anchors);
         }
         self.cursor = self.placed[self.column_start..]
-            .last()
+            .iter()
+            .rfind(|placed| placed.float.is_none())
             .map(|placed| placed.top + placed.height)
             .unwrap_or(self.tier().top);
     }
