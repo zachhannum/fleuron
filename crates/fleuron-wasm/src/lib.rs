@@ -406,6 +406,21 @@ impl Session {
         )
     }
 
+    /// The classes and the ids the blocks and inlines of one source
+    /// carry, as JSON: `{"classes": ["epigraph", "opening"], "ids":
+    /// ["ch1"]}`, each name once and in sorted order. Leaving the
+    /// source out asks about the whole book.
+    ///
+    /// The names come from the tree the engine read, so a host that
+    /// completes a selector offers what a sheet can reach: a brace
+    /// run that stayed prose names nothing, and neither does a
+    /// dialect with attributes off. A section's own names, from
+    /// frontmatter or from [`Session::set_source_attributes`], are
+    /// not in the answer.
+    pub fn names(&self, source: Option<String>) -> Result<String, JsError> {
+        serde_json::to_string(&self.engine.names(source.as_deref())).map_err(js_error)
+    }
+
     /// Where each of these nodes' content is set, as JSON: one
     /// answer per node, in the order asked about, each
     /// `{"first": 38, "last": 52, "at": 37, "count": 15}` or `null`.

@@ -30,6 +30,7 @@ export {
   type MarginBoxName,
   type MatchedRule,
   type Metadata,
+  type Names,
   type NodeSource,
   type PageBox,
   type Op,

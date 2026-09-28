@@ -142,6 +142,8 @@ export class Engine {
         );
       case 'hit':
         return answer(this.session.hit(request.page ?? 0, request.x ?? 0, request.y ?? 0) ?? null);
+      case 'names':
+        return answer(this.session.names(request.source));
       default:
         return this.session.preview(request.first, request.count);
     }
@@ -224,7 +226,8 @@ function answer(json: string | number | null): Uint8Array {
  * Whether a request is a question rather than a render: asking for a
  * face's bytes, asking where a node was read from or what was read at
  * a byte, asking which folios some nodes are set on, asking what
- * styled an element or which element is at a point, or asking which
+ * styled an element or which element is at a point, asking which
+ * classes and ids a source writes, or asking which
  * pages of the book as it stands (no `ops` of its own) fall in a
  * range. None of them overtakes a render nor is overtaken by one, or
  * by a sibling question, since none says what the last edit
@@ -243,6 +246,7 @@ function isQuestion(request: Request): boolean {
     request.want === 'folios' ||
     request.want === 'inspect' ||
     request.want === 'hit' ||
+    request.want === 'names' ||
     (request.want === 'preview' &&
       request.ops.length === 0 &&
       request.first !== undefined &&
