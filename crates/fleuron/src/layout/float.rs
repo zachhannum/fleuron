@@ -36,9 +36,11 @@ impl Flow<'_, '_> {
     /// What is placed next drops its lead, as it would in an empty
     /// column.
     pub(super) fn at_head(&self) -> bool {
-        self.placed[self.column_start..]
-            .iter()
-            .all(|placed| placed.float.is_some())
+        self.column_empty()
+            || self.paginator.floats()
+                && self.placed[self.column_start..]
+                    .iter()
+                    .all(|placed| placed.float.is_some())
     }
 
     /// Where `fragment`, a float, starts: at the cursor, or under the
@@ -64,6 +66,9 @@ impl Flow<'_, '_> {
     /// or every one for a fragment that is not a line of prose, which
     /// nothing sets beside a float.
     pub(super) fn clearance(&mut self, fragment: &Fragment) {
+        if !self.paginator.floats() {
+            return;
+        }
         let clear = match fragment.piece {
             Piece::Anchor(_) | Piece::Float(_) => return,
             _ if fragment.reflow.is_none() => Clear::Both,
