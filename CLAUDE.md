@@ -130,7 +130,8 @@ markdown in → valid PDF out**. The CLI runs it in
 2. `cargo clippy --workspace --all-targets -- -D warnings`
 3. `cargo test --workspace` (unit + property + snapshot)
 4. e2e job: build CLI, run fixture book, validate with `qpdf` +
-   `pdftotext` (tools installed via `apt` in the job)
+   `pdftotext` (tools installed via `apt` in the job), and the EPUB
+   of the same book with `epubcheck` (a pinned release)
 5. `cargo-deny` advisories check — no merged dependency with an open
    RUSTSEC advisory (rustybuzz taught us why this job exists)
 6. wasm job: calls `wasm.yml`. It checks that every version agrees and

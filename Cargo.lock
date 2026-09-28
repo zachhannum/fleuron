@@ -483,6 +483,7 @@ dependencies = [
  "fleuron",
  "fleuron-epub",
  "fleuron-markdown",
+ "miniz_oxide",
  "postcard",
  "serde_json",
  "sha2",

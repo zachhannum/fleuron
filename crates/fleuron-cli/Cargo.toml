@@ -29,3 +29,5 @@ postcard.workspace = true
 # The links and the outline of the fixture PDF are read back through
 # `qpdf --json`.
 serde_json = "1"
+# The EPUB the e2e writes is read back through its zip entries.
+miniz_oxide.workspace = true
