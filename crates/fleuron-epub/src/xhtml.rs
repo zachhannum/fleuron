@@ -680,7 +680,7 @@ fn heading(level: HeadingLevel) -> &'static str {
 pub fn refusal(what: &str, url: &str, refused: Refused) -> String {
     match refused {
         Refused::Missing => {
-            format!("{what} {url} could not be loaded. It is left out of the EPUB.")
+            format!("{what} {url} did not load. It is left out of the EPUB.")
         }
         Refused::Unknown => {
             format!("{what} {url} is not a type an EPUB can hold. It is left out of the EPUB.")

@@ -81,7 +81,7 @@ pub fn stylesheet(sheets: &Stylesheets, cx: &mut Context<'_>) -> String {
             for page in &sheet.pages {
                 cx.warnings.push(Warning {
                     message: format!(
-                        "Paged rule `{}`. A reading system makes the pages of an EPUB, so the EPUB leaves the rule out.",
+                        "Paged rule `{}`. The rule is left out of the EPUB.",
                         page.selector
                     ),
                     origin: Some(page.position.to_string()),
@@ -116,7 +116,7 @@ fn style_rule(rule: &WrittenRule, author: bool, out: &mut String, cx: &mut Conte
                 cx,
                 author,
                 format!(
-                    "Paged selector `{selector}`. A reading system has no `{element}`, so the EPUB leaves the selector out."
+                    "Paged selector `{selector}`: `{element}` is on a page only. The selector is left out of the EPUB."
                 ),
                 &rule.position,
             ),
@@ -131,9 +131,7 @@ fn style_rule(rule: &WrittenRule, author: bool, out: &mut String, cx: &mut Conte
             warn(
                 cx,
                 author,
-                format!(
-                    "Paged {what}. A reading system makes the pages of an EPUB, so the EPUB leaves the declaration out."
-                ),
+                format!("Paged {what}. The declaration is left out of the EPUB."),
                 &declaration.position,
             );
             continue;

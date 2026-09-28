@@ -2398,6 +2398,39 @@ fn two_runs_make_the_same_epub() {
     );
 }
 
+/// The sample in `docs/reference/epub.md` is what the CLI prints for
+/// the command the page gives, line for line.
+#[test]
+fn the_epub_page_shows_what_the_run_prints() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let page = std::fs::read_to_string(root.join("docs/reference/epub.md"))
+        .expect("the EPUB page is in the repository");
+    let samples: Vec<&str> = page
+        .lines()
+        .filter(|line| line.starts_with("fleuron: "))
+        .collect();
+    assert_eq!(samples.len(), 3, "the page stopped showing its sample");
+
+    let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("epub-page.epub");
+    let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
+        .current_dir(&root)
+        .args(["fixtures/gulliver-excerpt.md", "-o"])
+        .arg(&output)
+        .args(["-c", "fixtures/styled.css"])
+        .output()
+        .expect("the CLI runs");
+    assert!(run.status.success());
+    let stderr =
+        String::from_utf8_lossy(&run.stderr).replace(&output.display().to_string(), "book.epub");
+    let printed: Vec<&str> = stderr.lines().collect();
+    for sample in samples {
+        assert!(
+            printed.contains(&sample),
+            "the page shows a line the run does not print:\n{sample}\n\n{stderr}"
+        );
+    }
+}
+
 /// The fixture book through the CLI to an EPUB.
 fn render_epub(name: &str, css: &[&Path]) -> (PathBuf, String) {
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.epub"));
