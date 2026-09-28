@@ -8,7 +8,7 @@ use cssparser::{
 
 use crate::Warning;
 use crate::pages::Side;
-use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox, Pending};
+use crate::style::properties::{Content, CounterStyle, Edge, Length, MarginBox, Marks, Pending};
 
 use super::color::background_color;
 use super::custom::{mentions_var, raw};
@@ -113,6 +113,20 @@ pub(crate) const PAGE_PROPERTIES: &[Spec<PageDeclaration>] = &[
                 PageDeclaration::Margin(Edge::Left, length)
             })
         },
+    },
+    Spec {
+        name: "bleed",
+        inherited: false,
+        syntax: "auto | <length>",
+        examples: &["auto", "3mm", "9pt"],
+        read: |name, input| longhand(name, input, bleed, PageDeclaration::Bleed),
+    },
+    Spec {
+        name: "marks",
+        inherited: false,
+        syntax: "none | [ crop || cross ]",
+        examples: &["none", "crop", "cross", "crop cross"],
+        read: |name, input| longhand(name, input, marks, PageDeclaration::Marks),
     },
     Spec {
         name: "background-color",
@@ -486,6 +500,42 @@ fn content(input: &mut Parser<'_, '_>) -> Option<Content> {
             .ok();
     }
     None
+}
+
+/// `bleed`: `auto`, or a length that is not negative and is not a
+/// percentage, since a page has nothing to take one of.
+fn bleed(input: &mut Parser<'_, '_>) -> Option<Option<Length>> {
+    if input
+        .try_parse(|input| input.expect_ident_matching("auto"))
+        .is_ok()
+    {
+        return Some(None);
+    }
+    match length(input)? {
+        Length::Percent(_) => None,
+        Length::Points(value) | Length::Em(value) | Length::Rem(value) if value < 0.0 => None,
+        length => Some(Some(length)),
+    }
+}
+
+/// `marks`: `none`, or `crop` and `cross` in either order, each at
+/// most once.
+fn marks(input: &mut Parser<'_, '_>) -> Option<Marks> {
+    let mut marks = Marks::NONE;
+    let mut first = true;
+    while let Ok(keyword) = input.try_parse(|input| input.expect_ident().cloned()) {
+        let mark = match &*keyword.to_ascii_lowercase() {
+            "none" if first => {
+                return input.is_exhausted().then_some(Marks::NONE);
+            }
+            "crop" if !marks.crop => &mut marks.crop,
+            "cross" if !marks.cross => &mut marks.cross,
+            _ => return None,
+        };
+        *mark = true;
+        first = false;
+    }
+    (!first).then_some(marks)
 }
 
 /// `size`: one or two lengths, or a named sheet with an orientation.

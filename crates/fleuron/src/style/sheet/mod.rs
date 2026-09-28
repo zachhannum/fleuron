@@ -26,7 +26,7 @@ use crate::pages::Side;
 use crate::style::element::{Fleuron, PseudoElement};
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BorderStyle, Color, Content, Declaration, Edge, Length,
-    MarginBox, Pending, SizeSource, Url,
+    MarginBox, Marks, Pending, SizeSource, Url,
 };
 
 mod color;
@@ -228,6 +228,9 @@ pub enum PageDeclaration {
     ColumnRuleWidth(Length),
     ColumnRuleStyle(BorderStyle),
     AlignContent(AlignContent),
+    /// `bleed`, or `None` for `auto`.
+    Bleed(Option<Length>),
+    Marks(Marks),
     /// A value that reads a custom property of the book's root.
     Pending(Pending),
 }

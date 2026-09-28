@@ -399,6 +399,8 @@ mod tests {
             PageDeclaration::ColumnRuleWidth(_) => "column-rule-width",
             PageDeclaration::ColumnRuleStyle(_) => "column-rule-style",
             PageDeclaration::AlignContent(_) => "align-content",
+            PageDeclaration::Bleed(_) => "bleed",
+            PageDeclaration::Marks(_) => "marks",
             PageDeclaration::Pending(pending) => &pending.property,
         });
         check(MARGIN_BOX_PROPERTIES, |declaration| match declaration {
