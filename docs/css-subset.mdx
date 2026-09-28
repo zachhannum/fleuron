@@ -301,7 +301,7 @@ If a spanning block does not fit in the space left on the page, it moves to the 
 
 `align-content` moves only a page that has space below its content. A page can have that space when a break ends it, or when the book ends on it. A page that ends because nothing more fits on it does not move. The engine lays out a full page the same way under every value.
 
-The running heads and the page numbers stay where they are. An image or a block against the page stays where its insets put it. If the text of a page wraps around an image or a block, the content of that page stays at the top.
+The running heads and the page numbers stay where they are. An image or a block against the page stays where its insets put it. If the text of a page wraps around an image or a block, or goes beside a float, the content of that page stays at the top.
 
 The following example puts each chapter title on a page of its own, centered between the top and bottom margins:
 
@@ -1266,6 +1266,8 @@ The place where you write an image decides which page it lands on. An image writ
 
 The engine shortens every line the image reaches to the space the image leaves. The lines under the image run the full width. Where the image covers the full width, the text continues below it.
 
+An image against the page stays on the page its paragraph starts on. To keep an image next to its paragraph at a side of the text, use a [float](#floats) instead.
+
 ### Wrapping to the shape of an image
 
 `shape-outside` wraps the text around the shape of an image instead of around its box. That outline is called a contour.
@@ -1336,6 +1338,63 @@ img {
   wrap-flow: both;
 }
 ```
+
+## Floats
+
+A float is an image at one side of the text, with the paragraphs after it beside it. It stays among the paragraphs, next to the paragraph you wrote it above. If you edit the text before it, the float moves with its paragraph.
+
+`float` puts an image at one side of the text. On a page with columns, the side is the side of the column the image is in.
+
+| value | where the image goes |
+|---|---|
+| `none` | on a line of its own, which is the default |
+| `left` | at the left edge, with the text on its right |
+| `right` | at the right edge, with the text on its left |
+
+The image takes its size the same way as an image among the paragraphs. See [Image size](#image-size). Margins on the image add space between it and the text. The float takes up no height of its own.
+
+The following example puts each image at the right edge of the text, a third of its width, with space on its left and below it:
+
+```css
+img {
+  float: right;
+  width: 33%;
+  margin: 0 0 6pt 12pt;
+}
+```
+
+The top of a float is at the place you wrote it. If the new float covers part of a float that is already there, it starts under that float. The engine shortens every line the float reaches to the space the float leaves. It chooses the line breaks of a paragraph beside the float over the whole paragraph at once, as it does for every paragraph. The lines under the float run the full width. Where the space beside the float is too narrow for text, the text continues below the float.
+
+Only the lines of a paragraph, a heading, or a list item go beside a float. A table, a code block, another image, and the text of `::before` and `::after` start below it. A background or a border on a block beside a float still covers the full width of that block.
+
+`float` works only on an image among the paragraphs. It does nothing on any other block. A float inside a table cell or inside a block against the page gets a line of its own.
+
+### Clearing a float
+
+`clear` makes a block start below a float rather than beside it.
+
+| value | the floats the block starts below |
+|---|---|
+| `none` | none, which is the default |
+| `left` | a float at the left edge |
+| `right` | a float at the right edge |
+| `both` | every float |
+
+The following example starts each chapter title below any float above it:
+
+```css
+h2, h3 {
+  clear: both;
+}
+```
+
+### Floats across pages and columns
+
+The engine never divides a float between two pages. If the float does not fit in the space left in the column, the engine moves it to the next column. In the last column of a page, that is the next page. The text after the float moves with it. The space at the bottom of the column stays empty.
+
+A float belongs to the column it is in. It does not reach across the space between columns, and the text of the other column runs its full width. To put an image across two columns, put it [against the page](#images-on-a-divided-page).
+
+If the text of a page goes beside a float, the content of that page stays at the top. `align-content` does not move it.
 
 ## Footnotes
 
@@ -1738,7 +1797,7 @@ s { text-decoration: line-through }
 
 | area | not supported yet |
 |---|---|
-| layout | floats, grid, flexbox, transforms, `min-width`, `max-width` and `max-height` on anything but an image, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
+| layout | grid, flexbox, transforms, `float` on anything but an image, the `inline-start` and `inline-end` values of `float` and `clear`, `min-width`, `max-width` and `max-height` on anything but an image, `align-content` on a block, and the `align-content` values other than `start`, `center`, and `end` |
 | lists | `list-style-position`, `list-style-image`, the `list-style` shorthand, `::marker`, a string as a marker, and `counter(list-item)` |
 | tables | column widths measured from the content of the cells, `colspan`, `rowspan`, `border-spacing`, `vertical-align`, and `caption-side` |
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
