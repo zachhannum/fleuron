@@ -894,6 +894,33 @@ export const SUBSET: Subset = {
       ]
     },
     {
+      name: 'float',
+      inherited: false,
+      syntax: 'none | left | right',
+      keywords: [
+        'none',
+        'left',
+        'right'
+      ],
+      examples: [
+        'left'
+      ]
+    },
+    {
+      name: 'clear',
+      inherited: false,
+      syntax: 'none | left | right | both',
+      keywords: [
+        'none',
+        'left',
+        'right',
+        'both'
+      ],
+      examples: [
+        'both'
+      ]
+    },
+    {
       name: 'shape-outside',
       inherited: false,
       syntax: 'none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* )',

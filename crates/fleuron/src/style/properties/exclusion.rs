@@ -84,6 +84,48 @@ pub enum WrapFlow {
     End,
 }
 
+/// Which side of its column an image in the flow moves to, from
+/// `float`. The prose after it sets beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Float {
+    /// `none`: the image takes a band of its own.
+    None,
+    /// `left`: the image stands at the left edge, and the prose sets
+    /// to its right.
+    Left,
+    /// `right`: the image stands at the right edge, and the prose sets
+    /// to its left.
+    Right,
+}
+
+/// Which floats a block starts below, from `clear`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Clear {
+    /// `none`: the block sets beside any float.
+    None,
+    /// `left`: the block starts below a float on the left.
+    Left,
+    /// `right`: the block starts below a float on the right.
+    Right,
+    /// `both`: the block starts below every float.
+    Both,
+}
+
+impl Clear {
+    /// Whether a block that clears this way starts below a float to
+    /// `side`.
+    pub fn clears(self, side: Float) -> bool {
+        matches!(
+            (self, side),
+            (Clear::Both, Float::Left | Float::Right)
+                | (Clear::Left, Float::Left)
+                | (Clear::Right, Float::Right)
+        )
+    }
+}
+
 /// `shape-outside` as the sheet wrote it, before the cascade knows
 /// the font size its lengths are relative to.
 #[derive(Debug, Clone, PartialEq)]

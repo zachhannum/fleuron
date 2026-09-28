@@ -14,7 +14,9 @@ use super::background::{
 };
 use super::counter::{Content, ListStyleType, StringSet};
 use super::edges::{Border, BorderRadius, CornerRadius, Edges};
-use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
+use super::exclusion::{
+    Clear, Coord, Float, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow,
+};
 use super::value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
     Family, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
@@ -133,6 +135,13 @@ pub struct ComputedStyle {
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
+    /// Which side of its column an image in the flow moves to, from
+    /// `float`.
+    #[serde(skip_serializing_if = "floats_nowhere")]
+    pub float: Float,
+    /// Which floats the block starts below, from `clear`.
+    #[serde(skip_serializing_if = "clears_nothing")]
+    pub clear: Clear,
     /// The contour the prose sets around, from `shape-outside`.
     #[serde(skip_serializing_if = "wraps_its_box")]
     pub shape_outside: ShapeOutside,
@@ -242,6 +251,8 @@ impl ComputedStyle {
             z_index: 0,
             opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
+            float: Float::None,
+            clear: Clear::None,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
             margin: Edges::all(0.0),
@@ -290,6 +301,8 @@ impl ComputedStyle {
             z_index: 0,
             opacity: 1.0,
             wrap_flow: WrapFlow::Auto,
+            float: Float::None,
+            clear: Clear::None,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
             break_before: Break::Auto,
@@ -365,6 +378,8 @@ impl ComputedStyle {
             Declaration::ZIndex(layer) => self.z_index = *layer,
             Declaration::Opacity(opacity) => self.opacity = *opacity,
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
+            Declaration::Float(float) => self.float = *float,
+            Declaration::Clear(clear) => self.clear = *clear,
             Declaration::ShapeOutside(shape) => {
                 self.shape_outside = match shape {
                     ShapeSource::None => ShapeOutside::None,
@@ -490,6 +505,8 @@ impl ComputedStyle {
             Declaration::ZIndex(_) => self.z_index = base.z_index,
             Declaration::Opacity(_) => self.opacity = base.opacity,
             Declaration::WrapFlow(_) => self.wrap_flow = base.wrap_flow,
+            Declaration::Float(_) => self.float = base.float,
+            Declaration::Clear(_) => self.clear = base.clear,
             Declaration::ShapeOutside(_) => self.shape_outside = base.shape_outside.clone(),
             Declaration::ShapeMargin(_) => self.shape_margin = base.shape_margin,
             Declaration::Margin(edge, _) => *self.margin.edge(*edge) = base.margin.get(*edge),
@@ -719,6 +736,14 @@ fn opaque(opacity: &f32) -> bool {
 
 fn wraps_nothing(wrap: &WrapFlow) -> bool {
     *wrap == WrapFlow::Auto
+}
+
+fn floats_nowhere(float: &Float) -> bool {
+    *float == Float::None
+}
+
+fn clears_nothing(clear: &Clear) -> bool {
+    *clear == Clear::None
 }
 
 fn no_padding(padding: &Edges) -> bool {
