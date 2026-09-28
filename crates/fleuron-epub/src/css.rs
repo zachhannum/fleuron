@@ -45,12 +45,13 @@ const PAGED_ELEMENTS: &[&str] = &["notes", "pagebreak", "columnbreak"];
 const RENAMED: &[(&str, &str)] = &[("book", "body"), ("note", "aside")];
 
 /// The alignment a table's source writes on a column. It goes after
-/// the built-in rules and before the author's, and it weighs the same
-/// as one class, so an author rule for the cells still overrides it.
+/// the built-in rules and before the author's, and it weighs one
+/// element, so order decides against both: it overrides `th, td` in
+/// the built-in sheet, and any author rule for the cells overrides it.
 const ALIGNMENT: &str = "\
-:where(th, td)[data-align=\"left\"] { text-align: left; }
-:where(th, td)[data-align=\"center\"] { text-align: center; }
-:where(th, td)[data-align=\"right\"] { text-align: right; }
+th:where([data-align=\"left\"]), td:where([data-align=\"left\"]) { text-align: left; }
+th:where([data-align=\"center\"]), td:where([data-align=\"center\"]) { text-align: center; }
+th:where([data-align=\"right\"]), td:where([data-align=\"right\"]) { text-align: right; }
 ";
 
 /// What the stylesheet translation needs from the rest of the book.

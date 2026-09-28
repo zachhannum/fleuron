@@ -324,6 +324,26 @@ fn the_sheet_names_the_elements_the_documents_hold() {
     }
 }
 
+/// A column's alignment comes after the built-in rule for the cells
+/// and before the author's, and weighs the same as either. So it
+/// overrides the built-in sheet, and an author rule for the cells
+/// overrides it.
+#[test]
+fn a_column_alignment_sits_between_the_built_in_and_the_author_rules() {
+    let epub = write(&read(EVERY_VARIANT), "td { text-align: center }");
+    let sheet = entry(&epub.bytes, "EPUB/book.css");
+    let built_in = sheet
+        .find("th,\ntd {")
+        .expect("the built-in rule for the cells");
+    let aligned = sheet
+        .find("td:where([data-align=\"right\"])")
+        .expect("the alignment rule");
+    let author = sheet
+        .find("td {\n  text-align: center;")
+        .expect("the author rule");
+    assert!(built_in < aligned && aligned < author, "{sheet}");
+}
+
 /// A file the host cannot hand over warns, and the run goes on
 /// without it.
 #[test]
