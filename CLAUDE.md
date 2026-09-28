@@ -7,8 +7,10 @@ wins and the quick fix waits for its own PR.
 ## Project shape
 
 - Workspace: `crates/fleuron` (engine), `crates/fleuron-markdown`
-  (frontend), `crates/fleuron-cli` (binary), `crates/fleuron-wasm`
-  (bindings), `crates/fleuron-fixtures` (corpus and perf harness, never
+  (frontend), `crates/fleuron-epub` (reflowable EPUB from the content
+  tree and the sheets, beside the pipeline rather than in it),
+  `crates/fleuron-cli` (binary), `crates/fleuron-wasm` (bindings),
+  `crates/fleuron-fixtures` (corpus and perf harness, never
   published).
 - Outside the workspace: `crates/fleuron-wasm/npm` is the npm package
   `fleuron`, the TypeScript beside the module; `packages/react` is
