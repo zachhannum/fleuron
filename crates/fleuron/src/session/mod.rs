@@ -203,6 +203,9 @@ impl Cached {
             if let Piece::Anchor(node) = &mut fragment.piece {
                 *node = node.shifted(step);
             }
+            if let Piece::Float(float) = &mut fragment.piece {
+                float.node = float.node.shifted(step);
+            }
             if let Piece::Row(row) = &mut fragment.piece {
                 for (node, _) in &mut row.boxes {
                     *node = node.shifted(step);

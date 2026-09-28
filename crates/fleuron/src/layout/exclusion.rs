@@ -8,7 +8,9 @@ use std::rc::Rc;
 use crate::content::{Block, Book, NodeId, PseudoElement, block_position, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::{DrawItem, PageBox};
-use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
+use crate::style::{
+    ComputedStyle, Edges, Float, Inset, PageGeometry, Position, ShapeOutside, WrapFlow,
+};
 
 use super::Paginator;
 use super::build::{Builder, Child, Reflow, carry_over, children, set_lines};
@@ -855,9 +857,10 @@ impl Flow<'_, '_> {
             if set[at].spanning != self.tier().spanning {
                 self.open_tier(set[at].spanning);
             }
+            self.clearance(&set[at]);
             // The profile is read against where the line sits, which
             // is where `place` is about to put it.
-            let lead = if self.opening() { 0.0 } else { set[at].lead };
+            let lead = if self.at_head() { 0.0 } else { set[at].lead };
             let from = if at == 0 { 0 } else { ends[at - 1] };
             // A line set again keeps none of the gap it was broken
             // with. That gap was the page it left.
@@ -954,10 +957,33 @@ impl Flow<'_, '_> {
     /// column is not one of its holes, and an image that reaches two
     /// columns is a hole in each of them. A paragraph that spans the
     /// columns reads the whole content box.
+    ///
+    /// A float is a hole in the column it was placed in and in no
+    /// other. The prose sets on the side of it away from the edge it
+    /// stands at.
     fn holes(&self) -> Vec<Hole<'_>> {
+        let mut holes: Vec<Hole> = self.placed[self.column_start..]
+            .iter()
+            .filter_map(|placed| {
+                let float = placed.float?;
+                Some(Hole {
+                    rect: Rect {
+                        x: float.x,
+                        y: placed.top,
+                        w: float.width,
+                        h: float.height,
+                    },
+                    wrap: match float.side {
+                        Float::Right => WrapFlow::Start,
+                        _ => WrapFlow::End,
+                    },
+                    shape: None,
+                })
+            })
+            .collect();
         let index = self.pages.len();
         let Some(anchored) = self.anchored.by_page.get(&index) else {
-            return Vec::new();
+            return holes;
         };
         let geometry = self.paginator.master(index, &self.slot).geometry;
         let (origin, width) = if self.tier().spanning {
@@ -971,7 +997,7 @@ impl Flow<'_, '_> {
             w: width,
             h: self.height,
         };
-        anchored
+        let anchored = anchored
             .iter()
             .map(|at| &self.anchored.all[*at])
             .filter(|image| image.wrap != WrapFlow::Auto)
@@ -981,8 +1007,9 @@ impl Flow<'_, '_> {
                 rect: rect.within(origin),
                 wrap: image.wrap,
                 shape: image.shape.as_ref(),
-            })
-            .collect()
+            });
+        holes.extend(anchored);
+        holes
     }
 
     /// The bands a paragraph that starts at `top` in the column being
@@ -1368,10 +1395,10 @@ mod tests {
     use crate::LayoutOutput;
     use crate::content::{Attributes, Block, NodeId};
     use crate::layout::testing::{
-        ContentLine, Run, body_size, book_of, content_items, content_lines, folio_size, heading,
-        image, image_of, long_prose, master, page_geometry, paginate_styled, painted, paragraph,
-        png, quote, rects, registry, right_edge, section, styled, styled_geometry, tagged_lines,
-        tagged_prose, with_image, with_images,
+        ContentLine, Run, assert_broken_by_total_fit, body_size, book_of, content_items,
+        content_lines, folio_size, heading, image, image_of, long_prose, master, page_geometry,
+        paginate_styled, painted, paragraph, png, quote, rects, registry, right_edge, section,
+        styled, styled_geometry, tagged_lines, tagged_prose, with_image, with_images,
     };
     use crate::pages::{DrawItem, Page, Side};
     use crate::style::{Color, Situation};
@@ -2861,91 +2888,12 @@ mod tests {
 
     /// Acceptance: the paragraph beside an image is broken by total
     /// fit, not filled band by band.
-    ///
-    /// The greedy break of the same text against the same bands packs
-    /// every line as far as it goes. The break the flow chose does
-    /// not, and its lines sit closer to the bands they were set in:
-    /// the slack a break leaves is what its demerits are read from.
     #[test]
     fn the_wrapped_paragraph_is_broken_by_total_fit() {
-        let text = "my father had a small estate in nottinghamshire and i was the third \
-                    of five sons he sent me to emanuel college in cambridge at fourteen \
-                    years old where i resided three years and applied myself close to my \
-                    studies but the charge of maintaining me was too great for a narrow \
-                    fortune";
-        let css = "img { position: absolute; top: 0; left: 0; margin-right: 12pt; \
-                   wrap-flow: end } p { text-indent: 0 }";
-        let book = book_of(vec![section(vec![image(), paragraph(text)])]);
-        let styles = styled(css, &book);
-        let output = with_image(css, vec![section(vec![image(), paragraph(text)])]);
-        let page = &output.pages[0];
-
-        let geometry = master(Situation::First(Side::Recto)).geometry;
-        let measure = geometry.measure();
-        let narrow = measure - IMAGE - 12.0;
-        let lines = content_lines(page);
-        let bands: Vec<f32> = lines
-            .iter()
-            .map(|(baseline, _)| {
-                if *baseline < 54.0 + IMAGE {
-                    narrow
-                } else {
-                    measure
-                }
-            })
-            .collect();
-        let set: Vec<String> = lines
-            .iter()
-            .map(|(_, runs)| runs.iter().map(|run| run.2).collect::<String>())
-            .collect();
-        assert!(set.len() > 4, "too few lines to disagree over: {set:?}");
-
-        let paginator = Paginator::new(registry(), &styles);
-        let style = styles.root().paragraph();
-        let width = |text: &str| {
-            paginator
-                .line_of(text, &style)
-                .map(|line| paginator.line_width(&line))
-                .unwrap_or_default()
-        };
-        // What filling each band as far as it goes comes to.
-        let mut greedy: Vec<String> = Vec::new();
-        let mut band = 0;
-        for word in text.split_whitespace() {
-            let room = bands.get(band).copied().unwrap_or(measure);
-            match greedy.last_mut() {
-                Some(line) if width(&format!("{line} {word}")) <= room => {
-                    line.push(' ');
-                    line.push_str(word);
-                }
-                _ => {
-                    greedy.push(word.to_string());
-                    band = greedy.len() - 1;
-                }
-            }
-        }
-        let chose: Vec<&str> = set.iter().map(|line| line.trim()).collect();
-        let packed: Vec<&str> = greedy.iter().map(String::as_str).collect();
-        assert_ne!(chose, packed, "the two breaks agree, so nothing is proved");
-
-        // The last line of a break fills what it fills, so the slack
-        // under it is not a fault either break is charged for.
-        let slack = |broken: &[String]| -> f64 {
-            broken
-                .iter()
-                .take(broken.len() - 1)
-                .enumerate()
-                .map(|(index, line)| {
-                    let room = bands.get(index).copied().unwrap_or(measure);
-                    let gap = (room - width(line.trim())) as f64;
-                    gap * gap
-                })
-                .sum()
-        };
-        let (chosen, filled) = (slack(&set), slack(&greedy));
-        assert!(
-            chosen < filled,
-            "the break the flow chose leaves {chosen} of slack against the greedy {filled}",
+        assert_broken_by_total_fit(
+            "img { position: absolute; top: 0; left: 0; margin-right: 12pt; wrap-flow: end } \
+             p { text-indent: 0 }",
+            IMAGE + 12.0,
         );
     }
 
