@@ -2580,7 +2580,10 @@ It was the kind of morning that made you suspicious — too *clean*, too quiet.
         .unwrap();
 
         let one = book.names(Some("one.md"));
-        assert_eq!(one.classes, ["gloss", "opening", "smallcaps", "sum", "total"]);
+        assert_eq!(
+            one.classes,
+            ["gloss", "opening", "smallcaps", "sum", "total"]
+        );
         assert_eq!(one.ids, ["ch1", "first-item"]);
         assert_eq!(book.names(Some("two.md")).classes, ["epigraph"]);
         assert_eq!(book.names(Some("three.md")), Names::default());
