@@ -2,7 +2,7 @@
 //!
 //! The door between the engine and a host: markdown or a content
 //! tree and CSS text in, one buffer out: the postcard display structure,
-//! or PDF bytes on the export path. The engine never touches the
+//! PDF bytes on the export path, or an EPUB with its warnings. The engine never touches the
 //! DOM, opens nothing, and reads no clock.
 //!
 //! The surface is a [`Session`] rather than a function, because the
@@ -368,6 +368,23 @@ impl Session {
         self.engine.export().map_err(js_error)
     }
 
+    /// The book as a reflowable EPUB, and what writing it warned
+    /// about, in the wire's encoding: the version, the warnings, the
+    /// file.
+    ///
+    /// The EPUB is written from what the session holds: the content
+    /// tree, the sheets, the images handed over with
+    /// [`Session::add_image`] and the files handed over with
+    /// [`Session::add_font_file`]. A reading system lays a reflowable
+    /// book out itself, so no stage runs. The warnings are what
+    /// reading the sources said, then what the writer said, in the
+    /// shape a display structure's own take.
+    #[wasm_bindgen(js_name = exportEpub)]
+    pub fn export_epub(&self) -> Result<Vec<u8>, JsError> {
+        let epub = self.epub();
+        wire::encode_epub(&epub.bytes, &epub.warnings).map_err(js_error)
+    }
+
     /// The node one byte of one source was read into: the innermost,
     /// so a byte of prose answers with the run it was typed into and
     /// a byte of markup answers with the construct it opens.
@@ -516,6 +533,29 @@ impl Session {
     fn complain(&mut self, name: &str, complaints: Vec<Warning>) {
         self.complaints.insert(name.to_string(), complaints);
         self.reflect();
+    }
+
+    /// The EPUB [`Session::export_epub`] encodes, with the sources'
+    /// complaints in front of the writer's own.
+    pub fn epub(&self) -> fleuron_epub::Epub {
+        let unstyled;
+        let sheets = match self.engine.sheets() {
+            Some(sheets) => sheets,
+            None => {
+                unstyled = Stylesheets::parse(&[]);
+                &unstyled
+            }
+        };
+        let mut epub = fleuron_epub::write(
+            self.engine.book(),
+            sheets,
+            self.engine.images(),
+            self.engine.font_files(),
+        );
+        let mut warnings: Vec<Warning> = self.complaints.values().flatten().cloned().collect();
+        warnings.append(&mut epub.warnings);
+        epub.warnings = warnings;
+        epub
     }
 
     /// Hands the engine every source's complaints as they stand.

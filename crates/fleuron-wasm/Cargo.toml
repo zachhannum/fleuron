@@ -1,6 +1,6 @@
 [package]
 name = "fleuron-wasm"
-description = "WebAssembly bindings for fleuron: layout in a worker, display structure and PDF bytes out"
+description = "WebAssembly bindings for fleuron: layout in a worker, display structure, PDF and EPUB bytes out"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fleuron = { path = "../fleuron" }
+fleuron-epub = { path = "../fleuron-epub" }
 fleuron-markdown = { path = "../fleuron-markdown" }
 wasm-bindgen = "0.2"
 serde_json = "1"
+
+[dev-dependencies]
+miniz_oxide.workspace = true
