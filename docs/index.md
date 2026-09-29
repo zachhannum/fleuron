@@ -6,7 +6,7 @@ slug: overview
 
 fleuron takes markdown and CSS and generates a fully typeset and publish-ready novel. It shapes the text, 
 breaks and hyphenates the lines, fragments the result into pages, and produces a display structure that 
-can be used to preview the book, and exported to PDF. The same source compiles to native and to WebAssembly.
+can be used to preview the book, and exported to PDF. The same markdown and CSS can also go out as a reflowable EPUB. The same source compiles to native and to WebAssembly.
 
 ## Getting started
 
@@ -15,7 +15,7 @@ There are three ways to use fleuron: the native Rust library, a CLI, and `npm` p
 Write Rust, and `fleuron` is the engine and `fleuron-markdown` the frontend in front of it. [Sessions](library/sessions.md) 
 can be used to keep the pipeline open so a preview re-runs only what an edit changed. Start at the [library quickstart](library/quickstart.md).
 
-The `fleuron` CLI can read markdown and write a PDF, taking author stylesheets as flags. It is the quickest way to see output. 
+The `fleuron` CLI can read markdown and write a PDF or an EPUB. It takes author stylesheets as flags. It is the quickest way to see output. 
 Start at the [CLI quickstart](cli/quickstart.mdx).
 
 The `fleuron` package can be used to run layout in a worker and render as `<svg>` or output PDF bytes. 

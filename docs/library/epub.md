@@ -1,35 +1,21 @@
 ---
 title: EPUB
-description: A reflowable EPUB from the same manuscript and stylesheets, and what goes into it.
+description: Write the same manuscript and stylesheets as a reflowable EPUB, and what the EPUB holds.
 ---
 
-Fleuron can write a book as a reflowable EPUB 3 as well as a PDF. This page describes how to write one, what the EPUB holds, and which CSS goes into it.
+Fleuron can write a book as a reflowable EPUB 3 as well as a PDF. This page describes how to write one from Rust, and what the EPUB holds. To write one from the command line, see the [CLI quickstart](../cli/quickstart.mdx#writing-an-epub).
 
-A reflowable EPUB is XHTML and CSS in a zip file. The reading system on the device breaks the lines and makes the pages. So fleuron does not lay out the book to write an EPUB. It writes the [content tree](content-tree.md) and the stylesheets. The reading system does the rest.
+A reflowable EPUB is XHTML and CSS in a zip file. The reading system on the device breaks the lines and makes the pages. So fleuron does not lay out the book to write an EPUB. It writes the [content tree](../reference/content-tree.md) and the stylesheets. The reading system does the rest.
 
 The pages of the PDF do not carry over to the EPUB. The reader can change the size of the text and the size of the screen. The reading system then makes new pages. The [preview](../wasm/preview.mdx) shows the pages of the PDF, not the pages a reading system makes.
 
-## Write an EPUB from the command line
+## Sample code
 
-If the output path ends in `.epub`, the CLI writes an EPUB. Any other path is a PDF. The following example writes the fixture book as an EPUB, with the fixture stylesheet:
+The `fleuron-epub` crate writes the EPUB. The following example reads the fixture book and its stylesheet, and writes `book.epub`. The code is also at [`crates/fleuron-epub/examples/epub.rs`](https://github.com/zachhannum/fleuron/blob/main/crates/fleuron-epub/examples/epub.rs).
 
 ```sh
-fleuron fixtures/gulliver-excerpt.md -o book.epub -c fixtures/styled.css
+cargo run --example epub -p fleuron-epub
 ```
-
-The summary counts documents rather than pages. There is one document for each section. Then each warning follows, with the line and the column in the stylesheet:
-
-```text
-fleuron: fixtures/gulliver-excerpt.md → book.epub: 1 document
-fleuron: warning: fixtures/styled.css:7:1: Paged rule `@page`. The rule is left out of the EPUB.
-fleuron: warning: fixtures/styled.css:85:3: Paged property `box-decoration-break`. The declaration is left out of the EPUB.
-```
-
-The [CLI reference](../cli/reference.md) covers the other flags. They work the same for an EPUB as for a PDF.
-
-## Write an EPUB from Rust
-
-The `fleuron-epub` crate writes the EPUB. It takes a `Book`, the parsed stylesheets, and a loader for images and a loader for fonts. It returns the bytes of the file and the warnings. The following example reads the fixture book and its stylesheet, and writes `book.epub`. The code is also at [`crates/fleuron-epub/examples/epub.rs`](https://github.com/zachhannum/fleuron/blob/main/crates/fleuron-epub/examples/epub.rs).
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -84,6 +70,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## What each call does
+
+| call | |
+|---|---|
+| `to_sections`, `frontmatter`, `assemble` | Read the manuscript into a book, as for a PDF. See the [library quickstart](quickstart.md). |
+| `Stylesheets::parse` | Parses the author sheets. The built-in sheet goes first, as for a PDF. |
+| `fleuron_epub::write` | Writes the book as an EPUB. It takes the book, the parsed sheets, a loader for images, and a loader for fonts. It returns the bytes of the file and the warnings. |
+
+An EPUB needs no font registry, no style tree, and no layout. So the program does not call `load_fonts`, `compile`, `Assets::probe`, or `layout_book`.
+
 The same manuscript and the same stylesheets give the same EPUB, byte for byte.
 
 ## What the EPUB holds
@@ -121,7 +117,7 @@ A note is an `aside` after the section that holds it. Where the note was written
 
 ### Links
 
-A link to a heading or an id in the book goes to that element, in the document that holds it. A link to a web address, such as `https://example.com`, goes to that address. If a link names nothing in the book, its text is not a link, and the run warns.
+A link to a heading or an id in the book goes to that element, in the document that holds it. A link to a web address, such as `https://example.com`, goes to that address. If a link names nothing in the book, its text is not a link, and fleuron warns.
 
 ### Table of contents
 
@@ -157,7 +153,7 @@ An EPUB must have a title, a language, an identifier, and a date of modification
 
 ### Images and fonts
 
-Fleuron copies each image that the book or a stylesheet names into the EPUB. It also copies each font that `@font-face` names. Each file goes in as it is. Fleuron does not decode it.
+Fleuron copies each image that the book or a stylesheet names into the EPUB. It also copies each font that `@font-face` names. The two loaders supply the bytes. Each file goes in as it is. Fleuron does not decode it.
 
 An EPUB can hold these types:
 
@@ -166,43 +162,12 @@ images  PNG  JPEG  GIF  WebP  SVG
 fonts   TrueType  OpenType  WOFF  WOFF2
 ```
 
-If a file does not load, or is another type, the run warns. Fleuron then leaves out the file, and any declaration that names it.
+If a file does not load, or is another type, fleuron warns. It then leaves out the file, and any declaration that names it.
 
-## The stylesheet
+### The stylesheet
 
-The EPUB has one stylesheet. It holds the rules of the built-in stylesheet and of each author stylesheet, in the order of the cascade. It holds the CSS that fleuron [supports](../css-subset.mdx), less the CSS that describes pages.
+The EPUB has one stylesheet. It holds the rules of the built-in stylesheet and of each author stylesheet, in the order of the cascade. Fleuron leaves out the CSS that describes pages, because the reading system makes the pages. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists what goes and what warns.
 
-HTML has no `book` element and no `note` element. So a rule for `book` selects `body`, and a rule for `note` selects `aside`.
+## Warnings
 
-The alignment that the markdown gives a column of a table is a rule of its own. It comes after the built-in rules and before the author rules. So an author rule for the cells overrides it, as for a PDF.
-
-### CSS that the EPUB does not hold
-
-The reading system makes the pages. CSS that describes a page has nothing to act on there. Fleuron leaves out the rules, declarations, and selectors below.
-
-`@page` rules, with their margin boxes. The reading system chooses the size and the margins of the page.
-
-Declarations that control where pages and columns break:
-
-```text
-page  break-before  break-after  break-inside  orphans  widows
-box-decoration-break  column-span
-```
-
-Declarations that print running heads and page numbers:
-
-```text
-string-set  counter-reset  content: target-counter()
-```
-
-Declarations that put a box against the page:
-
-```text
-position: absolute  wrap-flow  shape-outside  shape-margin
-```
-
-Selectors that name `notes`, `pagebreak`, or `columnbreak`. These elements exist only on a page.
-
-The built-in stylesheet has some of these. Fleuron leaves those out with no warning. For each one that an author stylesheet has, the run warns with the line and the column. CSS that fleuron does not support yet warns as it does for a PDF. Fleuron leaves it out of the EPUB too.
-
-A reading system uses the CSS that it supports. The support is different from one reading system to the next. So a declaration in the EPUB can have no effect on some devices.
+`Epub::warnings` holds every warning of the run. It starts with the warnings of `Stylesheets::parse`. So CSS that fleuron does not support yet warns as it does for a PDF. Then come the warnings for CSS in the author sheets that describes pages, for files that did not go in, and for links that name nothing. [Diagnostics](diagnostics.mdx) covers how to read a warning.

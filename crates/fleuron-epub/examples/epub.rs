@@ -1,4 +1,4 @@
-//! The program `docs/reference/epub.md` quotes, and a test keeps the
+//! The program `docs/library/epub.md` quotes, and a test keeps the
 //! two the same. Run it from the root of the repository.
 
 use std::path::{Path, PathBuf};

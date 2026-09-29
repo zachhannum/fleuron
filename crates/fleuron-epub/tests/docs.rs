@@ -11,7 +11,7 @@ fn the_epub_page_quotes_the_example_it_runs() {
         .expect("workspace root");
     let example = std::fs::read_to_string(root.join("crates/fleuron-epub/examples/epub.rs"))
         .expect("the example");
-    let page = std::fs::read_to_string(root.join("docs/reference/epub.md")).expect("the doc page");
+    let page = std::fs::read_to_string(root.join("docs/library/epub.md")).expect("the doc page");
 
     // The example's own `//!` header stays out of the page.
     let code: String = example

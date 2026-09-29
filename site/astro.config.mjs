@@ -109,6 +109,7 @@ export default defineConfig({
             { label: 'Fonts', link: '/library/fonts/' },
             { label: 'Sessions', link: '/library/sessions/' },
             { label: 'Diagnostics', link: '/library/diagnostics/' },
+            { label: 'EPUB', link: '/library/epub/' },
           ],
         },
         {
@@ -132,7 +133,6 @@ export default defineConfig({
             { label: 'CSS subset', link: '/css-subset/' },
             { label: 'Markdown mapping', link: '/reference/markdown/' },
             { label: 'Content tree', link: '/reference/content-tree/' },
-            { label: 'EPUB', link: '/reference/epub/' },
             { label: 'Display structure', link: '/reference/display-structure/' },
             { label: 'API (rustdoc)', link: '/api/fleuron/', attrs: { target: '_blank' } },
           ],

@@ -2398,18 +2398,30 @@ fn two_runs_make_the_same_epub() {
     );
 }
 
-/// The sample in `docs/reference/epub.md` is what the CLI prints for
-/// the command the page gives, line for line.
+/// The EPUB samples in the CLI quickstart and on the CSS subset page
+/// are what the CLI prints for the command the quickstart gives, line
+/// for line.
 #[test]
-fn the_epub_page_shows_what_the_run_prints() {
+fn the_epub_samples_show_what_the_run_prints() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let page = std::fs::read_to_string(root.join("docs/reference/epub.md"))
-        .expect("the EPUB page is in the repository");
-    let samples: Vec<&str> = page
-        .lines()
+    let section = |page: &str, heading: &str| -> String {
+        let text = std::fs::read_to_string(root.join(page)).expect("the page is in the repository");
+        let start = text
+            .find(heading)
+            .unwrap_or_else(|| panic!("{page} has no {heading}"));
+        let rest = &text[start + heading.len()..];
+        rest[..rest.find("\n## ").unwrap_or(rest.len())].to_string()
+    };
+    let pages = [
+        section("docs/cli/quickstart.mdx", "## Writing an EPUB"),
+        section("docs/css-subset.mdx", "## CSS in an EPUB"),
+    ];
+    let samples: Vec<&str> = pages
+        .iter()
+        .flat_map(|text| text.lines())
         .filter(|line| line.starts_with("fleuron: "))
         .collect();
-    assert_eq!(samples.len(), 3, "the page stopped showing its sample");
+    assert_eq!(samples.len(), 3, "the pages stopped showing their samples");
 
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("epub-page.epub");
     let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
