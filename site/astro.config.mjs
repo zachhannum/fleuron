@@ -154,6 +154,7 @@ export default defineConfig({
             '/css-subset/',
             '/css-subset/**',
             '/cli/quickstart/',
+            '/cli/quickstart/**',
             '/library/diagnostics/',
             '/reference/display-structure/',
             '/reference/markdown/',
