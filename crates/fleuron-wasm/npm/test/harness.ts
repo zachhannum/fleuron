@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 
@@ -107,6 +107,24 @@ function reference(inputs: string[] = [fixture], named: string[] = []): {
     throw new Error(`the CLI reported no page count: ${run.stderr}`);
   }
   return { pages: Number(counted[1]), pdf: readFileSync(out), stderr: run.stderr };
+}
+
+/**
+ * What the CLI writes when the output path ends in `.epub`. The EPUB
+ * identifier comes from the book, source names included, so the CLI
+ * reads the file under the name the worker gets.
+ */
+function referenceEpub(): Uint8Array {
+  const cli = resolve(flag('--cli') ?? join(root, 'target', 'release', 'fleuron'));
+  const out = join(mkdtempSync(join(tmpdir(), 'fleuron-harness-')), 'reference.epub');
+  const run = spawnSync(cli, ['gulliver-excerpt.md', '-o', out], {
+    cwd: join(root, 'fixtures'),
+    encoding: 'utf8',
+  });
+  if (run.status !== 0) {
+    throw new Error(`the CLI did not write an EPUB: ${run.stderr ?? run.error}`);
+  }
+  return readFileSync(out);
 }
 
 /** The faces a PDF embeds, subset tags removed, or null where `pdffonts` is not installed. */
@@ -832,6 +850,30 @@ if (extracted === null || wanted === null) {
 } else {
   check('the PDF reads back as the text the CLI wrote', extracted === wanted);
 }
+
+// The EPUB comes from the tree and the sheets the session holds, so
+// no stage runs, and it is the file the CLI writes for the same book.
+const settled = client.stages;
+const epub = await client.exportEpub();
+if (epub === null) {
+  throw new Error('nothing overtook the EPUB, and it still came back superseded');
+}
+check('the EPUB is a zip', startsWith(epub.bytes, 'PK'));
+check(
+  'the EPUB is the file the CLI writes',
+  Buffer.from(epub.bytes).equals(referenceEpub()),
+  `worker ${epub.bytes.byteLength} bytes`,
+);
+check(
+  'writing the EPUB runs no stage',
+  JSON.stringify(client.stages) === JSON.stringify(settled),
+  `${JSON.stringify(settled)} before, ${JSON.stringify(client.stages)} after`,
+);
+check(
+  'the EPUB warnings cross as a render warnings do',
+  epub.warnings.every((w) => typeof w.message === 'string' && (w.origin === null || typeof w.origin === 'string')),
+  JSON.stringify(epub.warnings),
+);
 
 // The warm path: a stylesheet crosses on its own, with no content
 // behind it, and the lines already broken are the lines that are

@@ -31,6 +31,7 @@ import { faceFamily, paintPage } from './svg.js';
 import {
   linkAt,
   type Asset,
+  type Epub,
   type FontRefEntry,
   type LayoutOutput,
   type Link,
@@ -472,6 +473,15 @@ export class Preview {
    */
   async exportPdf(): Promise<Uint8Array | null> {
     return this.client.exportPdf();
+  }
+
+  /**
+   * The book as a reflowable EPUB, with what writing it warned about.
+   * A reading system lays the EPUB out, so the pages on screen are not
+   * in it.
+   */
+  async exportEpub(): Promise<Epub | null> {
+    return this.client.exportEpub();
   }
 
   /** Closes the worker and gives the element back. */

@@ -239,17 +239,18 @@ export type MarginBoxName =
 
 /**
  * What a request wants back, if anything: a display structure, a PDF,
- * the file a face was registered from, the node one byte of a source
+ * an EPUB, the file a face was registered from, the node one byte of a source
  * was read into, the source one node was read from, the folios some
  * nodes are set on, what styled one element or margin box, the
  * element at a point, or the classes and ids a source writes.
  *
- * The first two are renders and the rest are questions, which is
+ * The first three are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
  */
 export type Want =
   | 'preview'
   | 'pdf'
+  | 'epub'
   | 'font'
   | 'node'
   | 'source'
@@ -306,8 +307,9 @@ export interface Request {
 }
 
 /**
- * The bytes a request produced: a display structure, a PDF, a font
- * file, or the JSON a question was answered with.
+ * The bytes a request produced: a display structure, a PDF, an EPUB
+ * with its warnings, a font file, or the JSON a question was answered
+ * with.
  */
 export interface Rendered {
   id: number;
