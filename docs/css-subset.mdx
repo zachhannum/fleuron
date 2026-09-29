@@ -1730,6 +1730,52 @@ s { text-decoration: line-through }
 
 {/* end generated */}
 
+## CSS in an EPUB
+
+Fleuron can also write a book as a reflowable EPUB. See [EPUB](library/epub.md). The EPUB has one stylesheet, made from the same stylesheets as the PDF. It holds the CSS on this page, less the CSS that describes pages.
+
+HTML has no `book` element and no `note` element. So in the EPUB, a rule for `book` selects `body`, and a rule for `note` selects `aside`.
+
+The alignment that the markdown gives a column of a table is a rule of its own. It comes after the built-in rules and before the author rules. So an author rule for the cells overrides it, as for a PDF.
+
+### What the EPUB leaves out
+
+The reading system makes the pages. CSS that describes a page has nothing to act on there. Fleuron leaves out the rules, declarations, and selectors below.
+
+`@page` rules, with their margin boxes. The reading system chooses the size and the margins of the page.
+
+Declarations that control where pages and columns break:
+
+```text
+page  break-before  break-after  break-inside  orphans  widows
+box-decoration-break  column-span
+```
+
+Declarations that print running heads and page numbers:
+
+```text
+string-set  counter-reset  content: target-counter()
+```
+
+Declarations that put a box against the page:
+
+```text
+position: absolute  wrap-flow  shape-outside  shape-margin
+```
+
+Selectors that name `notes`, `pagebreak`, or `columnbreak`. These elements exist only on a page.
+
+The built-in stylesheet has some of these. Fleuron leaves those out with no warning. For each one that an author stylesheet has, fleuron warns with the line and the column. The following example shows two of the warnings:
+
+```text
+fleuron: warning: fixtures/styled.css:7:1: Paged rule `@page`. The rule is left out of the EPUB.
+fleuron: warning: fixtures/styled.css:85:3: Paged property `box-decoration-break`. The declaration is left out of the EPUB.
+```
+
+CSS that fleuron does not support yet warns as it does for a PDF. Fleuron leaves it out of the EPUB too.
+
+A reading system uses the CSS that it supports. The support is different from one reading system to the next. So a declaration in the EPUB can have no effect on some devices.
+
 ## Not in the subset
 
 | area | not supported yet |

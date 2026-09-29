@@ -1,6 +1,7 @@
 /target
 .DS_Store
 /book.pdf
+/book.epub
 /cli.pdf
 
 # The wasm package: the module wasm-pack builds, what tsc makes of the

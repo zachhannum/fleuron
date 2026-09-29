@@ -109,6 +109,7 @@ export default defineConfig({
             { label: 'Fonts', link: '/library/fonts/' },
             { label: 'Sessions', link: '/library/sessions/' },
             { label: 'Diagnostics', link: '/library/diagnostics/' },
+            { label: 'EPUB', link: '/library/epub/' },
           ],
         },
         {
@@ -153,6 +154,7 @@ export default defineConfig({
             '/css-subset/',
             '/css-subset/**',
             '/cli/quickstart/',
+            '/cli/quickstart/**',
             '/library/diagnostics/',
             '/reference/display-structure/',
             '/reference/markdown/',

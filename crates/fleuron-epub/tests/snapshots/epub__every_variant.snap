@@ -1,0 +1,47 @@
+---
+source: crates/fleuron-epub/tests/epub.rs
+expression: one
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en" lang="en">
+<head>
+<title>One</title>
+<link rel="stylesheet" type="text/css" href="book.css"/>
+</head>
+<body>
+<section>
+<h1 id="one" class="opening">One</h1>
+<p>He arrived <em>on a Tuesday</em>, <strong>late</strong>, with <code>a trunk</code>, a <s>cat</s> and <a href="section-002.xhtml#n75">a letter</a> in a <span class="hand">plain hand</span>.<a epub:type="noteref" role="doc-noteref" href="#note-1">1</a> The porter said nothing.<br/>Nobody asked him to.</p>
+<blockquote>
+<p>A quotation, with a <a href="https://example.com">link out</a>.</p>
+</blockquote>
+<pre>code &amp; &lt;markup&gt;</pre>
+<hr></hr>
+<img src="media/image-1.png" alt="An ornament"></img>
+<ol start="2">
+<li>second</li>
+<li>third</li>
+</ol>
+<ul>
+<li><p>loose</p></li>
+<li><p>items</p></li>
+</ul>
+<table>
+<thead>
+<tr><th data-align="left"><p>Left</p>
+</th><th data-align="right"><p>Right</p>
+</th></tr>
+</thead>
+<tbody>
+<tr><td data-align="left"><p>a</p>
+</td><td data-align="right"><p>b</p>
+</td></tr>
+</tbody>
+</table>
+</section>
+<aside id="note-1" epub:type="footnote" role="doc-footnote">
+<p>The trunk held <em>books</em>.</p>
+</aside>
+</body>
+</html>

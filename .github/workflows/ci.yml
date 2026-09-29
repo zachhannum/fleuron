@@ -26,7 +26,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install PDF validation tools
         run: sudo apt-get update && sudo apt-get install -y qpdf poppler-utils
-      - name: Fixture book in, validated PDF out
+      # The runner has Java. The release is pinned rather than taken
+      # from apt, so the rules the EPUB is checked against move only
+      # when this line does.
+      - name: Install epubcheck
+        env:
+          EPUBCHECK_VERSION: 5.4.0
+        run: |
+          curl -sSfL -o epubcheck.zip \
+            "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
+          unzip -q epubcheck.zip -d "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec java -jar "%s" "$@"\n' \
+            "$RUNNER_TEMP/epubcheck-${EPUBCHECK_VERSION}/epubcheck.jar" > "$RUNNER_TEMP/bin/epubcheck"
+          chmod +x "$RUNNER_TEMP/bin/epubcheck"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Fixture book in, validated PDF and EPUB out
         env:
           FLEURON_E2E_REQUIRE_TOOLS: "1"
         run: cargo test -p fleuron-cli --release --test e2e

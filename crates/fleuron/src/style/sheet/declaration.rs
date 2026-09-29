@@ -24,7 +24,7 @@ use super::value::{
     width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
-use super::{Importance, StyleError, Written, position, warning};
+use super::{Importance, SheetPosition, StyleError, Written, position, warning};
 
 /// Every declaration in one style-rule body, plus a warning for each
 /// one that fell outside the subset. `first_line` narrows the subset
@@ -60,6 +60,7 @@ pub(super) struct Parsed<D> {
     pub(super) importance: Importance,
     pub(super) property: String,
     pub(super) value: String,
+    pub(super) position: SheetPosition,
 }
 
 impl<D> Parsed<D> {
@@ -71,6 +72,7 @@ impl<D> Parsed<D> {
             value: self.value.clone(),
             important: self.importance == Importance::Important,
             longhands: at..at + self.declarations.len(),
+            position: self.position.clone(),
         }
     }
 }
@@ -160,6 +162,7 @@ impl<'i> DeclarationParser<'i> for Properties {
                     name.to_ascii_lowercase()
                 },
                 value,
+                position: SheetPosition::at(&self.sheet, start.source_location()),
             })
         })(input)
     }

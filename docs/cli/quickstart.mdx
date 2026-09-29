@@ -90,6 +90,22 @@ h1, h2, h3 { font-size: 20pt; }
 
 A face that resolves nowhere warns and the text falls back. See [fonts](../library/fonts.md).
 
+## Writing an EPUB
+
+If the output path ends in `.epub`, the CLI writes a reflowable EPUB rather than a PDF. The following example writes the fixture book as an EPUB, with the fixture stylesheet:
+
+```sh
+fleuron fixtures/gulliver-excerpt.md -o book.epub -c fixtures/styled.css
+```
+
+```text
+fleuron: fixtures/gulliver-excerpt.md → book.epub: 1 document
+```
+
+The summary counts documents rather than pages. There is one document for each section. The reading system on the device makes the pages. The other flags work the same as for a PDF.
+
+The stylesheet goes into the EPUB, less the CSS that describes pages. For each rule that fleuron leaves out, it warns with the line and the column. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists that CSS. [EPUB](../library/epub.md) covers what the EPUB holds.
+
 ## Reading the tree back
 
 To see what the frontend made of a manuscript, which heading opened a section, or where a construct degraded, dump the [content tree](../reference/content-tree.md) instead of laying it out:

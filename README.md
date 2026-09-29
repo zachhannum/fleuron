@@ -53,7 +53,8 @@ The pipeline runs one way. Nothing downstream reaches back upstream.
 |---|---|
 | `fleuron` | The engine: style compilation, box construction, inline layout, fragmentation, page assembly. No I/O. |
 | `fleuron-markdown` | Markdown in, sections out. The mapping is in [`docs/reference/markdown.mdx`](docs/reference/markdown.mdx). |
-| `fleuron-cli` | The `fleuron` binary. Markdown in, PDF out. |
+| `fleuron-epub` | The content tree and the stylesheets in, a reflowable EPUB out. It lays nothing out, because the reading system makes the pages. See [`docs/library/epub.md`](docs/library/epub.md). |
+| `fleuron-cli` | The `fleuron` binary. Markdown in, PDF or EPUB out. |
 | `fleuron-wasm` | WASM bindings, plus a worker, a display-structure reader and an SVG painter in TypeScript. Ships to npm as `fleuron`. |
 
 `fleuron-react` wraps the preview as a component and contains no

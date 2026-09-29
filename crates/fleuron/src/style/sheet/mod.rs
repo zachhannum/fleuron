@@ -153,6 +153,8 @@ pub struct Written {
     /// Which of the rule's declarations it expanded to: several for a
     /// shorthand, one for a longhand.
     pub longhands: Range<usize>,
+    /// Where the declaration begins.
+    pub position: SheetPosition,
 }
 
 /// One style rule: what it matches, and what it says.
@@ -561,12 +563,22 @@ mod tests {
                     value: "1em 2em".into(),
                     important: false,
                     longhands: 0..4,
+                    position: SheetPosition {
+                        sheet: "author.css".into(),
+                        line: 1,
+                        column: 5,
+                    },
                 },
                 Written {
                     property: "color".into(),
                     value: "red".into(),
                     important: true,
                     longhands: 4..5,
+                    position: SheetPosition {
+                        sheet: "author.css".into(),
+                        line: 1,
+                        column: 22,
+                    },
                 },
             ]
         );

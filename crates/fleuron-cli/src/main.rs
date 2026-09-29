@@ -1,4 +1,4 @@
-//! The `fleuron` binary: a manuscript in, a PDF out.
+//! The `fleuron` binary: a manuscript in, a PDF or an EPUB out.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -12,9 +12,10 @@ use fleuron::style::subset::Subset;
 use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::{Dialect, Options, Sections};
 
-const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf> [-c <style.css>]
+const USAGE: &str = "usage: fleuron <input.md…> -o <output.pdf|output.epub> [-c <style.css>]
 
-  -o, --output <path>  where to write the PDF
+  -o, --output <path>  where to write the book: a PDF, or a reflowable
+                       EPUB when the path ends in .epub
   -c, --css <path>     author stylesheet, cascading over the defaults;
                        repeatable, applied in the order given
   -s, --split <n|none> where a markdown file's sections begin: at a
@@ -232,27 +233,62 @@ fn is_markdown(path: &Path) -> bool {
         })
 }
 
+/// What the output path asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    Pdf,
+    Epub,
+}
+
+impl Format {
+    /// The format an output path names by its extension. Anything but
+    /// `.epub` is a PDF.
+    fn of(path: &Path) -> Format {
+        let epub = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("epub"));
+        if epub { Format::Epub } else { Format::Pdf }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Format::Pdf => "PDF",
+            Format::Epub => "EPUB",
+        }
+    }
+}
+
 /// What one rendered book has to say for itself.
 struct Summary {
-    pages: usize,
+    format: Format,
+    /// How much of it there is: pages of a PDF, documents of an EPUB.
+    extent: usize,
     warnings: Vec<Warning>,
 }
 
 impl Summary {
     fn report(&self, inputs: &[PathBuf], output: &Path) -> Status {
         let named: Vec<String> = inputs.iter().map(|i| i.display().to_string()).collect();
+        let unit = match (self.format, self.extent) {
+            (Format::Pdf, 1) => "page",
+            (Format::Pdf, _) => "pages",
+            (Format::Epub, 1) => "document",
+            (Format::Epub, _) => "documents",
+        };
         eprintln!(
-            "fleuron: {} → {}: {} pages",
+            "fleuron: {} → {}: {} {unit}",
             named.join(", "),
             output.display(),
-            self.pages,
+            self.extent,
         );
         report_warnings(&self.warnings);
         if !self.warnings.is_empty() {
             eprintln!(
-                "fleuron: {} warning{}. The PDF was written anyway.",
+                "fleuron: {} warning{}. The {} was written anyway.",
                 self.warnings.len(),
                 if self.warnings.len() == 1 { "" } else { "s" },
+                self.format.name(),
             );
         }
         Status::Ok
@@ -289,6 +325,17 @@ fn render(
     // resolved here, against the manuscript's directory and the
     // directory of the sheet that asked for them.
     let files = Files::rooted(inputs, css);
+    if Format::of(output) == Format::Epub {
+        // A reading system lays the book out, so nothing here does.
+        let epub = fleuron_epub::write(&book, &stylesheets, &files, &files);
+        std::fs::write(output, &epub.bytes).with_context(|| format!("{}", output.display()))?;
+        warnings.extend(epub.warnings);
+        return Ok(Summary {
+            format: Format::Epub,
+            extent: book.sections.len().max(1),
+            warnings,
+        });
+    }
     stylesheets.load_fonts(&mut registry, &files);
     let styles = stylesheets.compile(&book, &registry);
 
@@ -299,7 +346,8 @@ fn render(
     std::fs::write(output, bytes).with_context(|| format!("{}", output.display()))?;
     warnings.extend(laid_out.warnings);
     Ok(Summary {
-        pages: laid_out.pages.len(),
+        format: Format::Pdf,
+        extent: laid_out.pages.len(),
         warnings,
     })
 }
@@ -458,6 +506,17 @@ mod tests {
         ] {
             assert!(parse(args(&incomplete)).is_err(), "{incomplete:?}");
         }
+    }
+
+    /// The output path picks the writer: `.epub` is an EPUB, whatever
+    /// its case, and any other path is a PDF.
+    #[test]
+    fn the_output_extension_picks_the_writer() {
+        assert_eq!(Format::of(Path::new("book.epub")), Format::Epub);
+        assert_eq!(Format::of(Path::new("out/Book.EPUB")), Format::Epub);
+        assert_eq!(Format::of(Path::new("book.pdf")), Format::Pdf);
+        assert_eq!(Format::of(Path::new("book")), Format::Pdf);
+        assert_eq!(Format::of(Path::new("epub.pdf")), Format::Pdf);
     }
 
     /// Markdown composes in the order the command line gives it.
@@ -692,11 +751,13 @@ mod tests {
     #[test]
     fn exit_codes_separate_clean_warned_and_failed_runs() {
         let clean = Summary {
-            pages: 1,
+            format: Format::Pdf,
+            extent: 1,
             warnings: Vec::new(),
         };
         let warned = Summary {
-            pages: 1,
+            format: Format::Epub,
+            extent: 1,
             warnings: vec![Warning {
                 message: "unsupported property".into(),
                 origin: Some("node 12".into()),

@@ -59,6 +59,7 @@ compilation included, so reading it once at the end is enough.
 | a code block wider than the measure                | A line of a code block is wider than the measure. The line runs past the measure, because a code block breaks only where its own text does. The engine names the line and column of the block. See [code blocks](../css-subset.mdx#code-blocks). |
 | a reference that names nothing                     | A `target-counter()` or a `target-text()` names a source, a heading, or an id that the book does not have. The engine warns the same way for `attr(href url)` on an element that is not a link. The pseudo-element prints nothing. The engine names the line and column of the link. A reference to a web address, such as `https://example.com`, prints nothing, and the engine does not warn. See [the CSS subset](../css-subset.mdx). |
 | a link that names nothing                          | A link names a source, a heading, or an id that the book does not have. The text of the link is not a link in the PDF or in the preview. The engine names the line and column of the link. A link to a web address, such as `https://example.com`, is a link, and the engine does not warn. |
+| CSS that describes pages, in an EPUB | An author stylesheet has CSS that describes pages, such as `@page` or `orphans`, and the output is an EPUB. The reading system makes the pages, so fleuron leaves the CSS out of the EPUB. The warning names the line and column. See [CSS in an EPUB](../css-subset.mdx#css-in-an-epub). |
 | a target that moved to another page                | Printing the page numbers moved a target to another page. The reference prints the page from before the move. The engine warns and names the target and both pages.                                                        |
 
 ## What fails
@@ -74,4 +75,4 @@ compilation included, so reading it once at the end is enough.
 ## From the command line
 
 The CLI prints warnings to stderr, one per line, prefixed with the input they came from, and then a count.
-It still exits 0, because the PDF was written. [The CLI reference](../cli/reference.md) has the exit codes.
+It still exits 0, because the PDF or the EPUB was written. [The CLI reference](../cli/reference.md) has the exit codes.

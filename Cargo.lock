@@ -481,10 +481,24 @@ version = "0.19.0"
 dependencies = [
  "anyhow",
  "fleuron",
+ "fleuron-epub",
  "fleuron-markdown",
+ "miniz_oxide",
  "postcard",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "fleuron-epub"
+version = "0.19.0"
+dependencies = [
+ "crc32fast",
+ "cssparser",
+ "fleuron",
+ "fleuron-markdown",
+ "insta",
+ "miniz_oxide",
 ]
 
 [[package]]

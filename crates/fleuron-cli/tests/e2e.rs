@@ -16,7 +16,12 @@
 //! wraps the prose to the shape it traces, so the trace stage runs
 //! on the way to the PDF as well.
 //!
-//! Structure and text need `qpdf` and `pdftotext`. Where a tool is
+//! The same book and sheet also go out as an EPUB. `epubcheck`
+//! checks its structure, and its words are checked against the words
+//! of the PDF.
+//!
+//! Structure and text need `qpdf` and `pdftotext`, and the EPUB
+//! needs `epubcheck`. Where a tool is
 //! missing its check is skipped; setting `FLEURON_E2E_REQUIRE_TOOLS`
 //! makes the absence a failure, which is how CI keeps the checks from
 //! quietly ceasing to run.
@@ -2300,6 +2305,255 @@ fn the_cli_reference_shows_warnings_the_run_prints() {
         stderr.contains("2 warnings. The PDF was written anyway."),
         "the page shows the summary line:\n{stderr}",
     );
+}
+
+/// Acceptance: `epubcheck` reports no errors on the fixture book,
+/// styled by the fixture sheet.
+#[test]
+fn the_fixture_book_makes_an_epub_that_epubcheck_passes() {
+    let (epub, stderr) = render_epub("epub-check", &[&styled_sheet()]);
+    assert!(
+        stderr.contains("The EPUB was written anyway."),
+        "the paged rules of the sheet are reported: {stderr}",
+    );
+    let Some(check) = tool("epubcheck", &[epub.as_os_str()]) else {
+        return;
+    };
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+    assert!(check.status.success(), "epubcheck failed:\n{report}");
+    assert!(
+        report.contains("0 fatals / 0 errors"),
+        "epubcheck found errors:\n{report}"
+    );
+}
+
+/// Acceptance: the EPUB holds the words the PDF of the same
+/// manuscript and sheet holds, as many of them and as many times
+/// each.
+///
+/// A word is a run of letters. A folio, the number of a list item or
+/// of a note, and the ornament of a thematic break are the page's or
+/// the reading system's to draw, and none of them is a run of
+/// letters. Two things the pages add are taken out of the PDF's
+/// text: the page the sheet prints after the link to chapter III,
+/// and the header row a table repeats on each page it continues
+/// onto.
+#[test]
+fn the_epub_holds_the_words_the_pdf_holds() {
+    let (pdf, _) = render("epub-words", &[&styled_sheet()]);
+    let (epub, _) = render_epub("epub-words", &[&styled_sheet()]);
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    let printed = format!("(page {})", chapter_three_folio(&text));
+    assert!(text.contains(&printed), "the sheet prints {printed}");
+    let pdf_words = words(&text.replacen(&printed, "", 1));
+    let epub_words = words(&epub_text(&epub));
+
+    let mut repeated = count(&pdf_words);
+    for (word, times) in count(&epub_words) {
+        let left = repeated.entry(word.clone()).or_default();
+        assert!(
+            *left >= times,
+            "the EPUB has {word:?} more often than the PDF"
+        );
+        *left -= times;
+    }
+    repeated.retain(|_, times| *times > 0);
+    let header = count(&table_header_words());
+    let first = header
+        .keys()
+        .next()
+        .expect("the fixture table has a header");
+    let continued = repeated.get(first).copied().unwrap_or(0) / header[first];
+    let expected: std::collections::BTreeMap<String, usize> = header
+        .iter()
+        .map(|(word, times)| (word.clone(), times * continued))
+        .filter(|(_, times)| *times > 0)
+        .collect();
+    assert_eq!(
+        repeated, expected,
+        "the PDF holds words the EPUB does not, past the repeated table header",
+    );
+    let header_words: usize = header.values().sum();
+    assert_eq!(
+        epub_words.len(),
+        pdf_words.len() - continued * header_words,
+        "the word counts differ",
+    );
+}
+
+/// Acceptance: two runs make the same archive, to the byte.
+#[test]
+fn two_runs_make_the_same_epub() {
+    let (one, _) = render_epub("epub-once", &[&styled_sheet()]);
+    let (two, _) = render_epub("epub-twice", &[&styled_sheet()]);
+    assert_eq!(
+        std::fs::read(one).expect("the CLI wrote its output"),
+        std::fs::read(two).expect("the CLI wrote its output"),
+    );
+}
+
+/// The EPUB samples in the CLI quickstart and on the CSS subset page
+/// are what the CLI prints for the command the quickstart gives, line
+/// for line.
+#[test]
+fn the_epub_samples_show_what_the_run_prints() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let section = |page: &str, heading: &str| -> String {
+        let text = std::fs::read_to_string(root.join(page)).expect("the page is in the repository");
+        let start = text
+            .find(heading)
+            .unwrap_or_else(|| panic!("{page} has no {heading}"));
+        let rest = &text[start + heading.len()..];
+        rest[..rest.find("\n## ").unwrap_or(rest.len())].to_string()
+    };
+    let pages = [
+        section("docs/cli/quickstart.mdx", "## Writing an EPUB"),
+        section("docs/css-subset.mdx", "## CSS in an EPUB"),
+    ];
+    let samples: Vec<&str> = pages
+        .iter()
+        .flat_map(|text| text.lines())
+        .filter(|line| line.starts_with("fleuron: "))
+        .collect();
+    assert_eq!(samples.len(), 3, "the pages stopped showing their samples");
+
+    let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("epub-page.epub");
+    let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
+        .current_dir(&root)
+        .args(["fixtures/gulliver-excerpt.md", "-o"])
+        .arg(&output)
+        .args(["-c", "fixtures/styled.css"])
+        .output()
+        .expect("the CLI runs");
+    assert!(run.status.success());
+    let stderr =
+        String::from_utf8_lossy(&run.stderr).replace(&output.display().to_string(), "book.epub");
+    let printed: Vec<&str> = stderr.lines().collect();
+    for sample in samples {
+        assert!(
+            printed.contains(&sample),
+            "the page shows a line the run does not print:\n{sample}\n\n{stderr}"
+        );
+    }
+}
+
+/// The fixture book through the CLI to an EPUB.
+fn render_epub(name: &str, css: &[&Path]) -> (PathBuf, String) {
+    let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.epub"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_fleuron"));
+    command.arg(fixture_path()).arg("-o").arg(&output);
+    for sheet in css {
+        command.arg("-c").arg(sheet);
+    }
+    let run = command.output().expect("the CLI runs");
+    let stderr = String::from_utf8_lossy(&run.stderr).into_owned();
+    assert!(run.status.success(), "the CLI failed: {stderr}");
+    (output, stderr)
+}
+
+/// The text of an EPUB's section documents, in the order of the
+/// archive, which is the order of the spine. A tag that opens or
+/// closes a block is a space, and an inline tag is nothing.
+fn epub_text(epub: &Path) -> String {
+    let archive = std::fs::read(epub).expect("the CLI wrote its output");
+    let mut text = String::new();
+    for (name, bytes) in zip_entries(&archive) {
+        if !(name.starts_with("EPUB/section-") && name.ends_with(".xhtml")) {
+            continue;
+        }
+        let document = String::from_utf8(bytes).expect("a document is UTF-8");
+        let body = &document[document.find("<body>").expect("a document has a body")..];
+        let mut rest = body;
+        while let Some(open) = rest.find('<') {
+            text.push_str(&unescape(&rest[..open]));
+            let close = open + rest[open..].find('>').expect("a tag closes");
+            let tag = rest[open + 1..close].trim_start_matches('/');
+            let name: String = tag
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect();
+            if !matches!(name.as_str(), "em" | "strong" | "code" | "a" | "s" | "span") {
+                text.push(' ');
+            }
+            rest = &rest[close + 1..];
+        }
+        text.push_str(&unescape(rest));
+    }
+    text
+}
+
+fn unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&amp;", "&")
+}
+
+/// The entries of a zip archive, inflated, in the order of its
+/// central directory.
+fn zip_entries(archive: &[u8]) -> Vec<(String, Vec<u8>)> {
+    let le16 = |at: usize| u16::from_le_bytes([archive[at], archive[at + 1]]) as usize;
+    let le32 = |at: usize| u32::from_le_bytes(archive[at..at + 4].try_into().unwrap()) as usize;
+    let end = archive.len() - 22;
+    assert_eq!(&archive[end..end + 4], b"PK\x05\x06", "no end record");
+    let mut at = le32(end + 16);
+    let mut out = Vec::new();
+    for _ in 0..le16(end + 10) {
+        let (method, compressed, length) = (le16(at + 10), le32(at + 20), le16(at + 28));
+        let offset = le32(at + 42);
+        let name = String::from_utf8(archive[at + 46..at + 46 + length].to_vec()).unwrap();
+        let data = offset + 30 + le16(offset + 26) + le16(offset + 28);
+        let held = &archive[data..data + compressed];
+        let bytes = match method {
+            0 => held.to_vec(),
+            _ => miniz_oxide::inflate::decompress_to_vec(held).expect("the entry inflates"),
+        };
+        out.push((name, bytes));
+        at += 46 + length;
+    }
+    out
+}
+
+/// The runs of letters in `text`.
+fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphabetic())
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn count(words: &[String]) -> std::collections::BTreeMap<String, usize> {
+    let mut counted = std::collections::BTreeMap::new();
+    for word in words {
+        *counted.entry(word.clone()).or_default() += 1;
+    }
+    counted
+}
+
+/// The words of the header rows of the fixture book's table.
+fn table_header_words() -> Vec<String> {
+    let book = fixture_book();
+    let mut out = Vec::new();
+    for section in &book.sections {
+        for block in &section.blocks {
+            if let Block::Table { head, .. } = block {
+                for cell in head.iter().flat_map(|row| &row.cells) {
+                    for block in &cell.blocks {
+                        if let Block::Paragraph { inlines, .. } = block {
+                            out.extend(words(&fleuron::content::text(inlines)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// A source for the CLI to read, beside the PDFs.

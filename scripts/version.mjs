@@ -25,7 +25,7 @@ const SEMVER = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
 /** A place a version is written, and how it is read and rewritten. */
 const places = [
   text('Cargo.toml', 'workspace.package', /(\[workspace\.package\][\s\S]*?\nversion = ")([^"]+)(")/),
-  ...['fleuron', 'fleuron-cli', 'fleuron-fixtures', 'fleuron-markdown', 'fleuron-wasm'].map((crate) =>
+  ...['fleuron', 'fleuron-cli', 'fleuron-epub', 'fleuron-fixtures', 'fleuron-markdown', 'fleuron-wasm'].map((crate) =>
     text('Cargo.lock', crate, new RegExp(`(name = "${crate}"\\nversion = ")([^"]+)(")`)),
   ),
   json('crates/fleuron-wasm/npm/package.json', ['version']),

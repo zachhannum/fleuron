@@ -7,8 +7,10 @@ wins and the quick fix waits for its own PR.
 ## Project shape
 
 - Workspace: `crates/fleuron` (engine), `crates/fleuron-markdown`
-  (frontend), `crates/fleuron-cli` (binary), `crates/fleuron-wasm`
-  (bindings), `crates/fleuron-fixtures` (corpus and perf harness, never
+  (frontend), `crates/fleuron-epub` (reflowable EPUB from the content
+  tree and the sheets, beside the pipeline rather than in it),
+  `crates/fleuron-cli` (binary), `crates/fleuron-wasm` (bindings),
+  `crates/fleuron-fixtures` (corpus and perf harness, never
   published).
 - Outside the workspace: `crates/fleuron-wasm/npm` is the npm package
   `fleuron`, the TypeScript beside the module; `packages/react` is
@@ -130,7 +132,8 @@ markdown in → valid PDF out**. The CLI runs it in
 2. `cargo clippy --workspace --all-targets -- -D warnings`
 3. `cargo test --workspace` (unit + property + snapshot)
 4. e2e job: build CLI, run fixture book, validate with `qpdf` +
-   `pdftotext` (tools installed via `apt` in the job)
+   `pdftotext` (tools installed via `apt` in the job), and the EPUB
+   of the same book with `epubcheck` (a pinned release)
 5. `cargo-deny` advisories check — no merged dependency with an open
    RUSTSEC advisory (rustybuzz taught us why this job exists)
 6. wasm job: calls `wasm.yml`. It checks that every version agrees and
