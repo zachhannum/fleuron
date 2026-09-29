@@ -146,6 +146,12 @@ const pdf = await client.exportPdf();
 
 The export draws from the same laid-out pages the preview drew, rather than laying the book out a second time, so it cannot come out different from what is on screen.
 
+```js
+const epub = await client.exportEpub();
+```
+
+The EPUB is the same book, reflowable, with the warnings that writing it raised. A reading system makes its pages, so the worker lays out nothing to write it. See [EPUB](../library/epub.md#from-a-worker).
+
 ## Without a worker
 
 Nothing about the module needs a worker. For a build step, or a test:

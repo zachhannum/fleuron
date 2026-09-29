@@ -17,7 +17,7 @@ A version leads the encoding, and a host reads it before anything else. The enco
 
 In: whatever changed. Markdown source, stylesheets, font bytes, a content tree. Inputs are ops on a session the module keeps, not a book re-sent per frame. The engine opens nothing, so a face that has not crossed cannot be used.
 
-Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, or PDF bytes on the export path. Transferred rather than copied.
+Out: one transferable `ArrayBuffer`: the postcard-encoded display structure, PDF bytes on the export path, or an EPUB with its warnings. Transferred rather than copied.
 
 A `preview` reply need not be the whole book. `first` and `count` on the request ask for `count` pages starting at `first`, counting from 0, and the reply's `pages` is that slice: `first` says where it begins and `bookPages` says how many pages the book has, so a reply with one page still answers that. `fonts`, `assets` and `warnings` ride every reply whole, since none of them is per page. Leaving `first` and `count` out asks for the whole book.
 
@@ -72,6 +72,8 @@ Two more are about what styled the page. `want: 'inspect'`, with `node`, answers
 
 `want: 'hit'`, with `page`, `x`, and `y`, answers with the innermost element at that point on the page, or `null` outside every box. A page counts from 0, and a point is in points from the top-left corner of the page. Both questions answer in JSON, from the same cascade that styled the book, so a host matches no selectors of its own. A node id names a node only until the next edit. `Client.inspect`, `Client.inspectMarginBox`, and `Client.hit` are the host's side, and [sessions](../library/sessions.md) describes the answer in full.
 
+`want: 'epub'` is a render, as `want: 'pdf'` is. It answers with the book that the session holds as a reflowable EPUB, and runs no layout stage. The reply is postcard behind the same version as a display structure: the warnings, then the file. `decodeEpub` reads it, and `Client.exportEpub` is the host's side. [EPUB](../library/epub.md#from-a-worker) describes what the EPUB holds.
+
 The host raises the generation whenever the input goes stale, at a keystroke in a stylesheet or a new manuscript. A response whose generation is behind the current one is dropped without painting.
 
 ### Latest render wins
@@ -84,7 +86,7 @@ That is also what makes it cache-safe. A superseded render is one that never sta
 
 A request the engine cannot apply, font bytes that are not a font, a content tree that will not parse: each replies with an error, and the session continues rendering.
 
-A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which is the whole run's, [the frontend's included](../library/diagnostics.mdx).
+A warning is different. A book that laid out anyway reports through the display structure's own `warnings`, which is the whole run's, [the frontend's included](../library/diagnostics.mdx). An EPUB reply carries `warnings` of the same shape: the frontend's, then the writer's.
 
 ## Host duties
 

@@ -24,6 +24,8 @@ let bytes = session.export()?;       // the same run, as PDF
 
 `preview` and `export` are two painters over one set of stages, so an export cannot contradict the preview it came from.
 
+A writer that reads the book rather than the pages, such as [the EPUB writer](epub.md), reads the inputs of the session instead. `book`, `sheets`, `images`, and `font_files` return what the host set and sent. Reading them runs no stage.
+
 ## What an edit costs
 
 | change                                  | deepest surviving cache     | what runs                                |
