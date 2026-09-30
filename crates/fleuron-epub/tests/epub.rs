@@ -4,7 +4,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use fleuron::Warning;
 use fleuron::content::Book;
 use fleuron::images::ImageLoader;
 use fleuron::style::{FontLoader, Source, Stylesheets};
@@ -350,37 +349,112 @@ fn two_runs_make_the_same_bytes() {
     assert_eq!(write(&book, css).bytes, write(&book, css).bytes);
 }
 
-/// Acceptance: a property outside the subset and a paged property
-/// inside it both reach the diagnostics with a line and a column, and
-/// neither reaches the EPUB's sheet.
+/// Acceptance: each kind of CSS that describes a page drops from the
+/// EPUB with no warning when a host sheet has it.
 #[test]
-fn outside_the_subset_and_paged_both_warn_where_they_were_written() {
-    let css = "p {\n  color: #333;\n  float: left;\n  orphans: 3;\n}\n@page { size: a5 }\nnotes { color: red }\n";
+fn css_that_describes_a_page_drops_without_a_warning() {
+    let css = r#"@page {
+  size: a5;
+  @top-center { content: string(chapter) }
+}
+@page chapter:first { margin-top: 40mm }
+h1 {
+  color: #111;
+  page: chapter;
+  break-before: page;
+  break-after: avoid;
+  break-inside: avoid;
+  string-set: chapter content();
+  counter-reset: page 1;
+}
+p {
+  color: #333;
+  orphans: 3;
+  widows: 3;
+  box-decoration-break: clone;
+}
+blockquote { column-span: all }
+a.ref::after { content: " (page " target-counter(attr(href url), page) ")" }
+img {
+  position: absolute;
+  wrap-flow: end;
+  shape-outside: auto;
+  shape-margin: 2mm;
+}
+notes { color: red }
+section > pagebreak { color: red }
+:is(p, columnbreak) { color: red }
+"#;
     let epub = write(&read(EVERY_VARIANT), css);
-    let at = |origin: &str| -> Vec<&Warning> {
-        epub.warnings
-            .iter()
-            .filter(|w| w.origin.as_deref() == Some(origin))
-            .collect()
-    };
-    let float = at("author.css:3:3");
-    assert_eq!(float.len(), 1, "{:?}", epub.warnings);
-    assert!(float[0].message.contains("`float`"), "{float:?}");
-    let orphans = at("author.css:4:3");
-    assert_eq!(orphans.len(), 1, "{:?}", epub.warnings);
+    assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
+
+    let sheet = entry(&epub.bytes, "EPUB/book.css");
+    for kept in ["h1 {\n  color: #111;", "p {\n  color: #333;"] {
+        assert!(sheet.contains(kept), "{kept} is not in\n{sheet}");
+    }
+    for gone in [
+        "@page",
+        "size: a5",
+        "margin-top: 40mm",
+        "page: chapter",
+        "break-",
+        "string-set",
+        "counter-reset",
+        "orphans",
+        "widows",
+        "box-decoration-break",
+        "column-span",
+        "target-counter",
+        "position: absolute",
+        "wrap-flow",
+        "shape-",
+        "color: red",
+    ] {
+        assert!(!sheet.contains(gone), "{gone} is in\n{sheet}");
+    }
+}
+
+/// Acceptance: a property outside the subset still warns with a line
+/// and a column, and does not reach the EPUB's sheet.
+#[test]
+fn a_property_outside_the_subset_warns_where_it_was_written() {
+    let css = "p {\n  color: #333;\n  float: left;\n  orphans: 3;\n}\n";
+    let epub = write(&read(EVERY_VARIANT), css);
+    assert_eq!(epub.warnings.len(), 1, "{:?}", epub.warnings);
+    assert_eq!(epub.warnings[0].origin.as_deref(), Some("author.css:3:3"));
     assert!(
-        orphans[0].message.contains("Paged property `orphans`"),
-        "{orphans:?}"
+        epub.warnings[0].message.contains("`float`"),
+        "{:?}",
+        epub.warnings
     );
-    assert!(at("author.css:6:1")[0].message.contains("`@page`"));
-    assert!(at("author.css:7:1")[0].message.contains("`notes`"));
-    assert_eq!(epub.warnings.len(), 4, "{:?}", epub.warnings);
 
     let sheet = entry(&epub.bytes, "EPUB/book.css");
     assert!(sheet.contains("color: #333;"), "{sheet}");
-    for gone in ["float", "orphans: 3", "size: a5", "color: red"] {
-        assert!(!sheet.contains(gone), "{gone} is in\n{sheet}");
+    assert!(!sheet.contains("float"), "{sheet}");
+}
+
+/// Acceptance: an image or a font file that is missing, or of a type
+/// an EPUB cannot hold, still warns.
+#[test]
+fn a_missing_or_unknown_image_or_font_file_warns() {
+    let css = r#"@font-face { font-family: "Gone"; src: url(gone.otf) }
+@font-face { font-family: "Odd"; src: url(odd.otf) }
+blockquote { background-image: url(gone.png) }
+h1 { background-image: url(odd.png) }
+"#;
+    let sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
+    let mut files = Files::new();
+    files.0.insert("odd.png", b"not an image".to_vec());
+    files.0.insert("odd.otf", b"not a font".to_vec());
+    let epub = fleuron_epub::write(&read(EVERY_VARIANT), &sheets, &files, &files);
+    for url in ["gone.otf", "odd.otf", "gone.png", "odd.png"] {
+        assert!(
+            epub.warnings.iter().any(|w| w.message.contains(url)),
+            "no warning names {url}: {:?}",
+            epub.warnings
+        );
     }
+    assert_eq!(epub.warnings.len(), 4, "{:?}", epub.warnings);
 }
 
 /// The book is `body` and a note is `aside`, so a rule for either

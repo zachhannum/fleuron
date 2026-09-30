@@ -234,8 +234,8 @@ If a file does not load, or is another type, fleuron warns. It then leaves out t
 
 ### The stylesheet
 
-The EPUB has one stylesheet. It holds the rules of the built-in stylesheet and of each author stylesheet, in the order of the cascade. Fleuron leaves out the CSS that describes pages, because the reading system makes the pages. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists what goes and what warns.
+The EPUB has one stylesheet. It holds the rules of the built-in stylesheet and of each author stylesheet, in the order of the cascade. Fleuron leaves out the CSS that describes pages, because the reading system makes the pages. It leaves out this CSS with no warning, from every stylesheet. The same stylesheet makes the PDF, and the PDF uses this CSS. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists what fleuron leaves out.
 
 ## Warnings
 
-`Epub::warnings` holds every warning of the run. It starts with the warnings of `Stylesheets::parse`. So CSS that fleuron does not support yet warns as it does for a PDF. Then come the warnings for CSS in the author sheets that describes pages, for files that did not go in, and for links that name nothing. [Diagnostics](diagnostics.mdx) covers how to read a warning.
+`Epub::warnings` holds every warning of the run. It starts with the warnings of `Stylesheets::parse`. So CSS that fleuron does not support yet warns as it does for a PDF. Then come the warnings for files that did not go in, and for links that name nothing. CSS that describes pages does not warn. [Diagnostics](diagnostics.mdx) covers how to read a warning.
