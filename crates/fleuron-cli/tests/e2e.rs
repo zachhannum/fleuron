@@ -2313,8 +2313,8 @@ fn the_cli_reference_shows_warnings_the_run_prints() {
 fn the_fixture_book_makes_an_epub_that_epubcheck_passes() {
     let (epub, stderr) = render_epub("epub-check", &[&styled_sheet()]);
     assert!(
-        stderr.contains("The EPUB was written anyway."),
-        "the paged rules of the sheet are reported: {stderr}",
+        !stderr.contains("warning"),
+        "the paged rules of the sheet drop without a warning: {stderr}",
     );
     let Some(check) = tool("epubcheck", &[epub.as_os_str()]) else {
         return;

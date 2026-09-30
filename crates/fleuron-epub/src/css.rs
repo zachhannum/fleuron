@@ -3,10 +3,9 @@
 //!
 //! A reading system makes the pages of a reflowable EPUB itself, so
 //! `@page`, running heads, page numbers, break control and the
-//! placing of a box against the page have nothing to act on. Each
-//! one the author wrote is a warning at the line and column it was
-//! written at. The built-in sheet has paged rules too, and those are
-//! left out without a word, because the author did not write them.
+//! placing of a box against the page have nothing to act on. They
+//! drop without a warning from every sheet: the same sheet sets the
+//! PDF, where they are wanted.
 
 use cssparser::{Parser, ParserInput, Token, serialize_string};
 
@@ -78,17 +77,6 @@ pub fn stylesheet(sheets: &Stylesheets, cx: &mut Context<'_>) -> String {
             out.push_str(ALIGNMENT);
             aligned = true;
         }
-        if author {
-            for page in &sheet.pages {
-                cx.warnings.push(Warning {
-                    message: format!(
-                        "Paged rule `{}`. The rule is left out of the EPUB.",
-                        page.selector
-                    ),
-                    origin: Some(page.position.to_string()),
-                });
-            }
-        }
         for rule in &sheet.rules {
             style_rule(rule, author, &mut out, cx);
         }
@@ -111,16 +99,8 @@ fn warn(cx: &mut Context<'_>, author: bool, message: String, at: &SheetPosition)
 fn style_rule(rule: &WrittenRule, author: bool, out: &mut String, cx: &mut Context<'_>) {
     let mut selectors = Vec::new();
     for selector in &rule.selectors {
-        match translate_selector(selector) {
-            Ok(selector) => selectors.push(selector),
-            Err(element) => warn(
-                cx,
-                author,
-                format!(
-                    "Paged selector `{selector}`: `{element}` is on a page only. The selector is left out of the EPUB."
-                ),
-                &rule.position,
-            ),
+        if let Some(selector) = translate_selector(selector) {
+            selectors.push(selector);
         }
     }
     if selectors.is_empty() {
@@ -128,13 +108,7 @@ fn style_rule(rule: &WrittenRule, author: bool, out: &mut String, cx: &mut Conte
     }
     let mut declarations = String::new();
     for declaration in &rule.declarations {
-        if let Some(what) = paged(declaration) {
-            warn(
-                cx,
-                author,
-                format!("Paged {what}. The declaration is left out of the EPUB."),
-                &declaration.position,
-            );
+        if paged(declaration) {
             continue;
         }
         let Some(value) = urls(&declaration.value, cx, author, &declaration.position) else {
@@ -158,25 +132,23 @@ fn style_rule(rule: &WrittenRule, author: bool, out: &mut String, cx: &mut Conte
     out.push_str("}\n");
 }
 
-/// Why a declaration only acts on a page, or `None` when it acts on
-/// the text wherever the text is.
-fn paged(declaration: &Written) -> Option<String> {
+/// Whether a declaration only acts on a page.
+fn paged(declaration: &Written) -> bool {
     let property = declaration.property.as_str();
     if PAGED_PROPERTIES.contains(&property) {
-        return Some(format!("property `{property}`"));
+        return true;
     }
     let value = declaration.value.to_ascii_lowercase();
-    let paged_value = match property {
+    match property {
         "position" => value.trim() == "absolute",
         "content" => value.contains("target-counter("),
         _ => false,
-    };
-    paged_value.then(|| format!("value `{property}: {}`", declaration.value))
+    }
 }
 
-/// A selector with the element names the XHTML spells, or the paged
-/// element it names.
-fn translate_selector(selector: &str) -> Result<String, String> {
+/// A selector with the element names the XHTML spells, or `None` when
+/// it names a paged element.
+fn translate_selector(selector: &str) -> Option<String> {
     let mut input = ParserInput::new(selector);
     let mut parser = Parser::new(&mut input);
     let mut names = Vec::new();
@@ -187,7 +159,7 @@ fn translate_selector(selector: &str) -> Result<String, String> {
     for (range, name) in names {
         let lower = name.to_ascii_lowercase();
         if PAGED_ELEMENTS.contains(&lower.as_str()) {
-            return Err(lower);
+            return None;
         }
         if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == lower) {
             out.push_str(&selector[at..range.start]);
@@ -196,7 +168,7 @@ fn translate_selector(selector: &str) -> Result<String, String> {
         }
     }
     out.push_str(&selector[at..]);
-    Ok(out)
+    Some(out)
 }
 
 /// Every identifier in a type selector's place: not after `.`, `:`
@@ -346,17 +318,11 @@ mod tests {
             ("h2 + p::first-letter", "h2 + p::first-letter"),
         ];
         for (from, to) in cases {
-            assert_eq!(translate_selector(from).as_deref(), Ok(to), "{from}");
+            assert_eq!(translate_selector(from).as_deref(), Some(to), "{from}");
         }
-        assert_eq!(translate_selector("notes").unwrap_err(), "notes");
-        assert_eq!(
-            translate_selector("section > pagebreak").unwrap_err(),
-            "pagebreak"
-        );
-        assert_eq!(
-            translate_selector(":is(p, columnbreak)").unwrap_err(),
-            "columnbreak"
-        );
+        for paged in ["notes", "section > pagebreak", ":is(p, columnbreak)"] {
+            assert_eq!(translate_selector(paged), None, "{paged}");
+        }
     }
 
     fn written(property: &str, value: &str) -> Written {
@@ -382,7 +348,7 @@ mod tests {
             ),
             ("wrap-flow", "end"),
         ] {
-            assert!(paged(&written(property, value)).is_some(), "{property}");
+            assert!(paged(&written(property, value)), "{property}");
         }
         for (property, value) in [
             ("position", "relative"),
@@ -390,7 +356,7 @@ mod tests {
             ("font-size", "12pt"),
             ("--break-before", "page"),
         ] {
-            assert!(paged(&written(property, value)).is_none(), "{property}");
+            assert!(!paged(&written(property, value)), "{property}");
         }
     }
 }
