@@ -1765,14 +1765,9 @@ position: absolute  wrap-flow  shape-outside  shape-margin
 
 Selectors that name `notes`, `pagebreak`, or `columnbreak`. These elements exist only on a page.
 
-The built-in stylesheet has some of these. Fleuron leaves those out with no warning. For each one that an author stylesheet has, fleuron warns with the line and the column. The following example shows two of the warnings:
+Fleuron leaves out this CSS with no warning, from the built-in stylesheet and from each author stylesheet. The same stylesheet makes the PDF, and the PDF uses this CSS.
 
-```text
-fleuron: warning: fixtures/styled.css:7:1: Paged rule `@page`. The rule is left out of the EPUB.
-fleuron: warning: fixtures/styled.css:85:3: Paged property `box-decoration-break`. The declaration is left out of the EPUB.
-```
-
-CSS that fleuron does not support yet warns as it does for a PDF. Fleuron leaves it out of the EPUB too.
+CSS that fleuron does not support yet warns as it does for a PDF, with the line and the column. Fleuron leaves it out of the EPUB too.
 
 A reading system uses the CSS that it supports. The support is different from one reading system to the next. So a declaration in the EPUB can have no effect on some devices.
 

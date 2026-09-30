@@ -2449,9 +2449,8 @@ fn two_runs_make_the_same_epub() {
     );
 }
 
-/// The EPUB samples in the CLI quickstart and on the CSS subset page
-/// are what the CLI prints for the command the quickstart gives, line
-/// for line.
+/// The EPUB sample in the CLI quickstart is what the CLI prints for
+/// the command the quickstart gives, line for line.
 #[test]
 fn the_epub_samples_show_what_the_run_prints() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -2472,7 +2471,7 @@ fn the_epub_samples_show_what_the_run_prints() {
         .flat_map(|text| text.lines())
         .filter(|line| line.starts_with("fleuron: "))
         .collect();
-    assert_eq!(samples.len(), 3, "the pages stopped showing their samples");
+    assert_eq!(samples.len(), 1, "the pages stopped showing their sample");
 
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("epub-page.epub");
     let run = Command::new(env!("CARGO_BIN_EXE_fleuron"))
@@ -2486,6 +2485,7 @@ fn the_epub_samples_show_what_the_run_prints() {
     let stderr =
         String::from_utf8_lossy(&run.stderr).replace(&output.display().to_string(), "book.epub");
     let printed: Vec<&str> = stderr.lines().collect();
+    assert_eq!(printed.len(), samples.len(), "{stderr}");
     for sample in samples {
         assert!(
             printed.contains(&sample),
