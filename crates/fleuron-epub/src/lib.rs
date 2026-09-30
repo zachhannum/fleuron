@@ -54,7 +54,7 @@ use fleuron::content::{Block, Book, Metadata, text};
 use fleuron::images::ImageLoader;
 use fleuron::style::{FontLoader, Stylesheets};
 
-use media::Resources;
+use media::{Kind, Resources};
 use xhtml::{Heading, Plan};
 use zip::{Archive, Method};
 
@@ -234,6 +234,8 @@ pub fn files(
         hrefs.push("section-001.xhtml".to_string());
     }
 
+    let cover = cover(&book.metadata, &mut resources, images, &mut warnings);
+
     let headings = xhtml::headings(&book, &plan);
     let navigation = navigation(&book, &headings, &hrefs, language.as_deref());
     let package = package(
@@ -241,6 +243,7 @@ pub fn files(
         &book,
         &hrefs,
         &resources,
+        cover.as_deref(),
         language.as_deref(),
     );
 
@@ -289,6 +292,31 @@ pub fn files(
         files,
         spine,
         warnings,
+    }
+}
+
+/// The path of the image that the `cover` key names, or `None` with
+/// a warning when the host sent no such image.
+fn cover(
+    metadata: &Metadata,
+    resources: &mut Resources,
+    images: &dyn ImageLoader,
+    warnings: &mut Vec<Warning>,
+) -> Option<String> {
+    let url = metadata
+        .extra
+        .get("cover")
+        .map(|url| url.trim())
+        .filter(|url| !url.is_empty())?;
+    match resources.resolve(url, Kind::Image, |url| images.load(url)) {
+        Ok(href) => Some(href.to_string()),
+        Err(refused) => {
+            warnings.push(Warning {
+                message: xhtml::refusal("Cover image", url, refused),
+                origin: None,
+            });
+            None
+        }
     }
 }
 
@@ -394,6 +422,7 @@ fn package(
     book: &Book,
     hrefs: &[String],
     resources: &Resources,
+    cover: Option<&str>,
     language: Option<&str>,
 ) -> String {
     let mut out = String::from(
@@ -455,8 +484,13 @@ fn package(
         ));
     }
     for (index, file) in resources.files().iter().enumerate() {
+        let properties = if cover == Some(file.href.as_str()) {
+            " properties=\"cover-image\""
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "<item id=\"media-{}\" href=\"{}\" media-type=\"{}\"/>\n",
+            "<item id=\"media-{}\" href=\"{}\" media-type=\"{}\"{properties}/>\n",
             index + 1,
             file.href,
             file.media_type

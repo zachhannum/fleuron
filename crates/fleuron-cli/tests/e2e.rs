@@ -2331,6 +2331,57 @@ fn the_fixture_book_makes_an_epub_that_epubcheck_passes() {
     );
 }
 
+/// Acceptance: `epubcheck` reports no errors on the fixture book
+/// with a cover, which the CLI reads from the frontmatter.
+#[test]
+fn the_fixture_book_with_a_cover_passes_epubcheck() {
+    let book = fixture_with_cover("epub-cover");
+    let (epub, stderr) = render_epub_from("epub-cover", &book, &[&styled_sheet()]);
+    assert!(!stderr.contains("Cover image"), "{stderr}");
+    let archive = std::fs::read(&epub).expect("the CLI wrote its output");
+    let (_, package) = zip_entries(&archive)
+        .into_iter()
+        .find(|(name, _)| name == "EPUB/package.opf")
+        .expect("the EPUB has a package document");
+    let package = String::from_utf8(package).expect("the package document is UTF-8");
+    let cover = package
+        .lines()
+        .find(|line| line.contains("properties=\"cover-image\""))
+        .unwrap_or_else(|| panic!("no item is the cover:\n{package}"));
+    assert!(cover.contains("media-type=\"image/jpeg\""), "{cover}");
+
+    let Some(check) = tool("epubcheck", &[epub.as_os_str()]) else {
+        return;
+    };
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+    assert!(check.status.success(), "epubcheck failed:\n{report}");
+    assert!(
+        report.contains("0 fatals / 0 errors"),
+        "epubcheck found errors:\n{report}"
+    );
+}
+
+/// The fixture book with `cover: images/plate.jpg` in its
+/// frontmatter, beside a copy of its images.
+fn fixture_with_cover(name: &str) -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let images = dir.join("images");
+    std::fs::create_dir_all(&images).expect("the directory is writable");
+    for entry in std::fs::read_dir(fixtures().join("images")).expect("the images are there") {
+        let path = entry.unwrap().path();
+        std::fs::copy(&path, images.join(path.file_name().unwrap())).expect("the copy");
+    }
+    let text = std::fs::read_to_string(fixture_path()).expect("the fixture book is there");
+    let text = text.replacen("---\n", "---\ncover: images/plate.jpg\n", 1);
+    let book = dir.join("gulliver-excerpt.md");
+    std::fs::write(&book, text).expect("the book is writable");
+    book
+}
+
 /// Acceptance: the EPUB holds the words the PDF of the same
 /// manuscript and sheet holds, as many of them and as many times
 /// each.
@@ -2445,9 +2496,14 @@ fn the_epub_samples_show_what_the_run_prints() {
 
 /// The fixture book through the CLI to an EPUB.
 fn render_epub(name: &str, css: &[&Path]) -> (PathBuf, String) {
+    render_epub_from(name, &fixture_path(), css)
+}
+
+/// A manuscript through the CLI to an EPUB.
+fn render_epub_from(name: &str, input: &Path, css: &[&Path]) -> (PathBuf, String) {
     let output = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.epub"));
     let mut command = Command::new(env!("CARGO_BIN_EXE_fleuron"));
-    command.arg(fixture_path()).arg("-o").arg(&output);
+    command.arg(input).arg("-o").arg(&output);
     for sheet in css {
         command.arg("-c").arg(sheet);
     }
