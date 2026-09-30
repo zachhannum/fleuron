@@ -81,6 +81,11 @@ impl Resources {
     pub fn files(&self) -> &[Resource] {
         &self.files
     }
+
+    /// The same, taken out of the table.
+    pub fn into_files(self) -> Vec<Resource> {
+        self.files
+    }
 }
 
 /// The media type and a file extension for `bytes`, read from their

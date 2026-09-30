@@ -92,6 +92,58 @@ pub struct Epub {
     pub warnings: Vec<Warning>,
 }
 
+/// The files of one EPUB, before they go into the zip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Files {
+    /// Every file in the container, in the order of the zip.
+    pub files: Vec<File>,
+    /// The paths of the documents in reading order, as the spine of
+    /// the package document lists them.
+    pub spine: Vec<String>,
+    /// The same warnings [`Epub::warnings`] holds.
+    pub warnings: Vec<Warning>,
+}
+
+impl Files {
+    /// The zip that [`write`] makes of these files.
+    pub fn zip(&self) -> Vec<u8> {
+        let mut archive = Archive::default();
+        for file in &self.files {
+            // The reading system reads the media type at a fixed
+            // offset, so this entry is not compressed.
+            let method = if file.path == "mimetype" {
+                Method::Stored
+            } else {
+                Method::Deflated
+            };
+            archive.add(&file.path, &file.bytes, method);
+        }
+        archive.finish()
+    }
+}
+
+/// One file in the container.
+#[derive(Debug, Clone, PartialEq)]
+pub struct File {
+    /// Where the file is in the container, such as
+    /// `EPUB/section-001.xhtml`.
+    pub path: String,
+    /// The media type, such as `application/xhtml+xml`.
+    pub media_type: String,
+    /// The bytes, not compressed.
+    pub bytes: Vec<u8>,
+}
+
+impl File {
+    fn new(path: &str, media_type: &str, bytes: Vec<u8>) -> File {
+        File {
+            path: path.to_string(),
+            media_type: media_type.to_string(),
+            bytes,
+        }
+    }
+}
+
 /// Writes `book` as a reflowable EPUB 3, styled by `sheets`.
 ///
 /// Each section is one XHTML document, in the order of
@@ -110,6 +162,24 @@ pub fn write(
     images: &dyn ImageLoader,
     fonts: &dyn FontLoader,
 ) -> Epub {
+    let files = files(book, sheets, images, fonts);
+    Epub {
+        bytes: files.zip(),
+        warnings: files.warnings,
+    }
+}
+
+/// The files [`write`] puts in the container, one by one and not
+/// zipped, in the order the container holds them.
+///
+/// A host that shows the EPUB in a browser frame loads these files
+/// as they are, and does not open the zip.
+pub fn files(
+    book: &Book,
+    sheets: &Stylesheets,
+    images: &dyn ImageLoader,
+    fonts: &dyn FontLoader,
+) -> Files {
     let mut book = book.clone();
     book.assign_node_ids();
     let anchors = book.anchors();
@@ -174,44 +244,50 @@ pub fn write(
         language.as_deref(),
     );
 
-    let mut archive = Archive::default();
-    archive.add("mimetype", b"application/epub+zip", Method::Stored);
-    archive.add(
-        "META-INF/container.xml",
-        container().as_bytes(),
-        Method::Deflated,
-    );
-    archive.add(
-        &format!("{PACKAGE}/package.opf"),
-        package.as_bytes(),
-        Method::Deflated,
-    );
-    archive.add(
-        &format!("{PACKAGE}/nav.xhtml"),
-        navigation.as_bytes(),
-        Method::Deflated,
-    );
-    archive.add(
-        &format!("{PACKAGE}/book.css"),
-        stylesheet.as_bytes(),
-        Method::Deflated,
-    );
-    for (href, document) in hrefs.iter().zip(&documents) {
-        archive.add(
-            &format!("{PACKAGE}/{href}"),
-            document.as_bytes(),
-            Method::Deflated,
-        );
+    let mut files = vec![
+        File::new("mimetype", "text/plain", b"application/epub+zip".to_vec()),
+        File::new(
+            "META-INF/container.xml",
+            "application/xml",
+            container().into_bytes(),
+        ),
+        File::new(
+            &format!("{PACKAGE}/package.opf"),
+            "application/oebps-package+xml",
+            package.into_bytes(),
+        ),
+        File::new(
+            &format!("{PACKAGE}/nav.xhtml"),
+            "application/xhtml+xml",
+            navigation.into_bytes(),
+        ),
+        File::new(
+            &format!("{PACKAGE}/book.css"),
+            "text/css",
+            stylesheet.into_bytes(),
+        ),
+    ];
+    let spine: Vec<String> = hrefs
+        .iter()
+        .map(|href| format!("{PACKAGE}/{href}"))
+        .collect();
+    for (path, document) in spine.iter().zip(documents) {
+        files.push(File::new(
+            path,
+            "application/xhtml+xml",
+            document.into_bytes(),
+        ));
     }
-    for file in resources.files() {
-        archive.add(
+    for file in resources.into_files() {
+        files.push(File::new(
             &format!("{PACKAGE}/{}", file.href),
-            &file.bytes,
-            Method::Deflated,
-        );
+            file.media_type,
+            file.bytes,
+        ));
     }
-    Epub {
-        bytes: archive.finish(),
+    Files {
+        files,
+        spine,
         warnings,
     }
 }
