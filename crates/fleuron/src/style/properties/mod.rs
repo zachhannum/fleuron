@@ -34,7 +34,7 @@ pub use counter::{
 };
 pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, Edges};
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
-pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
+pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, Marks, PageGeometry};
 pub use value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
     Family, Figures, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,

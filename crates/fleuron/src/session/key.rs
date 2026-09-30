@@ -509,8 +509,11 @@ pub(super) fn hash_geometry(geometry: PageGeometry, h: &mut DefaultHasher) {
         margin,
         columns,
         align_content,
+        bleed,
+        marks,
     } = geometry;
-    (width.to_bits(), height.to_bits(), align_content).hash(h);
+    (width.to_bits(), height.to_bits(), align_content, marks).hash(h);
+    bleed.map(f32::to_bits).hash(h);
     hash_edges(margin, h);
     let Columns {
         count,

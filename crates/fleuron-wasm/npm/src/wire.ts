@@ -308,6 +308,17 @@ export interface Page {
   /** Trimmed page height in points. */
   height: number;
   /**
+   * How far past the trim the page background reaches, in points, on
+   * every edge. Zero on a page with no bleed.
+   */
+  bleed: number;
+  /**
+   * How far past the bleed the sheet reaches, in points, on every edge:
+   * the room crop marks and registration marks are painted in. Zero on a
+   * page with no marks.
+   */
+  slug: number;
+  /**
    * The content-tree node ids of the sections whose content appears on
    * this page, in the order their content appears on it. A chapter that
    * ends mid-page is followed there by the next one opening, so the
@@ -744,9 +755,38 @@ function page(r: Reader): Page {
     side,
     width: r.f32(),
     height: r.f32(),
+    bleed: r.f32(),
+    slug: r.f32(),
     sections: r.seq(() => r.varint()),
     items: r.seq(() => item(r)),
     links: r.seq(() => link(r)),
+  };
+}
+
+/** A rectangle on a page, in points from the top left corner of the trim. */
+export interface Rect {
+  /** Left edge. */
+  x: number;
+  /** Top edge. */
+  y: number;
+  /** Width in points. */
+  width: number;
+  /** Height in points. */
+  height: number;
+}
+
+/**
+ * The sheet a page is printed on: the trim grown by the bleed and the
+ * slug on every edge. On a page with neither, the sheet is the trim.
+ * Its corner is at negative coordinates wherever the sheet is larger.
+ */
+export function sheetOf(page: Page): Rect {
+  const outset = page.bleed + page.slug;
+  return {
+    x: -outset,
+    y: -outset,
+    width: page.width + 2 * outset,
+    height: page.height + 2 * outset,
   };
 }
 

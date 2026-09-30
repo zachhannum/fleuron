@@ -46,7 +46,7 @@ pub use properties::{
     ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
     CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, Figures,
     FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric,
-    Fractions, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, NumericSpacing,
+    Fractions, Hyphens, Inset, Length, LineHeight, ListStyleType, MarginBox, Marks, NumericSpacing,
     PageGeometry, Position, ShapeOutside, ShapePoint, ShapeSource, SizeSource, StringPiece,
     StringSet, Target, TextAlign, TextDecoration, TextJustify, TextTransform, Url, Width, WrapFlow,
 };
@@ -446,6 +446,8 @@ fn resolve_page(
         margin: Edges::all(0.0),
         columns: Columns::undivided(root_size),
         align_content: AlignContent::Start,
+        bleed: None,
+        marks: Marks::NONE,
     };
     let initial = geometry;
     let mut background = Background::NONE;
@@ -553,6 +555,10 @@ fn apply_page(
         }
         PageDeclaration::ColumnRuleStyle(style) => geometry.columns.rule.style = *style,
         PageDeclaration::AlignContent(align) => geometry.align_content = *align,
+        PageDeclaration::Bleed(bleed) => {
+            geometry.bleed = bleed.map(|bleed| bleed.to_points(root_size, root_size))
+        }
+        PageDeclaration::Marks(marks) => geometry.marks = *marks,
         PageDeclaration::Pending(_) => {}
     }
 }
@@ -587,6 +593,8 @@ fn reset_page(
             geometry.columns.rule.style = initial.columns.rule.style
         }
         PageDeclaration::AlignContent(_) => geometry.align_content = initial.align_content,
+        PageDeclaration::Bleed(_) => geometry.bleed = initial.bleed,
+        PageDeclaration::Marks(_) => geometry.marks = initial.marks,
         PageDeclaration::Pending(_) => {}
     }
 }
@@ -2088,6 +2096,66 @@ mod tests {
             align(css, Situation::Body(Side::Recto)),
             AlignContent::Start
         );
+    }
+
+    /// Part: `bleed: auto | <length>` and `marks: none | crop | cross`
+    /// reach the page box. `auto` is 6pt under crop marks and nothing
+    /// otherwise, and the slug is there only where a mark is.
+    #[test]
+    fn bleed_and_marks_reach_the_page_box() {
+        let book = sample();
+        let geometry = |css: &str| {
+            compile(&book, css)
+                .page(PageQuery {
+                    name: Some("chapter"),
+                    situation: Situation::Body(Side::Recto),
+                })
+                .geometry
+        };
+        let plain = geometry("");
+        assert_eq!((plain.bleed(), plain.slug()), (0.0, 0.0));
+        assert!(plain.marks.is_none());
+
+        let marked = geometry("@page { bleed: 3mm; marks: crop }");
+        assert!((marked.bleed() - 3.0 * 72.0 / 25.4).abs() < 1e-3);
+        assert!(marked.marks.crop && !marked.marks.cross);
+        assert!(marked.slug() > 0.0);
+
+        assert_eq!(geometry("@page { marks: crop }").bleed(), 6.0);
+        assert_eq!(geometry("@page { marks: cross }").bleed(), 0.0);
+        assert_eq!(geometry("@page { bleed: 9pt }").bleed(), 9.0);
+        assert_eq!(geometry("@page { bleed: 9pt }").slug(), 0.0);
+        let both = geometry("@page { marks: cross crop }").marks;
+        assert!(both.crop && both.cross);
+        assert!(
+            geometry("@page { marks: crop; marks: none }")
+                .marks
+                .is_none()
+        );
+    }
+
+    /// A value `bleed` and `marks` cannot take warns and leaves the
+    /// page as it was.
+    #[test]
+    fn bleed_and_marks_refuse_what_they_cannot_take() {
+        let book = sample();
+        for css in [
+            "@page { bleed: -3mm }",
+            "@page { bleed: 5% }",
+            "@page { marks: crop crop }",
+            "@page { marks: none crop }",
+            "@page { marks: bleed }",
+        ] {
+            let tree = compile(&book, css);
+            assert!(!tree.warnings().is_empty(), "{css} warned about nothing");
+            let geometry = tree
+                .page(PageQuery {
+                    name: Some("chapter"),
+                    situation: Situation::Body(Side::Recto),
+                })
+                .geometry;
+            assert_eq!((geometry.bleed(), geometry.slug()), (0.0, 0.0), "{css}");
+        }
     }
 
     /// The column properties resolve to points against the page's

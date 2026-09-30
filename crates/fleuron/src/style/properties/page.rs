@@ -95,6 +95,37 @@ impl AlignContent {
     }
 }
 
+/// The marks a printer cuts and registers by, from `marks` on
+/// `@page`. They paint outside the bleed, in the slug.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
+pub struct Marks {
+    /// `crop`: a short line off each corner of the trim, along each
+    /// edge that meets there.
+    pub crop: bool,
+    /// `cross`: a registration target off the middle of each edge.
+    pub cross: bool,
+}
+
+impl Marks {
+    /// `none`: no mark at all.
+    pub const NONE: Marks = Marks {
+        crop: false,
+        cross: false,
+    };
+
+    /// Whether no mark is drawn.
+    pub fn is_none(&self) -> bool {
+        *self == Marks::NONE
+    }
+}
+
+/// How far past the trim `bleed: auto` reaches where the page has crop
+/// marks: 6pt, the figure CSS gives.
+const AUTO_BLEED: f32 = 6.0;
+
+/// How far past the bleed the room for marks reaches, in points.
+pub(crate) const SLUG: f32 = 24.0;
+
 /// Page trim, margins and columns, in points: the resolved `@page`
 /// box.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -114,9 +145,34 @@ pub struct PageGeometry {
     /// content box sits.
     #[serde(skip_serializing_if = "AlignContent::is_start")]
     pub align_content: AlignContent,
+    /// `bleed`: how far past the trim the page background reaches, in
+    /// points, or `None` for `auto`. [`PageGeometry::bleed`] resolves
+    /// `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bleed: Option<f32>,
+    /// `marks`: what a printer cuts and registers by.
+    #[serde(skip_serializing_if = "Marks::is_none")]
+    pub marks: Marks,
 }
 
 impl PageGeometry {
+    /// How far past the trim the page background reaches, in points.
+    /// `auto` is 6pt on a page with crop marks and nothing on one
+    /// without.
+    pub fn bleed(self) -> f32 {
+        match self.bleed {
+            Some(bleed) => bleed.max(0.0),
+            None if self.marks.crop => AUTO_BLEED,
+            None => 0.0,
+        }
+    }
+
+    /// How far past the bleed the room for marks reaches, in points:
+    /// 24pt on a page with marks and nothing on one without.
+    pub fn slug(self) -> f32 {
+        if self.marks.is_none() { 0.0 } else { SLUG }
+    }
+
     /// Origin (top-left) of the content box, in page coordinates.
     pub fn content_origin(self) -> (f32, f32) {
         (self.margin.left, self.margin.top)

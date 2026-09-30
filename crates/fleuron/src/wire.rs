@@ -220,6 +220,8 @@ mod tests {
                 side: Side::Recto,
                 width: 396.0,
                 height: 612.0,
+                bleed: 9.0,
+                slug: 24.0,
                 sections: vec![NodeId::UNASSIGNED],
                 items: vec![
                     DrawItem::Text {
@@ -401,6 +403,8 @@ mod tests {
             side: Side::Verso,
             width: 396.0,
             height: 612.0,
+            bleed: 0.0,
+            slug: 0.0,
             sections: vec![],
             items: vec![],
             links: vec![],
