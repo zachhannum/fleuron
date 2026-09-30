@@ -16,7 +16,7 @@ import {
   type Response,
   type Want,
 } from './protocol.js';
-import { decodeDisplayList, type LayoutOutput } from './wire.js';
+import { decodeDisplayList, decodeEpub, type Epub, type LayoutOutput } from './wire.js';
 
 /** How a request reaches the worker. */
 export interface Transport {
@@ -113,6 +113,17 @@ export class Client {
   /** The same, as PDF bytes. */
   async exportPdf(ops: Op[] = []): Promise<Uint8Array | null> {
     return this.render(ops, 'pdf');
+  }
+
+  /**
+   * The book as a reflowable EPUB, and what writing it warned about.
+   * The EPUB holds the images and the `@font-face` files the session
+   * has, and a reading system lays it out, so no stage runs to make
+   * it. `null` when a later render overtook this one.
+   */
+  async exportEpub(ops: Op[] = []): Promise<Epub | null> {
+    const bytes = await this.render(ops, 'epub');
+    return bytes === SUPERSEDED ? SUPERSEDED : decodeEpub(bytes);
   }
 
   /**
@@ -241,7 +252,7 @@ export class Client {
 
   /**
    * Applies inputs and asks for bytes: the display structure as the
-   * engine encoded it, or a PDF. `null` when this render was
+   * engine encoded it, a PDF, or an EPUB behind its warnings. `null` when this render was
    * overtaken.
    *
    * The generation only raises when `ops` changed something. A range

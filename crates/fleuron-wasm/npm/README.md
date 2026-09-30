@@ -1,7 +1,7 @@
 # fleuron
 
 Paged-media layout in a worker: markdown and CSS in, a display
-structure or PDF bytes out.
+structure, PDF bytes, or an EPUB out.
 
 [fleuron](https://fleuron.typeworks.dev/) is a layout engine for
 book-shaped documents, compiled to WebAssembly. It shapes text, breaks
@@ -199,7 +199,9 @@ for selection and copy-and-paste.
 `paintPage` draws one of them as SVG. Each run becomes one `<text>`
 with an x for every character in it, so the browser places the
 glyphs where the engine put them instead of working out positions of
-its own. `exportPdf` writes the same pages as PDF.
+its own. `exportPdf` writes the same pages as PDF. `exportEpub` writes
+the book as a reflowable EPUB, with the warnings that writing it
+raised, and lays out nothing to do it.
 
 The bytes underneath are postcard with a version in front of them.
 `decodeDisplayList` reads them, exported for a host that moves them

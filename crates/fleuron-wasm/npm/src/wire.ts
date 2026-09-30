@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 17;
+export const WIRE_VERSION = 18;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -429,6 +429,18 @@ export interface LayoutOutput {
   warnings: Warning[];
 }
 
+/** A reflowable EPUB, and what writing it had to complain about. */
+export interface Epub {
+  /** The whole file, ready to save as `.epub`. */
+  bytes: Uint8Array;
+  /**
+   * What reading the sources said, then what the writer said: each
+   * rule, declaration and file the EPUB leaves out, and each link that
+   * reaches nothing.
+   */
+  warnings: Warning[];
+}
+
 /** A buffer this reader will not read, and why. */
 export class WireError extends Error {
   constructor(message: string) {
@@ -492,6 +504,17 @@ class Reader {
       throw new WireError('the buffer ended mid-string');
     }
     return decoder.decode(this.bytes.subarray(start, this.at));
+  }
+
+  /** A `Vec<u8>`: a count, then that many bytes, copied out. */
+  file(): Uint8Array {
+    const length = this.varint();
+    const start = this.at;
+    this.at += length;
+    if (this.at > this.bytes.length) {
+      throw new WireError('the buffer ended mid-file');
+    }
+    return this.bytes.slice(start, this.at);
   }
 
   /** A `Vec<T>`: a count, then that many of them. */
@@ -755,4 +778,22 @@ export function decodeDisplayList(bytes: Uint8Array): LayoutOutput {
     throw new WireError('the buffer is more than one display structure');
   }
   return output;
+}
+
+/**
+ * Reads the reply to `want: 'epub'`, refusing a version this reader
+ * does not know.
+ */
+export function decodeEpub(bytes: Uint8Array): Epub {
+  const r = new Reader(bytes);
+  const version = r.varint();
+  if (version !== WIRE_VERSION) {
+    throw new WireError(`wire version ${version}, expected ${WIRE_VERSION}`);
+  }
+  const warnings = r.seq(() => warning(r));
+  const epub: Epub = { warnings, bytes: r.file() };
+  if (!r.done()) {
+    throw new WireError('the buffer is more than one EPUB');
+  }
+  return epub;
 }

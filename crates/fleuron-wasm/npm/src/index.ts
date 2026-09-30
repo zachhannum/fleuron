@@ -1,6 +1,6 @@
 /**
- * fleuron in a worker: markdown and CSS in, a display structure or PDF
- * bytes out.
+ * fleuron in a worker: markdown and CSS in, a display structure, PDF
+ * bytes or an EPUB out.
  *
  * The host keeps a {@link Client}, the worker keeps an
  * {@link Engine}, and between them the engine's session keeps every
@@ -63,6 +63,7 @@ export {
   WIRE_VERSION,
   WireError,
   decodeDisplayList,
+  decodeEpub,
   linkAt,
   wireVersionOf,
   type Asset,
@@ -70,6 +71,7 @@ export {
   type Corners,
   type DrawItem,
   type Edges,
+  type Epub,
   type AxisSetting,
   type FaceAttributes,
   type FeatureSetting,

@@ -51,6 +51,15 @@ impl ImageLoader for NoImages {
     }
 }
 
+/// The images a host already handed over answer by the url they
+/// were registered under, with the bytes as they arrived.
+impl ImageLoader for Assets {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        let (index, _) = self.lookup(url)?;
+        self.bytes(index).map(<[u8]>::to_vec)
+    }
+}
+
 /// What CSS calls one pixel: 1/96th of an inch. An image whose header
 /// declares no resolution is measured at this one.
 pub const CSS_DPI: f32 = 96.0;
@@ -858,6 +867,19 @@ fn webp(bytes: &[u8]) -> Option<Intrinsic> {
 mod tests {
     use super::*;
     use crate::content::Attributes;
+
+    /// A table loads what the host handed over, by its url, and
+    /// nothing it refused.
+    #[test]
+    fn a_table_loads_the_bytes_a_url_was_registered_with() {
+        let mut assets = Assets::none();
+        let png = png_bytes(4, 2, None);
+        assets.add("a.png", png.clone());
+        assets.add("b.bmp", b"BM....".to_vec());
+        assert_eq!(ImageLoader::load(&assets, "a.png"), Some(png));
+        assert_eq!(ImageLoader::load(&assets, "b.bmp"), None);
+        assert_eq!(ImageLoader::load(&assets, "c.png"), None);
+    }
 
     /// A PNG header: signature, `IHDR`, and optionally a `pHYs`
     /// declaring pixels per metre.

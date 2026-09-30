@@ -126,6 +126,8 @@ export class Engine {
     switch (request.want) {
       case 'pdf':
         return this.session.exportPdf();
+      case 'epub':
+        return this.session.exportEpub();
       case 'font':
         return this.session.fontBytes(request.font ?? 0);
       case 'node':
@@ -266,7 +268,7 @@ function lastRenderIn(batch: Pending[]): number {
     if (request === undefined || isQuestion(request)) {
       continue;
     }
-    if (request.want === 'preview' || request.want === 'pdf') {
+    if (request.want === 'preview' || request.want === 'pdf' || request.want === 'epub') {
       return index;
     }
   }

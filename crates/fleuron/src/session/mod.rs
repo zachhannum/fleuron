@@ -50,7 +50,7 @@ use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::layout::{Fragment, Numbering, PageInfo, Piece, References, no_assets};
 use crate::pages::PageBox;
-use crate::style::{StyleTree, Stylesheets};
+use crate::style::{FontLoader, StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
 
 mod edit;
@@ -433,6 +433,24 @@ impl Session<'_> {
     /// The compiled styling behind the last update.
     pub fn styles(&self) -> &StyleTree {
         &self.styles
+    }
+
+    /// The sheets the styling was compiled from, as the host last
+    /// set them.
+    pub fn sheets(&self) -> Option<&Stylesheets> {
+        self.sheets.as_ref()
+    }
+
+    /// The images this session holds, by the url each was registered
+    /// under.
+    pub fn images(&self) -> &Assets {
+        self.assets.get()
+    }
+
+    /// The files [`add_font_file`](Session::add_font_file) handed
+    /// over, by the url a `@font-face` names them by.
+    pub fn font_files(&self) -> &dyn FontLoader {
+        &self.fonts
     }
 
     /// The faces this session lays out against.

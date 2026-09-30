@@ -21,6 +21,9 @@
 //! pages nobody asked for. `fonts`, `assets` and `warnings` are never
 //! sliced, since none of them is per page.
 //!
+//! An EPUB crosses the same wall behind the same version, with the
+//! warnings writing it raised: see [`encode_epub`].
+//!
 //! [postcard]: https://postcard.jamesmunns.com/
 
 use crate::fonts::FontRefEntry;
@@ -30,7 +33,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 17;
+pub const VERSION: u16 = 18;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -126,6 +129,34 @@ pub fn decode(bytes: &[u8]) -> Result<Reply, WireError> {
         assets,
         warnings,
     })
+}
+
+/// An EPUB as one wire reply, and what writing it warned about.
+///
+/// A display structure carries its warnings, and an EPUB is a file
+/// with no room for them, so the two cross together.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Epub {
+    /// What writing it had to complain about, in the shape a display
+    /// structure's warnings take.
+    pub warnings: Vec<Warning>,
+    /// The whole file.
+    pub bytes: Vec<u8>,
+}
+
+/// Encodes an EPUB and its warnings, version first.
+pub fn encode_epub(bytes: &[u8], warnings: &[Warning]) -> Result<Vec<u8>, WireError> {
+    Ok(postcard::to_stdvec(&(VERSION, warnings, bytes))?)
+}
+
+/// Reads an EPUB reply back, refusing a version this build does not
+/// write.
+pub fn decode_epub(bytes: &[u8]) -> Result<Epub, WireError> {
+    let (found, rest) = postcard::take_from_bytes::<u16>(bytes)?;
+    if found != VERSION {
+        return Err(WireError::Version { found });
+    }
+    Ok(postcard::from_bytes(rest)?)
 }
 
 /// The version a buffer leads with, without reading the rest of it.
@@ -356,5 +387,29 @@ mod tests {
         assert!(read.pages.is_empty());
         assert_eq!(read.first, 1, "first clamps to the book's own length");
         assert_eq!(read.book_pages, 1);
+    }
+
+    /// An EPUB crosses whole, its warnings beside it, and a version
+    /// this build does not write is refused.
+    #[test]
+    fn an_epub_round_trips_with_its_warnings() {
+        let file = b"PK\x03\x04mimetypeapplication/epub+zip".to_vec();
+        let warnings = output().warnings;
+        let bytes = encode_epub(&file, &warnings).unwrap();
+        assert_eq!(version(&bytes).unwrap(), VERSION);
+        assert_eq!(
+            decode_epub(&bytes).unwrap(),
+            Epub {
+                warnings,
+                bytes: file
+            }
+        );
+
+        let mut stale = bytes;
+        stale[0] = VERSION as u8 + 1;
+        assert!(matches!(
+            decode_epub(&stale),
+            Err(WireError::Version { .. })
+        ));
     }
 }

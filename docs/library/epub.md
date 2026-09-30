@@ -3,7 +3,7 @@ title: EPUB
 description: Write the same manuscript and stylesheets as a reflowable EPUB, and what the EPUB holds.
 ---
 
-Fleuron can write a book as a reflowable EPUB 3 as well as a PDF. This page describes how to write one from Rust, and what the EPUB holds. To write one from the command line, see the [CLI quickstart](../cli/quickstart.mdx#writing-an-epub).
+Fleuron can write a book as a reflowable EPUB 3 as well as a PDF. This page describes how to write one from Rust or from a worker, and what the EPUB holds. To write one from the command line, see the [CLI quickstart](../cli/quickstart.mdx#writing-an-epub).
 
 A reflowable EPUB is XHTML and CSS in a zip file. The reading system on the device breaks the lines and makes the pages. So fleuron does not lay out the book to write an EPUB. It writes the [content tree](../reference/content-tree.md) and the stylesheets. The reading system does the rest.
 
@@ -81,6 +81,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 An EPUB needs no font registry, no style tree, and no layout. So the program does not call `load_fonts`, `compile`, `Assets::probe`, or `layout_book`.
 
 The same manuscript and the same stylesheets give the same EPUB, byte for byte.
+
+## From a worker
+
+A host that runs fleuron in a worker asks the worker for the EPUB. `Client.exportEpub` sends a request with `want: 'epub'`. The worker writes the EPUB from what its session holds:
+
+- The content tree, from the markdown sources or the `content` op.
+- The stylesheets, from the `style` op.
+- The images, from the `image` op.
+- The fonts, from each `font` op that has a url.
+
+The worker does not lay out the book to write the EPUB. `client.stages` is the same after the request as before it.
+
+The following example asks for the EPUB of the book that the worker holds, and makes a file of it:
+
+```js
+const epub = await client.exportEpub();
+if (epub !== null) {
+  const file = new Blob([epub.bytes], { type: 'application/epub+zip' });
+}
+```
+
+`epub.bytes` is the file that `fleuron_epub::write` makes. `epub.warnings` has the same shape as the `warnings` of a display structure. It holds the warnings for the markdown sources first, then the warnings of the writer. The answer is `null` when a later render overtook the request, as for a PDF. See [the wire](../wasm/wire.md#the-protocol).
+
+A `Preview` has `exportEpub()` as well. Without a worker, `Session.exportEpub()` returns the same answer as bytes, and `decodeEpub` reads them.
 
 ## What the EPUB holds
 
