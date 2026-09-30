@@ -16,7 +16,14 @@ import {
   type Response,
   type Want,
 } from './protocol.js';
-import { decodeDisplayList, decodeEpub, type Epub, type LayoutOutput } from './wire.js';
+import {
+  decodeDisplayList,
+  decodeEpub,
+  decodeEpubFiles,
+  type Epub,
+  type EpubFiles,
+  type LayoutOutput,
+} from './wire.js';
 
 /** How a request reaches the worker. */
 export interface Transport {
@@ -124,6 +131,22 @@ export class Client {
   async exportEpub(ops: Op[] = []): Promise<Epub | null> {
     const bytes = await this.render(ops, 'epub');
     return bytes === SUPERSEDED ? SUPERSEDED : decodeEpub(bytes);
+  }
+
+  /**
+   * The same EPUB as its files, not zipped, for a host that loads them
+   * into a browser frame one by one. Each file has its path in the
+   * container, its media type and its bytes, and the spine lists the
+   * documents in reading order. The files are the entries of the zip
+   * {@link Client.exportEpub} returns.
+   *
+   * The reply crosses from the worker as one transferred buffer, and
+   * the bytes of each file are a view into it. `null` when a later
+   * render overtook this one.
+   */
+  async exportEpubFiles(ops: Op[] = []): Promise<EpubFiles | null> {
+    const bytes = await this.renderAs(ops, { want: 'epub', unzipped: true });
+    return bytes === SUPERSEDED ? SUPERSEDED : decodeEpubFiles(bytes);
   }
 
   /**
@@ -262,8 +285,16 @@ export class Client {
    * moves the generation such requests are answering against.
    */
   async render(ops: Op[], want: Want, range?: Range): Promise<Uint8Array | null> {
+    return this.renderAs(ops, { want, ...range });
+  }
+
+  /** {@link Client.render}, with any of the request's own options. */
+  private async renderAs(
+    ops: Op[],
+    what: { want: Want; first?: number; count?: number; unzipped?: boolean },
+  ): Promise<Uint8Array | null> {
     this.generation = this.generationFor(ops);
-    const response = await this.send({ ops, want, generation: this.generation, ...range });
+    const response = await this.send({ ops, ...what, generation: this.generation });
     if (!isRendered(response)) {
       return SUPERSEDED;
     }
@@ -312,6 +343,7 @@ export class Client {
     y?: number;
     first?: number;
     count?: number;
+    unzipped?: boolean;
   }): Promise<Response> {
     this.id += 1;
     const request: Request = {
@@ -330,6 +362,7 @@ export class Client {
       ...(what.y === undefined ? {} : { y: what.y }),
       ...(what.first === undefined ? {} : { first: what.first }),
       ...(what.count === undefined ? {} : { count: what.count }),
+      ...(what.unzipped === undefined ? {} : { unzipped: what.unzipped }),
     };
     const transfer = request.ops
       .filter((op) => op.op === 'font' || op.op === 'image')
