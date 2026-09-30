@@ -435,6 +435,49 @@ fn a_missing_image_warns_and_is_left_out() {
     assert!(one.contains("The text goes on."));
 }
 
+/// Acceptance: `cover` in the metadata names an image, and its
+/// manifest item carries `cover-image`. An image the book shows as
+/// well is one item.
+#[test]
+fn the_cover_names_an_image_and_its_item_carries_cover_image() {
+    let mut book = read("![A printer's ornament](ornament.png)\n\nThe text.\n");
+    book.metadata
+        .extra
+        .insert("cover".into(), "ornament.png".into());
+    let epub = write(&book, "");
+    assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
+    let package = entry(&epub.bytes, "EPUB/package.opf");
+    let item = "<item id=\"media-1\" href=\"media/image-1.png\" media-type=\"image/png\" properties=\"cover-image\"/>";
+    assert!(package.contains(item), "{package}");
+    assert_eq!(package.matches("media/image-1.png").count(), 1, "{package}");
+
+    let mut only = read("The text.\n");
+    only.metadata
+        .extra
+        .insert("cover".into(), "ornament.png".into());
+    let package = entry(&write(&only, "").bytes, "EPUB/package.opf");
+    assert!(package.contains(item), "{package}");
+}
+
+/// Acceptance: a `cover` that names no image the host sent warns,
+/// and the EPUB has no cover.
+#[test]
+fn a_cover_the_host_did_not_send_warns_and_the_epub_has_none() {
+    let mut book = read("The text.\n");
+    book.metadata
+        .extra
+        .insert("cover".into(), "jacket.png".into());
+    let epub = write(&book, "");
+    assert_eq!(epub.warnings.len(), 1, "{:?}", epub.warnings);
+    assert_eq!(
+        epub.warnings[0].message,
+        "Cover image jacket.png did not load. It is left out of the EPUB."
+    );
+    let package = entry(&epub.bytes, "EPUB/package.opf");
+    assert!(!package.contains("cover-image"), "{package}");
+    assert!(!package.contains("media/"), "{package}");
+}
+
 /// Acceptance: the crate names no type from the stages that lay a
 /// book out. It reads the content tree and the sheets, and nothing
 /// downstream of them.
