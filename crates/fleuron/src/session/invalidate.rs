@@ -5,7 +5,9 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::content::{Block, Book, Metadata, cell_blocks};
 use crate::lines::Patterns;
-use crate::style::{ColumnSpan, ComputedStyle, Content, PageGeometry, Position, StyleTree, Width};
+use crate::style::{
+    ColumnSpan, ComputedStyle, Content, Float, PageGeometry, Position, StyleTree, Width,
+};
 
 use super::Stale;
 use super::key::{
@@ -19,8 +21,8 @@ use super::key::{
 /// reads that height, and a page that grows taller leaves its prose
 /// broken where it was.
 ///
-/// A book that anchors an image to the page carries the exclusions as
-/// well. The flow resolves their geometry. A section whose paragraphs
+/// A book that anchors an image to the page or floats one carries the
+/// exclusions as well. The flow resolves their geometry. A section whose paragraphs
 /// can be set again beside an image keeps what it takes to set them.
 /// A book that gains its first image builds its sections again.
 ///
@@ -51,6 +53,12 @@ impl Against {
             style.shape_margin.to_bits().hash(&mut anchored);
             hash_insets(style.inset, &mut anchored);
             hash_edges(style.margin, &mut anchored);
+        }
+        for style in styles.styles() {
+            if style.float != Float::None {
+                any = true;
+            }
+            style.float.hash(&mut anchored);
         }
         Against {
             measure: geometry.measure(),

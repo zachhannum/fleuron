@@ -185,7 +185,7 @@ fn a_property_outside_the_description_warns_naming_line_and_column() {
         ("background-clip", "content-box"),
         ("box-shadow", "0 0 2pt black"),
         ("border-top-width", "1pt"),
-        ("float", "left"),
+        ("overflow", "hidden"),
         ("display", "block"),
         ("transform", "rotate(1deg)"),
         ("counter-increment", "page"),

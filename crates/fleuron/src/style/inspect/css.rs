@@ -8,11 +8,11 @@ use crate::pages::Side;
 use crate::style::sheet::PROPERTIES;
 use crate::style::{
     BackgroundRepeat, BackgroundSize, Border, BorderCollapse, BorderRadius, BorderStyle,
-    BoxDecorationBreak, Break, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord,
-    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edges, Family, Figures, FontStyle,
-    FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions,
-    Hyphens, Inset, ListStyleType, NumericSpacing, Position, ShapeOutside, StringPiece, StringSet,
-    Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
+    BoxDecorationBreak, Break, Clear, ColumnSpan, ComputedStyle, Content, ContentPiece, Coord,
+    CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edges, Family, Figures, Float,
+    FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric,
+    Fractions, Hyphens, Inset, ListStyleType, NumericSpacing, Position, ShapeOutside, StringPiece,
+    StringSet, Target, TextAlign, TextJustify, TextTransform, Width, WrapFlow,
 };
 
 /// The computed value of every property a style rule can declare, and
@@ -140,6 +140,19 @@ fn value(style: &ComputedStyle, property: &str) -> String {
             WrapFlow::Both => "both",
             WrapFlow::Start => "start",
             WrapFlow::End => "end",
+        }
+        .into(),
+        "float" => match style.float {
+            Float::None => "none",
+            Float::Left => "left",
+            Float::Right => "right",
+        }
+        .into(),
+        "clear" => match style.clear {
+            Clear::None => "none",
+            Clear::Left => "left",
+            Clear::Right => "right",
+            Clear::Both => "both",
         }
         .into(),
         "shape-outside" => match &style.shape_outside {

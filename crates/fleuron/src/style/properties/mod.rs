@@ -33,7 +33,9 @@ pub use counter::{
     Target,
 };
 pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, Edges};
-pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
+pub use exclusion::{
+    Clear, Coord, Float, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow,
+};
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
     BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
@@ -88,6 +90,8 @@ pub enum Declaration {
     /// From 0 to 1.
     Opacity(f32),
     WrapFlow(WrapFlow),
+    Float(Float),
+    Clear(Clear),
     ShapeOutside(ShapeSource),
     ShapeMargin(Length),
     Margin(Edge, Length),
@@ -196,6 +200,8 @@ impl Declaration {
             Declaration::ZIndex(_) => "z-index",
             Declaration::Opacity(_) => "opacity",
             Declaration::WrapFlow(_) => "wrap-flow",
+            Declaration::Float(_) => "float",
+            Declaration::Clear(_) => "clear",
             Declaration::ShapeOutside(_) => "shape-outside",
             Declaration::ShapeMargin(_) => "shape-margin",
             Declaration::Margin(side, _) => edge(

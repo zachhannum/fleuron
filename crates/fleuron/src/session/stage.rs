@@ -350,7 +350,7 @@ mod tests {
     use crate::pages::DrawItem;
     use crate::session::testing::{
         MAP, alpha_png, book, book_with_image, declaring, gif, hyphenated, illustrated, noted,
-        painted, prose, runs, section, sheets, three_chapters,
+        painted, paragraph, prose, runs, section, sheets, three_chapters,
     };
     use crate::session::{Session, Stages};
     use crate::style::Color;
@@ -560,6 +560,58 @@ mod tests {
         );
     }
 
+    /// Part: a sheet that floats an image, stops floating it and
+    /// floats it again comes back to the pages a fresh session lays
+    /// out, and those pages set the prose beside the float.
+    #[test]
+    fn a_float_edited_away_and_back_lays_out_as_a_fresh_session_does() {
+        let book = || {
+            let mut book = crate::content::Book {
+                sections: vec![Section {
+                    blocks: [
+                        vec![Block::Image {
+                            id: NodeId::UNASSIGNED,
+                            url: "plate.png".into(),
+                            alt: "an image".into(),
+                            attributes: Attributes::default(),
+                            position: None,
+                            span: None,
+                        }],
+                        (0..12)
+                            .map(|_| paragraph(&"a sentence of the voyage ".repeat(12)))
+                            .collect(),
+                    ]
+                    .concat(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            book.assign_node_ids();
+            book
+        };
+        let session = |css: &str| {
+            let mut session = Session::owning(crate::fonts::bundled_registry().unwrap());
+            session.set_content(book());
+            session.add_image("plate.png", alpha_png(0x22)).unwrap();
+            session.set_style(sheets(css));
+            session
+        };
+        let floated = "img { float: left; width: 40%; margin-right: 12pt }";
+        let encode = |session: &mut Session| {
+            serde_json::to_string(&session.preview().pages).expect("pages serialize")
+        };
+
+        let mut fresh = session(floated);
+        let expected = encode(&mut fresh);
+        let mut edited = session(floated);
+        encode(&mut edited);
+        edited.set_style(sheets("img { width: 40%; margin-right: 12pt }"));
+        let plain = encode(&mut edited);
+        edited.set_style(sheets(floated));
+        assert_ne!(plain, expected, "the float changed nothing");
+        assert_eq!(encode(&mut edited), expected);
+    }
+
     /// Acceptance: a book with nothing anchored to the page breaks
     /// its lines as often as it did before exclusions existed. The
     /// pass that settles where an image lands is a cost only a book
@@ -717,7 +769,7 @@ mod tests {
         let before = session.stages();
         let painted = serde_json::to_vec(&session.preview().pages).expect("pages serialize");
 
-        session.set_style(sheets("p { float: left }"));
+        session.set_style(sheets("p { overflow: hidden }"));
         let (repainted, complained) = {
             let output = session.preview();
             (
@@ -725,7 +777,7 @@ mod tests {
                 output
                     .warnings
                     .iter()
-                    .any(|warning| warning.message.contains("`float`")),
+                    .any(|warning| warning.message.contains("`overflow`")),
             )
         };
         let after = session.stages();

@@ -15,11 +15,11 @@ use super::color::{background_color, border_color, color, decoration_color};
 use super::custom::{mentions_var, raw};
 use super::value::{
     background_image, background_position, background_repeat, background_size, border_collapse,
-    border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
+    border_radius, break_value, ceiling, clear, column_span, corner_radius, count, counter_reset,
     decoration_break, decoration_keyword, decoration_line, decoration_style, decoration_thickness,
-    edges, families, feature_settings, font_style, generated, hanging, hyphens, inset, keyword_or,
-    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
-    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
+    edges, families, feature_settings, float, font_style, generated, hanging, hyphens, inset,
+    keyword_or, length, letter_spacing, line_height, line_style, line_width, list_style_type,
+    opacity, page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
     text_transform, variant_alternates, variant_caps, variant_ligatures, variant_numeric, weight,
     width, wrap_flow, z_index,
 };
@@ -742,6 +742,20 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "auto | both | start | end",
         examples: &["end"],
         read: |name, input| longhand(name, input, wrap_flow, Declaration::WrapFlow),
+    },
+    Spec {
+        name: "float",
+        inherited: false,
+        syntax: "none | left | right",
+        examples: &["left"],
+        read: |name, input| longhand(name, input, float, Declaration::Float),
+    },
+    Spec {
+        name: "clear",
+        inherited: false,
+        syntax: "none | left | right | both",
+        examples: &["both"],
+        read: |name, input| longhand(name, input, clear, Declaration::Clear),
     },
     Spec {
         name: "shape-outside",

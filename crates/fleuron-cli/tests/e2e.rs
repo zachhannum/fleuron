@@ -1686,6 +1686,156 @@ fn a_two_column_wrapped_page_paints_the_same_in_the_preview_and_the_pdf() {
     }
 }
 
+/// The fixture book with the map floated to the right of its column
+/// and the prose after it set down its left. A chapter heading starts
+/// below the map rather than beside it.
+const FLOATED_CSS: &str = ".map {\n  float: right;\n  width: 45%;\n  margin: 0 0 6pt 12pt;\n}\n\nh3 {\n  clear: both;\n}\n";
+
+/// The fixture book with a float in it: structurally sound, every
+/// word of it still there, and the page count the layout settled.
+#[test]
+fn a_book_with_a_float_reaches_the_pdf() {
+    let sheet = write_sheet("floated", FLOATED_CSS);
+    let (pdf, stderr) = render("floated", &[&sheet]);
+    assert!(
+        !stderr.contains("warning"),
+        "the float sheet is in the subset: {stderr}",
+    );
+    let pages = pages_under(FLOATED_CSS);
+    assert!(
+        stderr.contains(&format!("{} pages", pages.len())),
+        "the run did not report the {} pages the layout settled: {stderr}",
+        pages.len(),
+    );
+    if let Some(text) = extract_content_order(&pdf) {
+        assert_eq!(pages_of(&text).len(), pages.len());
+        if let Err(difference) = holds(&fixture_book(), &strip_folios(&text), unhyphenated, true) {
+            panic!("the floated PDF's prose is not the book's: {difference}");
+        }
+    }
+    let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
+        return;
+    };
+    assert!(
+        check.status.success(),
+        "qpdf --check: {}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+}
+
+/// Acceptance: the preview and the export agree over a page with the
+/// prose set beside a float.
+///
+/// The preview paints from the display structure, so what the two
+/// have to agree about is where every run and every image goes.
+#[test]
+fn a_floated_page_paints_the_same_in_the_preview_and_the_pdf() {
+    let pages = pages_under(FLOATED_CSS);
+    let (index, image) = pages
+        .iter()
+        .enumerate()
+        .find_map(|(index, page)| {
+            page.items.iter().find_map(|item| match item {
+                DrawItem::Image { x, y, w, h, .. } => Some((index, (*x, *y, *w, *h))),
+                _ => None,
+            })
+        })
+        .expect("the map is placed");
+    let page = &pages[index];
+    let (x, y, w, h) = image;
+    let mut beside = 0;
+    let mut under = 0;
+    for item in &page.items {
+        let DrawItem::Text {
+            y: baseline,
+            glyphs,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        let Some(last) = glyphs.last() else {
+            continue;
+        };
+        if *baseline > y && *baseline <= y + h {
+            assert!(
+                last.x < x,
+                "a line at {baseline} reaches {}, over the map",
+                last.x
+            );
+            beside += 1;
+        }
+        if *baseline > y + h + 12.0 && last.x > x {
+            under += 1;
+        }
+    }
+    assert!(beside > 0, "no line is set beside the map");
+    assert!(
+        under > 0,
+        "no line took the whole measure back under the map"
+    );
+    assert!(x + w > page.width / 2.0, "the map is not on the right");
+
+    let sheet = write_sheet("floated-preview", FLOATED_CSS);
+    let (pdf, _) = render("floated-preview", &[&sheet]);
+    let Some(streams) = content_streams(&pdf) else {
+        return;
+    };
+    let height = page.height;
+    assert!(
+        pages.iter().all(|page| page.height == height),
+        "the pages are not one size, so one flip does not undo them all",
+    );
+    let painted: Vec<(f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Text { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+    let written = placed_runs(&streams);
+    assert!(written.len() > 100, "the PDF writes {} runs", written.len());
+    assert_eq!(
+        painted.len(),
+        written.len(),
+        "the preview paints {} runs and the PDF writes {}",
+        painted.len(),
+        written.len(),
+    );
+    for (index, (paints, writes)) in painted.iter().zip(&written).enumerate() {
+        assert!(
+            (paints.0 - writes.0).abs() < 1e-3 && (paints.1 - writes.1).abs() < 1e-3,
+            "run {index}: the preview paints it at {paints:?} and the PDF at {writes:?}",
+        );
+    }
+    let boxes: Vec<(f32, f32, f32, f32)> = pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            DrawItem::Image { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+            _ => None,
+        })
+        .collect();
+    let placed = placed_images(&streams, height);
+    assert_eq!(boxes.len(), 2, "the fixture book has a map and an ornament");
+    assert_eq!(boxes.len(), placed.len(), "the two disagree about how many");
+    for (index, (paints, writes)) in boxes.iter().zip(&placed).enumerate() {
+        for (paints, writes) in [
+            (paints.0, writes.0),
+            (paints.1, writes.1),
+            (paints.2, writes.2),
+            (paints.3, writes.3),
+        ] {
+            assert!(
+                (paints - writes).abs() < 1e-3,
+                "image {index}: the preview paints {paints:?} and the PDF writes {writes:?}",
+            );
+        }
+    }
+}
+
 /// The column sheet with the chapters run together, so a chapter
 /// heading falls partway down a page, and the headings and the table
 /// set across both columns.

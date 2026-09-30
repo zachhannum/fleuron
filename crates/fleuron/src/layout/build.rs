@@ -11,15 +11,15 @@ use crate::content::{
 use crate::lines::{Line, LineBreakOptions, Measure, Opening, Patterns, Shaped, Span};
 use crate::pages::{DrawItem, PageBox};
 use crate::style::{
-    Break, ColumnSpan, ComputedStyle, Content, Hyphens, Position, StringPiece, StyleTree,
-    TextAlign, TextJustify,
+    Break, Clear, ColumnSpan, ComputedStyle, Content, Float, Hyphens, Position, StringPiece,
+    StyleTree, TextAlign, TextJustify,
 };
 
 use super::Paginator;
 use super::cap::Cap;
 use super::flow::Painted;
 use super::fragment::{
-    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marks, Piece, decoration,
+    BreakPoint, Decoration, Decorations, DropCap, Floated, Fragment, Marks, Piece, decoration,
 };
 use super::image::ImageSize;
 use super::note::Note;
@@ -50,7 +50,7 @@ impl Paginator<'_> {
             if builder.spanning {
                 for fragment in builder.fragments[first..]
                     .iter_mut()
-                    .filter(|fragment| !matches!(fragment.piece, Piece::Anchor(_)))
+                    .filter(|fragment| !fragment.aside())
                     .skip(1)
                 {
                     fragment.break_before = BreakPoint::Forbidden;
@@ -72,6 +72,8 @@ pub(super) struct Builder<'a, 'p> {
     pub(super) fragments: Vec<Fragment>,
     /// What the cascade has asked for above the next fragment.
     pub(super) pending: BreakPoint,
+    /// The floats the next fragment starts below.
+    clear: Clear,
     /// The collapsible margin standing above the next fragment,
     /// which is the larger of the margins that met there.
     pub(super) margin: f32,
@@ -121,6 +123,7 @@ impl<'a, 'p> Builder<'a, 'p> {
             source,
             fragments: Vec::new(),
             pending: BreakPoint::Allowed,
+            clear: Clear::None,
             margin: 0.0,
             fixed: 0.0,
             pending_marks: None,
@@ -244,6 +247,9 @@ impl Builder<'_, '_> {
         measure: f32,
     ) -> usize {
         self.ask(style.break_before);
+        if style.clear != Clear::None {
+            self.clear = style.clear;
+        }
         self.mark(style, inlines);
         self.layer = style.z_index;
         if style.position == Position::Relative {
@@ -429,9 +435,7 @@ impl Builder<'_, '_> {
     /// else takes what was asked above it here.
     fn remainder(&mut self, rest: f32, start: usize) {
         let mut blank = Fragment::plain(0.0, rest, Piece::Blank);
-        let mut first = self.fragments[start..]
-            .iter()
-            .all(|fragment| matches!(fragment.piece, Piece::Anchor(_)));
+        let mut first = self.fragments[start..].iter().all(Fragment::aside);
         if !first {
             blank.break_before = BreakPoint::Forbidden;
             blank.lead = std::mem::take(&mut self.margin);
@@ -446,8 +450,10 @@ impl Builder<'_, '_> {
     /// boxes it wrote against the page are not fragments of it, so
     /// its range ends at the last fragment the flow places.
     fn seal(&mut self, pending: Pending) {
-        let placed = |fragment: &Fragment| !matches!(fragment.piece, Piece::Anchor(_));
-        let Some(last) = self.fragments[pending.start..].iter().rposition(placed) else {
+        let Some(last) = self.fragments[pending.start..]
+            .iter()
+            .rposition(|fragment| !fragment.aside())
+        else {
             return;
         };
         let end = pending.start + last + 1;
@@ -493,6 +499,7 @@ impl Builder<'_, '_> {
             fragment.lead = std::mem::take(&mut self.margin);
             fragment.fixed = std::mem::take(&mut self.fixed);
             fragment.marks = self.pending_marks.take();
+            fragment.clear = std::mem::replace(&mut self.clear, Clear::None);
         }
         fragment.spanning = self.spanning;
         fragment.layer = self.layer;
@@ -520,6 +527,73 @@ impl Builder<'_, '_> {
         }
         self.fragments
             .push(Fragment::plain(0.0, 0.0, Piece::Anchor(id)));
+    }
+
+    /// An image floated to one side of the content box at `x` and
+    /// `measure`, sized as a block image is. It takes no height here,
+    /// and the margins that met around it still meet.
+    ///
+    /// A page does not end between the float and what follows it, so
+    /// a float that does not fit moves on with the text beside it.
+    fn float(
+        &mut self,
+        id: NodeId,
+        style: &ComputedStyle,
+        url: &str,
+        origin: String,
+        x: f32,
+        measure: f32,
+    ) {
+        let Some((asset, intrinsic)) = self.paginator.assets.lookup(url) else {
+            self.paginator.missing(url, origin);
+            return;
+        };
+        let within = (measure, self.tall_within());
+        let margin = style.margin;
+        let room = self.styles().default_page().geometry.content_size().1;
+        let ImageSize { width, height, .. } = self.paginator.image_size(
+            style,
+            url,
+            intrinsic.size(),
+            within,
+            (measure - margin.inline()).max(0.0),
+            (room - margin.top - margin.bottom).max(0.0),
+            (!origin.is_empty()).then_some(origin),
+        );
+        let outer = width + margin.inline();
+        let left = match style.float {
+            Float::Right => x + measure - outer,
+            _ => x,
+        };
+        let float = Floated {
+            node: id,
+            side: style.float,
+            asset,
+            x: margin.left,
+            y: margin.top,
+            width,
+            height,
+            outer,
+        };
+        let mut fragment = Fragment::plain(
+            left,
+            height + margin.top + margin.bottom,
+            Piece::Float(Box::new(float)),
+        );
+        self.ask(style.break_before);
+        fragment.break_before = std::mem::replace(&mut self.pending, BreakPoint::Forbidden);
+        self.ask(style.break_after);
+        let index = self.fragments.len();
+        for pending in &mut self.open {
+            if pending.start == index {
+                pending.start = index + 1;
+            }
+        }
+        fragment.spanning = self.spanning;
+        fragment.layer = style.z_index;
+        fragment.offset = self.offset;
+        fragment.opacity = self.opacity * style.opacity;
+        self.fragments.push(fragment);
     }
 
     /// Everything built so far, stacked in a box that no page break
@@ -626,6 +700,10 @@ impl Builder<'_, '_> {
                     self.pseudo(*id, PseudoElement::Before, position, inner, narrowed);
                     self.pseudo(*id, PseudoElement::After, position, inner, narrowed);
                     self.close(&style, start);
+                }
+                Block::Image { id, url, .. } if styles.style(*id).float != Float::None => {
+                    let style = styles.style(*id).clone();
+                    self.float(*id, &style, url, origin(self.source, position), x, measure);
                 }
                 Block::Image { id, url, .. } => {
                     let style = styles.style(*id).clone();
@@ -1050,9 +1128,10 @@ pub(super) fn set_lines(
 }
 
 /// Moves what the flow reads off the fragments a paragraph arrived as
-/// onto the ones it was set again as: the space and the break above
-/// the first of them, what it tells the page furniture, and the
-/// decorations that open and close over the paragraph.
+/// onto the ones it was set again as: the paragraph they came out of,
+/// the space and the break above the first of them, what it tells the
+/// page furniture, and the decorations that open and close over the
+/// paragraph.
 ///
 /// `fixed` is the paragraph's own space above the first of them.
 pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment], fixed: f32) {
@@ -1060,6 +1139,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment], fixed: f32) {
         return;
     };
     for fragment in fresh.iter_mut() {
+        fragment.reflow.clone_from(&head.reflow);
         fragment.spanning = head.spanning;
         fragment.layer = head.layer;
         fragment.offset = head.offset;
@@ -1081,6 +1161,7 @@ pub(super) fn carry_over(fresh: &mut [Fragment], old: &[Fragment], fixed: f32) {
         first.fixed += fixed;
         first.marks = head.marks.clone();
         first.markers = head.markers.clone();
+        first.clear = head.clear;
         if !opens.is_empty() {
             first.decorations = Some(Box::new(Decorations {
                 opens,
