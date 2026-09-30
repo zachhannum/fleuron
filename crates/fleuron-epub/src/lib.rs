@@ -105,7 +105,7 @@ pub struct Files {
 }
 
 impl Files {
-    /// The zip that [`write`] makes of these files.
+    /// The zip that [`write()`] makes of these files.
     pub fn zip(&self) -> Vec<u8> {
         let mut archive = Archive::default();
         for file in &self.files {
@@ -169,7 +169,7 @@ pub fn write(
     }
 }
 
-/// The files [`write`] puts in the container, one by one and not
+/// The files [`write()`] puts in the container, one by one and not
 /// zipped, in the order the container holds them.
 ///
 /// A host that shows the EPUB in a browser frame loads these files
