@@ -200,6 +200,25 @@ An EPUB must have a title, a language, an identifier, and a date of modification
 | `dc:identifier` | A UUID made from the content of the book. The same book gets the same UUID. |
 | `dcterms:modified` | `2000-01-01T00:00:00Z` |
 
+### Cover
+
+A book store or a reading app shows the cover image of an EPUB. The `cover` key of the metadata names that image by its url, as an image in the book does. Fleuron copies the image into the EPUB, and the package document marks it as the cover.
+
+The following frontmatter names the cover of a book:
+
+```yaml
+---
+title: Gulliver's Travels
+cover: images/plate.jpg
+---
+```
+
+The CLI reads the url relative to the manuscript, as for an image in the book. A worker loads it from the `image` op with the same url.
+
+If the image does not load, or is a type that an EPUB cannot hold, fleuron warns. The EPUB then has no cover.
+
+The EPUB has no cover page. To show the cover at the start of the book, put the image at the top of the first section.
+
 ### Images and fonts
 
 Fleuron copies each image that the book or a stylesheet names into the EPUB. It also copies each font that `@font-face` names. The two loaders supply the bytes. Each file goes in as it is. Fleuron does not decode it.
