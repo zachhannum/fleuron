@@ -219,6 +219,83 @@ fn the_container_holds_a_document_per_section_in_order() {
     assert!(package.contains("href=\"media/image-1.png\" media-type=\"image/png\""));
 }
 
+fn unzipped(book: &Book, css: &str) -> fleuron_epub::Files {
+    let sheets = Stylesheets::parse(&[Source::author("author.css", css)]);
+    let files = Files::new();
+    fleuron_epub::files(book, &sheets, &files, &files)
+}
+
+/// Acceptance: every entry in the zip is in the unzipped files, with
+/// the same path and the same bytes, and nothing else is.
+#[test]
+fn the_files_are_the_entries_of_the_zip() {
+    let book = read(EVERY_VARIANT);
+    let css = "h1 { background-image: url(ornament.png) }";
+    let epub = write(&book, css);
+    let unzipped = unzipped(&book, css);
+    let files: Vec<(String, Vec<u8>)> = unzipped
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), file.bytes.clone()))
+        .collect();
+    assert_eq!(files, entries(&epub.bytes));
+    assert_eq!(unzipped.zip(), epub.bytes);
+    assert_eq!(unzipped.warnings, epub.warnings);
+
+    let package = entry(&epub.bytes, "EPUB/package.opf");
+    for file in &unzipped.files {
+        let Some(href) = file.path.strip_prefix("EPUB/") else {
+            continue;
+        };
+        if href == "package.opf" {
+            continue;
+        }
+        let item = format!("href=\"{href}\" media-type=\"{}\"", file.media_type);
+        assert!(package.contains(&item), "the manifest has no {item}");
+    }
+}
+
+/// Acceptance: the unzipped files carry the spine order from the
+/// package document, as paths in the container.
+#[test]
+fn the_files_carry_the_spine_of_the_package_document() {
+    let book = read(&format!("{EVERY_VARIANT}\n# Three\n\nThe third section.\n"));
+    let unzipped = unzipped(&book, "");
+    let package = String::from_utf8(
+        unzipped
+            .files
+            .iter()
+            .find(|file| file.path == "EPUB/package.opf")
+            .expect("the package document is a file")
+            .bytes
+            .clone(),
+    )
+    .unwrap();
+    let attribute = |tag: &str, name: &str| -> String {
+        let start = tag.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+        tag[start..start + tag[start..].find('"').unwrap()].to_string()
+    };
+    let items: BTreeMap<String, String> = package
+        .split("<item ")
+        .skip(1)
+        .map(|tag| (attribute(tag, "id"), attribute(tag, "href")))
+        .collect();
+    let spine: Vec<String> = package
+        .split("<itemref ")
+        .skip(1)
+        .map(|tag| format!("EPUB/{}", items[&attribute(tag, "idref")]))
+        .collect();
+    assert_eq!(unzipped.spine, spine);
+    assert_eq!(
+        unzipped.spine,
+        [
+            "EPUB/section-001.xhtml",
+            "EPUB/section-002.xhtml",
+            "EPUB/section-003.xhtml"
+        ]
+    );
+}
+
 /// The metadata goes to its Dublin Core homes, and the keys the
 /// package requires are there when the book names none.
 #[test]

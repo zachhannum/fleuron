@@ -32,6 +32,7 @@ import {
   linkAt,
   type Asset,
   type Epub,
+  type EpubFiles,
   type FontRefEntry,
   type LayoutOutput,
   type Link,
@@ -482,6 +483,11 @@ export class Preview {
    */
   async exportEpub(): Promise<Epub | null> {
     return this.client.exportEpub();
+  }
+
+  /** The same EPUB as its files, not zipped, with the spine. */
+  async exportEpubFiles(): Promise<EpubFiles | null> {
+    return this.client.exportEpubFiles();
   }
 
   /** Closes the worker and gives the element back. */

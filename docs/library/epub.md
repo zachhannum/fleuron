@@ -77,6 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `to_sections`, `frontmatter`, `assemble` | Read the manuscript into a book, as for a PDF. See the [library quickstart](quickstart.md). |
 | `Stylesheets::parse` | Parses the author sheets. The built-in sheet goes first, as for a PDF. |
 | `fleuron_epub::write` | Writes the book as an EPUB. It takes the book, the parsed sheets, a loader for images, and a loader for fonts. It returns the bytes of the file and the warnings. |
+| `fleuron_epub::files` | Takes the same arguments as `write`. It returns the files of the EPUB before they go into the zip, the spine, and the warnings. See [The files one by one](#the-files-one-by-one). |
 
 An EPUB needs no font registry, no style tree, and no layout. So the program does not call `load_fonts`, `compile`, `Assets::probe`, or `layout_book`.
 
@@ -105,6 +106,30 @@ if (epub !== null) {
 `epub.bytes` is the file that `fleuron_epub::write` makes. `epub.warnings` has the same shape as the `warnings` of a display structure. It holds the warnings for the markdown sources first, then the warnings of the writer. The answer is `null` when a later render overtook the request, as for a PDF. See [the wire](../wasm/wire.md#the-protocol).
 
 A `Preview` has `exportEpub()` as well. Without a worker, `Session.exportEpub()` returns the same answer as bytes, and `decodeEpub` reads them.
+
+## The files one by one
+
+A host that shows the EPUB in a browser frame loads each file of the EPUB, not the zip. `Client.exportEpubFiles` asks the worker for the files. It sends a request with `want: 'epub'` and `unzipped: true`. The answer has these parts:
+
+- `files`: every file that the zip holds, in the order of the zip. Each file has its `path` in the container, its `mediaType`, and its `bytes`.
+- `spine`: the paths of the XHTML documents in reading order, from the spine of the package document.
+- `warnings`: the same warnings that `exportEpub` returns.
+
+The files are the entries of the zip, with the same paths and the same bytes. The bytes are not compressed. The documents refer to the stylesheet and the images by relative paths, such as `book.css`. So a host that serves each file at its path keeps those links.
+
+The worker transfers the answer as one buffer, and nothing copies it. The `bytes` of each file are a part of that buffer. The worker does not lay out the book to write the files.
+
+The following example asks for the files of the EPUB, and finds the first document in reading order:
+
+```js
+const epub = await client.exportEpubFiles();
+if (epub !== null) {
+  const byPath = new Map(epub.files.map((file) => [file.path, file]));
+  const first = byPath.get(epub.spine[0]);
+}
+```
+
+A `Preview` has `exportEpubFiles()` as well. Without a worker, `Session.exportEpubFiles()` returns the same answer as bytes, and `decodeEpubFiles` reads them. In Rust, `fleuron_epub::files` returns the same files, and `Files::zip` makes the zip that `write` returns.
 
 ## What the EPUB holds
 

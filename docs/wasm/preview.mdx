@@ -104,6 +104,7 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `svg(page?)` | the markup for a fetched page, painted but not mounted; empty for one that is not |
 | `exportPdf()` | the same run as PDF bytes |
 | `exportEpub()` | the book as a [reflowable EPUB](../library/epub.md#from-a-worker), with its warnings |
+| `exportEpubFiles()` | the same EPUB as [its files](../library/epub.md#the-files-one-by-one), not zipped, with the spine |
 | `destroy()` | closes the worker and empties the element |
 
 Set the dialect and the section-splitting level when the preview is mounted, not after. Changing either means reading every source again, and the preview keeps no copy of them.

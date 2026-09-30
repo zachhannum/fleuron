@@ -209,3 +209,31 @@ fn the_reply_leads_with_the_wire_version() {
     let bytes = session(BOOK, CSS).export_epub().unwrap();
     assert_eq!(wire::version(&bytes).unwrap(), fleuron_wasm::wire_version());
 }
+
+/// Acceptance: every entry in the zip is in the files reply, with the
+/// same path and the same bytes, and the reply has the spine order.
+#[test]
+fn the_files_reply_holds_every_entry_of_the_zip() {
+    let session = session(BOOK, CSS);
+    let zipped = export(&session);
+    let reply = wire::decode_epub_files(&session.export_epub_files().unwrap())
+        .expect("the reply reads back");
+    let files: BTreeMap<String, Vec<u8>> = reply
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), file.bytes.clone()))
+        .collect();
+    assert_eq!(files, entries(&zipped.bytes));
+    assert_eq!(files.len(), reply.files.len(), "a path is there twice");
+    assert_eq!(reply.warnings, zipped.warnings);
+    assert_eq!(
+        reply.spine,
+        ["EPUB/section-001.xhtml", "EPUB/section-002.xhtml"]
+    );
+    let font = reply
+        .files
+        .iter()
+        .find(|file| file.bytes == Files::new().0["fell.ttf"])
+        .expect("the font is a file");
+    assert_eq!(font.media_type, "font/ttf");
+}

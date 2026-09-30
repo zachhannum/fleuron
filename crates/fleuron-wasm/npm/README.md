@@ -201,7 +201,9 @@ with an x for every character in it, so the browser places the
 glyphs where the engine put them instead of working out positions of
 its own. `exportPdf` writes the same pages as PDF. `exportEpub` writes
 the book as a reflowable EPUB, with the warnings that writing it
-raised, and lays out nothing to do it.
+raised, and lays out nothing to do it. `exportEpubFiles` returns the
+files of the same EPUB one by one, not zipped, with the spine, for a
+host that loads them into a browser frame.
 
 The bytes underneath are postcard with a version in front of them.
 `decodeDisplayList` reads them, exported for a host that moves them

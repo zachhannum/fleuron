@@ -441,6 +441,35 @@ export interface Epub {
   warnings: Warning[];
 }
 
+/**
+ * A reflowable EPUB as its files, not zipped, and what writing it had
+ * to complain about.
+ */
+export interface EpubFiles {
+  /** The same warnings {@link Epub.warnings} holds. */
+  warnings: Warning[];
+  /**
+   * The paths of the documents in reading order, as the spine of the
+   * package document lists them, such as `EPUB/section-001.xhtml`.
+   */
+  spine: string[];
+  /** Every file the zip holds, in the order the zip holds them. */
+  files: EpubFile[];
+}
+
+/** One file of an EPUB. */
+export interface EpubFile {
+  /** Where the file is in the container, such as `EPUB/book.css`. */
+  path: string;
+  /** Its media type, such as `text/css`. */
+  mediaType: string;
+  /**
+   * Its bytes, not compressed: a view into the buffer the reply
+   * arrived in, not a copy.
+   */
+  bytes: Uint8Array;
+}
+
 /** A buffer this reader will not read, and why. */
 export class WireError extends Error {
   constructor(message: string) {
@@ -515,6 +544,17 @@ class Reader {
       throw new WireError('the buffer ended mid-file');
     }
     return this.bytes.slice(start, this.at);
+  }
+
+  /** A `Vec<u8>`: a count, then that many bytes, as a view. */
+  slice(): Uint8Array {
+    const length = this.varint();
+    const start = this.at;
+    this.at += length;
+    if (this.at > this.bytes.length) {
+      throw new WireError('the buffer ended mid-file');
+    }
+    return this.bytes.subarray(start, this.at);
   }
 
   /** A `Vec<T>`: a count, then that many of them. */
@@ -796,4 +836,24 @@ export function decodeEpub(bytes: Uint8Array): Epub {
     throw new WireError('the buffer is more than one EPUB');
   }
   return epub;
+}
+
+/**
+ * Reads the reply to `want: 'epub'` with `unzipped`, refusing a
+ * version this reader does not know. The bytes of each file are a
+ * view into `bytes`.
+ */
+export function decodeEpubFiles(bytes: Uint8Array): EpubFiles {
+  const r = new Reader(bytes);
+  const version = r.varint();
+  if (version !== WIRE_VERSION) {
+    throw new WireError(`wire version ${version}, expected ${WIRE_VERSION}`);
+  }
+  const warnings = r.seq(() => warning(r));
+  const spine = r.seq(() => r.string());
+  const files = r.seq(() => ({ path: r.string(), mediaType: r.string(), bytes: r.slice() }));
+  if (!r.done()) {
+    throw new WireError('the buffer is more than one EPUB');
+  }
+  return { warnings, spine, files };
 }

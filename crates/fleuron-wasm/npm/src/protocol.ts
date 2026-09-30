@@ -304,6 +304,11 @@ export interface Request {
   first?: number;
   /** See {@link Request.first}. */
   count?: number;
+  /**
+   * With `want: 'epub'`, asks for the files of the EPUB one by one
+   * rather than the zip: see {@link EpubFiles}.
+   */
+  unzipped?: boolean;
 }
 
 /**

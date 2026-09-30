@@ -22,7 +22,8 @@
 //! sliced, since none of them is per page.
 //!
 //! An EPUB crosses the same wall behind the same version, with the
-//! warnings writing it raised: see [`encode_epub`].
+//! warnings writing it raised: see [`encode_epub`]. Its files can
+//! cross one by one instead: see [`encode_epub_files`].
 //!
 //! [postcard]: https://postcard.jamesmunns.com/
 
@@ -152,6 +153,44 @@ pub fn encode_epub(bytes: &[u8], warnings: &[Warning]) -> Result<Vec<u8>, WireEr
 /// Reads an EPUB reply back, refusing a version this build does not
 /// write.
 pub fn decode_epub(bytes: &[u8]) -> Result<Epub, WireError> {
+    let (found, rest) = postcard::take_from_bytes::<u16>(bytes)?;
+    if found != VERSION {
+        return Err(WireError::Version { found });
+    }
+    Ok(postcard::from_bytes(rest)?)
+}
+
+/// An EPUB as its files, not zipped, and what writing it warned
+/// about.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EpubFiles {
+    /// The same warnings [`Epub::warnings`] holds.
+    pub warnings: Vec<Warning>,
+    /// The paths of the documents in reading order.
+    pub spine: Vec<String>,
+    /// Every file the zip holds, in the order it holds them.
+    pub files: Vec<EpubFile>,
+}
+
+/// One file of an EPUB.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EpubFile {
+    /// Where the file is in the container.
+    pub path: String,
+    /// Its media type.
+    pub media_type: String,
+    /// Its bytes, not compressed.
+    pub bytes: Vec<u8>,
+}
+
+/// Encodes an EPUB's files, version first.
+pub fn encode_epub_files(files: &EpubFiles) -> Result<Vec<u8>, WireError> {
+    Ok(postcard::to_stdvec(&(VERSION, files))?)
+}
+
+/// Reads an EPUB's files back, refusing a version this build does not
+/// write.
+pub fn decode_epub_files(bytes: &[u8]) -> Result<EpubFiles, WireError> {
     let (found, rest) = postcard::take_from_bytes::<u16>(bytes)?;
     if found != VERSION {
         return Err(WireError::Version { found });
@@ -387,6 +426,38 @@ mod tests {
         assert!(read.pages.is_empty());
         assert_eq!(read.first, 1, "first clamps to the book's own length");
         assert_eq!(read.book_pages, 1);
+    }
+
+    /// An EPUB's files cross with their paths, media types and
+    /// spine, and a version this build does not write is refused.
+    #[test]
+    fn an_epub_s_files_round_trip() {
+        let files = EpubFiles {
+            warnings: output().warnings,
+            spine: vec!["EPUB/section-001.xhtml".into()],
+            files: vec![
+                EpubFile {
+                    path: "mimetype".into(),
+                    media_type: "text/plain".into(),
+                    bytes: b"application/epub+zip".to_vec(),
+                },
+                EpubFile {
+                    path: "EPUB/section-001.xhtml".into(),
+                    media_type: "application/xhtml+xml".into(),
+                    bytes: b"<html/>".to_vec(),
+                },
+            ],
+        };
+        let bytes = encode_epub_files(&files).unwrap();
+        assert_eq!(version(&bytes).unwrap(), VERSION);
+        assert_eq!(decode_epub_files(&bytes).unwrap(), files);
+
+        let mut stale = bytes;
+        stale[0] = VERSION as u8 + 1;
+        assert!(matches!(
+            decode_epub_files(&stale),
+            Err(WireError::Version { .. })
+        ));
     }
 
     /// An EPUB crosses whole, its warnings beside it, and a version

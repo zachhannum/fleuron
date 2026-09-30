@@ -15,16 +15,19 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Worker } from 'node:worker_threads';
+import { MessageChannel, Worker } from 'node:worker_threads';
+import { inflateRawSync } from 'node:zlib';
 
 import {
   Client,
+  Engine,
   Session,
   isRendered,
   SUBSET,
   VERSION,
   WIRE_VERSION,
   decodeDisplayList,
+  decodeEpubFiles,
   faceFamily,
   initWasm,
   linkAt,
@@ -40,6 +43,7 @@ import {
   type Op,
   type Page,
   type RectItem,
+  type Rendered,
   type Response,
   type TextItem,
 } from '../dist/index.js';
@@ -125,6 +129,26 @@ function referenceEpub(): Uint8Array {
     throw new Error(`the CLI did not write an EPUB: ${run.stderr ?? run.error}`);
   }
   return readFileSync(out);
+}
+
+/** The entries of a zip archive, in the order of its central directory, inflated. */
+function zipEntries(archive: Uint8Array): [string, Uint8Array][] {
+  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  const end = archive.byteLength - 22;
+  let at = view.getUint32(end + 16, true);
+  const out: [string, Uint8Array][] = [];
+  for (let n = view.getUint16(end + 10, true); n > 0; n -= 1) {
+    const method = view.getUint16(at + 10, true);
+    const compressed = view.getUint32(at + 20, true);
+    const nameLength = view.getUint16(at + 28, true);
+    const offset = view.getUint32(at + 42, true);
+    const name = new TextDecoder().decode(archive.subarray(at + 46, at + 46 + nameLength));
+    const data = offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true);
+    const held = archive.subarray(data, data + compressed);
+    out.push([name, method === 0 ? held : new Uint8Array(inflateRawSync(held))]);
+    at += 46 + nameLength;
+  }
+  return out;
 }
 
 /** The faces a PDF embeds, subset tags removed, or null where `pdffonts` is not installed. */
@@ -873,6 +897,51 @@ check(
   'the EPUB warnings cross as a render warnings do',
   epub.warnings.every((w) => typeof w.message === 'string' && (w.origin === null || typeof w.origin === 'string')),
   JSON.stringify(epub.warnings),
+);
+
+// The same EPUB as its files: every entry of the zip, with its path
+// and its bytes, and the spine the package document lists.
+const unzipped = await client.exportEpubFiles();
+if (unzipped === null) {
+  throw new Error('nothing overtook the EPUB files, and they still came back superseded');
+}
+const zipped = zipEntries(epub.bytes);
+check(
+  'every entry of the zip is a file, with the same path and bytes',
+  unzipped.files.length === zipped.length &&
+    zipped.every(([path, bytes], index) => {
+      const file = unzipped.files[index];
+      return file !== undefined && file.path === path && Buffer.from(file.bytes).equals(bytes);
+    }),
+  `${unzipped.files.map((file) => file.path).join(', ')}\n          zip: ${zipped.map(([path]) => path).join(', ')}`,
+);
+const opf = unzipped.files.find((file) => file.path === 'EPUB/package.opf');
+const manifest = new Map(
+  [...new TextDecoder().decode(opf?.bytes).matchAll(/<item id="([^"]+)" href="([^"]+)"/g)].map(
+    (m) => [m[1], m[2]] as const,
+  ),
+);
+const listed = [...new TextDecoder().decode(opf?.bytes).matchAll(/<itemref idref="([^"]+)"/g)].map(
+  (m) => `EPUB/${manifest.get(m[1] ?? '')}`,
+);
+check(
+  'the files carry the spine of the package document',
+  unzipped.spine.length > 0 && JSON.stringify(unzipped.spine) === JSON.stringify(listed),
+  `${JSON.stringify(unzipped.spine)} against ${JSON.stringify(listed)}`,
+);
+check(
+  'each file names its media type',
+  unzipped.files.find((file) => file.path === 'EPUB/book.css')?.mediaType === 'text/css' &&
+    unzipped.files.find((file) => file.path === unzipped.spine[0])?.mediaType === 'application/xhtml+xml',
+);
+check(
+  'the files are views into the one buffer the reply arrived in',
+  unzipped.files.every((file) => file.bytes.buffer === unzipped.files[0]?.bytes.buffer),
+);
+check(
+  'the EPUB files run no stage',
+  JSON.stringify(client.stages) === JSON.stringify(settled),
+  `${JSON.stringify(settled)} before, ${JSON.stringify(client.stages)} after`,
 );
 
 // The warm path: a stylesheet crosses on its own, with no content
@@ -1869,6 +1938,41 @@ check(
   `${SUBSET.version} described, ${VERSION} shipped`,
 );
 once.free();
+
+// What the worker does with the reply: the bytes move to the other
+// side rather than being copied, so the worker is left with none. The
+// book's images already crossed to the worker, so they are read again.
+const engine = new Engine(new Session());
+const fresh: Op[] = [
+  ...images.map(([url]): Op => ({ op: 'image', url, bytes: new Uint8Array(readFileSync(join(root, 'fixtures', url))) })),
+  { op: 'markdown', name: 'gulliver-excerpt.md', text: markdown },
+];
+const moved = await new Promise<{ sent: Uint8Array; received: Response }>((done) => {
+  engine.submit({ id: 1, generation: 1, ops: fresh, want: 'epub', unzipped: true }, (response, transfer) => {
+    if (!isRendered(response)) {
+      throw new Error(`the in-process engine answered ${JSON.stringify(response)}`);
+    }
+    const channel = new MessageChannel();
+    channel.port2.once('message', (received: Response) => {
+      channel.port1.close();
+      done({ sent: response.bytes, received });
+    });
+    channel.port1.postMessage(response, transfer);
+  });
+});
+engine.free();
+check(
+  'the EPUB files cross as a transferable, with no copy',
+  moved.sent.byteLength === 0 && isRendered(moved.received) && moved.received.bytes.byteLength > 0,
+  `${moved.sent.byteLength} bytes left behind`,
+);
+if (isRendered(moved.received)) {
+  const crossed = decodeEpubFiles(moved.received.bytes);
+  check(
+    'the files that crossed are views into the buffer that moved',
+    crossed.files.every((file) => file.bytes.buffer === (moved.received as Rendered).bytes.buffer),
+  );
+}
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

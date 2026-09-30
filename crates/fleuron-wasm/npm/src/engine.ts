@@ -127,7 +127,7 @@ export class Engine {
       case 'pdf':
         return this.session.exportPdf();
       case 'epub':
-        return this.session.exportEpub();
+        return request.unzipped === true ? this.session.exportEpubFiles() : this.session.exportEpub();
       case 'font':
         return this.session.fontBytes(request.font ?? 0);
       case 'node':

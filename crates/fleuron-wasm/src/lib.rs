@@ -385,6 +385,33 @@ impl Session {
         wire::encode_epub(&epub.bytes, &epub.warnings).map_err(js_error)
     }
 
+    /// The same EPUB as its files, not zipped, in the wire's
+    /// encoding: the version, the warnings, the paths of the documents
+    /// in reading order, then each file with its path in the
+    /// container, its media type and its bytes.
+    ///
+    /// The files are the entries of the zip [`Session::export_epub`]
+    /// returns, in the same order, for a host that loads them into a
+    /// browser frame one by one.
+    #[wasm_bindgen(js_name = exportEpubFiles)]
+    pub fn export_epub_files(&self) -> Result<Vec<u8>, JsError> {
+        let files = self.epub_files();
+        wire::encode_epub_files(&wire::EpubFiles {
+            warnings: files.warnings,
+            spine: files.spine,
+            files: files
+                .files
+                .into_iter()
+                .map(|file| wire::EpubFile {
+                    path: file.path,
+                    media_type: file.media_type,
+                    bytes: file.bytes,
+                })
+                .collect(),
+        })
+        .map_err(js_error)
+    }
+
     /// The node one byte of one source was read into: the innermost,
     /// so a byte of prose answers with the run it was typed into and
     /// a byte of markup answers with the construct it opens.
@@ -538,6 +565,15 @@ impl Session {
     /// The EPUB [`Session::export_epub`] encodes, with the sources'
     /// complaints in front of the writer's own.
     pub fn epub(&self) -> fleuron_epub::Epub {
+        let files = self.epub_files();
+        fleuron_epub::Epub {
+            bytes: files.zip(),
+            warnings: files.warnings,
+        }
+    }
+
+    /// The files of that EPUB, not zipped, with the same warnings.
+    pub fn epub_files(&self) -> fleuron_epub::Files {
         let unstyled;
         let sheets = match self.engine.sheets() {
             Some(sheets) => sheets,
@@ -546,16 +582,16 @@ impl Session {
                 &unstyled
             }
         };
-        let mut epub = fleuron_epub::write(
+        let mut files = fleuron_epub::files(
             self.engine.book(),
             sheets,
             self.engine.images(),
             self.engine.font_files(),
         );
         let mut warnings: Vec<Warning> = self.complaints.values().flatten().cloned().collect();
-        warnings.append(&mut epub.warnings);
-        epub.warnings = warnings;
-        epub
+        warnings.append(&mut files.warnings);
+        files.warnings = warnings;
+        files
     }
 
     /// Hands the engine every source's complaints as they stand.
