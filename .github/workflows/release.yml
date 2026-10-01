@@ -2,7 +2,9 @@
 # runs it. It runs the wasm workflow again, with the tag checked against
 # every version in the repository, and the module and the built
 # package come out of that run rather than being built a second time
-# here.
+# here. The crates go to crates.io and the packages to npm, each from a
+# job of its own, so one registry's failure leaves the other's job to
+# be run again alone.
 name: release
 
 on:
@@ -21,6 +23,46 @@ jobs:
     uses: ./.github/workflows/wasm.yml
     with:
       tag: ${{ github.ref_name }}
+
+  # Every crate the workspace does not mark `publish = false`, in the
+  # order they depend on each other.
+  crates:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      # crates.io trades the workflow's OIDC identity for a token that
+      # lasts the job, so there is none in the repository's secrets.
+      id-token: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      # A crate already on the registry at this version is a re-run of
+      # a release that got some of them up, and crates.io refuses to
+      # take one twice.
+      - name: The crates, on the registry
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          version="${TAG#v}"
+          published=()
+          missing=0
+          for crate in $(cargo metadata --no-deps --format-version 1 |
+            jq -r '.packages[] | select(.publish != []) | .name'); do
+            if curl -sf -o /dev/null -A "fleuron release (github.com/zachhannum/fleuron)" \
+              "https://crates.io/api/v1/crates/$crate/$version"; then
+              published+=(--exclude "$crate")
+            else
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            cargo publish --workspace "${published[@]}"
+          fi
 
   publish:
     needs: checks
