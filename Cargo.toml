@@ -17,8 +17,16 @@ repository = "https://github.com/zachhannum/fleuron"
 homepage = "https://fleuron.typeworks.dev/"
 documentation = "https://fleuron.typeworks.dev/api/fleuron/"
 authors = ["Zach Hannum"]
+readme = "README.md"
 
 [workspace.dependencies]
+# The crates that depend on each other. A published crate resolves the
+# version, and every crate in a release is laid out by one engine, so
+# the requirement is exact.
+fleuron = { path = "crates/fleuron", version = "=0.20.0" }
+fleuron-markdown = { path = "crates/fleuron-markdown", version = "=0.20.0" }
+fleuron-epub = { path = "crates/fleuron-epub", version = "=0.20.0" }
+
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", default-features = false, features = ["use-std"] }
