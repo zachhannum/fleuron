@@ -155,14 +155,22 @@ GitHub Pages.
 `.github/workflows/release.yml` is the only thing that publishes, and a
 `v*` tag is the only thing that runs it: the wasm workflow again with
 the tag checked against every version in the repository, then both
-tarballs and the module on a GitHub release and both packages on the
-registry. `cut-release.yml` is the dispatch that raises the version and
+tarballs and the module on a GitHub release, both packages on npm and
+every crate but `fleuron-fixtures` on crates.io. `cut-release.yml` is the dispatch that raises the version and
 cuts that tag.
 
 npm authenticates the workflow over OIDC, so no npm token exists.
 Trusted publishing is configured per package on npmjs.com against
 `release.yml`, which is why the publish steps stay in that file rather
 than moving into the workflow it calls.
+
+crates.io takes the crates the same way: each crate names
+`release.yml` as its trusted publisher, and the job trades its OIDC
+identity for a token that lasts the run. A crate has to exist before
+it can name a publisher, so the first version of a new crate goes up
+by hand. The crates depend on each other through
+`[workspace.dependencies]` with an exact version beside the path, and
+the wasm workflow dry-runs the publish on every PR.
 
 `cut-release.yml` raises the version on `main`, which is protected, and
 a personal repository can exempt neither `github-actions[bot]` nor
@@ -173,7 +181,8 @@ secret, an app id being nobody's secret. The tag goes up under the same
 token, which is what starts the run that publishes.
 
 `scripts/version.mjs` is where a version is read and where it is
-bumped, because the number lives in the workspace, both packages, the
+bumped, because the number lives in the workspace, the requirements
+between the crates, both packages, the
 peer range between them, the constant the package reports itself by and
 the lockfiles that mirror all of it.
 

@@ -19,7 +19,7 @@ let output = fleuron::layout::layout_book(&book, &styles, &registry);
 let bytes = fleuron::pdf::write(&output, &registry, &book.metadata)?;
 std::fs::write("book.pdf", bytes)?;`;
 
-const shell = `cargo install --git https://github.com/zachhannum/fleuron fleuron-cli
+const shell = `cargo install fleuron-cli
 
 fleuron manuscript.md -o book.pdf -c book.css
 # fleuron: manuscript.md → book.pdf: 333 pages`;
