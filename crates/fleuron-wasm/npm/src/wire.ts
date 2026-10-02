@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 18;
+export const WIRE_VERSION = 19;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -449,12 +449,25 @@ export interface EpubFiles {
   /** The same warnings {@link Epub.warnings} holds. */
   warnings: Warning[];
   /**
-   * The paths of the documents in reading order, as the spine of the
-   * package document lists them, such as `EPUB/section-001.xhtml`.
+   * The documents in reading order, as the spine of the package
+   * document lists them.
    */
-  spine: string[];
+  spine: EpubSpineEntry[];
   /** Every file the zip holds, in the order the zip holds them. */
   files: EpubFile[];
+}
+
+/** One document of the spine of an EPUB. */
+export interface EpubSpineEntry {
+  /** Where the document is in the container, such as `EPUB/section-001.xhtml`. */
+  path: string;
+  /**
+   * The node id of the section the document holds, which is the id
+   * `Client.sourceOf` takes and the `data-node` attribute of the
+   * `section` element. `null` for the one empty document of a book
+   * with no sections.
+   */
+  section: number | null;
 }
 
 /** One file of an EPUB. */
@@ -850,7 +863,7 @@ export function decodeEpubFiles(bytes: Uint8Array): EpubFiles {
     throw new WireError(`wire version ${version}, expected ${WIRE_VERSION}`);
   }
   const warnings = r.seq(() => warning(r));
-  const spine = r.seq(() => r.string());
+  const spine = r.seq(() => ({ path: r.string(), section: r.option(() => r.varint()) }));
   const files = r.seq(() => ({ path: r.string(), mediaType: r.string(), bytes: r.slice() }));
   if (!r.done()) {
     throw new WireError('the buffer is more than one EPUB');
