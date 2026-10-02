@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use fleuron::content::Book;
+use fleuron::content::{Block, Book, NodeId, Section};
 use fleuron::images::ImageLoader;
 use fleuron::style::{FontLoader, Source, Stylesheets};
 use fleuron_markdown::{Dialect, Options};
@@ -150,20 +150,20 @@ fn every_block_and_inline_has_a_mapping() {
     assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
     let one = entry(&epub.bytes, "EPUB/section-001.xhtml");
     for element in [
-        "<h1 id=\"one\" class=\"opening\">",
-        "<p>",
-        "<blockquote>",
-        "<pre>code &amp; &lt;markup&gt;",
-        "<hr></hr>",
-        "<img src=\"media/image-1.png\" alt=\"An ornament\"></img>",
-        "<ol start=\"2\">",
-        "<ul>",
-        "<li>second</li>",
-        "<li><p>loose</p></li>",
-        "<table>",
+        "<h1 id=\"one\" data-node=\"2\" class=\"opening\">",
+        "<p id=\"n4\" data-node=\"4\">",
+        "<blockquote id=\"n34\" data-node=\"34\">",
+        "<pre id=\"n40\" data-node=\"40\">code &amp; &lt;markup&gt;",
+        "<hr id=\"n41\" data-node=\"41\"></hr>",
+        "<img id=\"n44\" data-node=\"44\" src=\"media/image-1.png\" alt=\"An ornament\"></img>",
+        "<ol id=\"n45\" data-node=\"45\" start=\"2\">",
+        "<ul id=\"n52\" data-node=\"52\">",
+        "<li id=\"n46\" data-node=\"46\">second</li>",
+        "<li id=\"n53\" data-node=\"53\"><p id=\"n54\" data-node=\"54\">loose</p></li>",
+        "<table id=\"n59\" data-node=\"59\">",
         "<thead>",
-        "<th data-align=\"left\">",
-        "<td data-align=\"right\">",
+        "<th id=\"n61\" data-node=\"61\" data-align=\"left\">",
+        "<td id=\"n71\" data-node=\"71\" data-align=\"right\">",
         "<em>on a Tuesday</em>",
         "<strong>late</strong>",
         "<code>a trunk</code>",
@@ -173,7 +173,7 @@ fn every_block_and_inline_has_a_mapping() {
         "<a href=\"https://example.com\">",
         "<br/>",
         "<a epub:type=\"noteref\" role=\"doc-noteref\" href=\"#note-1\">1</a>",
-        "<aside id=\"note-1\" epub:type=\"footnote\" role=\"doc-footnote\">",
+        "<aside id=\"note-1\" data-node=\"24\" epub:type=\"footnote\" role=\"doc-footnote\">",
     ] {
         assert!(one.contains(element), "{element} is not in\n{one}");
     }
@@ -240,6 +240,14 @@ fn the_files_are_the_entries_of_the_zip() {
     assert_eq!(files, entries(&epub.bytes));
     assert_eq!(unzipped.zip(), epub.bytes);
     assert_eq!(unzipped.warnings, epub.warnings);
+    for document in &unzipped.spine {
+        let zipped = entry(&epub.bytes, &document.path);
+        assert!(
+            !nodes(&zipped).is_empty(),
+            "{} names no node",
+            document.path
+        );
+    }
 
     let package = entry(&epub.bytes, "EPUB/package.opf");
     for file in &unzipped.files {
@@ -284,15 +292,209 @@ fn the_files_carry_the_spine_of_the_package_document() {
         .skip(1)
         .map(|tag| format!("EPUB/{}", items[&attribute(tag, "idref")]))
         .collect();
-    assert_eq!(unzipped.spine, spine);
+    let paths: Vec<&str> = unzipped
+        .spine
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect();
+    assert_eq!(paths, spine);
     assert_eq!(
-        unzipped.spine,
+        paths,
         [
             "EPUB/section-001.xhtml",
             "EPUB/section-002.xhtml",
             "EPUB/section-003.xhtml"
         ]
     );
+}
+
+/// The value of each `name` attribute of each `tag` element, in the
+/// order of the document.
+fn attributes(document: &str, tag: &str, name: &str) -> Vec<String> {
+    document
+        .split(&format!("<{tag} "))
+        .skip(1)
+        .filter_map(|rest| {
+            let open = &rest[..rest.find('>')?];
+            let start = open.find(&format!("{name}=\""))? + name.len() + 2;
+            Some(open[start..start + open[start..].find('"')?].to_string())
+        })
+        .collect()
+}
+
+/// Every node id a document carries, in the order of the document.
+fn nodes(document: &str) -> Vec<NodeId> {
+    document
+        .split(" data-node=\"")
+        .skip(1)
+        .map(|rest| NodeId::new(rest[..rest.find('"').unwrap()].parse().unwrap()))
+        .collect()
+}
+
+/// The opening tags of the block elements in a document.
+fn block_tags(document: &str) -> Vec<&str> {
+    const BLOCKS: &[&str] = &[
+        "section",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "p",
+        "blockquote",
+        "pre",
+        "hr",
+        "img",
+        "ol",
+        "ul",
+        "li",
+        "table",
+        "tr",
+        "th",
+        "td",
+        "aside",
+    ];
+    document
+        .split('<')
+        .skip(1)
+        .map(|rest| &rest[..rest.find('>').unwrap()])
+        .filter(|tag| {
+            let name = tag.split([' ', '/']).next().unwrap();
+            BLOCKS.contains(&name)
+        })
+        .collect()
+}
+
+/// Acceptance: each spine entry has the node id of its section, front
+/// matter and generated matter included. A section with no heading
+/// and a section no source was read into have one, as a chapter does.
+#[test]
+fn each_spine_entry_has_the_node_of_its_section() {
+    let mut book = read("A copyright notice, with no heading.\n\n# One\n\nA chapter.\n");
+    let Some(Block::Paragraph { inlines, .. }) = book.sections[0].blocks.first() else {
+        panic!("the front matter is a paragraph");
+    };
+    let generated = Section {
+        blocks: vec![Block::Paragraph {
+            id: Default::default(),
+            inlines: inlines.clone(),
+            attributes: Default::default(),
+            position: None,
+            span: None,
+        }],
+        ..Default::default()
+    };
+    book.sections.push(generated);
+    let unzipped = unzipped(&book, "");
+    book.assign_node_ids();
+
+    assert_eq!(unzipped.spine.len(), 3);
+    for (entry, section) in unzipped.spine.iter().zip(&book.sections) {
+        assert_eq!(entry.section, Some(section.id), "{}", entry.path);
+        let file = unzipped
+            .files
+            .iter()
+            .find(|file| file.path == entry.path)
+            .expect("the document is a file");
+        let document = String::from_utf8(file.bytes.clone()).unwrap();
+        assert_eq!(
+            attributes(&document, "section", "data-node"),
+            [section.id.get().to_string()],
+            "{document}"
+        );
+    }
+    let spine: Vec<&NodeId> = unzipped
+        .spine
+        .iter()
+        .filter_map(|entry| entry.section.as_ref())
+        .collect();
+    assert!(spine.windows(2).all(|pair| pair[0] < pair[1]), "{spine:?}");
+
+    let empty = self::unzipped(&Book::default(), "");
+    assert_eq!(empty.spine.len(), 1);
+    assert_eq!(empty.spine[0].section, None);
+}
+
+/// Acceptance: each block element in a document has its node id, and
+/// the book answers with the source of each one.
+#[test]
+fn each_block_element_has_its_node() {
+    let mut book = read(EVERY_VARIANT);
+    let epub = write(&book, "");
+    book.assign_node_ids();
+    let mut seen = Vec::new();
+    for name in ["EPUB/section-001.xhtml", "EPUB/section-002.xhtml"] {
+        let document = entry(&epub.bytes, name);
+        let tags = block_tags(&document);
+        assert!(!tags.is_empty());
+        for tag in tags {
+            assert!(tag.contains(" data-node=\""), "<{tag}> names no node");
+        }
+        for node in nodes(&document) {
+            let (source, span) = book
+                .source_of(node)
+                .unwrap_or_else(|| panic!("node {} has no source", node.get()));
+            assert_eq!(source, "levant.md");
+            assert!(span.start < span.end);
+            seen.push(node);
+        }
+    }
+    let unique: std::collections::BTreeSet<NodeId> = seen.iter().copied().collect();
+    assert_eq!(unique.len(), seen.len(), "a node is on two elements");
+
+    // The node is the one the text was read into.
+    let two = entry(&epub.bytes, "EPUB/section-002.xhtml");
+    let paragraph: u32 = attributes(&two, "p", "data-node")[0].parse().unwrap();
+    let (_, span) = book.source_of(NodeId::new(paragraph)).unwrap();
+    assert_eq!(
+        EVERY_VARIANT[span.start as usize..span.end as usize].trim_end(),
+        "The second section."
+    );
+}
+
+/// Acceptance: an element with an id the author set keeps that id and
+/// still gives its node id. A node id that the author took for another
+/// element still reads from the attribute.
+#[test]
+fn an_id_the_author_set_stays_beside_the_node() {
+    let markdown = "# One {#one}\n\n## Taken {#n6}\n\nPlain.\n";
+    let mut book = read(markdown);
+    let epub = write(&book, "");
+    book.assign_node_ids();
+    let document = entry(&epub.bytes, "EPUB/section-001.xhtml");
+
+    assert!(
+        document.contains("<h1 id=\"one\" data-node=\"2\">"),
+        "{document}"
+    );
+    assert!(
+        document.contains("<h2 id=\"n6\" data-node=\"4\">"),
+        "{document}"
+    );
+    assert!(
+        document.contains("<p id=\"n6-2\" data-node=\"6\">"),
+        "{document}"
+    );
+    for (tag, text) in [
+        ("h1", "# One {#one}"),
+        ("h2", "## Taken {#n6}"),
+        ("p", "Plain."),
+    ] {
+        let node: u32 = attributes(&document, tag, "data-node")[0].parse().unwrap();
+        let (_, span) = book.source_of(NodeId::new(node)).unwrap();
+        assert_eq!(
+            markdown[span.start as usize..span.end as usize].trim_end(),
+            text
+        );
+    }
+    let ids: Vec<String> = document
+        .split(" id=\"")
+        .skip(1)
+        .map(|rest| rest[..rest.find('"').unwrap()].to_string())
+        .collect();
+    let unique: std::collections::BTreeSet<&String> = ids.iter().collect();
+    assert_eq!(unique.len(), ids.len(), "{ids:?}");
 }
 
 /// The metadata goes to its Dublin Core homes, and the keys the

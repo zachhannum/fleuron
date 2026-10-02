@@ -27,6 +27,7 @@
 //!
 //! [postcard]: https://postcard.jamesmunns.com/
 
+use crate::content::NodeId;
 use crate::fonts::FontRefEntry;
 use crate::images::Asset;
 use crate::pages::Page;
@@ -34,7 +35,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 18;
+pub const VERSION: u16 = 19;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -166,10 +167,20 @@ pub fn decode_epub(bytes: &[u8]) -> Result<Epub, WireError> {
 pub struct EpubFiles {
     /// The same warnings [`Epub::warnings`] holds.
     pub warnings: Vec<Warning>,
-    /// The paths of the documents in reading order.
-    pub spine: Vec<String>,
+    /// The documents in reading order.
+    pub spine: Vec<EpubSpineEntry>,
     /// Every file the zip holds, in the order it holds them.
     pub files: Vec<EpubFile>,
+}
+
+/// One document of an EPUB's spine.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EpubSpineEntry {
+    /// Where the document is in the container.
+    pub path: String,
+    /// The node of the section the document holds. `None` for the
+    /// one empty document of a book with no sections.
+    pub section: Option<NodeId>,
 }
 
 /// One file of an EPUB.
@@ -434,7 +445,16 @@ mod tests {
     fn an_epub_s_files_round_trip() {
         let files = EpubFiles {
             warnings: output().warnings,
-            spine: vec!["EPUB/section-001.xhtml".into()],
+            spine: vec![
+                EpubSpineEntry {
+                    path: "EPUB/section-001.xhtml".into(),
+                    section: Some(NodeId::new(7)),
+                },
+                EpubSpineEntry {
+                    path: "EPUB/section-002.xhtml".into(),
+                    section: None,
+                },
+            ],
             files: vec![
                 EpubFile {
                     path: "mimetype".into(),

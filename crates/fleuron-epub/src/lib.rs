@@ -50,7 +50,7 @@ mod xml;
 mod zip;
 
 use fleuron::Warning;
-use fleuron::content::{Block, Book, Metadata, text};
+use fleuron::content::{Block, Book, Metadata, NodeId, text};
 use fleuron::images::ImageLoader;
 use fleuron::style::{FontLoader, Stylesheets};
 
@@ -97,9 +97,9 @@ pub struct Epub {
 pub struct Files {
     /// Every file in the container, in the order of the zip.
     pub files: Vec<File>,
-    /// The paths of the documents in reading order, as the spine of
-    /// the package document lists them.
-    pub spine: Vec<String>,
+    /// The documents in reading order, as the spine of the package
+    /// document lists them.
+    pub spine: Vec<SpineEntry>,
     /// The same warnings [`Epub::warnings`] holds.
     pub warnings: Vec<Warning>,
 }
@@ -120,6 +120,18 @@ impl Files {
         }
         archive.finish()
     }
+}
+
+/// One document of the spine.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpineEntry {
+    /// Where the document is in the container, such as
+    /// `EPUB/section-001.xhtml`.
+    pub path: String,
+    /// The node of the section the document holds, as
+    /// [`Book::assign_node_ids`] numbers it. `None` for the one empty
+    /// document of a book with no sections.
+    pub section: Option<NodeId>,
 }
 
 /// One file in the container.
@@ -147,7 +159,9 @@ impl File {
 /// Writes `book` as a reflowable EPUB 3, styled by `sheets`.
 ///
 /// Each section is one XHTML document, in the order of
-/// `book.sections`. The sheets become one stylesheet: the subset the
+/// `book.sections`. Each block element has its node id in the
+/// `data-node` attribute, as [`Book::assign_node_ids`] numbers the
+/// book. The sheets become one stylesheet: the subset the
 /// engine reads, less everything that describes a page. What parsing
 /// the sheets warned about is among the warnings, and so is each
 /// paged rule and declaration an author sheet wrote.
@@ -270,13 +284,17 @@ pub fn files(
             stylesheet.into_bytes(),
         ),
     ];
-    let spine: Vec<String> = hrefs
+    let spine: Vec<SpineEntry> = hrefs
         .iter()
-        .map(|href| format!("{PACKAGE}/{href}"))
+        .enumerate()
+        .map(|(doc, href)| SpineEntry {
+            path: format!("{PACKAGE}/{href}"),
+            section: book.sections.get(doc).map(|section| section.id),
+        })
         .collect();
-    for (path, document) in spine.iter().zip(documents) {
+    for (entry, document) in spine.iter().zip(documents) {
         files.push(File::new(
-            path,
+            &entry.path,
             "application/xhtml+xml",
             document.into_bytes(),
         ));

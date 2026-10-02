@@ -10,38 +10,38 @@ expression: one
 <link rel="stylesheet" type="text/css" href="book.css"/>
 </head>
 <body>
-<section>
-<h1 id="one" class="opening">One</h1>
-<p>He arrived <em>on a Tuesday</em>, <strong>late</strong>, with <code>a trunk</code>, a <s>cat</s> and <a href="section-002.xhtml#n75">a letter</a> in a <span class="hand">plain hand</span>.<a epub:type="noteref" role="doc-noteref" href="#note-1">1</a> The porter said nothing.<br/>Nobody asked him to.</p>
-<blockquote>
-<p>A quotation, with a <a href="https://example.com">link out</a>.</p>
+<section id="n1" data-node="1">
+<h1 id="one" data-node="2" class="opening">One</h1>
+<p id="n4" data-node="4">He arrived <em>on a Tuesday</em>, <strong>late</strong>, with <code>a trunk</code>, a <s>cat</s> and <a href="section-002.xhtml#n75">a letter</a> in a <span class="hand">plain hand</span>.<a epub:type="noteref" role="doc-noteref" href="#note-1">1</a> The porter said nothing.<br/>Nobody asked him to.</p>
+<blockquote id="n34" data-node="34">
+<p id="n35" data-node="35">A quotation, with a <a href="https://example.com">link out</a>.</p>
 </blockquote>
-<pre>code &amp; &lt;markup&gt;</pre>
-<hr></hr>
-<img src="media/image-1.png" alt="An ornament"></img>
-<ol start="2">
-<li>second</li>
-<li>third</li>
+<pre id="n40" data-node="40">code &amp; &lt;markup&gt;</pre>
+<hr id="n41" data-node="41"></hr>
+<img id="n44" data-node="44" src="media/image-1.png" alt="An ornament"></img>
+<ol id="n45" data-node="45" start="2">
+<li id="n46" data-node="46">second</li>
+<li id="n49" data-node="49">third</li>
 </ol>
-<ul>
-<li><p>loose</p></li>
-<li><p>items</p></li>
+<ul id="n52" data-node="52">
+<li id="n53" data-node="53"><p id="n54" data-node="54">loose</p></li>
+<li id="n56" data-node="56"><p id="n57" data-node="57">items</p></li>
 </ul>
-<table>
+<table id="n59" data-node="59">
 <thead>
-<tr><th data-align="left"><p>Left</p>
-</th><th data-align="right"><p>Right</p>
+<tr id="n60" data-node="60"><th id="n61" data-node="61" data-align="left"><p id="n62" data-node="62">Left</p>
+</th><th id="n64" data-node="64" data-align="right"><p id="n65" data-node="65">Right</p>
 </th></tr>
 </thead>
 <tbody>
-<tr><td data-align="left"><p>a</p>
-</td><td data-align="right"><p>b</p>
+<tr id="n67" data-node="67"><td id="n68" data-node="68" data-align="left"><p id="n69" data-node="69">a</p>
+</td><td id="n71" data-node="71" data-align="right"><p id="n72" data-node="72">b</p>
 </td></tr>
 </tbody>
 </table>
 </section>
-<aside id="note-1" epub:type="footnote" role="doc-footnote">
-<p>The trunk held <em>books</em>.</p>
+<aside id="note-1" data-node="24" epub:type="footnote" role="doc-footnote">
+<p id="n25" data-node="25">The trunk held <em>books</em>.</p>
 </aside>
 </body>
 </html>
