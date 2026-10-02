@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "criterion",
  "cssparser",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-cli"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "fleuron",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-epub"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "crc32fast",
  "cssparser",
@@ -503,7 +503,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-fixtures"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "fleuron",
  "fleuron-markdown",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-markdown"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "fleuron",
  "proptest",
@@ -521,7 +521,7 @@ dependencies = [
 
 [[package]]
 name = "fleuron-wasm"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "fleuron",
  "fleuron-epub",
