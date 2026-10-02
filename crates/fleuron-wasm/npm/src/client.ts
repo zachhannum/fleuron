@@ -136,8 +136,10 @@ export class Client {
   /**
    * The same EPUB as its files, not zipped, for a host that loads them
    * into a browser frame one by one. Each file has its path in the
-   * container, its media type and its bytes, and the spine lists the
-   * documents in reading order. The files are the entries of the zip
+   * container, its media type and its bytes. The spine lists the
+   * documents in reading order, each with the node id of its section,
+   * and each block element of a document has its node id in
+   * `data-node`. The files are the entries of the zip
    * {@link Client.exportEpub} returns.
    *
    * The reply crosses from the worker as one transferred buffer, and

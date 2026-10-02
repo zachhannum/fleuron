@@ -18,10 +18,15 @@ use fleuron::content::{
 use crate::media::{Kind, Refused, Resources};
 use crate::xml;
 
+/// The attribute a block element carries its node id in.
+pub const NODE: &str = "data-node";
+
 /// What a node is to the ids the plan gives out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Role {
     Heading,
+    /// A block that is an element in its document.
+    Block,
     Note,
     Other,
 }
@@ -40,8 +45,8 @@ pub struct Plan {
 
 impl Plan {
     /// Names each section's document and gives an id to every node
-    /// that has one written, every heading, every note and every node
-    /// a link reaches.
+    /// that has one written, every block, every note and every node a
+    /// link reaches.
     pub fn of(book: &Book, anchors: &Anchors) -> Plan {
         let mut targets = BTreeSet::new();
         for section in &book.sections {
@@ -71,7 +76,7 @@ impl Plan {
                     wanted.push((id, role));
                 }
             };
-            take(section.id, &section.attributes, Role::Other);
+            take(section.id, &section.attributes, Role::Block);
             each_block(&section.blocks, &mut |node| {
                 if let Visit::Node(id, attributes, role) = node {
                     take(id, attributes, role);
@@ -91,7 +96,7 @@ impl Plan {
                         notes += 1;
                         format!("note-{notes}")
                     }
-                    Role::Heading | Role::Other => format!("n{}", id.get()),
+                    Role::Heading | Role::Block | Role::Other => format!("n{}", id.get()),
                 };
                 let mut name = stem.clone();
                 let mut again = 1;
@@ -145,7 +150,7 @@ fn each_block<'a>(blocks: &'a [Block], f: &mut dyn FnMut(Visit<'a>)) {
                 attributes,
                 ..
             } => {
-                f(Visit::Node(*id, attributes, Role::Other));
+                f(Visit::Node(*id, attributes, Role::Block));
                 each_inline(inlines, f);
             }
             Block::Blockquote {
@@ -154,23 +159,26 @@ fn each_block<'a>(blocks: &'a [Block], f: &mut dyn FnMut(Visit<'a>)) {
                 attributes,
                 ..
             } => {
-                f(Visit::Node(*id, attributes, Role::Other));
+                f(Visit::Node(*id, attributes, Role::Block));
                 each_block(blocks, f);
             }
             Block::CodeBlock { id, attributes, .. }
             | Block::ThematicBreak { id, attributes, .. }
-            | Block::PageBreak { id, attributes, .. }
-            | Block::ColumnBreak { id, attributes, .. }
-            | Block::Image { id, attributes, .. } => f(Visit::Node(*id, attributes, Role::Other)),
+            | Block::Image { id, attributes, .. } => f(Visit::Node(*id, attributes, Role::Block)),
+            // A break has no element, so it has an id only when a
+            // link reaches it or the author wrote one.
+            Block::PageBreak { id, attributes, .. } | Block::ColumnBreak { id, attributes, .. } => {
+                f(Visit::Node(*id, attributes, Role::Other))
+            }
             Block::List {
                 id,
                 items,
                 attributes,
                 ..
             } => {
-                f(Visit::Node(*id, attributes, Role::Other));
+                f(Visit::Node(*id, attributes, Role::Block));
                 for item in items {
-                    f(Visit::Node(item.id, &item.attributes, Role::Other));
+                    f(Visit::Node(item.id, &item.attributes, Role::Block));
                     each_block(&item.blocks, f);
                 }
             }
@@ -181,11 +189,11 @@ fn each_block<'a>(blocks: &'a [Block], f: &mut dyn FnMut(Visit<'a>)) {
                 attributes,
                 ..
             } => {
-                f(Visit::Node(*id, attributes, Role::Other));
+                f(Visit::Node(*id, attributes, Role::Block));
                 for row in rows(head, body) {
-                    f(Visit::Node(row.id, &row.attributes, Role::Other));
+                    f(Visit::Node(row.id, &row.attributes, Role::Block));
                     for cell in &row.cells {
-                        f(Visit::Node(cell.id, &cell.attributes, Role::Other));
+                        f(Visit::Node(cell.id, &cell.attributes, Role::Block));
                         each_block(&cell.blocks, f);
                     }
                 }
@@ -323,13 +331,40 @@ struct Writer<'s, 'c, 'a> {
 }
 
 impl<'s> Writer<'s, '_, '_> {
-    /// Writes an opening tag with the node's id and classes, and any
-    /// other attributes after them.
+    /// Writes the opening tag of a block with the node's id, the node
+    /// itself and its classes, and any other attributes after them.
     fn open(&mut self, tag: &str, node: NodeId, attributes: &Attributes, extra: &[(&str, &str)]) {
+        self.tag(tag, node, attributes, extra, true);
+    }
+
+    /// The same for an inline, which does not carry its node.
+    fn open_inline(
+        &mut self,
+        tag: &str,
+        node: NodeId,
+        attributes: &Attributes,
+        extra: &[(&str, &str)],
+    ) {
+        self.tag(tag, node, attributes, extra, false);
+    }
+
+    fn tag(
+        &mut self,
+        tag: &str,
+        node: NodeId,
+        attributes: &Attributes,
+        extra: &[(&str, &str)],
+        block: bool,
+    ) {
         self.out.push('<');
         self.out.push_str(tag);
         if let Some(id) = self.cx.plan.id(node) {
             self.attribute("id", id);
+        }
+        // The id can be the author's, or a made-up one that gave way
+        // to the author's, so the node is written apart from it.
+        if block {
+            self.attribute(NODE, &node.get().to_string());
         }
         if !attributes.classes.is_empty() {
             self.attribute("class", &attributes.classes.join(" "));
@@ -558,7 +593,7 @@ impl<'s> Writer<'s, '_, '_> {
                 attributes,
                 ..
             } => {
-                self.open("code", *id, attributes, &[]);
+                self.open_inline("code", *id, attributes, &[]);
                 xml::text(&mut self.out, value);
                 self.close("code");
             }
@@ -609,7 +644,7 @@ impl<'s> Writer<'s, '_, '_> {
                     Some(href) => &[("href", href)],
                     None => &[],
                 };
-                self.open("a", *id, attributes, extra);
+                self.open_inline("a", *id, attributes, extra);
                 self.inlines(children);
                 self.close("a");
             }
@@ -629,7 +664,7 @@ impl<'s> Writer<'s, '_, '_> {
     }
 
     fn wrap(&mut self, tag: &str, id: NodeId, attributes: &Attributes, children: &'s [Inline]) {
-        self.open(tag, id, attributes, &[]);
+        self.open_inline(tag, id, attributes, &[]);
         self.inlines(children);
         self.close(tag);
     }

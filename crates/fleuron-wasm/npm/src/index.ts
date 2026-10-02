@@ -75,6 +75,7 @@ export {
   type Epub,
   type EpubFile,
   type EpubFiles,
+  type EpubSpineEntry,
   type AxisSetting,
   type FaceAttributes,
   type FeatureSetting,

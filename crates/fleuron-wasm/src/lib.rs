@@ -386,9 +386,10 @@ impl Session {
     }
 
     /// The same EPUB as its files, not zipped, in the wire's
-    /// encoding: the version, the warnings, the paths of the documents
-    /// in reading order, then each file with its path in the
-    /// container, its media type and its bytes.
+    /// encoding: the version, the warnings, the documents in reading
+    /// order, each with its path and the node of its section, then
+    /// each file with its path in the container, its media type and
+    /// its bytes.
     ///
     /// The files are the entries of the zip [`Session::export_epub`]
     /// returns, in the same order, for a host that loads them into a
@@ -398,7 +399,14 @@ impl Session {
         let files = self.epub_files();
         wire::encode_epub_files(&wire::EpubFiles {
             warnings: files.warnings,
-            spine: files.spine,
+            spine: files
+                .spine
+                .into_iter()
+                .map(|entry| wire::EpubSpineEntry {
+                    path: entry.path,
+                    section: entry.section,
+                })
+                .collect(),
             files: files
                 .files
                 .into_iter()

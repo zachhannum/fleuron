@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `to_sections`, `frontmatter`, `assemble` | Read the manuscript into a book, as for a PDF. See the [library quickstart](quickstart.md). |
 | `Stylesheets::parse` | Parses the author sheets. The built-in sheet goes first, as for a PDF. |
 | `fleuron_epub::write` | Writes the book as an EPUB. It takes the book, the parsed sheets, a loader for images, and a loader for fonts. It returns the bytes of the file and the warnings. |
-| `fleuron_epub::files` | Takes the same arguments as `write`. It returns the files of the EPUB before they go into the zip, the spine, and the warnings. See [The files one by one](#the-files-one-by-one). |
+| `fleuron_epub::files` | Takes the same arguments as `write`. It returns the files of the EPUB before they go into the zip, the spine, and the warnings. See [The files one by one](#the-files-one-by-one) and [A place in the book](#a-place-in-the-book). |
 
 An EPUB needs no font registry, no style tree, and no layout. So the program does not call `load_fonts`, `compile`, `Assets::probe`, or `layout_book`.
 
@@ -112,7 +112,7 @@ A `Preview` has `exportEpub()` as well. Without a worker, `Session.exportEpub()`
 A host that shows the EPUB in a browser frame loads each file of the EPUB, not the zip. `Client.exportEpubFiles` asks the worker for the files. It sends a request with `want: 'epub'` and `unzipped: true`. The answer has these parts:
 
 - `files`: every file that the zip holds, in the order of the zip. Each file has its `path` in the container, its `mediaType`, and its `bytes`.
-- `spine`: the paths of the XHTML documents in reading order, from the spine of the package document.
+- `spine`: the XHTML documents in reading order, from the spine of the package document. Each entry has the `path` of a document and the `section` that the document holds.
 - `warnings`: the same warnings that `exportEpub` returns.
 
 The files are the entries of the zip, with the same paths and the same bytes. The bytes are not compressed. The documents refer to the stylesheet and the images by relative paths, such as `book.css`. So a host that serves each file at its path keeps those links.
@@ -125,11 +125,51 @@ The following example asks for the files of the EPUB, and finds the first docume
 const epub = await client.exportEpubFiles();
 if (epub !== null) {
   const byPath = new Map(epub.files.map((file) => [file.path, file]));
-  const first = byPath.get(epub.spine[0]);
+  const first = byPath.get(epub.spine[0].path);
 }
 ```
 
 A `Preview` has `exportEpubFiles()` as well. Without a worker, `Session.exportEpubFiles()` returns the same answer as bytes, and `decodeEpubFiles` reads them. In Rust, `fleuron_epub::files` returns the same files, and `Files::zip` makes the zip that `write` returns.
+
+## A place in the book
+
+A node id is the number that fleuron gives to each node of the content tree. The files of the EPUB carry node ids. So a host can go from a place in the manuscript to a place in the EPUB, and back.
+
+The `section` of a spine entry is the node id of the section that the document holds. A document of front matter has a `section`, as a chapter does. The `section` is `null` only for the empty document of a book with no sections.
+
+Each block element in a document has its node id in the `data-node` attribute. The block elements are these:
+
+```text
+section  h1 to h6  p  blockquote  pre  hr  img
+ol  ul  li  table  tr  th  td  aside
+```
+
+A block element also has an `id`. If the author set an id on the node, the element keeps that id. If not, the `id` is `n` and the node id, such as `n42`. Read the node id from `data-node`, because the `id` can be the id of the author.
+
+`Client.sourceOf` takes a node id, and returns the source file and the bytes that the node came from. `Client.nodeAt` takes a source file and a byte, and returns the node id at that byte. See [the wire](../wasm/wire.md#the-protocol).
+
+The node ids go up in reading order. So the document for a node is the last spine entry with a `section` that is not more than the node id.
+
+The node from `nodeAt` can be an inline node, such as emphasis. An inline element has no `data-node`. The block element before it in the document has one.
+
+The following example finds the document that holds one byte of a source file:
+
+```js
+const epub = await client.exportEpubFiles();
+const node = await client.nodeAt('chapter-01.md', 812);
+if (epub !== null && node !== null) {
+  const entry = epub.spine.findLast((entry) => entry.section !== null && entry.section <= node);
+}
+```
+
+The following example finds the place in the manuscript for an element that the reader selected:
+
+```js
+const block = element.closest('[data-node]');
+const source = await client.sourceOf(Number(block.dataset.node));
+```
+
+In Rust, each entry of `Files::spine` has the same `path` and `section`. `Book::source_of` and `Book::node_at` answer for a book after `Book::assign_node_ids`.
 
 ## What the EPUB holds
 
@@ -154,7 +194,7 @@ The EPUB holds one XHTML document for each section, in the order of the sections
 | note | `aside` |
 | page break, column break | no element |
 
-Each element keeps the classes and the id of its node. So a selector in a stylesheet selects the same element in the EPUB as in the PDF.
+Each element keeps the classes and the id of its node. So a selector in a stylesheet selects the same element in the EPUB as in the PDF. A block element with no id gets one from its node id. See [A place in the book](#a-place-in-the-book).
 
 A tight list is a list with no blank lines between its items. A paragraph in an item of a tight list has no element, as for a PDF. Its text is the text of the `li`.
 

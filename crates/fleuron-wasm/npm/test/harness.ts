@@ -850,7 +850,8 @@ check(
 // files have the same objects under swapped numbers. What the book
 // is, its length and its pages and its text, is compared instead, and
 // the display structure above, which is the engine's own output, already
-// matches to the byte.
+// matches to the byte. The order changes how well the objects deflate,
+// so the two lengths agree to a part in a thousand and not to the byte.
 const pdf = await client.exportPdf();
 if (pdf === null) {
   throw new Error('nothing overtook the export, and it still came back superseded');
@@ -861,7 +862,7 @@ check(
 );
 check(
   'the PDF weighs what the CLI writes',
-  pdf.byteLength === cli.pdf.byteLength,
+  Math.abs(pdf.byteLength - cli.pdf.byteLength) <= cli.pdf.byteLength / 1000,
   `worker ${pdf.byteLength} bytes, CLI ${cli.pdf.byteLength}`,
 );
 const extracted = text(pdf);
@@ -926,13 +927,48 @@ const listed = [...new TextDecoder().decode(opf?.bytes).matchAll(/<itemref idref
 );
 check(
   'the files carry the spine of the package document',
-  unzipped.spine.length > 0 && JSON.stringify(unzipped.spine) === JSON.stringify(listed),
+  unzipped.spine.length > 0 &&
+    JSON.stringify(unzipped.spine.map((entry) => entry.path)) === JSON.stringify(listed),
   `${JSON.stringify(unzipped.spine)} against ${JSON.stringify(listed)}`,
+);
+// Each document names the node of its section, and each block element
+// its own, so the host asks the session where either was written.
+const documents = unzipped.spine.map((entry) => ({
+  entry,
+  text: new TextDecoder().decode(unzipped.files.find((file) => file.path === entry.path)?.bytes),
+}));
+const sectionSources = await Promise.all(
+  documents.map(({ entry }) => (entry.section === null ? null : client.sourceOf(entry.section))),
+);
+check(
+  'each spine entry names the node of its section, and sourceOf answers for it',
+  documents.every(
+    ({ entry, text }, index) =>
+      entry.section !== null &&
+      text.includes(`<section id="n${entry.section}" data-node="${entry.section}"`) &&
+      sectionSources[index]?.source === 'gulliver-excerpt.md',
+  ),
+  JSON.stringify(unzipped.spine),
+);
+const blockNodes = documents.flatMap(({ text }) =>
+  [...text.matchAll(/<(?:p|h[1-6]|blockquote)\b[^>]*? data-node="(\d+)"/g)].map((m) => Number(m[1])),
+);
+const untagged = documents.flatMap(({ text }) => text.match(/<(?:p|h[1-6]|blockquote|section)(?![^>]* data-node=")[ >]/g) ?? []);
+const blockSources = await Promise.all(blockNodes.map((node) => client.sourceOf(node)));
+check(
+  'each block element names its node, and sourceOf answers for it',
+  blockNodes.length > 0 && untagged.length === 0 && blockSources.every((source) => source !== null && source.end > source.start),
+  `${blockNodes.length} elements, ${untagged.length} with no node`,
+);
+const firstBlock = blockSources[0];
+check(
+  'nodeAt answers with the node an element names',
+  firstBlock != null && (await client.nodeAt(firstBlock.source, firstBlock.start)) === blockNodes[0],
 );
 check(
   'each file names its media type',
   unzipped.files.find((file) => file.path === 'EPUB/book.css')?.mediaType === 'text/css' &&
-    unzipped.files.find((file) => file.path === unzipped.spine[0])?.mediaType === 'application/xhtml+xml',
+    unzipped.files.find((file) => file.path === unzipped.spine[0]?.path)?.mediaType === 'application/xhtml+xml',
 );
 check(
   'the files are views into the one buffer the reply arrived in',

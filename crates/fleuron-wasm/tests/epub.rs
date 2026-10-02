@@ -205,7 +205,7 @@ fn the_warnings_come_back_as_a_render_s_do() {
 /// Acceptance: the wire version goes up, and the reply leads with it.
 #[test]
 fn the_reply_leads_with_the_wire_version() {
-    assert_eq!(wire::VERSION, 18);
+    assert_eq!(wire::VERSION, 19);
     let bytes = session(BOOK, CSS).export_epub().unwrap();
     assert_eq!(wire::version(&bytes).unwrap(), fleuron_wasm::wire_version());
 }
@@ -226,14 +226,116 @@ fn the_files_reply_holds_every_entry_of_the_zip() {
     assert_eq!(files, entries(&zipped.bytes));
     assert_eq!(files.len(), reply.files.len(), "a path is there twice");
     assert_eq!(reply.warnings, zipped.warnings);
-    assert_eq!(
-        reply.spine,
-        ["EPUB/section-001.xhtml", "EPUB/section-002.xhtml"]
-    );
+    let spine: Vec<&str> = reply.spine.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(spine, ["EPUB/section-001.xhtml", "EPUB/section-002.xhtml"]);
     let font = reply
         .files
         .iter()
         .find(|file| file.bytes == Files::new().0["fell.ttf"])
         .expect("the font is a file");
     assert_eq!(font.media_type, "font/ttf");
+}
+
+/// Every node id a document carries, in the order of the document.
+fn nodes(document: impl AsRef<[u8]>) -> Vec<u32> {
+    std::str::from_utf8(document.as_ref())
+        .unwrap()
+        .split(" data-node=\"")
+        .skip(1)
+        .map(|rest| rest[..rest.find('"').unwrap()].parse().unwrap())
+        .collect()
+}
+
+/// The bytes of a source that a node was read from.
+fn written(session: &Session, node: u32, markdown: &str) -> String {
+    let answer = session
+        .node_source(node)
+        .unwrap_or_else(|| panic!("node {node} has no source"));
+    let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+    assert_eq!(answer["source"], "lilliput.md");
+    let (start, end) = (answer["start"].as_u64(), answer["end"].as_u64());
+    markdown[start.unwrap() as usize..end.unwrap() as usize].to_string()
+}
+
+/// Acceptance: each spine entry has the node id of its section, and
+/// the session answers `nodeSource` and `nodeAt` for it. Front matter
+/// with no heading has one, as a chapter does.
+#[test]
+fn each_spine_entry_names_the_node_of_its_section() {
+    let markdown = BOOK.replace("# Chapter One", "Printed in London.\n\n# Chapter One");
+    let session = session(&markdown, CSS);
+    let reply = wire::decode_epub_files(&session.export_epub_files().unwrap()).unwrap();
+    assert_eq!(reply.spine.len(), 3);
+    for (entry, starts) in
+        reply
+            .spine
+            .iter()
+            .zip(["Printed in London.", "# Chapter One", "# Chapter Two"])
+    {
+        let node = entry.section.expect("the document holds a section").get();
+        let text = written(&session, node, &markdown);
+        assert!(text.starts_with(starts), "{} holds {text:?}", entry.path);
+        let file = reply.files.iter().find(|file| file.path == entry.path);
+        let held = nodes(&file.expect("the document is a file").bytes);
+        assert_eq!(held.first(), Some(&node), "{}", entry.path);
+    }
+    let byte = markdown.find("Emanuel").unwrap() as u32;
+    let inner = session.node_at("lilliput.md", byte).unwrap();
+    let last = reply.spine[2].section.unwrap().get();
+    assert!(inner > last, "the byte is in the last document");
+}
+
+/// Acceptance: each block element in a document has its node id, and
+/// `nodeSource` answers for it, before an edit and after one.
+#[test]
+fn the_session_answers_for_the_node_of_each_block_element() {
+    let mut session = session(BOOK, CSS);
+    let edited = BOOK.replace("# Chapter One", "# Chapter One\n\nA new first paragraph.");
+    for markdown in [BOOK.to_string(), edited] {
+        session.update_markdown("lilliput.md", &markdown);
+        let reply = wire::decode_epub_files(&session.export_epub_files().unwrap()).unwrap();
+        let mut paragraphs = Vec::new();
+        for entry in &reply.spine {
+            let file = reply.files.iter().find(|file| file.path == entry.path);
+            let document = &file.expect("the document is a file").bytes;
+            let held = nodes(document);
+            assert!(held.len() >= 3, "{held:?}");
+            for node in held {
+                paragraphs.push(written(&session, node, &markdown));
+            }
+            // A paragraph of plain text names the node its words
+            // were read into.
+            let document = std::str::from_utf8(document).unwrap();
+            for element in document.split("<p ").skip(1) {
+                let text = &element[element.find('>').unwrap() + 1..element.find("</p>").unwrap()];
+                if text.contains('<') {
+                    continue;
+                }
+                let node = nodes(format!("<p {element}"))[0];
+                let source = written(&session, node, &markdown);
+                let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+                assert_eq!(words(&source), words(text), "node {node}");
+            }
+        }
+        assert!(
+            paragraphs.iter().any(|text| text.trim_end()
+                == "He sent me to Emanuel College in Cambridge at fourteen years old."),
+            "{paragraphs:?}"
+        );
+    }
+}
+
+/// Acceptance: the zip holds the same documents as the unzipped
+/// result, node ids included.
+#[test]
+fn the_zip_holds_the_documents_the_files_reply_holds() {
+    let session = session(BOOK, CSS);
+    let zipped = entries(&export(&session).bytes);
+    let reply = wire::decode_epub_files(&session.export_epub_files().unwrap()).unwrap();
+    for entry in &reply.spine {
+        let file = reply.files.iter().find(|file| file.path == entry.path);
+        let document = &file.expect("the document is a file").bytes;
+        assert_eq!(&zipped[&entry.path], document, "{}", entry.path);
+        assert!(!nodes(&zipped[&entry.path]).is_empty());
+    }
 }
