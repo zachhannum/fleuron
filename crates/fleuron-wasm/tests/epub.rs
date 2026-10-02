@@ -311,7 +311,7 @@ fn the_session_answers_for_the_node_of_each_block_element() {
                 if text.contains('<') {
                     continue;
                 }
-                let node = nodes(&format!("<p {element}"))[0];
+                let node = nodes(format!("<p {element}"))[0];
                 let source = written(&session, node, &markdown);
                 let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
                 assert_eq!(words(&source), words(text), "node {node}");
