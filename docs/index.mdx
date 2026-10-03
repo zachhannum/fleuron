@@ -24,13 +24,7 @@ to test it out.
 
 ## The pipeline
 
-```text
-markdown ─► content tree ──┐
-                           ├─► style tree ─► box tree ─► line layout ─► fragmentation ─► pages
-CSS ───────────────────────┘                                                               │
-                                                                                           ├─► display structure (preview)
-                                                                                           └─► PDF (export)
-```
+<Pipeline />
 
 Content enters as markdown and becomes a semantic tree. Styling enters as CSS and is parsed into a supported ruleset. 
 From there, the engine lays out the lines, fragments into pages, and exports the display structure 

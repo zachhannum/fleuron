@@ -1,110 +1,250 @@
 ---
 // The pipeline is one-way, and the drawing says so: nothing points
-// left. Text is <text>, not paths, so it stays selectable and scales
+// up. Text is <text>, not paths, so it stays selectable and scales
 // with the reader's font settings.
-const stages = [
-  { x: 372, label: 'style tree' },
-  { x: 492, label: 'box tree' },
-  { x: 612, label: 'line layout' },
-  { x: 744, label: 'fragmentation' },
-  { x: 884, label: 'pages' },
+const W = 180;
+const H = 38;
+const LEFT = 150;
+const MID = 280;
+const RIGHT = 410;
+
+// A step is one beat of the loop. A wire runs on the beat before the
+// node it ends at, so the node lights as the pulse arrives.
+const nodes = [
+  { label: 'markdown', cx: LEFT, y: 10, step: 0 },
+  { label: 'CSS', cx: RIGHT, y: 10, step: 2 },
+  { label: 'content tree', cx: LEFT, y: 72, step: 2 },
+  { label: 'style tree', cx: MID, y: 150, step: 4 },
+  { label: 'box tree', cx: MID, y: 212, step: 6 },
+  { label: 'line layout', cx: MID, y: 274, step: 8 },
+  { label: 'fragmentation', cx: MID, y: 336, step: 10 },
+  { label: 'pages', cx: MID, y: 398, step: 12 },
+  { label: 'display structure', cx: LEFT, y: 476, step: 14, out: 'preview' },
+  { label: 'PDF', cx: RIGHT, y: 476, step: 14, out: 'export' },
+];
+
+const HEAD = 8;
+
+/** A wire through the given points, stopping short of the arrowhead at its tip. */
+function wire(step: number, points: [number, number][]) {
+  const [tx, ty] = points[points.length - 1]!;
+  const stops = [...points.slice(0, -1), [tx, ty - HEAD + 1]];
+  return {
+    step,
+    d: stops.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x} ${y}`).join(' '),
+    head: `${tx - 6},${ty - HEAD} ${tx + 6},${ty - HEAD} ${tx},${ty}`,
+  };
+}
+
+const wires = [
+  wire(1, [[LEFT, 48], [LEFT, 72]]),
+  wire(3, [[LEFT, 110], [LEFT, 130], [MID, 130], [MID, 150]]),
+  wire(3, [[RIGHT, 48], [RIGHT, 130], [MID, 130], [MID, 150]]),
+  wire(5, [[MID, 188], [MID, 212]]),
+  wire(7, [[MID, 250], [MID, 274]]),
+  wire(9, [[MID, 312], [MID, 336]]),
+  wire(11, [[MID, 374], [MID, 398]]),
+  wire(13, [[MID, 436], [MID, 456], [LEFT, 456], [LEFT, 476]]),
+  wire(13, [[MID, 436], [MID, 456], [RIGHT, 456], [RIGHT, 476]]),
 ];
 ---
 
-<div class="scroller">
-  <svg viewBox="0 0 1120 200" role="img" aria-labelledby="pipeline-title">
+<figure class="not-content pipeline">
+  <svg viewBox="52 0 462 548" role="img" aria-labelledby="pipeline-title">
     <title id="pipeline-title">
-      Markdown becomes a content tree; that and CSS enter; style tree,
-      box tree, line layout, fragmentation and pages follow in order;
-      pages leave as a display structure for preview and a PDF for export.
+      Markdown becomes a content tree. The content tree and the CSS make
+      the style tree. The box tree, line layout, fragmentation, and pages
+      follow in order. The pages leave as a display structure for preview
+      and as a PDF for export.
     </title>
 
-    <g class="node">
-      <rect x="8" y="34" width="118" height="34" ></rect>
-      <text x="67" y="56">markdown</text>
-    </g>
-    <path class="wire" d="M126 51 H166"></path>
-    <g class="node">
-      <rect x="166" y="34" width="132" height="34" ></rect>
-      <text x="232" y="56">content tree</text>
-    </g>
-    <g class="node">
-      <rect x="8" y="112" width="132" height="34" ></rect>
-      <text x="74" y="134">CSS</text>
-    </g>
-
-    <path class="wire" d="M298 51 H328 Q336 51 336 59 V82 Q336 90 344 90 H364"></path>
-    <path class="wire" d="M140 129 H328 Q336 129 336 121 V98 Q336 90 344 90 H364"></path>
-
     {
-      stages.map((stage, i) => (
-        <g class="node">
-          <rect x={stage.x} y={73} width={stage.label.length * 7.6 + 30} height={34} />
-          <text x={stage.x + (stage.label.length * 7.6 + 30) / 2} y={95}>
-            {stage.label}
-          </text>
-          {i < stages.length - 1 && (
-            <path
-              class="wire"
-              d={`M${stage.x + stage.label.length * 7.6 + 30} 90 H${stages[i + 1]!.x - 6}`}
-            />
-          )}
+      wires.map((w) => (
+        <g class="wire" style={`--step: ${w.step}`}>
+          <path d={w.d} />
+          <path class="pulse" d={w.d} pathLength="1" />
+          <polygon points={w.head} />
         </g>
       ))
     }
 
-    <path class="wire" d="M968 90 H1000 Q1008 90 1008 82 V48 Q1008 40 1016 40 H1036"></path>
-    <path class="wire" d="M968 90 H1000 Q1008 90 1008 98 V132 Q1008 140 1016 140 H1036"></path>
-
-    <g class="node out">
-      <rect x="976" y="23" width="136" height="34" ></rect>
-      <text x="1044" y="45">display structure</text>
-    </g>
-    <g class="node out">
-      <rect x="976" y="123" width="136" height="34" ></rect>
-      <text x="1044" y="145">PDF</text>
-    </g>
+    {
+      nodes.map((n) => (
+        <g class:list={['node', { out: n.out }]} style={`--step: ${n.step}`}>
+          <rect class="plate" x={n.cx - W / 2 + 6} y={n.y + 6} width={W} height={H} />
+          <rect class="face" x={n.cx - W / 2} y={n.y} width={W} height={H} />
+          <text x={n.cx} y={n.y + H / 2 + 4.5}>{n.label}</text>
+          {n.out && (
+            <text class="role" x={n.cx} y={n.y + H + 26}>
+              {n.out}
+            </text>
+          )}
+        </g>
+      ))
+    }
   </svg>
-</div>
+</figure>
 
 <style>
-  .scroller {
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
+  .pipeline {
+    --beat: 0.42s;
+    /* Seventeen beats: fifteen steps and a rest before the loop. The
+       keyframe percentages below are fractions of this. */
+    --cycle: calc(var(--beat) * 17);
+    margin: 1.5rem 0;
   }
 
   svg {
     display: block;
-    min-width: 54rem;
     width: 100%;
+    max-width: 29rem;
     height: auto;
+    margin-inline: auto;
+    overflow: visible;
   }
 
-  .node rect {
+  .face {
     fill: var(--f-panel);
     stroke: var(--f-rule);
     stroke-width: 3;
   }
 
-  .node.out rect {
+  .plate {
+    fill: var(--f-ink-c);
+    opacity: 0;
+  }
+
+  .out .face {
     fill: var(--f-hi);
   }
 
-  .node text {
+  text {
     fill: var(--f-panel-ink);
     font-family: var(--f-chrome);
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: 0.04em;
     text-anchor: middle;
   }
 
-  .node.out text {
+  .out text {
     fill: var(--f-hi-ink);
   }
 
-  .wire {
+  text.role {
+    fill: var(--f-ink-2);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .wire path {
     fill: none;
     stroke: var(--f-rule);
     stroke-width: 3;
+  }
+
+  .wire polygon {
+    fill: var(--f-rule);
+  }
+
+  .wire .pulse {
+    stroke: var(--f-ink-m);
+    stroke-width: 5;
+    stroke-dasharray: 0.45 1;
+    stroke-dashoffset: 0.45;
+  }
+
+  /* The beats switch rather than fade. A label halfway between its
+     two colors on a face halfway between its two is unreadable. */
+  @media (prefers-reduced-motion: no-preference) {
+    .wire .pulse,
+    .wire polygon,
+    .node .face,
+    .node .plate,
+    .node text:not(.role) {
+      animation: var(--cycle) step-end infinite;
+      animation-delay: calc(var(--step) * var(--beat));
+    }
+
+    .wire .pulse {
+      animation-name: pipeline-run;
+      animation-timing-function: linear;
+    }
+
+    .wire polygon {
+      animation-name: pipeline-tip;
+    }
+
+    .node .face {
+      animation-name: pipeline-face;
+    }
+
+    .node .plate {
+      animation-name: pipeline-plate;
+    }
+
+    .node text:not(.role) {
+      animation-name: pipeline-label;
+    }
+  }
+
+  /* One beat is 5.88% of the cycle. */
+  @keyframes pipeline-run {
+    0% {
+      stroke-dashoffset: 0.45;
+    }
+    5.88%,
+    100% {
+      stroke-dashoffset: -1;
+    }
+  }
+
+  @keyframes pipeline-tip {
+    0%,
+    100% {
+      fill: var(--f-rule);
+    }
+    4.5% {
+      fill: var(--f-ink-m);
+    }
+    8% {
+      fill: var(--f-rule);
+    }
+  }
+
+  @keyframes pipeline-face {
+    0% {
+      fill: var(--f-hi);
+    }
+    13%,
+    100% {
+      fill: var(--f-panel);
+    }
+  }
+
+  @keyframes pipeline-label {
+    0% {
+      fill: var(--f-hi-ink);
+    }
+    13%,
+    100% {
+      fill: var(--f-panel-ink);
+    }
+  }
+
+  @keyframes pipeline-plate {
+    0% {
+      opacity: 1;
+    }
+    13%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* The outputs are yellow at rest, so only the plate marks the beat. */
+  .out .face,
+  .out text:not(.role) {
+    animation-name: none;
   }
 </style>
