@@ -495,6 +495,69 @@ fn a_column_alignment_sits_between_the_built_in_and_the_author_rules() {
     assert!(built_in < aligned && aligned < author, "{sheet}");
 }
 
+/// Acceptance: the margin of a paragraph in the EPUB is the margin in
+/// the PDF. The built-in sheet gives `p` none, so the engine lays out
+/// a paragraph with none, and a browser's `1em` has to be cancelled.
+/// The rules that cancel it come before every other rule.
+#[test]
+fn a_paragraph_has_the_margin_the_pdf_gives_it() {
+    let built_in = Stylesheets::parse(&[]);
+    let written = built_in.written();
+    let gives_margin = |element: &str| {
+        written.iter().flat_map(|sheet| &sheet.rules).any(|rule| {
+            rule.selectors.iter().any(|selector| selector == element)
+                && rule.declarations.iter().any(|d| d.property == "margin")
+        })
+    };
+    assert!(!gives_margin("p"), "the built-in sheet gives p a margin");
+
+    let sheet = entry(&write(&read(EVERY_VARIANT), "").bytes, "EPUB/book.css");
+    let reset = sheet.find("p, h1,").expect("the reset rule");
+    assert_eq!(reset, 0, "the reset is not at the head of\n{sheet}");
+    let rule = &sheet[..sheet.find('}').unwrap()];
+    assert!(rule.contains("margin: 0;"), "{rule}");
+    for element in [
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "aside",
+        "blockquote",
+        "pre",
+        "ul",
+        "ol",
+        "hr",
+        "table",
+    ] {
+        assert!(
+            rule.contains(&format!(" {element},")) || rule.contains(&format!(" {element} {{")),
+            "{element} is not reset in\n{rule}"
+        );
+    }
+    // Every element the engine lays out with no margin of its own is
+    // reset, and every one with a margin gets it after the reset.
+    for margin in ["margin: 1em 2em;", "margin: 0.5em 0;"] {
+        let at = sheet.find(margin).expect(margin);
+        assert!(at > reset, "{margin} comes before the reset");
+    }
+}
+
+/// Acceptance: a book whose CSS sets a paragraph margin keeps it.
+#[test]
+fn a_paragraph_margin_in_the_book_stays_in_the_epub() {
+    let epub = write(&read(EVERY_VARIANT), "p { margin: 0 0 1em }");
+    assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
+    let sheet = entry(&epub.bytes, "EPUB/book.css");
+    let reset = sheet.find("margin: 0;").expect("the reset");
+    let author = sheet
+        .find("p {\n  margin: 0 0 1em;")
+        .expect("the author rule");
+    assert!(reset < author, "{sheet}");
+}
+
 /// A file the host cannot hand over warns, and the run goes on
 /// without it.
 #[test]

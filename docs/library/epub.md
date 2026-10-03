@@ -234,7 +234,7 @@ If a file does not load, or is another type, fleuron warns. It then leaves out t
 
 ### The stylesheet
 
-The EPUB has one stylesheet. It holds the rules of the built-in stylesheet and of each author stylesheet, in the order of the cascade. Fleuron leaves out the CSS that describes pages, because the reading system makes the pages. It leaves out this CSS with no warning, from every stylesheet. The same stylesheet makes the PDF, and the PDF uses this CSS. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists what fleuron leaves out.
+The EPUB has one stylesheet. It starts with rules that give each element the margin and the weight that the PDF gives it. A reading system gives a paragraph a margin and a heading a bold weight, unless a rule says otherwise. The rules of the built-in stylesheet and of each author stylesheet follow, in the order of the cascade, so a rule of a book still applies. Fleuron leaves out the CSS that describes pages, because the reading system makes the pages. It leaves out this CSS with no warning, from every stylesheet. The same stylesheet makes the PDF, and the PDF uses this CSS. [CSS in an EPUB](../css-subset.mdx#css-in-an-epub) lists what fleuron leaves out.
 
 ## Warnings
 
