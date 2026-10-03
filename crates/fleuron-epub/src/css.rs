@@ -43,6 +43,17 @@ const PAGED_ELEMENTS: &[&str] = &["notes", "pagebreak", "columnbreak"];
 /// Element names the XHTML spells differently.
 const RENAMED: &[(&str, &str)] = &[("book", "body"), ("note", "aside")];
 
+/// A browser's own stylesheet, set back to what the engine's layout
+/// assumes. It goes before every other rule, and a rule of the same
+/// weight after it wins, so the built-in rules and the author's keep
+/// their say.
+const RESET: &str = "\
+p, h1, h2, h3, h4, h5, h6, blockquote, pre, ul, ol, li, hr, table, aside { margin: 0; }
+ul, ol { padding: 0; }
+h1, h2, h3, h4, h5, h6 { font-weight: normal; }
+pre, code { font-size: 1em; }
+";
+
 /// The alignment a table's source writes on a column. It goes after
 /// the built-in rules and before the author's, and it weighs one
 /// element, so order decides against both: it overrides `th, td` in
@@ -64,7 +75,7 @@ pub struct Context<'a> {
 /// The EPUB stylesheet for `sheets`.
 pub fn stylesheet(sheets: &Stylesheets, cx: &mut Context<'_>) -> String {
     let written = sheets.written();
-    let mut out = String::new();
+    let mut out = String::from(RESET);
     for sheet in &written {
         for face in &sheet.faces {
             font_face(face, &mut out, cx);

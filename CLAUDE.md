@@ -104,6 +104,8 @@ markdown in → valid PDF out**. The CLI runs it in
 
 - One issue per branch: `feat/<issue>-slug`, `chore/<issue>-slug`,
   `fix/<issue>-slug`.
+- Implementing an issue always ends in a PR. Open one when the work is
+  committed and the CI mirror is green, without waiting to be asked.
 - PR description references the issue with `Closes #N`. The issue's
   acceptance checkboxes must all be checked before review is requested.
 - PR and issue bodies are unwrapped: one line per paragraph and per
@@ -114,8 +116,9 @@ markdown in → valid PDF out**. The CLI runs it in
   `cargo fmt --all --check && cargo clippy --workspace --all-targets
   -- -D warnings && cargo test --workspace`. Pushing red and letting CI
   find it wastes a cycle; CI is verification, not development.
-- After opening the PR, watch it to green (`gh run watch`) before
-  handing it to review.
+- After opening the PR, and after every later push to it, watch CI to
+  green (`gh run watch`) before handing it to review. A red run is
+  fixed on the branch, not left for the reviewer.
 - **Claude does not merge.** CI green is the floor, not the finish line;
   a human reviews and merges every PR, including Claude's.
 - Never force-push `main`. History rewrites on feature branches are fine
