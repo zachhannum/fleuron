@@ -160,7 +160,7 @@ export interface FontFaceRule {
 
 
 export const SUBSET: Subset = {
-  version: '0.21.0',
+  version: '0.22.0',
   selectors: {
     elements: [
       'book',
