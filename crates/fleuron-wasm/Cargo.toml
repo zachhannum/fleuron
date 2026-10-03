@@ -8,14 +8,17 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
+readme.workspace = true
+# The TypeScript beside the module ships to npm, not to crates.io.
+exclude = ["npm"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-fleuron = { path = "../fleuron" }
-fleuron-epub = { path = "../fleuron-epub" }
-fleuron-markdown = { path = "../fleuron-markdown" }
+fleuron.workspace = true
+fleuron-epub.workspace = true
+fleuron-markdown.workspace = true
 wasm-bindgen = "0.2"
 serde_json = "1"
 

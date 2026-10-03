@@ -1,11 +1,12 @@
 /**
  * One version, in every place a version appears.
  *
- * The crates, the two packages, the peer range between them, the
- * constant the package reports itself by, the CSS subset it ships
- * and the lockfiles that mirror all of it name the same release. A
- * tag argument is checked against them as well, which is what a
- * release runs before it publishes anything.
+ * The crates, the requirement each states on another, the two
+ * packages, the peer range between them, the constant the package
+ * reports itself by, the CSS subset it ships and the lockfiles that
+ * mirror all of it name the same release. A tag argument is checked
+ * against them as well, which is what a release runs before it
+ * publishes anything.
  *
  *   node scripts/version.mjs            compare
  *   node scripts/version.mjs v0.1.0     compare, and against the tag
@@ -25,6 +26,15 @@ const SEMVER = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
 /** A place a version is written, and how it is read and rewritten. */
 const places = [
   text('Cargo.toml', 'workspace.package', /(\[workspace\.package\][\s\S]*?\nversion = ")([^"]+)(")/),
+  // The requirement one crate states on another is exact, so the
+  // version is what follows the `=`.
+  ...['fleuron', 'fleuron-markdown', 'fleuron-epub'].map((crate) =>
+    text(
+      'Cargo.toml',
+      `workspace.dependencies ${crate}`,
+      new RegExp(`(\\n${crate} = \\{ path = "[^"]+", version = "=)([^"]+)(")`),
+    ),
+  ),
   ...['fleuron', 'fleuron-cli', 'fleuron-epub', 'fleuron-fixtures', 'fleuron-markdown', 'fleuron-wasm'].map((crate) =>
     text('Cargo.lock', crate, new RegExp(`(name = "${crate}"\\nversion = ")([^"]+)(")`)),
   ),

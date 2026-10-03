@@ -28,6 +28,11 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      # Each crate is packed and built from what was packed, against
+      # the others as the registry would serve them, so a manifest
+      # crates.io refuses fails here rather than on a tag.
+      - name: The crates, as crates.io takes them
+        run: cargo publish --workspace --dry-run
       - uses: actions/setup-node@v4
         with:
           node-version: 22
