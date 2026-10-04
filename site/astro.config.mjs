@@ -38,14 +38,17 @@ function moduleServedFromPublic() {
 const docLinks = [remarkDocLinks, { root: docsRoot, base: '/' }];
 
 /**
- * Puts the demo components in scope for every prose page.
+ * Puts the demo components and the figures in scope for every prose page.
  *
  * Prose is read on GitHub as well as here, and an import line at the
  * top of a chapter is a line of code in the middle of a sentence
  * there. A page that wants a demo writes the tag and nothing else.
  */
 function demoComponents() {
-  const source = "import Playground from '~/components/demos/Playground.astro';";
+  const source = [
+    "import Playground from '~/components/demos/Playground.astro';",
+    "import Pipeline from '~/components/Pipeline.astro';",
+  ].join('\n');
   const estree = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
   return () => (tree) => {
     tree.children.unshift({ type: 'mdxjsEsm', value: source, data: { estree } });

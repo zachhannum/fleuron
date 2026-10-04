@@ -1,110 +1,339 @@
 ---
 // The pipeline is one-way, and the drawing says so: nothing points
-// left. Text is <text>, not paths, so it stays selectable and scales
+// up. Text is <text>, not paths, so it stays selectable and scales
 // with the reader's font settings.
-const stages = [
-  { x: 372, label: 'style tree' },
-  { x: 492, label: 'box tree' },
-  { x: 612, label: 'line layout' },
-  { x: 744, label: 'fragmentation' },
-  { x: 884, label: 'pages' },
+const W = 180;
+const H = 38;
+const LEFT = 150;
+const MID = 280;
+const RIGHT = 410;
+
+const nodes = [
+  { id: 'markdown', label: 'markdown', cx: LEFT, y: 10,
+    text: 'The manuscript, as one markdown file or many.',
+  },
+  { id: 'css', label: 'CSS', cx: RIGHT, y: 10,
+    text: 'The stylesheets that describe how to typeset the book.',
+  },
+  { id: 'content', label: 'content tree', cx: LEFT, y: 72,
+    text: 'The book as a semantic document: sections, headings, paragraphs, and inline text.',
+  },
+  { id: 'style', label: 'style tree', cx: MID, y: 150,
+    text: 'Each element of the content tree, with the CSS values that apply to it.',
+  },
+  { id: 'box', label: 'box tree', cx: MID, y: 212,
+    text: 'The boxes to lay out: blocks, inline text, and images.',
+  },
+  { id: 'line', label: 'line layout', cx: MID, y: 274,
+    text: 'The engine shapes the text, then breaks and hyphenates the lines.',
+  },
+  { id: 'fragment', label: 'fragmentation', cx: MID, y: 336,
+    text: 'The engine divides the lines into columns and pages. The break properties apply here.',
+  },
+  { id: 'pages', label: 'pages', cx: MID, y: 398,
+    text: 'The finished pages, with their running heads and page numbers.',
+  },
+  { id: 'display', label: 'display structure', cx: LEFT, y: 476, out: 'preview',
+    text: 'A description of every page for a painter to draw. The preview comes from it.',
+  },
+  { id: 'pdf', label: 'PDF', cx: RIGHT, y: 476, out: 'export',
+    text: 'The pages as a PDF file.',
+  },
 ];
+
+const HEAD = 8;
+
+/** A wire through the given points, stopping short of the arrowhead at its tip. */
+function wire(from: string, to: string, points: [number, number][]) {
+  const [tx, ty] = points[points.length - 1]!;
+  const stops = [...points.slice(0, -1), [tx, ty - HEAD + 1]];
+  return {
+    from,
+    to,
+    d: stops.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x} ${y}`).join(' '),
+    head: `${tx - 6},${ty - HEAD} ${tx + 6},${ty - HEAD} ${tx},${ty}`,
+  };
+}
+
+const wires = [
+  wire('markdown', 'content', [[LEFT, 48], [LEFT, 72]]),
+  wire('content', 'style', [[LEFT, 110], [LEFT, 130], [MID, 130], [MID, 150]]),
+  wire('css', 'style', [[RIGHT, 48], [RIGHT, 130], [MID, 130], [MID, 150]]),
+  wire('style', 'box', [[MID, 188], [MID, 212]]),
+  wire('box', 'line', [[MID, 250], [MID, 274]]),
+  wire('line', 'fragment', [[MID, 312], [MID, 336]]),
+  wire('fragment', 'pages', [[MID, 374], [MID, 398]]),
+  wire('pages', 'display', [[MID, 436], [MID, 456], [LEFT, 456], [LEFT, 476]]),
+  wire('pages', 'pdf', [[MID, 436], [MID, 456], [RIGHT, 456], [RIGHT, 476]]),
+];
+
+// A stage under the pointer or the focus lights the wires that enter
+// and leave it, and opens its card.
+const VIEW = { x: 52, w: 462, h: 548 };
+const pct = (n: number, of: number) => `${((n / of) * 100).toFixed(2)}%`;
+
+const active = nodes
+  .map((n) => {
+    const on = `.pipeline:has([data-stage="${n.id}"]:is(:hover, :focus-visible))`;
+    return [
+      `${on} .lit:is([data-from="${n.id}"], [data-to="${n.id}"]) { opacity: 1; }`,
+      `${on} .card[data-for="${n.id}"] { opacity: 1; visibility: visible; transform: none; transition-delay: 0.12s; }`,
+    ].join('\n');
+  })
+  .join('\n');
+
+/**
+ * Where a card sits. The first row opens upward and the last row
+ * downward, off the chart. The rows between open under their stage,
+ * and beside it where the page has the room.
+ */
+function place(n: (typeof nodes)[number]) {
+  const x =
+    n.cx === LEFT
+      ? `--x: ${pct(n.cx - W / 2 - VIEW.x, VIEW.w)}`
+      : n.cx === RIGHT
+        ? `--r: ${pct(VIEW.x + VIEW.w - (n.cx + W / 2), VIEW.w)}`
+        : `--x: 50%; --shift: calc(var(--card) / -2)`;
+  const y =
+    n.y < 72
+      ? `--b: ${pct(VIEW.h - n.y + 10, VIEW.h)}`
+      : `--t: ${pct(n.y + H + (n.out ? 44 : 10), VIEW.h)}`;
+  // Beside the content tree is the wire from the CSS, so its card
+  // opens past that wire.
+  const edge = n.cx === LEFT ? RIGHT - 6 : n.cx + W / 2;
+  const side = `--side-x: ${pct(edge - VIEW.x, VIEW.w)}; --side-t: ${pct(n.y, VIEW.h)}`;
+  return `${x}; ${y}; ${side}`;
+}
 ---
 
-<div class="scroller">
-  <svg viewBox="0 0 1120 200" role="img" aria-labelledby="pipeline-title">
-    <title id="pipeline-title">
-      Markdown becomes a content tree; that and CSS enter; style tree,
-      box tree, line layout, fragmentation and pages follow in order;
-      pages leave as a display structure for preview and a PDF for export.
-    </title>
-
-    <g class="node">
-      <rect x="8" y="34" width="118" height="34" ></rect>
-      <text x="67" y="56">markdown</text>
-    </g>
-    <path class="wire" d="M126 51 H166"></path>
-    <g class="node">
-      <rect x="166" y="34" width="132" height="34" ></rect>
-      <text x="232" y="56">content tree</text>
-    </g>
-    <g class="node">
-      <rect x="8" y="112" width="132" height="34" ></rect>
-      <text x="74" y="134">CSS</text>
-    </g>
-
-    <path class="wire" d="M298 51 H328 Q336 51 336 59 V82 Q336 90 344 90 H364"></path>
-    <path class="wire" d="M140 129 H328 Q336 129 336 121 V98 Q336 90 344 90 H364"></path>
-
+<figure class="not-content pipeline">
+  <div class="chart">
+  <svg
+    viewBox="52 0 462 548"
+    role="group"
+    aria-label="The pipeline, from markdown and CSS to the display structure and the PDF."
+  >
     {
-      stages.map((stage, i) => (
-        <g class="node">
-          <rect x={stage.x} y={73} width={stage.label.length * 7.6 + 30} height={34} />
-          <text x={stage.x + (stage.label.length * 7.6 + 30) / 2} y={95}>
-            {stage.label}
-          </text>
-          {i < stages.length - 1 && (
-            <path
-              class="wire"
-              d={`M${stage.x + stage.label.length * 7.6 + 30} 90 H${stages[i + 1]!.x - 6}`}
-            />
-          )}
+      wires.map((w) => (
+        <g class="wire">
+          <path d={w.d} />
+          <polygon points={w.head} />
         </g>
       ))
     }
 
-    <path class="wire" d="M968 90 H1000 Q1008 90 1008 82 V48 Q1008 40 1016 40 H1036"></path>
-    <path class="wire" d="M968 90 H1000 Q1008 90 1008 98 V132 Q1008 140 1016 140 H1036"></path>
+    {/* Two wires share a run into the style tree and out of the pages,
+        so the lit copies sit above every wire at rest. */}
+    {
+      wires.map((w) => (
+        <g class="wire lit" data-from={w.from} data-to={w.to}>
+          <path d={w.d} />
+          <polygon points={w.head} />
+        </g>
+      ))
+    }
 
-    <g class="node out">
-      <rect x="976" y="23" width="136" height="34" ></rect>
-      <text x="1044" y="45">display structure</text>
-    </g>
-    <g class="node out">
-      <rect x="976" y="123" width="136" height="34" ></rect>
-      <text x="1044" y="145">PDF</text>
-    </g>
+    {
+      nodes.map((n) => (
+        <g
+          class:list={['node', { out: n.out }]}
+          data-stage={n.id}
+          tabindex="0"
+          aria-describedby={`pipeline-${n.id}`}
+        >
+          <rect class="plate" x={n.cx - W / 2} y={n.y} width={W} height={H} />
+          <rect class="face" x={n.cx - W / 2} y={n.y} width={W} height={H} />
+          <text x={n.cx} y={n.y + H / 2 + 4.5}>{n.label}</text>
+          {n.out && (
+            <text class="role" x={n.cx} y={n.y + H + 26}>
+              {n.out}
+            </text>
+          )}
+        </g>
+      ))
+    }
   </svg>
-</div>
+
+  {
+    nodes.map((n) => (
+      <div
+        class:list={['card', { side: n.y >= 72 && !n.out }]}
+        id={`pipeline-${n.id}`}
+        role="tooltip"
+        data-for={n.id}
+        style={place(n)}
+      >
+        <strong>{n.label}</strong>
+        <p>{n.text}</p>
+      </div>
+    ))
+  }
+  </div>
+</figure>
+
+<style is:inline set:html={active}></style>
 
 <style>
-  .scroller {
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
+  .pipeline {
+    margin: 1.5rem 0;
+    container-type: inline-size;
+  }
+
+  .chart {
+    --card: min(15.5rem, 78%);
+    position: relative;
+    max-width: 29rem;
   }
 
   svg {
     display: block;
-    min-width: 54rem;
     width: 100%;
     height: auto;
+    overflow: visible;
   }
 
-  .node rect {
+  .node {
+    cursor: default;
+    outline: none;
+  }
+
+  .node:focus-visible .face {
+    stroke: var(--f-ink-m);
+  }
+
+  .card {
+    position: absolute;
+    z-index: 2;
+    top: var(--t, auto);
+    right: var(--r, auto);
+    bottom: var(--b, auto);
+    left: var(--x, auto);
+    margin-left: var(--shift, 0);
+    width: var(--card);
+    border: 3px solid var(--f-rule);
+    background: var(--f-panel);
+    color: var(--f-panel-ink);
+    box-shadow: 5px 5px 0 var(--f-ink-c);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+  }
+
+  @container (min-width: 39rem) {
+    .card.side {
+      top: var(--side-t);
+      left: calc(var(--side-x) + 16px);
+      margin-left: 0;
+      transform: translateX(-6px);
+    }
+  }
+
+  .card strong {
+    display: block;
+    padding: 0.35rem 0.7rem;
+    border-bottom: 3px solid var(--f-rule);
+    background: var(--f-hi);
+    color: var(--f-hi-ink);
+    font-family: var(--f-chrome);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .card p {
+    margin: 0;
+    padding: 0.6rem 0.7rem 0.7rem;
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .face {
     fill: var(--f-panel);
     stroke: var(--f-rule);
     stroke-width: 3;
   }
 
-  .node.out rect {
+  .plate {
+    fill: var(--f-ink-c);
+  }
+
+  .out .face {
     fill: var(--f-hi);
   }
 
-  .node text {
+  text {
     fill: var(--f-panel-ink);
     font-family: var(--f-chrome);
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: 0.04em;
     text-anchor: middle;
   }
 
-  .node.out text {
+  .out text {
     fill: var(--f-hi-ink);
   }
 
-  .wire {
+  text.role {
+    fill: var(--f-ink-2);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .wire path {
     fill: none;
     stroke: var(--f-rule);
     stroke-width: 3;
+  }
+
+  .wire polygon {
+    fill: var(--f-rule);
+  }
+
+  .lit {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .lit path {
+    stroke: var(--f-ink-m);
+    stroke-width: 5;
+  }
+
+  .lit polygon {
+    fill: var(--f-ink-m);
+  }
+
+  .node:is(:hover, :focus-visible) .face {
+    fill: var(--f-hi);
+  }
+
+  .node:is(:hover, :focus-visible) text:not(.role) {
+    fill: var(--f-hi-ink);
+  }
+
+  .node:is(:hover, :focus-visible) .plate {
+    transform: translate(6px, 6px);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .plate {
+      transition: transform 0.12s ease-out;
+    }
+
+    .lit {
+      transition: opacity 0.12s ease-out;
+    }
+
+    /* The card waits a moment to open, so a pointer that crosses the
+       chart does not open every card on its way. */
+    .card {
+      transition:
+        opacity 0.16s ease-out,
+        transform 0.16s ease-out,
+        visibility 0s 0.16s;
+    }
   }
 </style>
