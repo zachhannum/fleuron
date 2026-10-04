@@ -8,9 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
+readme.workspace = true
 
 [dependencies]
-fleuron = { path = "../fleuron" }
+fleuron.workspace = true
 pulldown-cmark.workspace = true
 
 [dev-dependencies]

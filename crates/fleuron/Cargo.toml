@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
+readme.workspace = true
 
 [dependencies]
 cssparser.workspace = true

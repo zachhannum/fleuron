@@ -8,14 +8,15 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
+readme.workspace = true
 
 [dependencies]
-fleuron = { path = "../fleuron" }
+fleuron.workspace = true
 cssparser.workspace = true
 miniz_oxide.workspace = true
 crc32fast.workspace = true
 
 [dev-dependencies]
-fleuron-markdown = { path = "../fleuron-markdown" }
+fleuron-markdown.workspace = true
 insta = "1"
 miniz_oxide.workspace = true
