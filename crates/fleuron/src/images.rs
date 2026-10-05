@@ -456,16 +456,16 @@ impl Contours {
                         else {
                             continue;
                         };
-                        if contours
+                        let kept = contours
                             .traced
                             .get(&index)
-                            .is_some_and(|kept| kept.digest == digest)
-                        {
-                            continue;
+                            .is_some_and(|kept| kept.digest == digest);
+                        if !kept {
+                            let contour = assets.bytes(index).and_then(trace);
+                            *traced += 1;
+                            contours.traced.insert(index, Traced { digest, contour });
                         }
-                        let contour = assets.bytes(index).and_then(trace);
-                        *traced += 1;
-                        if contour.is_none() && contours.warned.insert(url.clone()) {
+                        if contours.get(index).is_none() && contours.warned.insert(url.clone()) {
                             let origin = crate::content::origin(source, *position);
                             contours.warnings.push(Warning {
                                 message: format!(
@@ -475,12 +475,15 @@ impl Contours {
                                 origin: (!origin.is_empty()).then_some(origin),
                             });
                         }
-                        contours.traced.insert(index, Traced { digest, contour });
                     }
                     _ => {}
                 }
             }
         }
+        // The warnings are this run's: a sheet that stopped asking
+        // for a contour leaves none behind.
+        self.warnings.clear();
+        self.warned.clear();
         let mut traced = 0;
         for section in &book.sections {
             walk(
@@ -1527,6 +1530,44 @@ mod tests {
         assert_eq!(assets.lookup("missing.png"), None);
         assert_eq!(assets.warnings().len(), 1);
         assert!(assets.warnings()[0].message.contains("missing.png"));
+    }
+
+    /// A contour that traced to nothing warns while the sheet asks
+    /// for it, once however often the stage runs, and stops when the
+    /// sheet stops asking.
+    #[test]
+    fn a_missing_contour_warns_only_while_the_sheet_asks_for_it() {
+        let mut book = Book {
+            metadata: Default::default(),
+            sections: vec![crate::content::Section {
+                attributes: Default::default(),
+                blocks: vec![Block::Image {
+                    id: crate::content::NodeId::UNASSIGNED,
+                    url: "seal.svg".into(),
+                    alt: String::new(),
+                    attributes: Attributes::default(),
+                    position: None,
+                    span: None,
+                }],
+                ..Default::default()
+            }],
+        };
+        book.assign_node_ids();
+        let mut assets = Assets::none();
+        assets.add("seal.svg", br#"<svg width="64" height="64"/>"#.to_vec());
+        let anchored = "img { position: absolute; top: 0; left: 0; wrap-flow: end }";
+        let asking = styled(&book, &format!("{anchored} img {{ shape-outside: auto }}"));
+        let plain = styled(&book, anchored);
+
+        let mut contours = Contours::none();
+        assert_eq!(contours.update(&book, &asking, &assets), 1);
+        assert_eq!(contours.warnings().len(), 1);
+        assert_eq!(contours.update(&book, &asking, &assets), 0, "traced twice");
+        assert_eq!(contours.warnings().len(), 1);
+        contours.update(&book, &plain, &assets);
+        assert!(contours.warnings().is_empty(), "{:?}", contours.warnings());
+        contours.update(&book, &asking, &assets);
+        assert_eq!(contours.warnings().len(), 1);
     }
 
     /// A book of one paragraph, with no image in it.
