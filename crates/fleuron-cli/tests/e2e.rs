@@ -9,10 +9,10 @@
 //! trim, mirrored margins, a head and a folio on the opening page —
 //! and the PDF that comes back is checked for all of it.
 //!
-//! The book has a map and an ornament in it, so the same run covers
-//! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
-//! transparency kept as a soft mask, and `qpdf --check` clean over
-//! both. The ornament's transparency does a second job. The sheet
+//! The book has a map, an ornament and a tailpiece in it, so the same
+//! run covers what images do to a PDF: a JPEG embedded as it arrived,
+//! a PNG's transparency kept as a soft mask, an SVG drawn as paths,
+//! and `qpdf --check` clean over all three. The ornament's transparency does a second job. The sheet
 //! wraps the prose to the shape it traces, so the trace stage runs
 //! on the way to the PDF as well.
 //!
