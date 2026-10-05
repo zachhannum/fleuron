@@ -2332,7 +2332,8 @@ fn the_fixture_book_makes_an_epub_that_epubcheck_passes() {
 }
 
 /// Acceptance: `epubcheck` reports no errors on the fixture book
-/// with a cover, which the CLI reads from the frontmatter.
+/// with a cover, which the CLI reads from the frontmatter. The
+/// package document names the cover in both forms.
 #[test]
 fn the_fixture_book_with_a_cover_passes_epubcheck() {
     let book = fixture_with_cover("epub-cover");
@@ -2349,6 +2350,15 @@ fn the_fixture_book_with_a_cover_passes_epubcheck() {
         .find(|line| line.contains("properties=\"cover-image\""))
         .unwrap_or_else(|| panic!("no item is the cover:\n{package}"));
     assert!(cover.contains("media-type=\"image/jpeg\""), "{cover}");
+    let id = cover
+        .split("id=\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .expect("the item has an id");
+    assert!(
+        package.contains(&format!("<meta name=\"cover\" content=\"{id}\"/>")),
+        "{package}"
+    );
 
     let Some(check) = tool("epubcheck", &[epub.as_os_str()]) else {
         return;

@@ -63,7 +63,10 @@ impl Files {
     fn new() -> Files {
         let png = std::fs::read(fixtures().join("images/fleuron.png"))
             .expect("the fixture ornament is checked in");
-        Files(BTreeMap::from([("ornament.png", png)]))
+        Files(BTreeMap::from([
+            ("map.png", png.clone()),
+            ("ornament.png", png),
+        ]))
     }
 }
 
@@ -815,6 +818,58 @@ fn a_cover_the_host_did_not_send_warns_and_the_epub_has_none() {
     let package = entry(&epub.bytes, "EPUB/package.opf");
     assert!(!package.contains("cover-image"), "{package}");
     assert!(!package.contains("media/"), "{package}");
+}
+
+/// Acceptance: a book with a cover has `<meta name="cover">` in its
+/// metadata, and its `content` is the id of the item that carries
+/// `cover-image`.
+#[test]
+fn the_metadata_names_the_item_that_carries_cover_image() {
+    let mut book = read("![A map](map.png)\n\nThe text.\n");
+    book.metadata
+        .extra
+        .insert("cover".into(), "ornament.png".into());
+    let epub = write(&book, "");
+    assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
+    let package = entry(&epub.bytes, "EPUB/package.opf");
+    let item = package
+        .lines()
+        .find(|line| line.contains("properties=\"cover-image\""))
+        .unwrap_or_else(|| panic!("no item is the cover:\n{package}"));
+    assert!(item.contains("href=\"media/image-2.png\""), "{item}");
+    let id = item
+        .split("id=\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .expect("the item has an id");
+    let metadata = package
+        .split("</metadata>")
+        .next()
+        .expect("the package document has metadata");
+    assert!(
+        metadata.contains(&format!("<meta name=\"cover\" content=\"{id}\"/>\n")),
+        "{package}"
+    );
+    assert_eq!(package.matches("name=\"cover\"").count(), 1, "{package}");
+}
+
+/// Acceptance: a book with no cover, or with a `cover` that names no
+/// image the host sent, has no such element.
+#[test]
+fn a_book_with_no_cover_has_no_cover_element() {
+    let none = read("![A printer's ornament](ornament.png)\n\nThe text.\n");
+    let package = entry(&write(&none, "").bytes, "EPUB/package.opf");
+    assert!(!package.contains("name=\"cover\""), "{package}");
+
+    let mut missing = none.clone();
+    missing
+        .metadata
+        .extra
+        .insert("cover".into(), "jacket.png".into());
+    let epub = write(&missing, "");
+    assert_eq!(epub.warnings.len(), 1, "{:?}", epub.warnings);
+    let package = entry(&epub.bytes, "EPUB/package.opf");
+    assert!(!package.contains("name=\"cover\""), "{package}");
 }
 
 /// Acceptance: the crate names no type from the stages that lay a
