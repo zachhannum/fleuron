@@ -2048,6 +2048,11 @@ expression: tree
     },
     {
       "id": 295,
+      "element": "img",
+      "style": 4
+    },
+    {
+      "id": 296,
       "element": "notes",
       "style": 25
     }
