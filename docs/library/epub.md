@@ -242,7 +242,9 @@ An EPUB must have a title, a language, an identifier, and a date of modification
 
 ### Cover
 
-A book store or a reading app shows the cover image of an EPUB. The `cover` key of the metadata names that image by its url, as an image in the book does. Fleuron copies the image into the EPUB, and the package document marks it as the cover.
+A book store or a reading app shows the cover image of an EPUB. The `cover` key of the metadata names that image by its url, as an image in the book does. Fleuron copies the image into the EPUB.
+
+The package document marks the image as the cover in two forms. The manifest item of the image has `properties="cover-image"`, which is the EPUB 3 form. The metadata has a `meta` element with the name `cover`, which is the EPUB 2 form. Some reading apps and thumbnail tools read only the EPUB 2 form.
 
 The following frontmatter names the cover of a book:
 
