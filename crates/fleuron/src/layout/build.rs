@@ -949,7 +949,7 @@ impl Builder<'_, '_> {
         let ImageSize { width, height, .. } = self.paginator.image_size(
             style,
             url,
-            intrinsic.size(),
+            intrinsic.size_within(measure),
             within,
             measure,
             available,

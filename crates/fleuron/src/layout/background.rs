@@ -30,6 +30,8 @@ pub(super) struct Tile {
     asset: u32,
     /// The size the image's own header asks for, in points.
     intrinsic: (f32, f32),
+    /// Whether that is a size. An image with a ratio alone has none.
+    sized: bool,
     repeat: BackgroundRepeat,
     size: BackgroundSize,
     position: Coords,
@@ -52,6 +54,7 @@ impl Backdrop {
                 .map(|(asset, intrinsic)| Tile {
                     asset,
                     intrinsic: intrinsic.size(),
+                    sized: intrinsic.sized,
                     repeat: background.repeat,
                     size: background.size,
                     position: (background.position.x, background.position.y),
@@ -143,17 +146,31 @@ impl Tile {
     /// The size one copy of the image is drawn at, over a box `w` by
     /// `h`. An axis the sheet left `auto` follows the image's own
     /// ratio, and an image with no ratio to follow is drawn at the
-    /// size its header asks for.
+    /// size its header asks for. An image with a ratio and no size
+    /// is drawn as `contain` draws it where the sheet gives no size.
     fn drawn(&self, w: f32, h: f32) -> (f32, f32) {
         let (image_w, image_h) = self.intrinsic;
-        match self.size {
+        let unset = matches!(
+            self.size,
+            BackgroundSize::Auto
+                | BackgroundSize::Fixed {
+                    width: None,
+                    height: None
+                }
+        );
+        let size = if unset && !self.sized {
+            BackgroundSize::Contain
+        } else {
+            self.size
+        };
+        match size {
             BackgroundSize::Auto => (image_w, image_h),
             BackgroundSize::Cover | BackgroundSize::Contain => {
                 if image_w <= 0.0 || image_h <= 0.0 {
                     return (image_w, image_h);
                 }
                 let (across, down) = (w / image_w, h / image_h);
-                let scale = if self.size == BackgroundSize::Cover {
+                let scale = if size == BackgroundSize::Cover {
                     across.max(down)
                 } else {
                     across.min(down)
@@ -201,6 +218,7 @@ mod tests {
             height: 40,
             dpi_x: 72.0,
             dpi_y: 72.0,
+            sized: true,
         }
     }
 

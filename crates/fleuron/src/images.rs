@@ -3,7 +3,8 @@
 //! Layout needs one thing from an image — how big it is — and getting
 //! it by decoding would put a pixel buffer in the layout pass. So the
 //! engine reads the header: PNG's `IHDR` and `pHYs`, JPEG's `SOFn` and
-//! JFIF density, GIF's screen descriptor, WebP's chunk headers. The
+//! JFIF density, GIF's screen descriptor, WebP's chunk headers, and
+//! the `width`, `height` and `viewBox` of an SVG's root element. The
 //! file is kept as it arrived, and a painter is what decodes it.
 //!
 //! A url reaches the table from two places. The content tree names
@@ -66,6 +67,10 @@ pub const CSS_DPI: f32 = 96.0;
 
 /// An image's own idea of its size: pixels, and the resolution they
 /// are meant to be shown at.
+///
+/// A vector image has no pixels. Its `width` and `height` are its
+/// size in CSS pixels to the nearest whole one, and the resolution
+/// carries the remainder, so [`Intrinsic::size`] is exact.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Intrinsic {
     /// Width in pixels.
@@ -76,15 +81,33 @@ pub struct Intrinsic {
     pub dpi_x: f32,
     /// Vertical resolution in pixels per inch.
     pub dpi_y: f32,
+    /// Whether the file gives a size. False for a vector image that
+    /// gives a ratio alone: `width` and `height` are then the two
+    /// sides of the ratio, and what sizes the image is the box it is
+    /// placed in.
+    pub sized: bool,
 }
 
 impl Intrinsic {
     /// The intrinsic size in points, at the header's own resolution.
+    /// For an image with a ratio and no size, the two sides of the
+    /// ratio.
     pub fn size(self) -> (f32, f32) {
         (
             self.width as f32 / self.dpi_x * 72.0,
             self.height as f32 / self.dpi_y * 72.0,
         )
+    }
+
+    /// The size the image takes where no sheet gives it one, in a
+    /// box `measure` wide. An image with a ratio and no size fills
+    /// the width, as CSS has a replaced element do.
+    pub fn size_within(self, measure: f32) -> (f32, f32) {
+        let (width, height) = self.size();
+        if self.sized || width <= 0.0 {
+            return (width, height);
+        }
+        (measure, measure * height / width)
     }
 }
 
@@ -696,6 +719,12 @@ pub fn probe(bytes: &[u8]) -> Option<Intrinsic> {
         .or_else(|| jpeg(bytes))
         .or_else(|| gif(bytes))
         .or_else(|| webp(bytes))
+        .or_else(|| svg(bytes))
+}
+
+/// Whether a file is an SVG: its root element is `svg`.
+pub fn is_svg(bytes: &[u8]) -> bool {
+    svg_root(bytes).is_some()
 }
 
 fn be32(bytes: &[u8], at: usize) -> Option<u32> {
@@ -724,6 +753,7 @@ fn png(bytes: &[u8]) -> Option<Intrinsic> {
         height: be32(bytes, 20)?,
         dpi_x: CSS_DPI,
         dpi_y: CSS_DPI,
+        sized: true,
     };
     let mut at = 8usize;
     while let (Some(length), Some(kind)) = (be32(bytes, at), bytes.get(at + 4..at + 8)) {
@@ -796,6 +826,7 @@ fn jpeg(bytes: &[u8]) -> Option<Intrinsic> {
                 height: be16(bytes, data + 1)? as u32,
                 dpi_x,
                 dpi_y,
+                sized: true,
             });
         }
         if marker == 0xDA {
@@ -815,6 +846,7 @@ fn gif(bytes: &[u8]) -> Option<Intrinsic> {
         height: le16(bytes, 8)? as u32,
         dpi_x: CSS_DPI,
         dpi_y: CSS_DPI,
+        sized: true,
     })
 }
 
@@ -830,6 +862,7 @@ fn webp(bytes: &[u8]) -> Option<Intrinsic> {
             height,
             dpi_x: CSS_DPI,
             dpi_y: CSS_DPI,
+            sized: true,
         })
     };
     match bytes.get(12..16)? {
@@ -861,6 +894,132 @@ fn webp(bytes: &[u8]) -> Option<Intrinsic> {
         }
         _ => None,
     }
+}
+
+/// SVG: the root element's `width` and `height` where they are
+/// absolute lengths, and its `viewBox` for a side they leave out. A
+/// root with a `viewBox` and no size gives a ratio alone.
+fn svg(bytes: &[u8]) -> Option<Intrinsic> {
+    let root = svg_root(bytes)?;
+    let width = attribute(root, "width").and_then(svg_length);
+    let height = attribute(root, "height").and_then(svg_length);
+    let view = attribute(root, "viewBox").and_then(view_box);
+    match (width, height, view) {
+        (Some(width), Some(height), _) => vector(width, height, true),
+        (Some(width), None, Some((across, down))) => vector(width, width * down / across, true),
+        (None, Some(height), Some((across, down))) => vector(height * across / down, height, true),
+        (None, None, Some((across, down))) => vector(across, down, false),
+        _ => None,
+    }
+}
+
+/// A size in CSS pixels as an [`Intrinsic`]. The pixel count is the
+/// nearest whole one, and the resolution makes up the difference.
+fn vector(width: f32, height: f32, sized: bool) -> Option<Intrinsic> {
+    let whole = |side: f32| side.round().max(1.0);
+    let finite = |side: f32| side.is_finite() && side > 0.0;
+    (finite(width) && finite(height)).then(|| Intrinsic {
+        width: whole(width) as u32,
+        height: whole(height) as u32,
+        dpi_x: CSS_DPI * whole(width) / width,
+        dpi_y: CSS_DPI * whole(height) / height,
+        sized,
+    })
+}
+
+/// The attributes of the root element, where that element is `svg`.
+/// An XML declaration, a doctype and comments may come before it.
+fn svg_root(bytes: &[u8]) -> Option<&str> {
+    let after = |rest: &[u8], close: &[u8]| -> Option<usize> {
+        rest.windows(close.len())
+            .position(|window| window == close)
+            .map(|at| at + close.len())
+    };
+    let mut rest = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    loop {
+        rest = rest.trim_ascii_start();
+        let skip = if rest.starts_with(b"<?") {
+            after(rest, b"?>")?
+        } else if rest.starts_with(b"<!--") {
+            after(rest, b"-->")?
+        } else if rest.starts_with(b"<!") {
+            // A doctype may hold declarations of its own in brackets.
+            match rest.iter().position(|byte| matches!(byte, b'[' | b'>'))? {
+                at if rest[at] == b'[' => at + after(&rest[at..], b"]>")?,
+                at => at + 1,
+            }
+        } else {
+            break;
+        };
+        rest = &rest[skip..];
+    }
+    let rest = rest.strip_prefix(b"<")?;
+    let name = rest
+        .iter()
+        .position(|byte| byte.is_ascii_whitespace() || matches!(byte, b'>' | b'/'))?;
+    if rest[..name].rsplit(|byte| *byte == b':').next()? != b"svg" {
+        return None;
+    }
+    let mut quote = None;
+    for (at, byte) in rest.iter().enumerate().skip(name) {
+        match (quote, byte) {
+            (Some(open), _) if open == byte => quote = None,
+            (Some(_), _) => {}
+            (None, b'"' | b'\'') => quote = Some(byte),
+            (None, b'>') => return std::str::from_utf8(&rest[name..at]).ok(),
+            (None, _) => {}
+        }
+    }
+    None
+}
+
+/// One attribute's value out of a tag's attributes.
+fn attribute<'a>(mut tag: &'a str, name: &str) -> Option<&'a str> {
+    loop {
+        let (key, rest) = tag.split_once('=')?;
+        let rest = rest.trim_start();
+        let quote = rest.chars().next().filter(|c| matches!(c, '"' | '\''))?;
+        let (value, rest) = rest[1..].split_once(quote)?;
+        if key.trim() == name {
+            return Some(value);
+        }
+        tag = rest;
+    }
+}
+
+/// An absolute SVG length in CSS pixels. A percentage and a length
+/// relative to a font are `None`: neither is a size the file has on
+/// its own.
+fn svg_length(value: &str) -> Option<f32> {
+    let value = value.trim();
+    let number = value.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '%');
+    let per = match value[number.len()..].to_ascii_lowercase().as_str() {
+        "" | "px" => 1.0,
+        "pt" => CSS_DPI / 72.0,
+        "pc" => CSS_DPI / 6.0,
+        "in" => CSS_DPI,
+        "cm" => CSS_DPI / 2.54,
+        "mm" => CSS_DPI / 25.4,
+        "q" => CSS_DPI / 101.6,
+        _ => return None,
+    };
+    let pixels = number.parse::<f32>().ok()? * per;
+    (pixels.is_finite() && pixels > 0.0).then_some(pixels)
+}
+
+/// The width and height of a `viewBox`.
+fn view_box(value: &str) -> Option<(f32, f32)> {
+    let mut numbers = value
+        .split(|c: char| c.is_ascii_whitespace() || c == ',')
+        .filter(|part| !part.is_empty())
+        .map(|part| part.parse::<f32>().ok());
+    let (_, _, width, height) = (
+        numbers.next()??,
+        numbers.next()??,
+        numbers.next()??,
+        numbers.next()??,
+    );
+    (numbers.next().is_none() && width > 0.0 && height > 0.0).then_some((width, height))
 }
 
 #[cfg(test)]
@@ -1088,6 +1247,107 @@ mod tests {
         webp.extend([0, 0, 0, 0, 0, 0, 0, 0]); // chunk size and flags
         webp.extend([0x3F, 0x00, 0x00, 0x1F, 0x00, 0x00]); // 64 x 32, less one
         assert_eq!(probe(&webp).map(|i| (i.width, i.height)), Some((64, 32)));
+    }
+
+    /// Part: the probe reads an SVG root for `width`, `height` and
+    /// `viewBox`, and gives an intrinsic size and a ratio. An XML
+    /// declaration, a doctype and a comment before the root are
+    /// stepped over.
+    #[test]
+    fn an_svg_root_gives_up_its_size() {
+        let plain = probe(br#"<svg xmlns="http://www.w3.org/2000/svg" width="192" height="96"/>"#)
+            .expect("an SVG with a size probes");
+        assert_eq!((plain.width, plain.height), (192, 96));
+        assert_eq!(plain.size(), (144.0, 72.0));
+        assert!(plain.sized);
+
+        let prefaced = probe(
+            b"\xEF\xBB\xBF<?xml version=\"1.0\"?>\n<!-- a > rule -->\n\
+              <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"svg11.dtd\" [<!ENTITY a \"b\">]>\n\
+              <svg:svg title='a > b' width='1in' height=\"36pt\" viewBox=\"0 0 10 10\">",
+        )
+        .expect("the root is found after its preamble");
+        assert_eq!(prefaced.size(), (72.0, 36.0));
+
+        // A size no whole number of pixels holds is still exact.
+        let metric = probe(br#"<svg width="10mm" height="2.5cm">"#).expect("metric units probe");
+        let (width, height) = metric.size();
+        assert!((width - 28.346).abs() < 0.001, "{width}");
+        assert!((height - 70.866).abs() < 0.001, "{height}");
+    }
+
+    /// Part: a percentage size or no size falls back to the `viewBox`
+    /// ratio, and one side given takes the other from it.
+    #[test]
+    fn an_svg_without_a_size_falls_back_to_its_view_box() {
+        for root in [
+            r#"<svg viewBox="0 0 300 100">"#,
+            r#"<svg width="100%" height="100%" viewBox="0,0,300,100">"#,
+            r#"<svg width="20em" viewBox="-5 -5 300 100">"#,
+        ] {
+            let ratio = probe(root.as_bytes()).unwrap_or_else(|| panic!("{root} probes"));
+            assert!(!ratio.sized, "{root} has no size of its own");
+            assert_eq!(ratio.size(), (225.0, 75.0), "{root}");
+            assert_eq!(ratio.size_within(360.0), (360.0, 120.0), "{root}");
+        }
+        let wide = probe(br#"<svg width="150" viewBox="0 0 300 100">"#).unwrap();
+        assert!(wide.sized);
+        assert_eq!((wide.width, wide.height), (150, 50));
+        let tall = probe(br#"<svg height="50" viewBox="0 0 300 100">"#).unwrap();
+        assert_eq!((tall.width, tall.height), (150, 50));
+        assert_eq!(
+            tall.size_within(360.0),
+            tall.size(),
+            "a sized image keeps its size"
+        );
+    }
+
+    /// Part: an SVG with no size and no `viewBox` warns and is
+    /// skipped, the way an unreadable file is. The warning is raised
+    /// once however often the url is offered.
+    #[test]
+    fn an_svg_with_no_size_and_no_view_box_is_refused_once() {
+        for root in [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0\"/></svg>",
+            "<svg width=\"100%\" height=\"50%\">",
+            "<svg width=\"120\">",
+            "<svg viewBox=\"0 0 0 10\">",
+            "<svg viewBox=\"0 0 10\">",
+            "<html><svg width=\"1\" height=\"1\"/></html>",
+            "<svg width=\"10\" height=\"10\"",
+        ] {
+            assert!(probe(root.as_bytes()).is_none(), "{root} probed");
+        }
+        let mut assets = Assets::none();
+        let bare = b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>".to_vec();
+        assert_eq!(assets.add("rule.svg", bare.clone()), Added::Refused);
+        assert_eq!(assets.add("rule.svg", bare), Added::Refused);
+        assert_eq!(assets.warnings().len(), 1);
+        assert_eq!(
+            assets.warnings()[0].message,
+            "Image rule.svg has no size in it. The image is skipped.",
+        );
+        assert!(assets.assets().is_empty());
+    }
+
+    /// An SVG root cut off anywhere is `None` rather than a panic.
+    #[test]
+    fn a_truncated_svg_probes_to_nothing() {
+        let svg = "<?xml version=\"1.0\"?><!-- c --><!DOCTYPE svg [ ]>\
+                   <svg width=\"10\" height='10' viewBox=\"0 0 1 1\">";
+        for cut in 0..svg.len() {
+            assert!(probe(&svg.as_bytes()[..cut]).is_none(), "cut at {cut}");
+        }
+        assert!(probe(svg.as_bytes()).is_some());
+    }
+
+    /// An SVG has no alpha channel to trace, so it traces to nothing
+    /// and its box is what the text goes around.
+    #[test]
+    fn an_svg_traces_to_nothing() {
+        let svg = br#"<svg width="64" height="64"><circle cx="32" cy="32" r="16"/></svg>"#;
+        assert!(is_svg(svg));
+        assert!(trace(svg).is_none());
     }
 
     /// A header with no resolution in it is measured at 96dpi, and one

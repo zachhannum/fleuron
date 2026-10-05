@@ -221,14 +221,16 @@ fn asset() -> impl Strategy<Value = Asset> {
         1u32..4000,
         1.0f32..600.0,
         1.0f32..600.0,
+        any::<bool>(),
     )
-        .prop_map(|(url, width, height, dpi_x, dpi_y)| Asset {
+        .prop_map(|(url, width, height, dpi_x, dpi_y, sized)| Asset {
             url,
             intrinsic: Intrinsic {
                 width,
                 height,
                 dpi_x,
                 dpi_y,
+                sized,
             },
         })
 }
