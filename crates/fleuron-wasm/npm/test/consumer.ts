@@ -36,7 +36,7 @@ const require = createRequire(import.meta.url);
 await initWasm({ module_or_path: readFileSync(require.resolve('fleuron/fleuron_bg.wasm')) });
 
 const session = new Session();
-for (const url of ['images/plate.jpg', 'images/fleuron.png']) {
+for (const url of ['images/plate.jpg', 'images/fleuron.png', 'images/tailpiece.svg']) {
   session.addImage(url, new Uint8Array(readFileSync(url)));
 }
 session.setMarkdown('book.md', readFileSync('book.md', 'utf8'));
@@ -110,7 +110,7 @@ check('the tarball ships the module and the glue beside it', missing.length === 
 const home = join(where, 'host');
 mkdirSync(join(home, 'images'), { recursive: true });
 copyFileSync(join(root, 'fixtures', 'gulliver-excerpt.md'), join(home, 'book.md'));
-for (const image of ['plate.jpg', 'fleuron.png']) {
+for (const image of ['plate.jpg', 'fleuron.png', 'tailpiece.svg']) {
   copyFileSync(join(root, 'fixtures', 'images', image), join(home, 'images', image));
 }
 writeFileSync(

@@ -183,7 +183,11 @@ function open(): { client: Client; worker: Worker } {
 
 const markdown = readFileSync(fixture, 'utf8');
 /** The images the fixture book refers to, resolved the way the CLI does. */
-const images: [string, Uint8Array][] = ['images/plate.jpg', 'images/fleuron.png'].map((url) => [
+const images: [string, Uint8Array][] = [
+  'images/plate.jpg',
+  'images/fleuron.png',
+  'images/tailpiece.svg',
+].map((url) => [
   url,
   new Uint8Array(readFileSync(join(root, 'fixtures', url))),
 ]);
@@ -235,6 +239,46 @@ check(
   'and the pages place them',
   preview.pages.flatMap((page) => page.items).filter((item) => item.kind === 'image').length ===
     images.length,
+);
+
+// The tailpiece is an SVG. The reader reports the size its root
+// element gives, and the painter hands the url the host resolves it
+// to straight to an `<image>`, in the box layout gave it. A browser
+// draws an SVG from that url as it draws a PNG.
+const tailpiece = preview.assets.findIndex((asset) => asset.url === 'images/tailpiece.svg');
+const tailpieceAsset = preview.assets[tailpiece];
+check(
+  'the reader reports the size of an SVG from its root element',
+  tailpieceAsset !== undefined &&
+    tailpieceAsset.intrinsic.sized &&
+    tailpieceAsset.intrinsic.width === 192 &&
+    tailpieceAsset.intrinsic.height === 24 &&
+    tailpieceAsset.intrinsic.dpiX === 96,
+  JSON.stringify(tailpieceAsset?.intrinsic),
+);
+const closing = preview.pages.find((page) =>
+  page.items.some((item) => item.kind === 'image' && item.asset === tailpiece),
+);
+const tailpieceItem = closing?.items.find(
+  (item): item is ImageItem => item.kind === 'image' && item.asset === tailpiece,
+);
+const closingSvg =
+  closing === undefined
+    ? ''
+    : paintPage(closing, {
+        fonts: preview.fonts,
+        assets: preview.assets,
+        asset: (asset) => `blob:${asset.url}`,
+      });
+check(
+  'the painter hands an SVG to an `<image>` in the box layout gave it',
+  tailpieceItem !== undefined &&
+    tailpieceItem.w === 144 &&
+    tailpieceItem.h === 18 &&
+    /<image x="[\d.]+" y="[\d.]+" width="144" height="18" href="blob:images\/tailpiece\.svg"/.test(
+      closingSvg,
+    ),
+  closingSvg.match(/<image\b[^>]*>/)?.[0] ?? 'no image on the closing page',
 );
 
 // A range: the pages nobody asked for stay off the wire, but the book's

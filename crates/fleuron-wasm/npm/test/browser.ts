@@ -355,18 +355,32 @@ check('a missing face falls back visibly rather than painting nothing', fallback
 // made at the same zoom, so a pixel is a pixel on either side.
 // The images the harness handed over are on the page, drawn from the
 // same files the engine sized them by.
-const drawn = await page.evaluate(async (count: number) => {
+const { drawn, decoded } = await page.evaluate(async (count: number) => {
   const preview = globalThis.preview;
   let drawn = 0;
+  let decoded = 0;
   for (let number = 1; number <= count; number += 1) {
     preview.page = number;
     await globalThis.__settledOnPage(number);
-    drawn += document.querySelectorAll('#preview svg image').length;
+    for (const image of document.querySelectorAll('#preview svg image')) {
+      drawn += 1;
+      const probe = new Image();
+      probe.src = image.getAttribute('href') ?? '';
+      try {
+        await probe.decode();
+        decoded += probe.naturalWidth > 0 ? 1 : 0;
+      } catch {
+        // An image the browser cannot read is counted as not decoded.
+      }
+    }
   }
   preview.page = 1;
-  return drawn;
+  return { drawn, decoded };
 }, pages);
-check('the images the host handed over are painted, not outlined', drawn === 2, `${drawn} drawn`);
+check('the images the host handed over are painted, not outlined', drawn === 3, `${drawn} drawn`);
+// The tailpiece is an SVG, and its blob has no signature for the
+// browser to sniff. It decodes because the blob names its type.
+check('the browser reads every one of them, the SVG included', decoded === 3, `${decoded} decoded`);
 
 // Asset cache: leaving an image's page far enough behind revokes the
 // blob url it painted from, and returning to that page paints it
