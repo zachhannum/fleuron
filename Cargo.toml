@@ -52,6 +52,9 @@ icu_segmenter = "2"
 # default `simple-text` is not, since the engine arrives with glyphs
 # already shaped.
 krilla = { version = "0.5", default-features = false, features = ["raster-images"] }
+# An SVG goes into the PDF as paths, through the tree usvg parses.
+# Without the default `text`, which shapes through rustybuzz.
+usvg = { version = "0.45", default-features = false }
 
 # Alpha decoding, for `shape-outside: auto`. The same three the PDF
 # writer already links through krilla, so a contour costs the module
