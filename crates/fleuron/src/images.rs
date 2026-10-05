@@ -993,16 +993,19 @@ fn attribute<'a>(mut tag: &'a str, name: &str) -> Option<&'a str> {
 fn svg_length(value: &str) -> Option<f32> {
     let value = value.trim();
     let number = value.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '%');
-    let per = match value[number.len()..].to_ascii_lowercase().as_str() {
-        "" | "px" => 1.0,
-        "pt" => CSS_DPI / 72.0,
-        "pc" => CSS_DPI / 6.0,
-        "in" => CSS_DPI,
-        "cm" => CSS_DPI / 2.54,
-        "mm" => CSS_DPI / 25.4,
-        "q" => CSS_DPI / 101.6,
-        _ => return None,
-    };
+    let unit = &value[number.len()..];
+    let per = [
+        ("", 1.0),
+        ("px", 1.0),
+        ("pt", CSS_DPI / 72.0),
+        ("pc", CSS_DPI / 6.0),
+        ("in", CSS_DPI),
+        ("cm", CSS_DPI / 2.54),
+        ("mm", CSS_DPI / 25.4),
+        ("q", CSS_DPI / 101.6),
+    ]
+    .into_iter()
+    .find_map(|(name, per)| unit.eq_ignore_ascii_case(name).then_some(per))?;
     let pixels = number.parse::<f32>().ok()? * per;
     (pixels.is_finite() && pixels > 0.0).then_some(pixels)
 }
