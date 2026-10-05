@@ -21,7 +21,7 @@ pub struct LayoutOutput {
 
 `fonts` is the table `font_id` indexes. Both painters and the PDF writer resolve ids through it, so a run's face is the same face on both sides. An entry names the family, the face and style names, the slope and weight it answers for, and `variations`: where on its file's axes it sits, in user space. A variable file's named styles are one file at several locations, and the location is what distinguishes them.
 
-`assets` is the table that `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read.
+`assets` is the table that `Image.asset` and `Background.asset` index. An entry is the url an image was named by, in the content tree or in the stylesheet, and what its header reported: pixel dimensions and resolution. That is all layout read. An SVG has no pixels, so its dimensions are its size in CSS pixels. Where an SVG gives proportions and no size, `sized` is false, and the dimensions are the two sides of the proportions.
 
 `warnings` is the whole run's, style compilation included. See [diagnostics](../library/diagnostics.mdx).
 

@@ -924,6 +924,34 @@ img.map {
 }
 ```
 
+### Image formats
+
+The engine takes an image in one of these formats:
+
+```text
+PNG  JPEG  GIF  WebP  SVG
+```
+
+The formats are the same for an image in the manuscript and for a `background-image`. If a file is in another format, the engine warns and leaves the image out.
+
+An SVG is vector art, and it stays vector art in the PDF. The size of an SVG comes from the `width` and `height` of its root element. If the root element gives one side only, the `viewBox` gives the other side.
+
+If the root element gives no size, or a size in percentages, the SVG has proportions and no size. The proportions come from the `viewBox`. As an image, the SVG then takes the width of the block it is in. As a background, it takes the largest size that fits in the box.
+
+If an SVG has no size and no `viewBox`, the engine warns and leaves the image out.
+
+Text and filter effects in an SVG are not supported yet in the PDF. Convert the text to outlines before you place the file. The engine does not load a file that an SVG links to. Embed an image in the SVG that uses it.
+
+The following example puts a vector ornament behind every chapter title, at the size its file gives:
+
+```css
+h2 {
+  background-image: url("ornaments/rule.svg");
+  background-repeat: no-repeat;
+  background-position: center bottom;
+}
+```
+
 ### Backgrounds
 
 A background is a color, an image, or a color with an image over it. The engine paints it over the block's border box, and the border draws over it. Where a block breaks across a page turn, the engine paints the background on each page, behind the part the page holds.
@@ -1288,7 +1316,7 @@ img {
 }
 ```
 
-`auto` takes the shape from the image's own alpha channel. PNG, GIF and WebP carry one. JPEG does not, and neither does a PNG saved without transparency. Where there is no alpha channel, the text goes around the box instead, and the engine warns you.
+`auto` takes the shape from the image's own alpha channel. PNG, GIF and WebP carry one. JPEG and SVG do not, and neither does a PNG saved without transparency. Where there is no alpha channel, the text goes around the box instead, and the engine warns you.
 
 `shape-margin` adds space between the contour and the text. Margins on the image do not, because a contour replaces the box they surround. Use `shape-margin` instead. An upright edge gets exactly the space you ask for, and a sloping edge gets at least that much.
 
