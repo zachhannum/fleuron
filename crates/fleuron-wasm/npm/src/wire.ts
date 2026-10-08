@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 20;
+export const WIRE_VERSION = 21;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -25,6 +25,49 @@ export const PAGE_BACKGROUND = -2147483648;
  * layer a stylesheet can name.
  */
 export const PAGE_FURNITURE = 2147483647;
+
+/**
+ * How an item is mixed with what is already painted under it. Each
+ * one is a keyword of CSS `mix-blend-mode`, and `normal` is an item
+ * that covers what is under it.
+ */
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
+
+/** The modes, in the order the engine numbers them on the wire. */
+const BLEND_MODES: readonly BlendMode[] = [
+  'normal',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'color-dodge',
+  'color-burn',
+  'hard-light',
+  'soft-light',
+  'difference',
+  'exclusion',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
+];
 
 /** Which side of the spread a page falls on. */
 export type Side = 'recto' | 'verso';
@@ -126,6 +169,8 @@ export interface TextItem {
   glyphs: Glyph[];
   /** Which layer the run paints in. */
   layer: number;
+  /** How the run is mixed with what is already painted under it. */
+  blend: BlendMode;
 }
 
 /** A filled rectangle: rules, borders, backgrounds. */
@@ -143,6 +188,8 @@ export interface RectItem {
   color: string;
   /** Which layer the rectangle paints in. */
   layer: number;
+  /** How the rectangle is mixed with what is already painted under it. */
+  blend: BlendMode;
 }
 
 /** An image's own idea of its size, from its header. */
@@ -197,6 +244,8 @@ export interface ImageItem {
   alpha: number;
   /** Which layer the image paints in. */
   layer: number;
+  /** How the image is mixed with what is already painted under it. */
+  blend: BlendMode;
 }
 
 /**
@@ -239,6 +288,8 @@ export interface BackgroundItem {
   alpha: number;
   /** Which layer the image paints in. */
   layer: number;
+  /** How the image is mixed with what is already painted under it. */
+  blend: BlendMode;
 }
 
 /** How far one corner of a box is rounded: the two radii of the quarter ellipse it follows. */
@@ -298,6 +349,8 @@ export interface RoundedItem {
   color: string;
   /** Which layer the shape paints in. */
   layer: number;
+  /** How the shape is mixed with what is already painted under it. */
+  blend: BlendMode;
 }
 
 /** A single paint operation. */
@@ -656,6 +709,15 @@ function edges(r: Reader): Edges {
   return { top: r.f32(), right: r.f32(), bottom: r.f32(), left: r.f32() };
 }
 
+function blendMode(r: Reader): BlendMode {
+  const variant = r.varint();
+  const mode = BLEND_MODES[variant];
+  if (mode === undefined) {
+    throw new WireError(`blend mode ${variant} is not one this reader reads`);
+  }
+  return mode;
+}
+
 function item(r: Reader): DrawItem {
   const variant = r.varint();
   switch (variant) {
@@ -676,6 +738,7 @@ function item(r: Reader): DrawItem {
         color: r.color(),
         glyphs: r.seq(() => glyph(r)),
         layer: r.signed(),
+        blend: blendMode(r),
       };
     case 1:
       return {
@@ -686,6 +749,7 @@ function item(r: Reader): DrawItem {
         h: r.f32(),
         color: r.color(),
         layer: r.signed(),
+        blend: blendMode(r),
       };
     case 2:
       return {
@@ -697,6 +761,7 @@ function item(r: Reader): DrawItem {
         asset: r.varint(),
         alpha: r.byte(),
         layer: r.signed(),
+        blend: blendMode(r),
       };
     case 3:
       return {
@@ -714,6 +779,7 @@ function item(r: Reader): DrawItem {
         asset: r.varint(),
         alpha: r.byte(),
         layer: r.signed(),
+        blend: blendMode(r),
       };
     case 4:
       return {
@@ -726,6 +792,7 @@ function item(r: Reader): DrawItem {
         ring: edges(r),
         color: r.color(),
         layer: r.signed(),
+        blend: blendMode(r),
       };
     default:
       throw new WireError(`draw item ${variant} is not one this reader reads`);

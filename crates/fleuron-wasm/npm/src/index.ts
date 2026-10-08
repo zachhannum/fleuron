@@ -69,6 +69,7 @@ export {
   wireVersionOf,
   type Asset,
   type BackgroundItem,
+  type BlendMode,
   type Corners,
   type DrawItem,
   type Edges,

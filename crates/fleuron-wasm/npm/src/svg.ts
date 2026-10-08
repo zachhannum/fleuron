@@ -118,7 +118,19 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
   );
 }
 
+/**
+ * One item, mixed with what the page already holds where the item
+ * names a mode. The mode goes on a group around the item, so it reads
+ * the same on a run, a shape and an image with a clip of its own.
+ */
 function paint(item: DrawItem, options: PaintOptions, id: () => string): string {
+  const drawn = draw(item, options, id);
+  return item.blend === 'normal' || drawn === ''
+    ? drawn
+    : `<g style="mix-blend-mode: ${item.blend}">${drawn}</g>`;
+}
+
+function draw(item: DrawItem, options: PaintOptions, id: () => string): string {
   switch (item.kind) {
     case 'text':
       return text(item, options);

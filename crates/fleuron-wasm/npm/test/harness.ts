@@ -1070,6 +1070,37 @@ check(
   grounded !== null && grounded.pages.every((page) => blockLayers(page).every((layer) => layer === 0)),
 );
 
+// The blend mode crosses the wire beside the layer, and the preview
+// painter draws it: a run of a paragraph the sheet multiplies comes
+// back in that mode, in a group that names it, and the runs of a
+// sheet that names no mode come back in `normal`.
+const mixed = await client.preview([styleOp('p { mix-blend-mode: multiply }')]);
+const modes = new Set(mixed?.pages.flatMap((page) => page.items.map((item) => item.blend)));
+check(
+  'a blend mode the sheet named crosses the wire',
+  modes.size === 2 && modes.has('normal') && modes.has('multiply'),
+  `the modes were ${[...modes].join(' ')}`,
+);
+const multiplied = mixed?.pages.find((page) => page.items.some((item) => item.blend === 'multiply'));
+const blended =
+  mixed === null || multiplied === undefined ? '' : paintPage(multiplied, { fonts: mixed.fonts });
+check(
+  'the preview draws each blended item in a group that names its mode',
+  multiplied !== undefined &&
+    [...blended.matchAll(/<g style="mix-blend-mode: multiply"><(text|rect|path|image|defs)\b/g)].length ===
+      multiplied.items.filter((item) => item.blend === 'multiply').length,
+);
+const unmixed = await client.preview([styleOp('')]);
+check(
+  'and a book that names no blend mode comes back in normal, with no group',
+  unmixed !== null &&
+    unmixed.pages.every(
+      (page) =>
+        page.items.every((item) => item.blend === 'normal') &&
+        !paintPage(page, { fonts: unmixed.fonts }).includes('mix-blend-mode'),
+    ),
+);
+
 // The preview painter and the PDF export walk the same sorted list,
 // so a tint a sheet raises covers the prose in both.
 const tinted = 'section { background-color: #eeeeee }';
