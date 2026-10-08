@@ -490,6 +490,15 @@ fn package(
         "meta",
         modified,
     );
+    // Readers that predate EPUB 3 find the cover through this element.
+    if let Some(index) =
+        cover.and_then(|cover| resources.files().iter().position(|file| file.href == cover))
+    {
+        out.push_str(&format!(
+            "<meta name=\"cover\" content=\"media-{}\"/>\n",
+            index + 1
+        ));
+    }
     out.push_str("</metadata>\n<manifest>\n");
     out.push_str(
         "<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n",
