@@ -42,7 +42,7 @@ const opening = {
 // Nothing in the package fetches a url, so the images are fetched
 // here and the bytes handed over. The same file sizes the box and
 // fills it.
-for (const url of ['images/plate.jpg', 'images/fleuron.png']) {
+for (const url of ['images/plate.jpg', 'images/fleuron.png', 'images/tailpiece.svg']) {
   const file = await fetch(`/fixtures/${url}`);
   await preview.addImage(url, new Uint8Array(await file.arrayBuffer()));
 }

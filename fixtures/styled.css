@@ -135,3 +135,13 @@ img:not(.map) {
   shape-outside: auto;
   shape-margin: 3pt;
 }
+
+/* The tailpiece is vector art, and it has no alpha channel to wrap
+   to. It stays in the text and closes the excerpt in the middle of
+   the line. */
+img.tailpiece {
+  position: static;
+  shape-outside: none;
+  text-align: center;
+  margin-top: 12pt;
+}

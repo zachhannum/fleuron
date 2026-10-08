@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A swelled rule with a lozenge at its center. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="2in" height="0.25in" viewBox="0 0 192 24">
+  <path fill="#5c4a2e" d="M0 12 C40 10.5 70 10 84 12 C70 14 40 13.5 0 12 Z"/>
+  <path fill="#5c4a2e" d="M192 12 C152 10.5 122 10 108 12 C122 14 152 13.5 192 12 Z"/>
+  <path fill="#5c4a2e" d="M96 4 L104 12 L96 20 L88 12 Z"/>
+  <circle cx="96" cy="12" r="2" fill="#f4f1ea"/>
+</svg>

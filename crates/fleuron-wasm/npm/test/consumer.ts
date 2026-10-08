@@ -36,7 +36,7 @@ const require = createRequire(import.meta.url);
 await initWasm({ module_or_path: readFileSync(require.resolve('fleuron/fleuron_bg.wasm')) });
 
 const session = new Session();
-for (const url of ['images/plate.jpg', 'images/fleuron.png']) {
+for (const url of ['images/plate.jpg', 'images/fleuron.png', 'images/tailpiece.svg']) {
   session.addImage(url, new Uint8Array(readFileSync(url)));
 }
 session.setMarkdown('book.md', readFileSync('book.md', 'utf8'));
@@ -110,7 +110,7 @@ check('the tarball ships the module and the glue beside it', missing.length === 
 const home = join(where, 'host');
 mkdirSync(join(home, 'images'), { recursive: true });
 copyFileSync(join(root, 'fixtures', 'gulliver-excerpt.md'), join(home, 'book.md'));
-for (const image of ['plate.jpg', 'fleuron.png']) {
+for (const image of ['plate.jpg', 'fleuron.png', 'tailpiece.svg']) {
   copyFileSync(join(root, 'fixtures', 'images', image), join(home, 'images', image));
 }
 writeFileSync(
@@ -129,7 +129,7 @@ const said = JSON.parse(execFileSync(process.execPath, ['render.mjs'], { cwd: ho
 
 check('the installed package sets the fixture book', said.pages > 1, `${said.pages} pages`);
 check('every page of it has something to paint', said.bare === 0, `${said.bare} empty`);
-check('the images the host handed over are placed', said.images === 2, `${said.images} images`);
+check('the images the host handed over are placed', said.images === 3, `${said.images} images`);
 check('the prose is all there', said.characters > 10000, `${said.characters} characters`);
 check(
   'and the PDF it wrote is a PDF',

@@ -11,7 +11,7 @@
 import type { PageBox } from './protocol.js';
 
 /** The encoding this reader reads. */
-export const WIRE_VERSION = 19;
+export const WIRE_VERSION = 20;
 
 /**
  * The layer the background of a page paints in: under every layer a
@@ -155,6 +155,12 @@ export interface Intrinsic {
   dpiX: number;
   /** Vertical resolution in pixels per inch. */
   dpiY: number;
+  /**
+   * Whether the file gives a size. False for a vector image that
+   * gives a ratio alone: `width` and `height` are then the two sides
+   * of the ratio.
+   */
+  sized: boolean;
 }
 
 /**
@@ -792,7 +798,13 @@ function font(r: Reader): FontRefEntry {
 function asset(r: Reader): Asset {
   return {
     url: r.string(),
-    intrinsic: { width: r.varint(), height: r.varint(), dpiX: r.f32(), dpiY: r.f32() },
+    intrinsic: {
+      width: r.varint(),
+      height: r.varint(),
+      dpiX: r.f32(),
+      dpiY: r.f32(),
+      sized: r.bool(),
+    },
   };
 }
 

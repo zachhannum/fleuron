@@ -9,10 +9,10 @@
 //! trim, mirrored margins, a head and a folio on the opening page —
 //! and the PDF that comes back is checked for all of it.
 //!
-//! The book has a map and an ornament in it, so the same run covers
-//! what images do to a PDF: a JPEG embedded as it arrived, a PNG's
-//! transparency kept as a soft mask, and `qpdf --check` clean over
-//! both. The ornament's transparency does a second job. The sheet
+//! The book has a map, an ornament and a tailpiece in it, so the same
+//! run covers what images do to a PDF: a JPEG embedded as it arrived,
+//! a PNG's transparency kept as a soft mask, an SVG drawn as paths,
+//! and `qpdf --check` clean over all three. The ornament's transparency does a second job. The sheet
 //! wraps the prose to the shape it traces, so the trace stage runs
 //! on the way to the PDF as well.
 //!
@@ -62,7 +62,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "313c4e1d9c373b6b51bd283c683b5f0762205289555177e972835d105349cbf7";
+    "bc4a3d27d4aa3b74f2fcca6a52200ca6dde45e0263ac980e4ce7d80e2574b10b";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -782,8 +782,8 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
             })
         })
         .collect();
-    let [map, ornament] = images.as_slice() else {
-        panic!("the fixture book has a map and an ornament: {images:?}");
+    let [map, ornament, tailpiece] = images.as_slice() else {
+        panic!("the fixture book has a map, an ornament and a tailpiece: {images:?}");
     };
 
     // The map sits in the bottom corner of the page area, at the
@@ -835,6 +835,21 @@ fn the_named_image_is_set_against_the_page_and_the_prose_wraps() {
     assert!(
         (x - near).abs() < 0.5,
         "the ornament is not at the near edge: {ornament:?}",
+    );
+
+    // The tailpiece is an SVG. It stays in the text at the size its
+    // root element gives it, in the middle of the line.
+    let (index, x, _, w, h) = *tailpiece;
+    assert_eq!(index, pages.len() - 1, "the tailpiece closes the book");
+    assert_eq!((w, h), (144.0, 18.0), "2in by 0.25in");
+    let page = &pages[index];
+    let (left, right) = match page.side {
+        Side::Verso => (FORE_EDGE, SPINE),
+        Side::Recto => (SPINE, FORE_EDGE),
+    };
+    assert!(
+        (x - left - (page.width - right - x - w)).abs() < 0.5,
+        "the tailpiece is not centered: {tailpiece:?}",
     );
 }
 
@@ -1420,6 +1435,38 @@ fn the_fixture_jpeg_embeds_byte_for_byte() {
     assert!(readable.contains("/SMask"), "the ornament lost its alpha");
 }
 
+/// Acceptance: the PDF holds the tailpiece as the art it is. The
+/// curves the SVG draws are in the page, no third image object is
+/// written for it, and `qpdf --check` passes over the file.
+#[test]
+fn the_fixture_svg_stays_vector_in_the_pdf() {
+    let (pdf, stderr) = render("vector", &[]);
+    assert!(
+        !stderr.contains("tailpiece.svg"),
+        "the run complained about the tailpiece: {stderr}",
+    );
+    let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) else {
+        return;
+    };
+    assert!(
+        check.status.success(),
+        "qpdf --check: {}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr),
+    );
+    let streams = content_streams(&pdf).expect("qpdf is installed");
+    assert!(
+        streams.contains("40 10.5 70 10 84 12 c"),
+        "the curve the tailpiece draws is not in the PDF",
+    );
+    // The map, the ornament and the ornament's soft mask.
+    assert_eq!(
+        streams.matches("/Subtype /Image").count(),
+        3,
+        "the tailpiece was written as an image",
+    );
+}
+
 /// The document information dictionary names the book: the
 /// frontmatter's title and author, the engine as producer, and the
 /// book's own date rather than the hour the run started.
@@ -1668,8 +1715,15 @@ fn a_two_column_wrapped_page_paints_the_same_in_the_preview_and_the_pdf() {
             _ => None,
         })
         .collect();
-    let placed = placed_images(&streams, height);
-    assert_eq!(boxes.len(), 2, "the fixture book has a map and an ornament");
+    // The tailpiece is an SVG, which the PDF draws as paths under a
+    // matrix of its own. It is the last image in the book.
+    let mut placed = placed_images(&streams, height);
+    placed.extend(placed_vectors(&streams, height, TAILPIECE_UNITS));
+    assert_eq!(
+        boxes.len(),
+        3,
+        "the fixture book has a map, an ornament and a tailpiece"
+    );
     assert_eq!(boxes.len(), placed.len(), "the two disagree about how many");
     for (index, (paints, writes)) in boxes.iter().zip(&placed).enumerate() {
         for (paints, writes) in [
@@ -1914,6 +1968,44 @@ fn placed_images(streams: &str, height: f32) -> Vec<(f32, f32, f32, f32)> {
             (b == 0.0 && c == 0.0 && a > 0.0 && d > 0.0).then_some((x, height - up - d, a, d))
         })
         .collect()
+}
+
+/// The width and height of the tailpiece in its own units: the
+/// `viewBox` of `fixtures/images/tailpiece.svg`.
+const TAILPIECE_UNITS: (f32, f32) = (192.0, 24.0);
+
+/// Every SVG a PDF draws, as the box its art is scaled into, in the
+/// same coordinates and the same order.
+///
+/// An SVG is drawn as paths under one matrix, which scales the file's
+/// own units to the box and turns them the right way up. Each path
+/// names that matrix again, so one box is reported once.
+fn placed_vectors(streams: &str, height: f32, units: (f32, f32)) -> Vec<(f32, f32, f32, f32)> {
+    let mut placed = Vec::new();
+    for matrix in streams
+        .lines()
+        .filter_map(|line| line.trim().strip_suffix(" cm"))
+    {
+        let Some(values) = matrix
+            .split(' ')
+            .map(|value| value.parse().ok())
+            .collect::<Option<Vec<f32>>>()
+        else {
+            continue;
+        };
+        let [a, b, c, d, x, up] = values[..] else {
+            continue;
+        };
+        // A scale of one is the flip a run of text is written under.
+        if b != 0.0 || c != 0.0 || a <= 0.0 || d >= 0.0 || (a, d) == (1.0, -1.0) {
+            continue;
+        }
+        let found = (x, height - up, a * units.0, -d * units.1);
+        if placed.last() != Some(&found) {
+            placed.push(found);
+        }
+    }
+    placed
 }
 
 /// The fixture book on a divided page box with the map against it,

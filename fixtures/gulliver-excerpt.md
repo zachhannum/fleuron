@@ -134,4 +134,4 @@ I swore and subscribed to these articles with great cheerfulness and content, al
 
 The reader may please to observe, that, in the last article of the recovery of my liberty, the emperor stipulates to allow me a quantity of meat and drink sufficient for the support of 1724 Lilliputians.  Some time after, asking a friend at court how they came to fix on that determinate number, he told me that his majesty's mathematicians, having taken the height of my body by the help of a quadrant, and finding it to exceed theirs in the proportion of twelve to one, they concluded from the similarity of their bodies, that mine must contain at least 1724 of theirs, and consequently would require as much food as was necessary to support that number of Lilliputians.  By which the reader may conceive an idea of the ingenuity of that people, as well as the prudent and exact economy of so great a prince.
 
-
+![A tailpiece.](images/tailpiece.svg){.tailpiece}

@@ -904,5 +904,8 @@ function mediaType(bytes: Uint8Array): string {
   if (starts(0x52, 0x49, 0x46, 0x46)) {
     return 'image/webp';
   }
-  return 'application/octet-stream';
+  // The engine sized this file, and the one format it sizes that has
+  // no signature is SVG. A browser draws an SVG blob only under its
+  // own type.
+  return 'image/svg+xml';
 }

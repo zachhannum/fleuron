@@ -23,9 +23,9 @@ readme = "README.md"
 # The crates that depend on each other. A published crate resolves the
 # version, and every crate in a release is laid out by one engine, so
 # the requirement is exact.
-fleuron = { path = "crates/fleuron", version = "=0.20.0" }
-fleuron-markdown = { path = "crates/fleuron-markdown", version = "=0.20.0" }
-fleuron-epub = { path = "crates/fleuron-epub", version = "=0.20.0" }
+fleuron = { path = "crates/fleuron", version = "=0.22.0" }
+fleuron-markdown = { path = "crates/fleuron-markdown", version = "=0.22.0" }
+fleuron-epub = { path = "crates/fleuron-epub", version = "=0.22.0" }
 
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -52,6 +52,9 @@ icu_segmenter = "2"
 # default `simple-text` is not, since the engine arrives with glyphs
 # already shaped.
 krilla = { version = "0.5", default-features = false, features = ["raster-images"] }
+# An SVG goes into the PDF as paths, through the tree usvg parses.
+# Without the default `text`, which shapes through rustybuzz.
+usvg = { version = "0.45", default-features = false }
 
 # Alpha decoding, for `shape-outside: auto`. The same three the PDF
 # writer already links through krilla, so a contour costs the module

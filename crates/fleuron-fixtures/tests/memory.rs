@@ -9,8 +9,12 @@
 //! thing at a time, which is what the numbers need to mean what they
 //! say.
 
+use fleuron::images::{Assets, ImageLoader};
 use fleuron_fixtures::gate::{self, Target};
-use fleuron_fixtures::{Corpus, alloc, registry};
+use fleuron_fixtures::{Corpus, alloc, anchored_images, registry, styles};
+
+/// A swelled rule drawn as paths, 192 by 24 CSS pixels.
+const TAILPIECE: &[u8] = include_bytes!("../../../fixtures/images/tailpiece.svg");
 
 /// The tracker measures nothing unless it is the global allocator,
 /// and a binary is the one place it can be installed without imposing
@@ -21,11 +25,13 @@ static ALLOCATOR: alloc::Tracking = alloc::Tracking;
 fn main() {
     assert!(alloc::installed(), "the tracker is the global allocator");
     a_peak_outlives_the_allocation_that_made_it();
+    sizing_an_svg_allocates_nothing();
     if cfg!(debug_assertions) {
         println!("book scale: skipped, meaningful only in release");
         return;
     }
     a_book_scale_run_stays_inside_the_memory_ceilings();
+    a_book_that_places_an_svg_allocates_what_a_raster_book_does();
     println!("memory ceilings met");
 }
 
@@ -76,4 +82,58 @@ fn a_book_scale_run_stays_inside_the_memory_ceilings() {
     for peak in ceilings {
         assert!(peak.passed(), "{peak}");
     }
+}
+
+/// Layout decodes nothing. The size of an SVG is a read of its root
+/// element, and that read allocates no byte.
+fn sizing_an_svg_allocates_nothing() {
+    let (intrinsic, peak) = alloc::measure(|| fleuron::images::probe(TAILPIECE));
+    let intrinsic = intrinsic.expect("the tailpiece has a size");
+    assert_eq!((intrinsic.width, intrinsic.height), (192, 24));
+    assert_eq!(peak, 0, "the probe allocated {peak} bytes");
+}
+
+/// Acceptance: the allocation ceiling is unchanged for a book that
+/// places an SVG. The gate book with the tailpiece at the head of
+/// every chapter peaks where the same book peaks with a raster header
+/// of the same size, and inside the layout ceiling.
+fn a_book_that_places_an_svg_allocates_what_a_raster_book_does() {
+    /// One file under both names the two books use.
+    struct One(Vec<u8>);
+    impl ImageLoader for One {
+        fn load(&self, _url: &str) -> Option<Vec<u8>> {
+            Some(self.0.clone())
+        }
+    }
+    // A PNG header of the tailpiece's size, which is a whole image as
+    // far as layout reads one.
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    png.extend(13u32.to_be_bytes());
+    png.extend(b"IHDR");
+    png.extend(192u32.to_be_bytes());
+    png.extend(24u32.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+
+    let peak = |url: &str, bytes: Vec<u8>| {
+        let book = anchored_images::illustrated_with(&Corpus::GATE.book(), url);
+        let styles = styles(&book);
+        let assets = Assets::probe(&book, &styles, &One(bytes));
+        assert_eq!(assets.assets().len(), 1, "{url} did not probe");
+        assert!(assets.warnings().is_empty(), "{:?}", assets.warnings());
+        let (output, peak) =
+            alloc::measure(|| fleuron::layout::layout_book(&book, &styles, registry(), &assets));
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+        (output.pages.len(), peak)
+    };
+    let (vector_pages, vector) = peak("tail.svg", TAILPIECE.to_vec());
+    let (raster_pages, raster) = peak("tail.png", png);
+    assert_eq!(vector_pages, raster_pages);
+    assert_eq!(
+        vector, raster,
+        "an SVG moved the layout peak: {vector} bytes against {raster}"
+    );
+    assert!(
+        vector as u64 <= gate::budget::LAYOUT_PEAK,
+        "{vector} bytes is over the layout ceiling"
+    );
 }

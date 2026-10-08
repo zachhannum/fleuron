@@ -13,9 +13,13 @@ the engine bundles, rendered at 128px on a transparent ground with a
 `pHYs` of 300dpi. The two are the same pixels in the two raster
 formats the PDF writer decodes.
 
+`tailpiece.svg` is a swelled rule with a lozenge at its center, drawn
+for this repository. Its root element gives it a size of 2in by
+0.25in.
+
 Between them they cover what the writer does with an image: a JPEG
-embedded as it arrived, and a raster format whose alpha channel
-becomes a soft mask.
+embedded as it arrived, a raster format whose alpha channel becomes a
+soft mask, and an SVG drawn as paths.
 
 The ornament's alpha channel does a second job. `fixtures/styled.css`
 wraps the text around the shape that channel covers, so the ornament

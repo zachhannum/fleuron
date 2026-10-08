@@ -36,6 +36,8 @@ use crate::images::Assets;
 use crate::pages::{Corners, DrawItem, Glyph, LinkTo, OutlineEntry, Page, PageBox};
 use crate::style::Color;
 
+mod svg;
+
 /// What can go wrong turning the display structure into a PDF.
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
@@ -146,15 +148,34 @@ fn outline_node(entry: &OutlineEntry) -> OutlineNode {
     node
 }
 
-/// Every asset as a krilla image, indexed as the display structure
-/// indexes them.
+/// One asset as the writer draws it.
+enum Embedded {
+    /// Pixels, as an image object.
+    Raster(Image),
+    /// An SVG, drawn as the paths it holds.
+    Vector(Box<svg::Vector>),
+}
+
+impl Embedded {
+    /// Draws the asset over a box of `size` at the surface's origin.
+    fn draw(&self, surface: &mut Surface, size: Size) {
+        match self {
+            Embedded::Raster(image) => surface.draw_image(image.clone(), size),
+            Embedded::Vector(vector) => vector.draw(surface, size),
+        }
+    }
+}
+
+/// Every asset as the writer draws it, indexed as the display
+/// structure indexes them.
 ///
 /// The format is read off the bytes rather than off the url, since a
 /// url never has to name one: `/asset/8412` is a perfectly good
 /// one. PDF's `DCTDecode` is the JPEG stream
 /// itself, so a JPEG travels into the file as it arrived; the raster
-/// formats are decoded once, alpha channel and all.
-fn embed_images(assets: &Assets) -> Result<Vec<Image>, PdfError> {
+/// formats are decoded once, alpha channel and all. An SVG is parsed
+/// once and stays vector.
+fn embed_images(assets: &Assets) -> Result<Vec<Embedded>, PdfError> {
     assets
         .assets()
         .iter()
@@ -173,15 +194,19 @@ fn embed_images(assets: &Assets) -> Result<Vec<Image>, PdfError> {
 ///
 /// Interpolation is off, because an image placed at the size its own
 /// header asked for is already at the resolution it was made for.
-fn embed_image(bytes: Vec<u8>) -> Option<Image> {
+fn embed_image(bytes: Vec<u8>) -> Option<Embedded> {
+    if crate::images::is_svg(&bytes) {
+        return svg::Vector::parse(&bytes).map(|vector| Embedded::Vector(Box::new(vector)));
+    }
     let data = krilla::Data::from(bytes);
-    match () {
+    let image = match () {
         _ if data.as_ref().starts_with(b"\x89PNG\r\n\x1a\n") => Image::from_png(data, false),
         _ if data.as_ref().starts_with(&[0xFF, 0xD8]) => Image::from_jpeg(data, false),
         _ if data.as_ref().starts_with(b"GIF8") => Image::from_gif(data, false),
         _ if data.as_ref().starts_with(b"RIFF") => Image::from_webp(data, false),
         _ => None,
-    }
+    };
+    image.map(Embedded::Raster)
 }
 
 /// Every registered face as a krilla font, indexed by `font_id`.
@@ -277,7 +302,7 @@ fn paint(
     item: &DrawItem,
     page: &Page,
     fonts: &[Font],
-    images: &[Image],
+    images: &[Embedded],
     registry: &FontRegistry,
 ) -> Result<(), PdfError> {
     match item {
@@ -365,7 +390,7 @@ fn paint(
             })?;
             faded(surface, *alpha, |surface| {
                 surface.push_transform(&Transform::from_translate(*x, *y));
-                surface.draw_image(image.clone(), size);
+                image.draw(surface, size);
                 surface.pop();
             });
         }
@@ -416,7 +441,7 @@ fn paint(
                     *repeat,
                 ) {
                     surface.push_transform(&Transform::from_translate(left, top));
-                    surface.draw_image(image.clone(), size);
+                    image.draw(surface, size);
                     surface.pop();
                 }
                 surface.pop();
@@ -687,6 +712,8 @@ mod tests {
     /// the same image as lossless WebP.
     const ORNAMENT: &[u8] = include_bytes!("../../../fixtures/images/fleuron.png");
     const ORNAMENT_WEBP: &[u8] = include_bytes!("../../../fixtures/images/fleuron.webp");
+    /// A swelled rule drawn as paths, 2in by 0.25in.
+    const TAILPIECE: &[u8] = include_bytes!("../../../fixtures/images/tailpiece.svg");
 
     fn registry() -> &'static FontRegistry {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -1142,6 +1169,150 @@ mod tests {
             bytes.windows(MAP.len()).any(|window| window == MAP),
             "the embedded stream is not the file that went in",
         );
+    }
+
+    /// Part: the PDF export paints an SVG, and the art stays vector:
+    /// the page fills curves in the colour the file names, scaled
+    /// from the file's own units to the box layout gave it, and no
+    /// image object is written.
+    #[test]
+    fn an_svg_goes_into_the_pdf_as_paths() {
+        let items = vec![DrawItem::Image {
+            x: 144.0,
+            y: 300.0,
+            w: 144.0,
+            h: 18.0,
+            asset: 0,
+            alpha: 255,
+            layer: 0,
+        }];
+        let table = assets(&[("tailpiece.svg", TAILPIECE)]);
+        let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
+        assert!(!pdf.contains("/Subtype /Image"), "the SVG was rasterized");
+        let painted = content(&pdf);
+        // 192 units across 144pt, with the corner at (144, 300) from
+        // the top of a 648pt page.
+        assert!(
+            painted.contains("0.75 0 0 -0.75 144 348 cm"),
+            "the art is not scaled into its box:\n{painted}",
+        );
+        assert!(
+            painted.contains("0.36078432 0.2901961 0.18039216 rg"),
+            "the rule is not filled in its own colour:\n{painted}",
+        );
+        assert!(
+            painted.contains("40 10.5 70 10 84 12 c"),
+            "the curve the file draws is not in the page:\n{painted}",
+        );
+    }
+
+    /// Acceptance: an SVG behind a box is drawn as paths as well, one
+    /// copy to a tile, inside the clip of the box.
+    #[test]
+    fn an_svg_background_tiles_as_paths() {
+        let items = vec![DrawItem::Background {
+            x: 72.0,
+            y: 72.0,
+            w: 288.0,
+            h: 18.0,
+            radii: Corners::SQUARE,
+            tile_x: 72.0,
+            tile_y: 72.0,
+            tile_w: 144.0,
+            tile_h: 18.0,
+            repeat: true,
+            asset: 0,
+            alpha: 255,
+            layer: 0,
+        }];
+        let table = assets(&[("tailpiece.svg", TAILPIECE)]);
+        let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
+        assert!(!pdf.contains("/Subtype /Image"), "the SVG was rasterized");
+        let painted = content(&pdf);
+        assert_eq!(
+            painted.matches("40 10.5 70 10 84 12 c").count(),
+            2,
+            "two tiles cover the box:\n{painted}",
+        );
+        assert!(
+            painted.contains("W\nn"),
+            "the box does not clip:\n{painted}"
+        );
+    }
+
+    /// What an SVG holds beyond flat fills reaches the PDF as the
+    /// same kind of object: a gradient as a shading, a clip path as a
+    /// clip, a stroke as a stroke, and group opacity as a graphics
+    /// state.
+    #[test]
+    fn gradients_clips_and_strokes_stay_vector() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <defs>
+              <linearGradient id="fade"><stop offset="0" stop-color="#800"/><stop offset="1" stop-color="#008"/></linearGradient>
+              <clipPath id="disc"><circle cx="50" cy="50" r="40"/></clipPath>
+            </defs>
+            <rect width="100" height="100" fill="url(#fade)" clip-path="url(#disc)"/>
+            <g opacity="0.5"><path d="M10 10 L90 90" fill="none" stroke="#123456" stroke-width="3"/></g>
+            <text x="10" y="20">not outlined</text>
+          </svg>"##;
+        let items = vec![DrawItem::Image {
+            x: 0.0,
+            y: 0.0,
+            w: 75.0,
+            h: 75.0,
+            asset: 0,
+            alpha: 255,
+            layer: 0,
+        }];
+        let table = assets(&[("plate.svg", svg)]);
+        let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
+        assert!(!pdf.contains("/Subtype /Image"), "the SVG was rasterized");
+        assert!(pdf.contains("/ShadingType 2"), "no axial shading:\n{pdf}");
+        assert!(pdf.contains("/ca 0.5"), "the group opacity is lost:\n{pdf}");
+        assert!(pdf.contains("\n3 w\n"), "the stroke width is lost:\n{pdf}");
+        assert!(
+            pdf.contains("0.07058824 0.20392157 0.3372549 RG"),
+            "the stroke colour is lost:\n{pdf}",
+        );
+        assert!(content(&pdf).contains("W\nn"), "nothing clips:\n{pdf}");
+    }
+
+    /// The writer opens no file. An SVG that names an image by path
+    /// is drawn without it, and one that carries the bytes is drawn
+    /// with them.
+    #[test]
+    fn an_svg_reads_no_file_it_names() {
+        let item = vec![DrawItem::Image {
+            x: 0.0,
+            y: 0.0,
+            w: 72.0,
+            h: 72.0,
+            asset: 0,
+            alpha: 255,
+            layer: 0,
+        }];
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/images/plate.jpg"
+        );
+        let named = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><image width="96" height="96" href="{path}"/></svg>"#,
+        );
+        let table = assets(&[("named.svg", named.as_bytes())]);
+        let pdf = with_images(&page_of(item, 432.0, 648.0), &table, &Metadata::default());
+        assert!(!pdf.contains("/DCTDecode"), "the writer read {path}");
+    }
+
+    /// An SVG the probe sized and the parser cannot read fails the
+    /// export by name, as a raster file that does not decode does.
+    #[test]
+    fn an_svg_that_does_not_parse_is_named() {
+        let broken = br#"<svg width="10" height="10"><g></svg>"#;
+        let table = assets(&[("broken.svg", broken)]);
+        let output = page_of(Vec::new(), 432.0, 648.0);
+        let error = write(&output, registry(), &table, &Metadata::default())
+            .expect_err("a broken SVG embedded");
+        assert!(matches!(error, PdfError::Image(url) if url == "broken.svg"));
     }
 
     /// The raster formats decode, and an alpha channel becomes the

@@ -256,12 +256,13 @@ impl Paginator<'_> {
         };
         let (available, room) = self.styles.default_page().geometry.content_size();
         let margin = style.margin;
+        let measure = (available - margin.inline()).max(0.0);
         let super::image::ImageSize { width, height, .. } = self.image_size(
             style,
             url,
-            intrinsic.size(),
+            intrinsic.size_within(measure),
             (available, room),
-            (available - margin.inline()).max(0.0),
+            measure,
             (room - margin.top - margin.bottom).max(0.0),
             (!origin.is_empty()).then_some(origin),
         );
