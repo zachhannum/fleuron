@@ -55,6 +55,11 @@ fn layer() -> impl Strategy<Value = i32> {
     prop_oneof![-64i32..64, Just(DrawItem::PAGE_BACKGROUND)]
 }
 
+/// Any mode an item can be mixed in.
+fn blend() -> impl Strategy<Value = BlendMode> {
+    proptest::sample::select(BlendMode::ALL.to_vec())
+}
+
 fn text_item() -> impl Strategy<Value = DrawItem> {
     (
         coordinate(),
@@ -67,26 +72,29 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
         color(),
         origin(),
         layer(),
+        blend(),
     )
         .prop_map(
-            |(x, y, font_id, size, width, text, glyphs, color, origin, layer)| DrawItem::Text {
-                x,
-                y,
-                font_id,
-                size,
-                width,
-                // A run nothing transformed has no source of its
-                // own; one that was is covered where the transform is.
-                source: String::new(),
-                source_map: Vec::new(),
-                pseudo_element: origin.as_ref().map(|origin| origin.node),
-                origin,
-                features: fleuron::fonts::Features::NONE,
-                color,
-                text,
-                glyphs,
-                layer,
-                blend: BlendMode::Normal,
+            |(x, y, font_id, size, width, text, glyphs, color, origin, layer, blend)| {
+                DrawItem::Text {
+                    x,
+                    y,
+                    font_id,
+                    size,
+                    width,
+                    // A run nothing transformed has no source of its
+                    // own; one that was is covered where the transform is.
+                    source: String::new(),
+                    source_map: Vec::new(),
+                    pseudo_element: origin.as_ref().map(|origin| origin.node),
+                    origin,
+                    features: fleuron::fonts::Features::NONE,
+                    color,
+                    text,
+                    glyphs,
+                    layer,
+                    blend,
+                }
             },
         )
 }
@@ -100,16 +108,17 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             coordinate(),
             color(),
-            layer()
+            layer(),
+            blend()
         )
-            .prop_map(|(x, y, w, h, color, layer)| DrawItem::Rect {
+            .prop_map(|(x, y, w, h, color, layer, blend)| DrawItem::Rect {
                 x,
                 y,
                 w,
                 h,
                 color,
                 layer,
-                blend: BlendMode::Normal,
+                blend,
             }),
         (
             coordinate(),
@@ -118,9 +127,10 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             any::<u32>(),
             any::<u8>(),
-            layer()
+            layer(),
+            blend()
         )
-            .prop_map(|(x, y, w, h, asset, alpha, layer)| DrawItem::Image {
+            .prop_map(|(x, y, w, h, asset, alpha, layer, blend)| DrawItem::Image {
                 x,
                 y,
                 w,
@@ -128,7 +138,7 @@ fn item() -> impl Strategy<Value = DrawItem> {
                 asset,
                 alpha,
                 layer,
-                blend: BlendMode::Normal,
+                blend,
             }),
         (
             coordinate(),
@@ -138,10 +148,11 @@ fn item() -> impl Strategy<Value = DrawItem> {
             coordinate(),
             coordinate(),
             color(),
-            layer()
+            layer(),
+            blend()
         )
-            .prop_map(
-                |(x, y, w, h, radius, ring, color, layer)| DrawItem::Rounded {
+            .prop_map(|(x, y, w, h, radius, ring, color, layer, blend)| {
+                DrawItem::Rounded {
                     x,
                     y,
                     w,
@@ -153,9 +164,9 @@ fn item() -> impl Strategy<Value = DrawItem> {
                     ring: fleuron::style::Edges::all(ring),
                     color,
                     layer,
-                    blend: BlendMode::Normal,
+                    blend,
                 }
-            ),
+            }),
     ]
 }
 
