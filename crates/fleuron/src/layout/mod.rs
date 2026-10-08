@@ -306,11 +306,7 @@ impl Paginator<'_> {
                 character: found.character,
                 source: source.map(str::to_string),
                 warning: Warning {
-                    message: format!(
-                        "{face} has no glyph for `{}` (U+{:04X}). The engine draws the glyph \
-                         that the font uses for a missing character.",
-                        found.character, found.character as u32,
-                    ),
+                    message: format!("{face} has no glyph for `{}`.", found.character),
                     origin: (!at.is_empty()).then_some(at),
                 },
             });

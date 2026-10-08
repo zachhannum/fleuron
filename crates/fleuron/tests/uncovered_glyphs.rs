@@ -93,8 +93,7 @@ fn an_uncovered_character_warns_once_for_each_character_and_source() {
         .iter()
         .find(|warning| warning.message.contains('★'))
         .expect("the star warns");
-    assert!(star.message.contains("U+2605"), "{}", star.message);
-    assert!(star.message.contains("EB Garamond"), "{}", star.message);
+    assert_eq!(star.message, "EB Garamond Regular has no glyph for `★`.");
 
     // A session keeps each section's lines, and answers the same.
     let mut session = Session::new(registry());
