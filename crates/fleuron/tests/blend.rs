@@ -52,10 +52,14 @@ impl ImageLoader for Fixtures {
 }
 
 fn book() -> Book {
+    read(MANUSCRIPT)
+}
+
+fn read(markdown: &str) -> Book {
     let (sections, warnings) =
-        fleuron_markdown::to_sections(MANUSCRIPT, "blend.md", &Options::default());
+        fleuron_markdown::to_sections(markdown, "blend.md", &Options::default());
     assert!(warnings.is_empty(), "the frontend warned: {warnings:?}");
-    fleuron_markdown::assemble(fleuron_markdown::frontmatter(MANUSCRIPT), sections)
+    fleuron_markdown::assemble(fleuron_markdown::frontmatter(markdown), sections)
 }
 
 fn styles(book: &Book, css: &str) -> StyleTree {
@@ -66,10 +70,13 @@ fn styles(book: &Book, css: &str) -> StyleTree {
 }
 
 fn page(css: &str) -> Page {
-    let book = book();
-    let styles = styles(&book, css);
-    let assets = Assets::probe(&book, &styles, &Fixtures);
-    let mut pages = layout_book(&book, &styles, registry(), &assets).pages;
+    page_of(&book(), css)
+}
+
+fn page_of(book: &Book, css: &str) -> Page {
+    let styles = styles(book, css);
+    let assets = Assets::probe(book, &styles, &Fixtures);
+    let mut pages = layout_book(book, &styles, registry(), &assets).pages;
     assert_eq!(pages.len(), 1, "the chapter fits one page");
     pages.remove(0)
 }
@@ -234,4 +241,38 @@ fn an_element_takes_the_mode_of_the_nearest_element_around_it() {
     assert_eq!(runs(&nearest, "the water"), [BlendMode::Screen]);
     assert_eq!(rects(&nearest, CHIP), [BlendMode::Screen; 2]);
     assert_eq!(runs(&nearest, "Quoted"), [BlendMode::Multiply]);
+}
+
+/// Part of the same: a table and an image the sheet puts against the
+/// page are built apart from the blocks around them, and they carry
+/// their modes as well.
+#[test]
+fn a_table_and_an_image_against_the_page_carry_their_modes() {
+    let book = read(
+        "# The Quay\n\n\
+         | Tide | Hour |\n|---|---|\n| High | Six |\n\n\
+         ![an ornament](images/fleuron.png)\n",
+    );
+    let page = page_of(
+        &book,
+        "table { mix-blend-mode: multiply } \
+         tr { background-color: #f4f1ea } \
+         td { border: 1pt solid #858585 } \
+         img { position: absolute; top: 0; left: 0; mix-blend-mode: screen }",
+    );
+    for words in ["Tide", "High", "Six"] {
+        assert_eq!(runs(&page, words), [BlendMode::Multiply], "{words}");
+    }
+    assert!(
+        rects(&page, TINT)
+            .iter()
+            .all(|mode| *mode == BlendMode::Multiply)
+    );
+    assert!(
+        rects(&page, CHIP)
+            .iter()
+            .all(|mode| *mode == BlendMode::Multiply)
+    );
+    assert_eq!(images(&page), [BlendMode::Screen]);
+    assert_eq!(runs(&page, "The Quay"), [BlendMode::Normal]);
 }

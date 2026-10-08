@@ -70,6 +70,8 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 
 Every item names its own layer. `z-index` on a block sets that layer, and [the CSS subset](../css-subset.mdx) describes it under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the background of a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
 
+Every item has a blend mode as well. It comes from `mix-blend-mode` on an element, and [the CSS subset](../css-subset.mdx#blend-modes) describes it under Blend modes. `BlendMode` has one variant for `normal` and one for each of the fifteen blend modes of CSS. The TypeScript reader gives the mode as the CSS keyword, such as `'multiply'`.
+
 ## `Link`
 
 ```rust
@@ -114,6 +116,7 @@ Text {
     color: Color,
     glyphs: Vec<Glyph>,
     layer: i32,
+    blend: BlendMode,
 }
 ```
 
@@ -232,7 +235,7 @@ The inspection also carries `element_node`, the id of that element. A host that 
 ### `Rect`
 
 ```rust
-Rect { x: f32, y: f32, w: f32, h: f32, color: Color, layer: i32 }
+Rect { x: f32, y: f32, w: f32, h: f32, color: Color, layer: i32, blend: BlendMode }
 ```
 
 A filled rectangle: rules, borders, backgrounds. `color` is the fill, and its alpha is how opaque the fill is.
@@ -240,7 +243,16 @@ A filled rectangle: rules, borders, backgrounds. `color` is the fill, and its al
 ### `Image`
 
 ```rust
-Image { x: f32, y: f32, w: f32, h: f32, asset: u32, alpha: u8, layer: i32 }
+Image {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    asset: u32,
+    alpha: u8,
+    layer: i32,
+    blend: BlendMode,
+}
 ```
 
 A placed image. `asset` indexes `LayoutOutput::assets`, and the pixels are the host's. Layout never decoded them, so the placement comes from a header probe and the painter decodes the file.
@@ -266,6 +278,7 @@ Background {
     asset: u32,
     alpha: u8,
     layer: i32,
+    blend: BlendMode,
 }
 ```
 
@@ -289,6 +302,7 @@ Rounded {
     ring: Edges,
     color: Color,
     layer: i32,
+    blend: BlendMode,
 }
 ```
 
@@ -331,6 +345,8 @@ For an image, resolve `asset` through `LayoutOutput::assets` and draw the file t
 For a background, resolve `asset` the same way, clip to the box with its corners rounded by `radii`, and draw the file into the tile. Where `repeat` is true, step the tile across and down until the box is covered. For a url nothing can supply, draw nothing. A placeholder behind the text reads as part of the page.
 
 Fill every color at its alpha, and draw every image at its `alpha`. At 255 the fill or the image is opaque, and at 0 it does not show.
+
+Draw every item in its `blend` mode. An item in `normal` covers the items before it. An item in any other mode mixes with the items before it, and with nothing after it.
 
 For a rounded box, draw the outline with each corner as a quarter ellipse. Where `ring` is not zero, add the second outline to the same path and fill the path by the even-odd rule. The even-odd rule leaves the inside of the second outline empty.
 
