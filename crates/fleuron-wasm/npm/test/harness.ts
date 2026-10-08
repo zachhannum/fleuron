@@ -1943,6 +1943,45 @@ check(
   widths(stripped),
 );
 
+// A source keeps the place the book op gave it, whatever its text is
+// edited to. A text with no blocks yields no section, so the place is
+// not something the sections of the book can hold.
+const ordered = [
+  { name: 'a.md', text: 'Alpha.\n' },
+  { name: 'b.md', text: 'Bravo.\n' },
+  { name: 'c.md', text: 'Charlie.\n' },
+];
+const setOrder = (output: LayoutOutput | null): string =>
+  (output?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter((item): item is TextItem => item.kind === 'text')
+    .map((item) => item.text.trim())
+    .filter((text) => ordered.some((chapter) => chapter.text.trim() === text))
+    .join(' ');
+for (const [what, blank] of [
+  ['an empty text', ''],
+  ['white space', ' \n\t\n'],
+  ['frontmatter alone', '---\ntitle: Alpha\n---\n'],
+] as const) {
+  await client.apply([{ op: 'book', sources: ordered }]);
+  await client.apply([{ op: 'edit', name: 'a.md', text: blank }]);
+  const back = await client.preview([{ op: 'edit', name: 'a.md', text: 'Alpha.\n' }]);
+  check(
+    `a source edited to ${what} and back is set at the place the book op gave it`,
+    setOrder(back) === 'Alpha. Bravo. Charlie.',
+    setOrder(back),
+  );
+}
+await client.apply([
+  { op: 'book', sources: ordered.map((chapter, at) => (at === 1 ? { ...chapter, text: '' } : chapter)) },
+]);
+const filled = await client.preview([{ op: 'edit', name: 'b.md', text: 'Bravo.\n' }]);
+check(
+  'a source empty when the book opens, and then given text, is set at the place the book op gave it',
+  setOrder(filled) === 'Alpha. Bravo. Charlie.',
+  setOrder(filled),
+);
+
 // The classes and ids a source writes, for a style editor that
 // completes a selector. The engine read the brace syntax, so the
 // answer is the names a sheet can reach and no others.
