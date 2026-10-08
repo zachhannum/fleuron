@@ -20,41 +20,75 @@ impl Session<'_> {
     /// way in, so a host may hand over sections it built by hand.
     pub fn set_content(&mut self, mut book: Book) {
         book.assign_node_ids();
+        self.order.clear();
+        for section in &book.sections {
+            if let Some(source) = &section.source
+                && !self.order.contains(source)
+            {
+                self.order.push(source.clone());
+            }
+        }
         self.book = Cow::Owned(book);
         self.images = has_images(&self.book);
         self.recompile();
         self.stale = Stale::Trace;
     }
 
+    /// Names the sources of the book in the order they come, one that
+    /// has no section among them.
+    ///
+    /// The book alone cannot say where such a source belongs, and
+    /// this is what [`replace_source`](Session::replace_source) places
+    /// its sections by once it has some.
+    /// [`set_content`](Session::set_content) resets the order to the
+    /// sources the book carries, so this follows it.
+    pub fn set_source_order(&mut self, names: Vec<String>) {
+        self.order = names;
+    }
+
     /// Replaces every section that came from one source file.
     ///
     /// The source is the replaceable unit because a host names files
-    /// and one file may split into several sections. A name the book
-    /// does not already have appends instead, which is how a file it
-    /// has not seen before arrives.
+    /// and one file may split into several sections. A source keeps
+    /// its place when it is replaced with no sections, and is set
+    /// there again when it is next given some. A name the book has
+    /// not seen appends instead, which is how a new file arrives.
     pub fn replace_source(&mut self, name: &str, sections: Vec<Section>) {
-        let mut sections = sections;
+        let place = self.order.iter().position(|source| source == name);
+        if place.is_none() {
+            self.order.push(name.to_string());
+        }
+        let order = &self.order;
         let book = self.book.to_mut();
-        let mut rebuilt = Vec::with_capacity(book.sections.len() + sections.len());
-        let mut placed = false;
-        for section in std::mem::take(&mut book.sections) {
-            if section.source.as_deref() == Some(name) {
-                if !placed {
-                    rebuilt.append(&mut sections);
-                    placed = true;
-                }
-            } else {
-                rebuilt.push(section);
-            }
-        }
-        if !placed {
-            rebuilt.append(&mut sections);
-        }
-        book.sections = rebuilt;
+        let own = |section: &Section| section.source.as_deref() == Some(name);
+        let follows = |section: &Section| {
+            let at = section
+                .source
+                .as_ref()
+                .and_then(|source| order.iter().position(|known| known == source));
+            matches!((at, place), (Some(at), Some(place)) if at > place)
+        };
+        let at = book
+            .sections
+            .iter()
+            .position(own)
+            .or_else(|| book.sections.iter().position(follows))
+            .unwrap_or(book.sections.len());
+        // Nothing above the first of its sections is its own, so the
+        // index outlives the rest of them going.
+        book.sections.retain(|section| !own(section));
+        book.sections.splice(at..at, sections);
         book.assign_node_ids();
         self.images = has_images(&self.book);
         self.recompile();
         self.stale = Stale::Trace;
+    }
+
+    /// Drops every section that came from one source file, and its
+    /// place in the book with them.
+    pub fn remove_source(&mut self, name: &str) {
+        self.replace_source(name, Vec::new());
+        self.order.retain(|source| source != name);
     }
 
     /// Names every section that came from one source by these classes
@@ -424,6 +458,59 @@ mod tests {
         session.replace_source("two.md", vec![section("two.md", vec![paragraph("second")])]);
         session.preview();
         assert_eq!(session.book().sections.len(), 2);
+    }
+
+    fn sources(session: &Session) -> Vec<String> {
+        session
+            .book()
+            .sections
+            .iter()
+            .filter_map(|section| section.source.clone())
+            .collect()
+    }
+
+    /// Acceptance: a source replaced with no sections keeps its place,
+    /// and is set there again when it is given some.
+    #[test]
+    fn a_source_emptied_and_filled_again_keeps_its_place() {
+        let mut session = three_chapters();
+        session.replace_source("one.md", Vec::new());
+        session.preview();
+        assert_eq!(sources(&session), ["two.md", "three.md"]);
+
+        session.replace_source("one.md", vec![section("one.md", prose("alpha", 8))]);
+        session.preview();
+        assert_eq!(sources(&session), ["one.md", "two.md", "three.md"]);
+
+        session.replace_source("two.md", Vec::new());
+        session.replace_source("three.md", Vec::new());
+        session.replace_source("three.md", vec![section("three.md", prose("gamma", 8))]);
+        session.replace_source("two.md", vec![section("two.md", prose("beta", 8))]);
+        assert_eq!(sources(&session), ["one.md", "two.md", "three.md"]);
+    }
+
+    /// Acceptance: a source with no sections when the book arrives is
+    /// set at the place the host named for it.
+    #[test]
+    fn a_source_empty_when_the_book_arrives_is_set_at_its_place() {
+        let mut session = Session::new(registry());
+        session.set_content(book(vec![
+            section("one.md", prose("alpha", 8)),
+            section("three.md", prose("gamma", 8)),
+        ]));
+        session.set_source_order(vec!["one.md".into(), "two.md".into(), "three.md".into()]);
+        session.replace_source("two.md", vec![section("two.md", prose("beta", 8))]);
+        session.preview();
+        assert_eq!(sources(&session), ["one.md", "two.md", "three.md"]);
+    }
+
+    /// A source that was removed has no place to come back to.
+    #[test]
+    fn a_removed_source_comes_back_at_the_end() {
+        let mut session = three_chapters();
+        session.remove_source("one.md");
+        session.replace_source("one.md", vec![section("one.md", prose("alpha", 8))]);
+        assert_eq!(sources(&session), ["two.md", "three.md", "one.md"]);
     }
 
     /// The cache stores breaks and no positions, so a section the

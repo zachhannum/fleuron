@@ -270,6 +270,9 @@ pub struct Session<'a> {
     /// around. Empty for a sheet that names no contour.
     contours: Contours,
     book: Cow<'a, Book>,
+    /// The sources in the order the book holds them, one that has no
+    /// section among them.
+    order: Vec<String>,
     /// The sheets the tree was compiled from. `None` on the one-shot
     /// path, where the caller compiled the tree itself and nothing
     /// will ask for another.
@@ -338,6 +341,7 @@ impl<'a> Session<'a> {
             fonts,
             contours: Contours::none(),
             book: Cow::Owned(book),
+            order: Vec::new(),
             sheets: Some(sheets),
             prints: Prints::of(&styles, false),
             section_local: section_local(&styles),
@@ -393,6 +397,7 @@ impl<'a> Session<'a> {
             fonts: faces::FontFiles::over(registry.len()),
             contours: Contours::none(),
             book: Cow::Borrowed(book),
+            order: Vec::new(),
             sheets: None,
             styles: Cow::Borrowed(styles),
             prints: Prints::default(),
