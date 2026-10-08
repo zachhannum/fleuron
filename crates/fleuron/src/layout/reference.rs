@@ -229,6 +229,7 @@ fn inline_texts(inlines: &[Inline], anchors: &Anchors, texts: &mut BTreeMap<Node
         | Inline::Strong { children, .. }
         | Inline::Link { children, .. }
         | Inline::Strikethrough { children, .. }
+        | Inline::Highlight { children, .. }
         | Inline::Span { children, .. } = inline
         {
             inline_texts(children, anchors, texts);
@@ -387,6 +388,7 @@ impl Named {
                 Inline::Emphasis { children, .. }
                 | Inline::Strong { children, .. }
                 | Inline::Strikethrough { children, .. }
+                | Inline::Highlight { children, .. }
                 | Inline::Span { children, .. } => (None, Some(children)),
                 Inline::Link { url, children, .. } => (Some(url.as_str()), Some(children)),
             };

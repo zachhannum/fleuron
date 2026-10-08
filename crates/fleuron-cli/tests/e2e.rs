@@ -2636,7 +2636,10 @@ fn epub_text(epub: &Path) -> String {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric())
                 .collect();
-            if !matches!(name.as_str(), "em" | "strong" | "code" | "a" | "s" | "span") {
+            if !matches!(
+                name.as_str(),
+                "em" | "strong" | "code" | "a" | "s" | "mark" | "span"
+            ) {
                 text.push(' ');
             }
             rest = &rest[close + 1..];
@@ -3299,6 +3302,7 @@ fn append_inlines(inlines: &[Inline], text: &mut String, notes: &mut Notes) {
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
             | Inline::Strikethrough { children, .. }
+            | Inline::Highlight { children, .. }
             | Inline::Span { children, .. } => append_inlines(children, text, notes),
         }
     }

@@ -151,6 +151,7 @@ em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
 s { text-decoration: line-through }
+mark { background-color: #ffff00 }
 
 @page {
   size: 432pt 648pt;

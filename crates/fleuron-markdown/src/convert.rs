@@ -1363,6 +1363,7 @@ fn take_notes_in_inlines(
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
             | Inline::Strikethrough { children, .. }
+            | Inline::Highlight { children, .. }
             | Inline::Span { children, .. } => {
                 take_notes_in_inlines(children, notes, called, missing)
             }

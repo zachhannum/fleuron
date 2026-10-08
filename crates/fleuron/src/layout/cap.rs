@@ -110,6 +110,7 @@ fn take_initial(inlines: &[Inline]) -> Option<Initial> {
                 | Inline::Strong { children, .. }
                 | Inline::Link { children, .. }
                 | Inline::Strikethrough { children, .. }
+                | Inline::Highlight { children, .. }
                 | Inline::Span { children, .. } => texts(children, out),
             }
         }
