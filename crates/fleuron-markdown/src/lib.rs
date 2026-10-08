@@ -107,6 +107,18 @@ pub struct Dialect {
     /// Footnotes, as GitHub writes them: `[^1]` in the prose, and
     /// `[^1]: the note` on a line of its own.
     pub footnotes: bool,
+    /// `%%a comment%%`, as Obsidian writes one: in a line of prose
+    /// or over several blocks, and never set.
+    pub comments: bool,
+    /// `==highlighted==`, as Obsidian writes it.
+    pub highlights: bool,
+    /// `^name` at the end of a paragraph or a list item, which is
+    /// what an Obsidian link names the block by, and is never set.
+    pub block_ids: bool,
+    /// A blockquote that opens with `[!type]` is a callout: the type
+    /// is a class on the quotation, and the rest of the line its
+    /// title.
+    pub callouts: bool,
 }
 
 impl Default for Dialect {
@@ -130,6 +142,10 @@ impl Dialect {
             smart_punctuation: false,
             breaks: true,
             footnotes: true,
+            comments: false,
+            highlights: false,
+            block_ids: false,
+            callouts: false,
         }
     }
 
@@ -150,6 +166,10 @@ impl Dialect {
         Dialect {
             gfm: true,
             wikilinks: true,
+            comments: true,
+            highlights: true,
+            block_ids: true,
+            callouts: true,
             ..Dialect::fleuron()
         }
     }
