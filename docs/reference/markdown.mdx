@@ -98,6 +98,7 @@ Warnings accumulate the same way, and each one already names the file it came fr
 | `#` … `######` | `heading`, at that level |
 | a paragraph | `paragraph` |
 | `> …` | `blockquote`, nesting |
+| `> [!type] Title` | `blockquote`, with the classes `callout` and the type |
 | a fenced or an indented block | `code_block` |
 | `---` | `thematic_break` |
 | `\pagebreak` on a line of its own | `page_break` |
@@ -342,6 +343,7 @@ A link to a source or a heading that the book does not have also prints nothing.
 | `*em*` | `emphasis` |
 | `**strong**` | `strong` |
 | `~~struck~~` | `strikethrough` |
+| `==marked==` | `highlight` |
 | `` `code` `` | `code` |
 | `[text](url)` | `link` |
 | `[text]{.class}` | `span` |
@@ -349,6 +351,8 @@ A link to a source or a heading that the book does not have also prints nothing.
 | two spaces or `\` at the end of a line | `break` |
 
 `~~struck~~` needs the `gfm` dialect, which is off by default. The [dialects](#dialects) below say how to turn it on. The built-in stylesheet draws a rule through it.
+
+`==marked==` and `> [!type] Title` need `Dialect::obsidian()`. [Obsidian notes](#obsidian-notes) describes both.
 
 A line wrapped in the source is a space in the tree. The shaper never sees the markdown's ragged column.
 
@@ -384,6 +388,80 @@ The note becomes a `note` inline where the reference was written. A note holds b
 The reference and the note can be written in either order. A note can be written far from the paragraph that refers to it. The engine puts the note at the foot of the page its reference lands on. [The CSS subset](../css-subset.mdx#footnotes) says how to style the note and the area at the foot of the page.
 
 Two things warn. A note that no reference names is kept where it was written. Where two notes are written under one label, the reference takes the second, and the first is kept where it was written.
+
+## Obsidian notes
+
+Under `Dialect::obsidian()`, the frontend reads four more constructs that an Obsidian note can hold. Each construct has a switch of its own in the [dialects](#dialects) table.
+
+| markdown | content tree |
+|---|---|
+| `%%comment%%` | nothing |
+| `==marked==` | `highlight` |
+| `^name` at the end of a paragraph or a list item | nothing |
+| `> [!type] Title` | `blockquote`, with the classes `callout` and the type |
+
+Inside a code span or a code block, all four are code.
+
+### Comments
+
+The engine does not lay out a comment. A comment can be part of one line, or it can hold several blocks. The following example has one comment of each kind:
+
+```markdown
+He arrived at noon. %%Compare the time with chapter two.%%
+
+%%
+Cut this scene?
+
+- The inn
+- The letter
+%%
+```
+
+A `%%` with no second `%%` after it is prose.
+
+### Highlights
+
+`==marked==` becomes a `highlight`, an inline element that a stylesheet reaches as `mark`. The built-in stylesheet gives it a yellow background. The following rule changes the color:
+
+```css
+mark { background-color: #ffe9a8 }
+```
+
+The text must touch both marks. `a == b` is prose.
+
+### Block ids
+
+A block id is a name that Obsidian uses to link to one block. It is a `^` and a name at the end of a paragraph or a list item. The name can also be on a line of its own under the block. The engine does not lay out a block id. The following example names a paragraph and a list item:
+
+```markdown
+He waited for the tide. ^tide
+
+- The first item ^first
+```
+
+A link to a block id, such as `[[Chapter 3#^tide]]`, is not supported yet. It names nothing in the book.
+
+### Callouts
+
+A callout is a blockquote that starts with `[!type]`. It becomes a `blockquote` with two classes: `callout`, and the type in lowercase. The engine does not lay out the marker.
+
+The text after the marker on the first line is the title. The title becomes a paragraph with the class `callout-title`. The built-in stylesheet makes the title bold. A callout with no text after the marker has no title paragraph.
+
+The following example is a callout of the type `warning`:
+
+```markdown
+> [!warning] Mind the gap
+> The platform is low on this side.
+```
+
+The following rules give every callout a background, and give a warning a different one:
+
+```css
+.callout { background-color: #f4f1ea; padding: 6pt }
+.warning { background-color: #fbe9e7 }
+```
+
+In Obsidian, a `+` or a `-` after the marker folds the callout. The engine ignores the sign.
 
 ## What warns
 
@@ -423,6 +501,10 @@ These constructs have no counterpart in the content tree. The frontend lays them
 | `smart_punctuation` | Dashes and curly quotes at parse rather than in the manuscript. |
 | `breaks` | A line of nothing but `\pagebreak` or `\columnbreak` starts a new page or the next column. On by default. |
 | `footnotes` | `[^label]` and `[^label]:`, as GitHub writes them. On by default. |
+| `comments` | `%%comment%%`, which the engine does not lay out. |
+| `highlights` | `==marked==`, which becomes a highlight. |
+| `block_ids` | `^name` at the end of a paragraph or a list item, which the engine does not lay out. |
+| `callouts` | A blockquote that starts with `[!type]` is a callout. |
 
 `Dialect::fleuron()`, `Dialect::common_mark()`, `Dialect::gfm()` and `Dialect::obsidian()` are the four named combinations. `fleuron()` is the default, and the other three are named after whose markdown they read. `common_mark()` is the strict one: frontmatter and nothing else, so a brace run, a table, and `\pagebreak` are prose.
 
