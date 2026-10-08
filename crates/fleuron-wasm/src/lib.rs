@@ -255,9 +255,8 @@ impl Session {
     }
 
     /// Replaces every section that came from one source, reparsing
-    /// that source alone. A source whose text has no blocks keeps its
-    /// place in the book for the text it is given next. A name the
-    /// book has not seen appends instead, which is how a new file
+    /// that source alone. A name the book does not already have
+    /// appends instead, which is how a file it has not seen before
     /// arrives.
     ///
     /// This is the keystroke path: one file crosses, one file is

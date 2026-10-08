@@ -46,10 +46,9 @@ impl Session<'_> {
     /// Replaces every section that came from one source file.
     ///
     /// The source is the replaceable unit because a host names files
-    /// and one file may split into several sections. A source keeps
-    /// its place when it is replaced with no sections, and is set
-    /// there again when it is next given some. A name the book has
-    /// not seen appends instead, which is how a new file arrives.
+    /// and one file may split into several sections. A name the book
+    /// does not already have appends instead, which is how a file it
+    /// has not seen before arrives.
     pub fn replace_source(&mut self, name: &str, sections: Vec<Section>) {
         let place = self.order.iter().position(|source| source == name);
         if place.is_none() {
