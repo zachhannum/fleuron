@@ -23,8 +23,11 @@ on:
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
+# Named by the pull request rather than by the ref: on the `closed`
+# event of a merged pull request the ref is main, and the run would
+# cancel the deploy that the merge started.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
