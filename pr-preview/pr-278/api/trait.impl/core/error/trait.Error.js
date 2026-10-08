@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["fleuron",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"fleuron/session/enum.AddFontError.html\" title=\"enum fleuron::session::AddFontError\">AddFontError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"fleuron/session/enum.AddImageError.html\" title=\"enum fleuron::session::AddImageError\">AddImageError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"fleuron/fonts/enum.FontError.html\" title=\"enum fleuron::fonts::FontError\">FontError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"fleuron/content/struct.InvalidHeadingLevel.html\" title=\"struct fleuron::content::InvalidHeadingLevel\">InvalidHeadingLevel</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"fleuron/pdf/enum.PdfError.html\" title=\"enum fleuron::pdf::PdfError\">PdfError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"fleuron/wire/enum.WireError.html\" title=\"enum fleuron::wire::WireError\">WireError</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1663]}
