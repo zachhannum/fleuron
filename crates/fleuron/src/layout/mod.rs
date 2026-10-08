@@ -306,7 +306,10 @@ impl Paginator<'_> {
                 character: found.character,
                 source: source.map(str::to_string),
                 warning: Warning {
-                    message: format!("{face} has no glyph for `{}`.", found.character),
+                    message: format!(
+                        "{face} has no glyph for `{}` (U+{:04X}).",
+                        found.character, found.character as u32,
+                    ),
                     origin: (!at.is_empty()).then_some(at),
                 },
             });
