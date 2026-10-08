@@ -8,3 +8,4 @@ dist/
 public/fleuron_bg.wasm
 public/fixtures/
 src/generated/
+/preview/

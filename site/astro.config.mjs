@@ -35,7 +35,11 @@ function moduleServedFromPublic() {
   };
 }
 
-const docLinks = [remarkDocLinks, { root: docsRoot, base: '/' }];
+// A pull request's preview is a folder of the Pages site, so its job
+// sets the folder as the base. The deploy on main leaves it unset.
+const base = process.env.SITE_BASE || '/';
+
+const docLinks = [remarkDocLinks, { root: docsRoot, base }];
 
 /**
  * Puts the demo components and the figures in scope for every prose page.
@@ -57,6 +61,7 @@ function demoComponents() {
 
 export default defineConfig({
   site: 'https://fleuron.typeworks.dev',
+  base,
   // A stylesheet in the document is a stylesheet the reader is not
   // waiting a round trip for. The site's sheets are small enough
   // that inlining them costs less than fetching them.
@@ -152,6 +157,7 @@ export default defineConfig({
           // `scripts/check-doc-links.mjs` resolves prose links
           // against the files themselves, which is the check that
           // matters for a reader on GitHub anyway.
+          // The validator matches a link with its base on it.
           exclude: [
             '/api/**',
             '/css-subset/',
@@ -164,7 +170,7 @@ export default defineConfig({
             '/reference/markdown/**',
             '/wasm/preview/',
             '/wasm/preview/**',
-          ],
+          ].map((path) => `${base.replace(/\/$/, '')}${path}`),
         }),
       ],
       editLink: {
