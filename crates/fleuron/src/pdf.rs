@@ -1152,6 +1152,51 @@ mod tests {
         );
     }
 
+    /// Acceptance: an item that names a mode is drawn in it, text
+    /// included, and a book that asks for none writes no blend mode.
+    #[test]
+    fn an_item_with_a_blend_mode_is_drawn_in_that_mode() {
+        let rect = |x: f32, color: Color, blend: BlendMode| DrawItem::Rect {
+            x,
+            y: 40.0,
+            w: 100.0,
+            h: 100.0,
+            color,
+            layer: 0,
+            blend,
+        };
+        let mixed = page_of(
+            vec![
+                rect(10.0, Color::rgb(255, 221, 0), BlendMode::Normal),
+                rect(60.0, Color::rgb(0, 51, 102), BlendMode::Multiply),
+            ],
+            200.0,
+            200.0,
+        );
+        let pdf = readable(&mixed, &Metadata::default());
+        assert_eq!(
+            pdf.matches("/BM /Multiply").count(),
+            1,
+            "one rectangle is multiplied in:\n{pdf}"
+        );
+
+        let book = chapter();
+        let sheet = crate::style::Source::author("blend.css", "h1 { mix-blend-mode: screen }");
+        let styles = crate::style::Stylesheets::parse(&[sheet]).compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let pdf = readable(&output, &Metadata::default());
+        assert!(
+            pdf.contains("/BM /Screen"),
+            "the heading is not screened in:\n{pdf}"
+        );
+
+        let plain = readable(&laid_out(&book), &Metadata::default());
+        assert!(
+            !plain.contains("/BM"),
+            "a plain book wrote a blend mode:\n{plain}"
+        );
+    }
+
     /// Acceptance: text set in a colour with alpha paints at that
     /// alpha. The fill carries the colour, and a graphics state carries
     /// the alpha as its fill opacity.
