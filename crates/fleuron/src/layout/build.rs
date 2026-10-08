@@ -990,7 +990,7 @@ pub(super) fn set_lines(
     // The cap's baseline is the last sunk line's, which is only
     // known once the lines are broken.
     let drop = if sunk > 0 {
-        lines[1..sunk]
+        lines[..sunk - 1]
             .iter()
             .map(|line| line.box_.height)
             .sum::<f32>()
