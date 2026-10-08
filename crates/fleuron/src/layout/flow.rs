@@ -1445,7 +1445,7 @@ pub(super) fn fade(items: &mut [DrawItem], opacity: f32) {
     }
 }
 
-/// Mixes each item in `blend` where it has no mode of its own: what
+/// Mixes each item in `mode` where it has no mode of its own: what
 /// the `mix-blend-mode` of the element the items came out of comes
 /// to.
 pub(super) fn mix(items: &mut [DrawItem], mode: BlendMode) {
