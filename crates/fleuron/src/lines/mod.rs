@@ -82,6 +82,29 @@ impl LineLayout<'_> {
             .unwrap_or_default()
     }
 
+    /// The strut of the line a paragraph opens on. A `line-height`
+    /// on `::first-line` is a multiple of that line's own size, so
+    /// the strut is the opening style's where the rule gave one, and
+    /// the paragraph's own where it did not.
+    pub fn opening_strut(&self, style: &ParagraphStyle, first_line: Option<FirstLine>) -> Strut {
+        match self.opening_style(style, first_line) {
+            Some(opening) => self.strut(&opening),
+            None => self.strut(style),
+        }
+    }
+
+    /// The style the opening line's box is measured in, where
+    /// `::first-line` gave the line a height of its own.
+    fn opening_style(
+        &self,
+        style: &ParagraphStyle,
+        first_line: Option<FirstLine>,
+    ) -> Option<ParagraphStyle> {
+        first_line
+            .filter(|first| first.line_height.is_some())
+            .map(|first| first.over(style, self.registry))
+    }
+
     /// The box one line occupies: the strut, grown by any run taller
     /// than it around the shared baseline.
     pub fn line_box(&self, runs: &[ShapedRun], style: &ParagraphStyle) -> LineBox {
@@ -249,7 +272,9 @@ impl LineLayout<'_> {
         lead: Lead,
     ) -> Option<Shaped> {
         let flat = self.flatten(inlines, style, styles, lead);
-        self.shape_flat(flat, style, options, lead.extent)
+        let mut shaped = self.shape_flat(flat, style, options, lead.extent)?;
+        shaped.opening_style = self.opening_style(style, lead.style);
+        Some(shaped)
     }
 
     /// Breaks the text of the generated box `node` into lines of
@@ -308,6 +333,7 @@ impl LineLayout<'_> {
             options,
             upem,
             opening,
+            opening_style: None,
         })
     }
 
@@ -329,9 +355,13 @@ impl LineLayout<'_> {
             style,
             options,
             upem,
+            opening_style,
             ..
         } = shaped;
         let (options, upem) = (*options, *upem);
+        // The line the paragraph opens on is the first one broken
+        // from its start.
+        let boxed = |opens: bool| opening_style.as_ref().filter(|_| opens).unwrap_or(style);
         // Points → font units: measure / size gives ems, ems *
         // units_per_em gives font units.
         let to_points = |units: f32| units / upem * style.size;
@@ -422,7 +452,8 @@ impl LineLayout<'_> {
                 continue;
             };
             line.overhang = to_points(fit.overhang);
-            line.box_ = self.line_box(&line.runs, style);
+            let opens = from == 0 && broken.lines.is_empty();
+            line.box_ = self.line_box(&line.runs, boxed(opens));
             line.spans = gather(&mut spans);
             if broken.lines.is_empty() {
                 broken.extent = at.content_end;
@@ -433,7 +464,8 @@ impl LineLayout<'_> {
         // A paragraph that ran out inside a band still sets what it
         // reached.
         if let Some((mut line, _)) = band.take() {
-            line.box_ = self.line_box(&line.runs, style);
+            let opens = from == 0 && broken.lines.is_empty();
+            line.box_ = self.line_box(&line.runs, boxed(opens));
             line.spans = gather(&mut spans);
             broken.lines.push(line);
             broken.ends.push(breaker.end());
@@ -460,6 +492,9 @@ pub struct Shaped {
     /// Where the line the paragraph opens on has to end, when an
     /// opening style covers exactly that much of the text.
     opening: Option<usize>,
+    /// The style the opening line's box is measured in, where
+    /// `::first-line` gave the line a height of its own.
+    opening_style: Option<ParagraphStyle>,
 }
 
 impl std::fmt::Debug for Shaped {
@@ -510,6 +545,16 @@ mod tests {
     fn faced(face: Face) -> Option<FirstLine> {
         Some(FirstLine {
             face: Some(face),
+            ..FirstLine::default()
+        })
+    }
+
+    /// The opening line at `line_height`, set at `size` where one is
+    /// given.
+    fn leaded(line_height: f32, size: Option<f32>) -> Option<FirstLine> {
+        Some(FirstLine {
+            line_height: Some(line_height),
+            size,
             ..FirstLine::default()
         })
     }
@@ -800,6 +845,76 @@ mod tests {
             "the opening run was not set larger",
         );
         assert_eq!(lines[1].runs[0].size, body().size);
+    }
+
+    /// Acceptance: a larger line height on the opening line makes
+    /// that line taller around its own baseline, and leaves the lines
+    /// under it the height they were.
+    #[test]
+    fn a_first_line_line_height_makes_its_line_taller() {
+        let layout = LineLayout::new(registry());
+        let plain = layout_first(&layout, 240.0, None);
+        let lines = layout_first(&layout, 240.0, leaded(2.0, None));
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert!(
+            (lines[0].box_.height - 2.0 * body().size).abs() < 1e-3,
+            "the opening line is {}pt",
+            lines[0].box_.height,
+        );
+        assert!(lines[0].box_.baseline > plain[0].box_.baseline);
+        assert_eq!(
+            lines[1..].iter().map(|line| line.box_).collect::<Vec<_>>(),
+            plain[1..].iter().map(|line| line.box_).collect::<Vec<_>>(),
+            "a line under the opening one moved",
+        );
+    }
+
+    /// Acceptance: a smaller line height on the opening line makes
+    /// that line shorter than the paragraph's own lines.
+    #[test]
+    fn a_first_line_line_height_makes_its_line_shorter() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(&layout, 240.0, leaded(1.0, None));
+        assert!(lines.len() > 1, "the paragraph did not break");
+        assert!(
+            (lines[0].box_.height - body().size).abs() < 1e-3,
+            "the opening line is {}pt",
+            lines[0].box_.height,
+        );
+        assert!(lines[0].box_.height < lines[1].box_.height);
+    }
+
+    /// Acceptance: the line height of the opening line multiplies
+    /// the size that line is set in, so a smaller first line under a
+    /// line height of its own is not held to the paragraph's strut.
+    #[test]
+    fn a_first_line_line_height_multiplies_its_own_size() {
+        let layout = LineLayout::new(registry());
+        let lines = layout_first(&layout, 240.0, leaded(2.5, Some(8.0)));
+        assert!(
+            (lines[0].box_.height - 20.0).abs() < 1e-3,
+            "the opening line is {}pt",
+            lines[0].box_.height,
+        );
+        assert_eq!(
+            layout
+                .opening_strut(&body(), leaded(2.5, Some(8.0)))
+                .height(),
+            lines[0].box_.height,
+        );
+    }
+
+    /// Acceptance: a line height on the opening line moves no break.
+    #[test]
+    fn a_first_line_line_height_moves_no_break() {
+        let layout = LineLayout::new(registry());
+        let plain = layout_first(&layout, 160.0, None);
+        let lines = layout_first(&layout, 160.0, leaded(3.0, None));
+        assert!(plain.len() > 2, "the paragraph did not break");
+        assert_eq!(
+            lines.iter().map(line_text).collect::<Vec<_>>(),
+            plain.iter().map(line_text).collect::<Vec<_>>(),
+        );
     }
 
     /// Acceptance: `font-style: italic` on the opening line sets it

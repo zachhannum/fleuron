@@ -3268,20 +3268,21 @@ mod tests {
         assert!(tree.opening_line(*second).is_none());
     }
 
-    /// `::first-line` takes the properties that change a run's width
-    /// and its colour. Anything else warns naming the property, is
-    /// dropped, and leaves the rest of the rule standing.
+    /// `::first-line` takes the properties that change a run's width,
+    /// its colour and the height of its line. Anything else warns
+    /// naming the property, is dropped, and leaves the rest of the
+    /// rule standing.
     #[test]
     fn a_property_outside_the_first_line_set_warns_and_is_dropped() {
         let book = sample();
         let tree = compile(
             &book,
-            "p::first-line { line-height: 2; text-transform: uppercase }",
+            "p::first-line { margin-top: 2em; text-transform: uppercase }",
         );
         assert!(
             tree.warnings().iter().any(|warning| {
                 warning.message
-                    == "Unsupported property `line-height` on `::first-line`. \
+                    == "Unsupported property `margin-top` on `::first-line`. \
                         The declaration is ignored."
             }),
             "{:?}",
@@ -3293,10 +3294,65 @@ mod tests {
         let opening = tree.opening_line(*id).expect("the opening line's overlay");
         assert_eq!(opening.transform, Some(TextTransform::Uppercase));
         assert_eq!(
-            tree.first_line(*id).unwrap().line_height,
-            first(&tree, "p").line_height,
-            "the line height the rule asked for was dropped",
+            tree.first_line(*id).unwrap().margin.top,
+            0.0,
+            "the margin the rule asked for was dropped",
         );
+    }
+
+    /// Acceptance: `line-height` on `::first-line` does not warn, and
+    /// reaches the overlay line layout reads. A rule that leaves it
+    /// alone sets nothing.
+    #[test]
+    fn a_line_height_sets_on_a_first_line() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { line-height: 1.5 }
+             h1 + p::first-line { line-height: 2 }
+             p::first-line { color: #112233 }",
+        );
+        assert_eq!(
+            tree.warnings()
+                .iter()
+                .filter(|warning| warning.message.contains("`::first-line`"))
+                .collect::<Vec<_>>(),
+            Vec::<&Warning>::new(),
+        );
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let opening = tree.opening_line(*id).expect("the opening line's overlay");
+        assert_eq!(opening.line_height, Some(2.0));
+        assert_eq!(
+            first(&tree, "p").line_height,
+            1.5,
+            "the element keeps its own"
+        );
+
+        let Block::Paragraph { id: second, .. } = &book.sections[0].blocks[2] else {
+            panic!("the third block is a paragraph");
+        };
+        let untouched = tree.opening_line(*second).expect("the colour rule matched");
+        assert_eq!(untouched.line_height, None);
+    }
+
+    /// Acceptance: a length on `::first-line` is read against the
+    /// first line's own `font-size`, not the paragraph's.
+    #[test]
+    fn a_first_line_length_is_read_against_its_own_size() {
+        let book = sample();
+        let tree = compile(
+            &book,
+            "p { font-size: 12pt }
+             h1 + p::first-line { font-size: 8pt; line-height: 20pt }",
+        );
+        let Block::Paragraph { id, .. } = &book.sections[0].blocks[1] else {
+            panic!("the second block is a paragraph");
+        };
+        let opening = tree.opening_line(*id).expect("the opening line's overlay");
+        assert_eq!(opening.size, Some(8.0));
+        assert_eq!(opening.line_height, Some(2.5));
     }
 
     /// Acceptance: `font-family`, `font-style` and `font-weight` on

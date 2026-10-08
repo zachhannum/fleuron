@@ -48,6 +48,9 @@ pub struct FirstLine {
     pub face: Option<Face>,
     /// `font-size`, in points.
     pub size: Option<f32>,
+    /// `line-height`, as a multiple of the opening line's own size.
+    /// It sets the height of the line and leaves its runs alone.
+    pub line_height: Option<f32>,
     /// `letter-spacing`, in points.
     pub letter_spacing: Option<f32>,
     /// `font-variant-caps`.
@@ -85,6 +88,7 @@ impl FirstLine {
         ParagraphStyle {
             font_id: self.font_id(style, registry),
             size: self.size.unwrap_or(style.size),
+            line_height: self.line_height.unwrap_or(style.line_height),
             letter_spacing: self.letter_spacing.unwrap_or(style.letter_spacing),
             caps: self.caps.unwrap_or(style.caps),
             transform: self.transform.unwrap_or(style.transform),
