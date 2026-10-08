@@ -201,6 +201,7 @@ impl Session {
         }
         self.engine
             .set_content(fleuron_markdown::assemble(metadata, sections));
+        self.engine.set_source_order(names);
         self.reflect();
         Ok(())
     }
@@ -209,7 +210,7 @@ impl Session {
     /// complaints reading it raised.
     #[wasm_bindgen(js_name = removeMarkdown)]
     pub fn remove_markdown(&mut self, name: &str) {
-        self.engine.replace_source(name, Vec::new());
+        self.engine.remove_source(name);
         self.complaints.remove(name);
         self.names.remove(name);
         self.reflect();
