@@ -4,10 +4,10 @@ use std::ops::Range;
 
 use crate::fonts::{Features, ShapedGlyph};
 
-use super::LineLayout;
 use super::flatten::{FlatParagraph, StyleSpan};
 use super::line::{ShapedRun, cut_runs};
 use super::paragraph::ParagraphStyle;
+use super::{LineLayout, Uncovered};
 
 impl LineLayout<'_> {
     /// One string as shaped runs, set the way `style` asks for it.
@@ -41,6 +41,7 @@ impl LineLayout<'_> {
                     .registry
                     .shape_with(span.font_id, &flat.text[span.range.clone()], &span.features)
                     .unwrap_or_default();
+                self.find_uncovered(flat, span, &glyphs);
                 let track = self.tracking_units(span);
                 if track != 0 {
                     for at in 0..glyphs.len() {
@@ -63,6 +64,31 @@ impl LineLayout<'_> {
                 }
             })
             .collect()
+    }
+
+    /// Keeps the characters of a span that shaped to the glyph a face
+    /// draws for a character it does not have.
+    ///
+    /// A control character has no glyph in any face and draws
+    /// nothing, so it is not one of them.
+    fn find_uncovered(&self, flat: &FlatParagraph, span: &StyleSpan, glyphs: &[ShapedGlyph]) {
+        for glyph in glyphs.iter().filter(|glyph| glyph.id == 0) {
+            let at = span.range.start + glyph.cluster as usize;
+            let Some(character) = flat.text.get(at..).and_then(|rest| rest.chars().next()) else {
+                continue;
+            };
+            if character.is_control() {
+                continue;
+            }
+            let mut found = self.uncovered.borrow_mut();
+            if found.seen.insert(character) {
+                found.list.push(Uncovered {
+                    character,
+                    font_id: span.font_id,
+                    position: flat.written_at(at),
+                });
+            }
+        }
     }
 
     /// A span's tracking in its own font units.
@@ -209,13 +235,14 @@ impl ShapedSpan {
 
 #[cfg(test)]
 mod tests {
-    use crate::content::{Attributes, Inline, NodeId};
+    use crate::content::{Attributes, Inline, NodeId, SourcePos};
+    use crate::lines::Uncovered;
     use crate::lines::flatten::SMALL_CAPS_RATIO;
     use crate::lines::testing::{
         body, hyphenated, layout_body_opts, layout_style, line_text, registry, units_per_em,
     };
     use crate::lines::{LineBreakOptions, LineLayout, Measure, Opening, ParagraphStyle};
-    use crate::style::FontVariantCaps;
+    use crate::style::{FontVariantCaps, TextTransform};
 
     /// The hyphen is painted as well as charged: the run has the
     /// character and a glyph for it, and the last line has neither.
@@ -256,6 +283,40 @@ mod tests {
             "the last line was hyphenated: {:?}",
             line_text(last_line),
         );
+    }
+
+    /// A character the face has no glyph for is found once, at the
+    /// column it was written at, whatever a transform shaped the text
+    /// before it as. Taking what was found starts over.
+    #[test]
+    fn an_uncovered_character_is_found_once_where_it_was_written() {
+        let layout = LineLayout::new(registry());
+        let inlines = vec![Inline::Text {
+            id: NodeId::UNASSIGNED,
+            value: "stra\u{df}e \u{2605} and \u{2605}".into(),
+            attributes: Attributes::default(),
+            position: Some(SourcePos { line: 4, column: 3 }),
+            span: None,
+        }];
+        let mut style = body();
+        style.transform = TextTransform::Uppercase;
+        layout.layout(&inlines, &style, 400.0, Default::default());
+
+        let found = layout.take_uncovered();
+        assert_eq!(
+            found,
+            [Uncovered {
+                character: '\u{2605}',
+                font_id: style.font_id,
+                // Eight bytes of the node come before the star: the
+                // sharp s is two, however many letters it shaped as.
+                position: Some(SourcePos {
+                    line: 4,
+                    column: 11
+                }),
+            }]
+        );
+        assert_eq!(layout.take_uncovered(), []);
     }
 
     /// Emphasis is its own span: a paragraph of roman prose around

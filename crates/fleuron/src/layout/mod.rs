@@ -63,9 +63,9 @@ pub(crate) use reference::{Named, References, landed, moved};
 
 use std::borrow::Cow;
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
-use crate::content::{Book, Metadata};
+use crate::content::{Book, Metadata, origin};
 use crate::fonts::{FeatureSetting, FontRegistry};
 use crate::images::{Assets, Contours};
 use crate::lines::{LineLayout, ParagraphStyle, Patterns};
@@ -142,6 +142,10 @@ pub struct Paginator<'a> {
     /// message: a book that scales the same image twice has one
     /// problem, not two.
     warnings: RefCell<Vec<Warning>>,
+    /// The characters set with no glyph. Recorded once for each
+    /// character and source, so the same message stands once under
+    /// every file that has the character.
+    uncovered: RefCell<Vec<UncoveredWarning>>,
     /// Whether the sheet anchors anything to the page, answered once.
     wraps: OnceCell<bool>,
     /// How many times the flow set a paragraph again beside an image.
@@ -153,6 +157,34 @@ pub struct Paginator<'a> {
     /// How many times the book was laid out again to print the pages
     /// its references name.
     settles: Cell<u32>,
+}
+
+/// A character set with no glyph, and what the run says about it.
+///
+/// Kept apart from the other warnings, which are recorded once for
+/// each message. This one is recorded once for each character and
+/// source.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct UncoveredWarning {
+    pub(crate) character: char,
+    /// The file the character was written in.
+    pub(crate) source: Option<String>,
+    pub(crate) warning: Warning,
+}
+
+impl UncoveredWarning {
+    /// The warnings of `found`, in order, once for each character
+    /// and source.
+    pub(crate) fn warnings<'f>(
+        found: impl IntoIterator<Item = &'f UncoveredWarning>,
+    ) -> Vec<Warning> {
+        let mut seen = HashSet::new();
+        found
+            .into_iter()
+            .filter(|found| seen.insert((found.source.as_deref(), found.character)))
+            .map(|found| found.warning.clone())
+            .collect()
+    }
 }
 
 impl<'a> Paginator<'a> {
@@ -190,6 +222,7 @@ impl<'a> Paginator<'a> {
             patterns: Cell::new(Patterns::default()),
             unknown: RefCell::new(None),
             warnings: RefCell::new(Vec::new()),
+            uncovered: RefCell::new(Vec::new()),
             wraps: OnceCell::new(),
             rebreaks: Cell::new(0),
             references: RefCell::new(References::default()),
@@ -235,7 +268,53 @@ impl Paginator<'_> {
 
     /// What fragmentation had to complain about.
     pub fn warnings(&self) -> Vec<Warning> {
+        let mut warnings = self.flow_warnings();
+        let uncovered = self.uncovered.borrow();
+        warnings.extend(uncovered.iter().map(|found| found.warning.clone()));
+        warnings
+    }
+
+    /// The same, without the characters set with no glyph.
+    pub(crate) fn flow_warnings(&self) -> Vec<Warning> {
         self.warnings.borrow().clone()
+    }
+
+    /// The characters set with no glyph, once for each character and
+    /// source.
+    pub(crate) fn uncovered(&self) -> Vec<UncoveredWarning> {
+        self.uncovered.borrow().clone()
+    }
+
+    /// Files the characters shaping found no glyph for under
+    /// `source`, the file they were written in.
+    fn uncover(&self, source: Option<&str>) {
+        let mut uncovered = self.uncovered.borrow_mut();
+        for found in self.lines.take_uncovered() {
+            let seen = uncovered
+                .iter()
+                .any(|seen| seen.character == found.character && seen.source.as_deref() == source);
+            if seen {
+                continue;
+            }
+            let face = self
+                .registry
+                .font_ref(found.font_id)
+                .map(|entry| entry.name.clone())
+                .unwrap_or_default();
+            let at = origin(source, found.position);
+            uncovered.push(UncoveredWarning {
+                character: found.character,
+                source: source.map(str::to_string),
+                warning: Warning {
+                    message: format!(
+                        "{face} has no glyph for `{}` (U+{:04X}). The engine draws the glyph \
+                         that the font uses for a missing character.",
+                        found.character, found.character as u32,
+                    ),
+                    origin: (!at.is_empty()).then_some(at),
+                },
+            });
+        }
     }
 
     /// How many times the flow that paints set a paragraph again

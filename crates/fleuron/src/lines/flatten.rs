@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use crate::content::{Inline, NodeId, PseudoElement, SourceRange};
+use crate::content::{Inline, NodeId, PseudoElement, SourcePos, SourceRange};
 use crate::fonts::Features;
 use crate::style::{Color, FontVariantCaps, TextDecoration, TextTransform};
 
@@ -66,6 +66,12 @@ struct Origin {
     /// Where it starts in the node's own text, which is past the
     /// letter wherever a drop cap took one.
     node_start: u32,
+    /// Where the node's text starts in the manuscript, or where the
+    /// node does when `whole` is set.
+    position: Option<SourcePos>,
+    /// Whether the node's text runs over more than one line of the
+    /// manuscript, so that a byte of it is only as near as the node.
+    whole: bool,
 }
 
 /// One inline element's box, over the bytes of the shaped text it
@@ -181,11 +187,47 @@ impl FlatParagraph {
     /// Opens a stretch of the source written in `node`, starting
     /// `node_start` bytes into that node's own text.
     fn open(&mut self, node: Option<NodeId>, node_start: usize) {
+        self.open_at(node, node_start, None, false);
+    }
+
+    /// The same, for a node the manuscript holds at `position`.
+    fn open_at(
+        &mut self,
+        node: Option<NodeId>,
+        node_start: usize,
+        position: Option<SourcePos>,
+        whole: bool,
+    ) {
         self.origins.push(Origin {
             node,
             start: self.source_len() as u32,
             node_start: node_start as u32,
+            position,
+            whole,
         });
+    }
+
+    /// The line and column one byte of the shaped text was written
+    /// at. Columns count bytes, as the positions on the nodes do.
+    ///
+    /// `None` where the manuscript holds no such byte: text the sheet
+    /// generated, and a tree a host built without positions.
+    pub(super) fn written_at(&self, byte: usize) -> Option<SourcePos> {
+        let at = self.source_at(byte);
+        let index = self
+            .origins
+            .partition_point(|origin| origin.start as usize <= at)
+            .checked_sub(1)?;
+        let origin = &self.origins[index];
+        let position = origin.position?;
+        if origin.whole {
+            return Some(position);
+        }
+        let within = origin.node_start + (at as u32).saturating_sub(origin.start);
+        Some(SourcePos {
+            column: position.column + within,
+            ..position
+        })
     }
 
     /// The stretch of the source one byte of the shaped text was
@@ -472,11 +514,12 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: NodeId,
+        position: Option<SourcePos>,
         style: &ParagraphStyle,
     ) -> FlatParagraph {
         let mut flat = FlatParagraph::new();
         if !text.is_empty() {
-            flat.open(Some(node), 0);
+            flat.open_at(Some(node), 0, position, true);
             self.push_run(&mut flat, text, style, Lead::default());
         }
         flat
@@ -492,14 +535,35 @@ impl LineLayout<'_> {
     ) {
         for inline in inlines {
             match inline {
-                Inline::Text { id, value, .. } => self.push_text(flat, *id, value, style, lead),
+                Inline::Text {
+                    id,
+                    value,
+                    position,
+                    ..
+                } => self.push_text(flat, *id, value, *position, style, lead),
                 Inline::Break { .. } => self.push_break(flat, style, lead),
-                Inline::Code { id, value, .. } => {
+                Inline::Code {
+                    id,
+                    value,
+                    position,
+                    span,
+                    ..
+                } => {
+                    // The node starts at its opening backticks, and
+                    // its text after them.
+                    let ticks = span.map_or(0, |span| {
+                        span.width().saturating_sub(value.len() as u32) / 2
+                    });
+                    let position = position.map(|position| SourcePos {
+                        column: position.column + ticks,
+                        ..position
+                    });
                     let generated = styles.generated(inline);
                     let open = flat.open_inline(*id, styles.inline_box(*id));
                     self.push_generated(flat, generated.before, *id, PseudoElement::Before, lead);
                     let from = flat.text.len();
-                    self.push_text(flat, *id, value, &styles.style(*id, style), lead);
+                    let code = styles.style(*id, style);
+                    self.push_text(flat, *id, value, position, &code, lead);
                     flat.literal.push(from..flat.text.len());
                     self.push_generated(flat, generated.after, *id, PseudoElement::After, lead);
                     flat.close_inline(open);
@@ -588,6 +652,7 @@ impl LineLayout<'_> {
         flat: &mut FlatParagraph,
         node: NodeId,
         value: &str,
+        position: Option<SourcePos>,
         style: &ParagraphStyle,
         lead: Lead,
     ) {
@@ -600,7 +665,7 @@ impl LineLayout<'_> {
         if value.is_empty() {
             return;
         }
-        flat.open(Some(node), node_start);
+        flat.open_at(Some(node), node_start, position, false);
         self.push_run(flat, value, style, lead);
     }
 

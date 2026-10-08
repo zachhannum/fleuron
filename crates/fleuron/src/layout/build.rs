@@ -34,6 +34,8 @@ impl Paginator<'_> {
     /// spanning block moves to the next page whole rather than split
     /// under the columns above it.
     pub fn section_fragments(&self, section: &Section) -> Vec<Fragment> {
+        // What was shaped outside a section was written in none.
+        self.lines.take_uncovered();
         let geometry = self.styles.default_page().geometry;
         let measure = geometry.measure();
         let mut builder = Builder::new(self, section.source.as_deref());
@@ -59,7 +61,9 @@ impl Paginator<'_> {
         }
         builder.spanning = false;
         builder.close(&style, start);
-        builder.fragments
+        let fragments = builder.fragments;
+        self.uncover(section.source.as_deref());
+        fragments
     }
 }
 
@@ -796,7 +800,7 @@ impl Builder<'_, '_> {
         let lines = self
             .paginator
             .lines
-            .layout_preformatted(text, id, &style, &spec, options);
+            .layout_preformatted(text, id, position, &style, &spec, options);
         let over = lines
             .iter()
             .any(|line| self.paginator.line_width(line) > measure);

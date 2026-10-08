@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::Warning;
 use crate::content::NodeId;
 use crate::layout::{
-    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, UNSETTLED, landed, moved,
-    navigation,
+    NOTE_PASSES, Named, Numbering, Paged, Paginator, References, UNSETTLED, UncoveredWarning,
+    landed, moved, navigation,
 };
 use crate::pages::{Page, PageBox};
 
@@ -124,7 +124,8 @@ impl Session<'_> {
                         key,
                         section: section.id,
                         fragments,
-                        warnings: paginator.warnings(),
+                        warnings: paginator.flow_warnings(),
+                        uncovered: paginator.uncovered(),
                     }
                 }
             });
@@ -273,7 +274,8 @@ impl Session<'_> {
                         key,
                         section: section.id,
                         fragments,
-                        warnings: paginator.warnings(),
+                        warnings: paginator.flow_warnings(),
+                        uncovered: paginator.uncovered(),
                     }
                 }
             };
@@ -332,11 +334,22 @@ impl Session<'_> {
         warnings.extend(self.assets.get().warnings().iter().cloned());
         warnings.extend(self.contours.warnings().iter().cloned());
         warnings.extend(self.flow_warnings.iter().cloned());
-        for warning in self.settle_warnings.iter().chain(&self.link_warnings) {
-            if !warnings.iter().any(|seen| seen.message == warning.message) {
-                warnings.push(warning.clone());
+        let once = |warnings: &mut Vec<Warning>, from: &[Warning]| {
+            for warning in from {
+                if !warnings.iter().any(|seen| seen.message == warning.message) {
+                    warnings.push(warning.clone());
+                }
             }
-        }
+        };
+        once(&mut warnings, &self.settle_warnings);
+        // The same message stands once under every source, so these
+        // are not held to one for each message. A one-shot run keeps
+        // no lines, and has them in its flow warnings.
+        let kept = self.lines.iter().chain(self.settled.iter().flatten());
+        warnings.extend(UncoveredWarning::warnings(
+            kept.flat_map(|cached| &cached.uncovered),
+        ));
+        once(&mut warnings, &self.link_warnings);
         if let Some(output) = &mut self.output {
             output.warnings = warnings;
         }
