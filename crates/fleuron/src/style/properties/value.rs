@@ -456,6 +456,81 @@ pub enum BoxDecorationBreak {
     Clone,
 }
 
+/// How what an element draws is mixed with what is under it, from
+/// `mix-blend-mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlendMode {
+    /// `normal`: it covers what is under it.
+    #[default]
+    Normal,
+    /// `multiply`
+    Multiply,
+    /// `screen`
+    Screen,
+    /// `overlay`
+    Overlay,
+    /// `darken`
+    Darken,
+    /// `lighten`
+    Lighten,
+    /// `color-dodge`
+    ColorDodge,
+    /// `color-burn`
+    ColorBurn,
+    /// `hard-light`
+    HardLight,
+    /// `soft-light`
+    SoftLight,
+    /// `difference`
+    Difference,
+    /// `exclusion`
+    Exclusion,
+    /// `hue`
+    Hue,
+    /// `saturation`
+    Saturation,
+    /// `color`
+    Color,
+    /// `luminosity`
+    Luminosity,
+}
+
+impl BlendMode {
+    /// Every mode, in the order CSS lists them.
+    #[rustfmt::skip]
+    pub const ALL: [BlendMode; 16] = [
+        BlendMode::Normal, BlendMode::Multiply, BlendMode::Screen, BlendMode::Overlay, BlendMode::Darken, BlendMode::Lighten, BlendMode::ColorDodge, BlendMode::ColorBurn, BlendMode::HardLight, BlendMode::SoftLight, BlendMode::Difference, BlendMode::Exclusion, BlendMode::Hue, BlendMode::Saturation, BlendMode::Color, BlendMode::Luminosity,
+    ];
+
+    /// The keyword CSS spells the mode with.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            BlendMode::Normal => "normal",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Overlay => "overlay",
+            BlendMode::Darken => "darken",
+            BlendMode::Lighten => "lighten",
+            BlendMode::ColorDodge => "color-dodge",
+            BlendMode::ColorBurn => "color-burn",
+            BlendMode::HardLight => "hard-light",
+            BlendMode::SoftLight => "soft-light",
+            BlendMode::Difference => "difference",
+            BlendMode::Exclusion => "exclusion",
+            BlendMode::Hue => "hue",
+            BlendMode::Saturation => "saturation",
+            BlendMode::Color => "color",
+            BlendMode::Luminosity => "luminosity",
+        }
+    }
+
+    /// Whether the mode is `normal`.
+    pub fn is_normal(&self) -> bool {
+        *self == BlendMode::Normal
+    }
+}
+
 /// The size a box is asked to take on one axis, from `width`,
 /// `height` or `min-height`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]

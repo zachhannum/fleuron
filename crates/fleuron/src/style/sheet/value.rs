@@ -7,8 +7,8 @@ use crate::fonts::{FeatureSetting, GenericFamily};
 use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
-    AlignContent, BackgroundRepeat, BorderCollapse, BorderStyle, BoxDecorationBreak, Break,
-    ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration,
+    AlignContent, BackgroundRepeat, BlendMode, BorderCollapse, BorderStyle, BoxDecorationBreak,
+    Break, ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration,
     DecorationLine, DecorationStyle, Edge, Family, Figures, FontStyle, FontVariantAlternates,
     FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions, Hyphens, LINE_WIDTHS,
     Length, LineHeight, ListStyleType, NumericSpacing, Position, ShapeSource, SizeSource,
@@ -574,6 +574,14 @@ fn position_component(input: &mut Parser<'_, '_>) -> Option<Component> {
         };
     }
     length(input).map(Component::Either)
+}
+
+/// `mix-blend-mode: normal | multiply | …`: one of the sixteen modes.
+pub(super) fn blend_mode(input: &mut Parser<'_, '_>) -> Option<BlendMode> {
+    let keyword = input.expect_ident().ok()?.clone();
+    BlendMode::ALL
+        .into_iter()
+        .find(|mode| mode.keyword().eq_ignore_ascii_case(&keyword))
 }
 
 /// `wrap-flow: auto | both | start | end`: which side of an exclusion

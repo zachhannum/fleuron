@@ -8,7 +8,9 @@ use std::rc::Rc;
 use crate::content::{Block, Book, NodeId, PseudoElement, block_position, cell_blocks, origin};
 use crate::lines::{Measure, Span};
 use crate::pages::{DrawItem, PageBox};
-use crate::style::{ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow};
+use crate::style::{
+    BlendMode, ComputedStyle, Edges, Inset, PageGeometry, Position, ShapeOutside, WrapFlow,
+};
 
 use super::Paginator;
 use super::build::{Builder, Child, Reflow, carry_over, children, set_lines};
@@ -278,6 +280,7 @@ impl Paginator<'_> {
             shape: self.shape(style, Some(asset), (width, height)),
             layer: style.z_index,
             opacity: around.opacity * style.opacity,
+            blend: style.blend(),
             paint: Paint::Image {
                 id,
                 asset,
@@ -349,6 +352,7 @@ impl Paginator<'_> {
             shape: self.shape(style, None, inner),
             layer: style.z_index,
             opacity: style.opacity * around.opacity,
+            blend: style.blend(),
             paint: Paint::Block(stacked.items, stacked.boxes),
         }
     }
@@ -437,6 +441,9 @@ pub(super) struct Anchored {
     /// that of the blocks around it. The items of a block already
     /// show as much as the blocks they came out of let them.
     opacity: f32,
+    /// How an image is mixed with what is under it. The items of a
+    /// block carry the modes of the blocks they came out of.
+    blend: BlendMode,
     /// What it paints, from the top left corner of its margin box.
     paint: Paint,
 }
@@ -548,6 +555,7 @@ impl Anchored {
                 asset: *asset,
                 alpha: crate::pages::fade(255, self.opacity),
                 layer: self.layer,
+                blend: self.blend,
             }],
             Paint::Block(items, _) => {
                 let mut items = items.clone();

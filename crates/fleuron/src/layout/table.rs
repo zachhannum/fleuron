@@ -14,10 +14,10 @@
 
 use crate::content::{Block, NodeId, PseudoElement, Row, SourcePos, origin, rows};
 use crate::pages::DrawItem;
-use crate::style::{Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
+use crate::style::{BlendMode, Border, BorderCollapse, Color, ComputedStyle, Edges, StyleTree};
 
 use super::build::{Builder, Child, Stacked, gather};
-use super::flow::{Painted, fade, shift, shift_boxes};
+use super::flow::{Painted, fade, mix, shift, shift_boxes};
 use super::fragment::{BreakPoint, Decoration, Fragment, Marks, Piece, TableRow};
 
 impl<'a> Builder<'a, '_> {
@@ -143,6 +143,7 @@ impl<'a> Builder<'a, '_> {
                 layer: cell_style.z_index,
                 offset: (0.0, 0.0),
                 opacity: style.opacity * cell_style.opacity,
+                blend: cell_style.blend(),
             };
             items.extend(
                 Painted {
@@ -175,6 +176,7 @@ impl<'a> Builder<'a, '_> {
                 }
             }
         }
+        mix(&mut items, style.blend());
         let area = |x: f32, width: f32| crate::pages::PageBox {
             page: 0,
             x,
@@ -286,6 +288,7 @@ fn rect(items: &mut Vec<DrawItem>, x: f32, y: f32, w: f32, h: f32, color: Color,
             h,
             color,
             layer,
+            blend: BlendMode::Normal,
         });
     }
 }

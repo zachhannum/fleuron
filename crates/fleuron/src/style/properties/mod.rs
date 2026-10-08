@@ -36,10 +36,10 @@ pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, E
 pub use exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
 pub use value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
-    Family, Figures, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
-    FontVariantNumeric, Fractions, Hyphens, Length, LineHeight, NumericSpacing, TextAlign,
-    TextDecoration, TextJustify, TextTransform, Width,
+    BlendMode, BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine,
+    DecorationStyle, Family, Figures, FontStyle, FontVariantAlternates, FontVariantCaps,
+    FontVariantLigatures, FontVariantNumeric, Fractions, Hyphens, Length, LineHeight,
+    NumericSpacing, TextAlign, TextDecoration, TextJustify, TextTransform, Width,
 };
 
 pub(crate) use background::no_background;
@@ -87,6 +87,7 @@ pub enum Declaration {
     ZIndex(i32),
     /// From 0 to 1.
     Opacity(f32),
+    MixBlendMode(BlendMode),
     WrapFlow(WrapFlow),
     ShapeOutside(ShapeSource),
     ShapeMargin(Length),
@@ -195,6 +196,7 @@ impl Declaration {
             Declaration::Inset(side, _) => edge(side, ["top", "right", "bottom", "left"]),
             Declaration::ZIndex(_) => "z-index",
             Declaration::Opacity(_) => "opacity",
+            Declaration::MixBlendMode(_) => "mix-blend-mode",
             Declaration::WrapFlow(_) => "wrap-flow",
             Declaration::ShapeOutside(_) => "shape-outside",
             Declaration::ShapeMargin(_) => "shape-margin",

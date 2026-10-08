@@ -47,6 +47,7 @@ impl Paginator<'_> {
                 width,
                 height,
                 asset,
+                blend,
             } => vec![DrawItem::Image {
                 x: x + fragment.x,
                 y: top,
@@ -55,6 +56,7 @@ impl Paginator<'_> {
                 asset: *asset,
                 alpha: 255,
                 layer: fragment.layer,
+                blend: *blend,
             }],
             // A row's items were painted with the layers of the
             // table they belong to.
@@ -174,6 +176,7 @@ impl Paginator<'_> {
                     color: run.color,
                     glyphs,
                     layer,
+                    blend: run.blend,
                 });
                 items.append(&mut self.decoration_items(
                     run,
@@ -232,6 +235,7 @@ impl Paginator<'_> {
                     h: thickness,
                     color,
                     layer,
+                    blend: run.blend,
                 });
             }
         }

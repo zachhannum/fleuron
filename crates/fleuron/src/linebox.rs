@@ -75,6 +75,7 @@ mod tests {
     use super::*;
     use crate::fonts::{FontRegistry, bundled_registry};
     use crate::lines::{LineLayout, ParagraphStyle, ShapedRun};
+    use crate::style::BlendMode;
 
     fn layout() -> LineLayout<'static> {
         static REGISTRY: std::sync::OnceLock<FontRegistry> = std::sync::OnceLock::new();
@@ -110,6 +111,7 @@ mod tests {
             decoration: crate::style::TextDecoration::NONE,
             glyphs: Vec::new(),
             advance: 0,
+            blend: BlendMode::Normal,
         }
     }
 

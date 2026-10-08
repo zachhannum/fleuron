@@ -10,7 +10,7 @@
 use fleuron::content::{NodeId, SourceRange};
 use fleuron::images::{Asset, Assets, Intrinsic};
 use fleuron::pages::{DrawItem, Glyph, Link, LinkTo, Page, PageBox, Side};
-use fleuron::style::Color;
+use fleuron::style::{BlendMode, Color};
 use fleuron::wire;
 use fleuron::{LayoutOutput, Warning};
 use proptest::prelude::*;
@@ -86,6 +86,7 @@ fn text_item() -> impl Strategy<Value = DrawItem> {
                 text,
                 glyphs,
                 layer,
+                blend: BlendMode::Normal,
             },
         )
 }
@@ -107,7 +108,8 @@ fn item() -> impl Strategy<Value = DrawItem> {
                 w,
                 h,
                 color,
-                layer
+                layer,
+                blend: BlendMode::Normal,
             }),
         (
             coordinate(),
@@ -125,7 +127,8 @@ fn item() -> impl Strategy<Value = DrawItem> {
                 h,
                 asset,
                 alpha,
-                layer
+                layer,
+                blend: BlendMode::Normal,
             }),
         (
             coordinate(),
@@ -149,7 +152,8 @@ fn item() -> impl Strategy<Value = DrawItem> {
                     },
                     ring: fleuron::style::Edges::all(ring),
                     color,
-                    layer
+                    layer,
+                    blend: BlendMode::Normal,
                 }
             ),
     ]

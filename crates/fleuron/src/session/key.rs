@@ -371,6 +371,8 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
         // emits.
         z_index,
         opacity,
+        mix_blend_mode,
+        blend_around,
         wrap_flow: _,
         shape_outside: _,
         shape_margin: _,
@@ -439,6 +441,7 @@ pub(super) fn hash_layout(style: &ComputedStyle, h: &mut DefaultHasher) {
     )
         .hash(h);
     (position, z_index, opacity.to_bits()).hash(h);
+    (mix_blend_mode, blend_around).hash(h);
     hash_insets(*inset, h);
     (break_before, break_after, break_inside, column_span).hash(h);
     hash_background(background, h);

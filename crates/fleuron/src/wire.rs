@@ -35,7 +35,7 @@ use crate::{LayoutOutput, Warning};
 
 /// What the encoding is. A host checks this before reading anything
 /// else, and a mismatch is a refusal rather than a best effort.
-pub const VERSION: u16 = 20;
+pub const VERSION: u16 = 21;
 
 /// Why a buffer could not be read as a display structure.
 #[derive(Debug, thiserror::Error)]
@@ -222,7 +222,7 @@ mod tests {
     use crate::fonts::{AxisSetting, FaceAttributes, FeatureSetting, Features, FontRefEntry};
     use crate::images::{Asset, Intrinsic};
     use crate::pages::{Corners, DrawItem, Glyph, Link, LinkTo, Page, PageBox, Radius, Side};
-    use crate::style::{Color, Edges};
+    use crate::style::{BlendMode, Color, Edges};
 
     fn output() -> LayoutOutput {
         LayoutOutput {
@@ -255,6 +255,7 @@ mod tests {
                             range: 0..2,
                         }],
                         layer: 10,
+                        blend: BlendMode::Normal,
                     },
                     DrawItem::Rect {
                         x: 0.0,
@@ -263,6 +264,7 @@ mod tests {
                         h: 0.5,
                         color: Color::BLACK,
                         layer: DrawItem::PAGE_BACKGROUND,
+                        blend: BlendMode::Normal,
                     },
                     DrawItem::Image {
                         x: 1.0,
@@ -272,6 +274,7 @@ mod tests {
                         asset: 7,
                         alpha: 128,
                         layer: -1,
+                        blend: BlendMode::Normal,
                     },
                     DrawItem::Rounded {
                         x: 5.0,
@@ -288,6 +291,7 @@ mod tests {
                         },
                         color: Color::rgba(51, 102, 153, 128),
                         layer: 0,
+                        blend: BlendMode::Normal,
                     },
                 ],
                 links: vec![
