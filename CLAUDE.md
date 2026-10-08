@@ -150,8 +150,14 @@ markdown in → valid PDF out**. The CLI runs it in
    every run with each job's result and the perf-gate reports.
 
 `.github/workflows/docs.yml` builds the site, runs both quickstarts,
-folds in rustdoc, checks the landing demo in a browser and deploys to
-GitHub Pages.
+folds in rustdoc and checks the landing demo in a browser. On main the
+`deploy` job puts the result on the `gh-pages` branch that GitHub Pages
+serves, keeps the `pr-preview` folder, and checks the live docs.
+
+On a PR from this repository the same run builds the site a second
+time under `SITE_BASE`, and the `preview` job publishes that build to
+`pr-preview/pr-<number>/` with `rossjrw/pr-preview-action`. One comment
+holds the link. Closing the PR deletes the folder.
 
 ## Releases
 

@@ -11,7 +11,10 @@ on:
       - 'crates/**'
       - 'fixtures/**'
       - '.github/workflows/docs.yml'
+  # `closed` is here for the preview: closing the pull request deletes
+  # its folder.
   pull_request:
+    types: [opened, reopened, synchronize, closed]
     paths:
       - 'docs/**'
       - 'site/**'
@@ -19,6 +22,10 @@ on:
       - 'fixtures/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # The CLAUDE.md rule about `///` on every public item, enforced. The
@@ -29,6 +36,7 @@ env:
 
 jobs:
   build:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,26 +124,137 @@ jobs:
           <a href="fleuron/">fleuron API documentation</a>
           HTML
 
-      - uses: actions/upload-pages-artifact@v3
-        if: github.event_name != 'pull_request'
+      # A dotfile is left out of an artifact unless it is asked for, and
+      # `.nojekyll` is what makes Pages serve `_astro/`.
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
+          name: site
           path: site/dist
+          include-hidden-files: true
+          retention-days: 1
 
-  # Settings → Pages → Source must be "GitHub Actions" before the first
-  # deploy succeeds; there is no way to set that from a workflow.
+      # The preview is a folder of the Pages site, so it is the same
+      # site built again under that folder as its base. Everything
+      # above checked the build that main deploys. A fork cannot push
+      # to the Pages branch, so only a branch of this repository gets
+      # a preview.
+      - name: Build the preview
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+        working-directory: site
+        env:
+          SITE_BASE: /pr-preview/pr-${{ github.event.pull_request.number }}
+        run: |
+          npx astro build --outDir preview
+          cp -r dist/api preview/api
+      - uses: actions/upload-artifact@v4
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          name: preview
+          path: site/preview
+          retention-days: 1
+
+  # Settings → Pages → Source must be the `gh-pages` branch, and the
+  # `github-pages` environment must allow deployments from it; there is
+  # no way to set either from a workflow.
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
+      contents: write
+    # The previews write the same branch.
     concurrency:
-      group: pages
+      group: pages-branch
       cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site/dist
+
+      # Pages serves the gh-pages branch. The previews of open pull
+      # requests live in its pr-preview folder, which a deploy keeps.
+      - uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: site/dist
+          clean-exclude: pr-preview/
+
+      - name: Check the live docs
+        run: |
+          host="$(cat site/dist/CNAME)"
+          for page in "" overview/ api/fleuron/; do
+            for _ in $(seq 1 30); do
+              curl -fsS "https://$host/$page" | grep -q "<title>" && continue 2
+              sleep 10
+            done
+            echo "https://$host/$page did not load"
+            exit 1
+          done
+
+  # A folder of the Pages site for the pull request, with a link in one
+  # comment that every push updates. Closing the pull request deletes
+  # the folder.
+  preview:
+    if: >-
+      !cancelled() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && (needs.build.result == 'success' || github.event.action == 'closed')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # The deploy on main writes the same branch.
+    concurrency:
+      group: pages-branch
+      cancel-in-progress: false
+    steps:
+      # The action commits to the Pages branch from a clone.
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        if: github.event.action != 'closed'
+        with:
+          name: preview
+          path: site/preview
+
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: site/preview
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          comment: false
+
+      - name: Say where the preview is
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CLOSED: ${{ github.event.action == 'closed' }}
+        run: |
+          MARKER='<!-- fleuron-docs-preview -->'
+          url="https://$(cat site/public/CNAME)/pr-preview/pr-$PR/"
+          {
+            echo "$MARKER"
+            if [ "$CLOSED" = true ]; then
+              echo "The preview of this pull request is deleted."
+            else
+              echo "Preview of \`${HEAD_SHA:0:8}\`: [docs]($url) · [API](${url}api/fleuron/)"
+            fi
+          } > body.md
+
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            --jq "[.[] | select(.body | startswith(\"$MARKER\"))] | first | .id // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@body.md --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@body.md --silent
+          fi
