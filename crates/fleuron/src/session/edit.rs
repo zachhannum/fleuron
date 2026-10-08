@@ -34,12 +34,9 @@ impl Session<'_> {
         self.stale = Stale::Trace;
     }
 
-    /// Names the sources of the book in the order they come, one that
-    /// has no section among them.
+    /// Sets the order of the book's sources, one that has no section
+    /// among them.
     ///
-    /// The book alone cannot say where such a source belongs, and
-    /// this is what [`replace_source`](Session::replace_source) places
-    /// its sections by once it has some.
     /// [`set_content`](Session::set_content) resets the order to the
     /// sources the book carries, so this follows it.
     pub fn set_source_order(&mut self, names: Vec<String>) {

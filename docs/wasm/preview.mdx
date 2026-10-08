@@ -120,7 +120,7 @@ await preview.setBook([
 ]);
 ```
 
-After that, `edit(name, text)` is the keystroke path: it reads that one file again and every other file keeps the lines it already has. A file that you edit to an empty text keeps its place in the book. A name the book has not seen is appended, so `edit` is also how a file arrives mid-session. `remove(name)` is how one leaves.
+After that, `edit(name, text)` is the keystroke path: it reads that one file again and every other file keeps the lines it already has. A name the book has not seen is appended, so `edit` is also how a file arrives mid-session. `remove(name)` is how one leaves.
 
 A sheet reaches the sections of a source by the classes and the id that the host gives the source. The names stay with the source through an edit and a reorder. A rule for `section.chapter` matches the same chapters after the author moves one. The text does not change, so no byte offset of a node moves. The following example names the front matter and the first chapter, and then changes the classes of the chapter:
 

@@ -43,11 +43,9 @@ If the references in a book print page numbers, the engine lays out the book twi
 
 ## Editing content
 
-`set_content` replaces the book. `replace_source(name, sections)` replaces every section that came from one file. One markdown file can split into several sections, and they all go together. If the name is new to the book, `replace_source` adds the sections at the end.
-
-A file that you replace with no sections keeps its place in the book. The next sections that you give the file go at that place. `remove_source(name)` removes the file and its place.
-
-A book can open with a file that has no sections, and the sections of the book do not hold a place for it. `set_source_order(names)` gives the session the order of every file. Call it after `set_content`.
+`set_content` replaces the book. `replace_source(name, sections)` replaces every section that came from one file. 
+One markdown file may split into several sections, and they all go together. A name the book does not already have 
+appends instead.
 
 ```rust
 use fleuron_markdown::{Options, to_sections};
