@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["files","write"],"struct":["Epub","File","Files","SpineEntry"]};
