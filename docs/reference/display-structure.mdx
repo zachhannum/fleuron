@@ -70,7 +70,7 @@ Layout decides which page a chapter starts on, so a host builds a contents page 
 
 Every item names its own layer. `z-index` on a block sets that layer, and [the CSS subset](../css-subset.mdx) describes it under Layers. Two layers are the engine's own. `DrawItem::PAGE_BACKGROUND` is the background of a page, under every layer a stylesheet can name. `DrawItem::PAGE_FURNITURE` is a page number or a running head, over every one of them. The TypeScript reader exports the same two numbers as `PAGE_BACKGROUND` and `PAGE_FURNITURE`.
 
-Every item has a blend mode as well. It comes from `mix-blend-mode` on an element, and [the CSS subset](../css-subset.mdx#blend-modes) describes it under Blend modes. `BlendMode` has one variant for `normal` and one for each of the fifteen blend modes of CSS. The TypeScript reader gives the mode as the CSS keyword, such as `'multiply'`.
+Every item has a blend mode as well. It comes from [`mix-blend-mode`](../css-subset.mdx#blend-modes) on an element. `BlendMode` has one variant for `normal` and one for each of the fifteen blend modes of CSS. The TypeScript reader gives the mode as the CSS keyword, such as `'multiply'`.
 
 ## `Link`
 
@@ -346,7 +346,7 @@ For a background, resolve `asset` the same way, clip to the box with its corners
 
 Fill every color at its alpha, and draw every image at its `alpha`. At 255 the fill or the image is opaque, and at 0 it does not show.
 
-Draw every item in its `blend` mode. An item in `normal` covers the items before it. An item in any other mode mixes with the items before it, and with nothing after it.
+Draw every item in its `blend` mode. An item in `normal` covers the items before it. An item in any other mode mixes with the items before it.
 
 For a rounded box, draw the outline with each corner as a quarter ellipse. Where `ring` is not zero, add the second outline to the same path and fill the path by the even-odd rule. The even-odd rule leaves the inside of the second outline empty.
 

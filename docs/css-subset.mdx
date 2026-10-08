@@ -1045,11 +1045,11 @@ luminosity
 
 Each mode mixes two colors the way it does in a browser. For example, `multiply` darkens the colors under the element, and `screen` lightens them.
 
-A blend mode applies to a block or to an inline element. It applies to the text, the background, the border, and the images of the element. `mix-blend-mode` does not inherit, but an element inside a blended element blends in the same mode. An element inside that names a mode of its own uses that mode.
+A blend mode applies to a block or to an inline element, and to everything in the element: the text, the backgrounds, the borders, and the images. An element inside it can have a blend mode of its own.
 
-What is under an element is everything the engine drew before it. That includes the background of the page and the backgrounds of the blocks around the element.
+The colors under an element include the background of the page, the backgrounds of the blocks around the element, and anything in a [layer](#layers) below it.
 
-The engine blends each part of an element on its own. Where an element has a blend mode and a background of its own, its text blends with that background. In a browser, the text covers the background, and the two blend with the page as one picture. To get the same result in both, put the background on a block. Then put the blend mode on an inline element inside that block.
+Where an element has a blend mode and a background of its own, its text blends with that background as well. In a browser, it does not.
 
 The following example gives a note a yellow background and multiplies its emphasized words with that background:
 
