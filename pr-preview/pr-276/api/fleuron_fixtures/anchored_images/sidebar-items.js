@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTOUR_CSS","CSS","IMAGE","ORNAMENT","ORNAMENT_URL","ORNAMENT_WEBP","URL"],"fn":["assets","illustrated","illustrated_with"]};
