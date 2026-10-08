@@ -1,0 +1,1008 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/fleuron/src/lines/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="fleuron" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">fleuron/lines/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Line layout: text in, broken lines out.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Knuth-Plass total fit. A paragraph is flattened into style runs,
+<a href=#4 id=4 data-nosnippet>4</a>//! shaped, and modelled as boxes, glue and penalties; the breaker
+<a href=#5 id=5 data-nosnippet>5</a>//! picks the set of breaks with the fewest demerits over the whole
+<a href=#6 id=6 data-nosnippet>6</a>//! paragraph rather than the most text on each line. The break
+<a href=#7 id=7 data-nosnippet>7</a>//! source is UAX #14 with word boundaries from UAX #29, plus
+<a href=#8 id=8 data-nosnippet>8</a>//! optional hyphenation, which enters as a flagged penalty.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! Justified text has its glue stretched or shrunk to the measure
+<a href=#11 id=11 data-nosnippet>11</a>//! here. The adjustment lands on the glyphs' own advances, so a
+<a href=#12 id=12 data-nosnippet>12</a>//! painter positions what it is given and never re-derives spacing.
+<a href=#13 id=13 data-nosnippet>13</a>//! A `Line` is shaped runs: measurement happened here.
+<a href=#14 id=14 data-nosnippet>14</a>//!
+<a href=#15 id=15 data-nosnippet>15</a>//! Units: advances come out of the shaper in font units; the measure
+<a href=#16 id=16 data-nosnippet>16</a>//! arrives in points and converts once, via `units_per_em * size`.
+<a href=#17 id=17 data-nosnippet>17</a>//!
+<a href=#18 id=18 data-nosnippet>18</a>//! The stages have a file each: `flatten` makes one string of styled
+<a href=#19 id=19 data-nosnippet>19</a>//! spans, `shape` turns spans into glyphs, `opportunity` says where a
+<a href=#20 id=20 data-nosnippet>20</a>//! line may end, `breaker` picks the breaks, `justify` moves the glue
+<a href=#21 id=21 data-nosnippet>21</a>//! on a line that was set to its measure, and `line` is what comes
+<a href=#22 id=22 data-nosnippet>22</a>//! out.
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">use </span>std::cell::RefCell;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>std::collections::HashSet;
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span><span class="kw">crate</span>::content::{Inline, SourcePos};
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span><span class="kw">crate</span>::fonts::FontRegistry;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span><span class="kw">crate</span>::linebox::{LineBox, Strut};
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">mod </span>breaker;
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">mod </span>flatten;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">mod </span>inline;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">mod </span>justify;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">mod </span>line;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">mod </span>measure;
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">mod </span>opportunity;
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">mod </span>paragraph;
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">mod </span>shape;
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="attr">#[cfg(test)]
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="kw">mod </span>testing;
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub use </span>line::{InlineFragment, Line, LineSpan, ShapedRun, Spans};
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub use </span>measure::{Measure, Span};
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub use </span>paragraph::{
+<a href=#48 id=48 data-nosnippet>48</a>    Face, FirstLine, Generated, HangEnd, HangingPunctuation, Inherited, InlineBox, InlineStyles,
+<a href=#49 id=49 data-nosnippet>49</a>    LineBreakOptions, Opening, ParagraphStyle, Patterns,
+<a href=#50 id=50 data-nosnippet>50</a>};
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">use </span>breaker::Breaker;
+<a href=#53 id=53 data-nosnippet>53</a><span class="kw">use </span>flatten::FlatParagraph;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">use </span>justify::adjust;
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">use </span>line::{Widths, cut_runs, gather, tile};
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">use </span>paragraph::Lead;
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">use </span>shape::ShapedSpan;
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="doccomment">/// The layout pass: one paragraph → lines that fit the measure.
+<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">pub struct </span>LineLayout&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#61 id=61 data-nosnippet>61</a>    registry: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FontRegistry,
+<a href=#62 id=62 data-nosnippet>62</a>    segmenter: WordSegmenterBorrowedStatic,
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="doccomment">/// The characters shaping found no glyph for, since they were
+<a href=#64 id=64 data-nosnippet>64</a>    /// last taken.
+<a href=#65 id=65 data-nosnippet>65</a>    </span>uncovered: RefCell&lt;Found&gt;,
+<a href=#66 id=66 data-nosnippet>66</a>}
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// A character the face it was set in has no glyph for, where it was
+<a href=#69 id=69 data-nosnippet>69</a>/// first written.
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="attr">#[derive(Debug, Clone, PartialEq)]
+<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Uncovered {
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) character: char,
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// The face that has no glyph for it.
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) font_id: u16,
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// `None` where the manuscript does not hold the character.
+<a href=#76 id=76 data-nosnippet>76</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) position: <span class="prelude-ty">Option</span>&lt;SourcePos&gt;,
+<a href=#77 id=77 data-nosnippet>77</a>}
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a><span class="doccomment">/// The characters with no glyph, each one once, in the order they
+<a href=#80 id=80 data-nosnippet>80</a>/// were shaped.
+<a href=#81 id=81 data-nosnippet>81</a></span><span class="attr">#[derive(Default)]
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">struct </span>Found {
+<a href=#83 id=83 data-nosnippet>83</a>    seen: HashSet&lt;char&gt;,
+<a href=#84 id=84 data-nosnippet>84</a>    list: Vec&lt;Uncovered&gt;,
+<a href=#85 id=85 data-nosnippet>85</a>}
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// The borrowed, 'static segmenter `WordSegmenter::new_auto` returns.
+<a href=#88 id=88 data-nosnippet>88</a></span><span class="kw">type </span>WordSegmenterBorrowedStatic = icu_segmenter::WordSegmenterBorrowed&lt;<span class="lifetime">'static</span>&gt;;
+<a href=#89 id=89 data-nosnippet>89</a>
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; LineLayout&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// A layout pass over the faces in `registry`.
+<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub fn </span>new(registry: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FontRegistry) -&gt; <span class="self">Self </span>{
+<a href=#93 id=93 data-nosnippet>93</a>        LineLayout {
+<a href=#94 id=94 data-nosnippet>94</a>            registry,
+<a href=#95 id=95 data-nosnippet>95</a>            segmenter: WordSegmenter::new_auto(WordBreakInvariantOptions::default()),
+<a href=#96 id=96 data-nosnippet>96</a>            uncovered: RefCell::new(Found::default()),
+<a href=#97 id=97 data-nosnippet>97</a>        }
+<a href=#98 id=98 data-nosnippet>98</a>    }
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="doccomment">/// Hands over the characters shaping found no glyph for, each
+<a href=#101 id=101 data-nosnippet>101</a>    /// one once, and starts over.
+<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>take_uncovered(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Uncovered&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>        std::mem::take(<span class="kw-2">&amp;mut *</span><span class="self">self</span>.uncovered.borrow_mut()).list
+<a href=#104 id=104 data-nosnippet>104</a>    }
+<a href=#105 id=105 data-nosnippet>105</a>}
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a><span class="kw">impl </span>LineLayout&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// The paragraph's strut: the minimum box every one of its lines
+<a href=#109 id=109 data-nosnippet>109</a>    /// occupies, whatever the runs on it.
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">pub fn </span>strut(<span class="kw-2">&amp;</span><span class="self">self</span>, style: <span class="kw-2">&amp;</span>ParagraphStyle) -&gt; Strut {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="self">self</span>.registry
+<a href=#112 id=112 data-nosnippet>112</a>            .metrics(style.font_id)
+<a href=#113 id=113 data-nosnippet>113</a>            .map(|m| Strut::from_metrics(m, style.size, style.line_height))
+<a href=#114 id=114 data-nosnippet>114</a>            .unwrap_or_default()
+<a href=#115 id=115 data-nosnippet>115</a>    }
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// The box one line occupies: the strut, grown by any run taller
+<a href=#118 id=118 data-nosnippet>118</a>    /// than it around the shared baseline.
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">pub fn </span>line_box(<span class="kw-2">&amp;</span><span class="self">self</span>, runs: <span class="kw-2">&amp;</span>[ShapedRun], style: <span class="kw-2">&amp;</span>ParagraphStyle) -&gt; LineBox {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>strut = <span class="self">self</span>.strut(style);
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span><span class="kw-2">mut </span>above = strut.above;
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span><span class="kw-2">mut </span>below = strut.below;
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">for </span>run <span class="kw">in </span>runs {
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(metrics) = <span class="self">self</span>.registry.metrics(run.font_id) <span class="kw">else </span>{
+<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">continue</span>;
+<a href=#126 id=126 data-nosnippet>126</a>            };
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">let </span>run_strut = Strut::from_metrics(metrics, run.size, style.line_height);
+<a href=#128 id=128 data-nosnippet>128</a>            above = above.max(run_strut.above);
+<a href=#129 id=129 data-nosnippet>129</a>            below = below.max(run_strut.below);
+<a href=#130 id=130 data-nosnippet>130</a>        }
+<a href=#131 id=131 data-nosnippet>131</a>        LineBox {
+<a href=#132 id=132 data-nosnippet>132</a>            baseline: above,
+<a href=#133 id=133 data-nosnippet>133</a>            height: above + below,
+<a href=#134 id=134 data-nosnippet>134</a>        }
+<a href=#135 id=135 data-nosnippet>135</a>    }
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="doccomment">/// Breaks one paragraph into lines of at most `measure_pt`
+<a href=#138 id=138 data-nosnippet>138</a>    /// points, every inline taking the block's own style.
+<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">pub fn </span>layout(
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#141 id=141 data-nosnippet>141</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#142 id=142 data-nosnippet>142</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#143 id=143 data-nosnippet>143</a>        measure: <span class="kw">impl </span>Into&lt;Measure&gt;,
+<a href=#144 id=144 data-nosnippet>144</a>        options: LineBreakOptions,
+<a href=#145 id=145 data-nosnippet>145</a>    ) -&gt; Vec&lt;Line&gt; {
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="self">self</span>.layout_styled(
+<a href=#147 id=147 data-nosnippet>147</a>            inlines,
+<a href=#148 id=148 data-nosnippet>148</a>            style,
+<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw-2">&amp;</span>Inherited,
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw-2">&amp;</span>measure.into(),
+<a href=#151 id=151 data-nosnippet>151</a>            options,
+<a href=#152 id=152 data-nosnippet>152</a>            Opening::default(),
+<a href=#153 id=153 data-nosnippet>153</a>        )
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="doccomment">/// The same, with the style tree answering for each inline and
+<a href=#157 id=157 data-nosnippet>157</a>    /// `opening` saying what sets the line the paragraph opens on
+<a href=#158 id=158 data-nosnippet>158</a>    /// apart from the rest of it.
+<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">pub fn </span>layout_styled(
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#161 id=161 data-nosnippet>161</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#162 id=162 data-nosnippet>162</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#163 id=163 data-nosnippet>163</a>        styles: <span class="kw-2">&amp;</span><span class="kw">dyn </span>InlineStyles,
+<a href=#164 id=164 data-nosnippet>164</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#165 id=165 data-nosnippet>165</a>        options: LineBreakOptions,
+<a href=#166 id=166 data-nosnippet>166</a>        opening: Opening,
+<a href=#167 id=167 data-nosnippet>167</a>    ) -&gt; Vec&lt;Line&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="self">self</span>.broken(inlines, style, styles, measure, options, opening)
+<a href=#169 id=169 data-nosnippet>169</a>            .<span class="number">0
+<a href=#170 id=170 data-nosnippet>170</a>    </span>}
+<a href=#171 id=171 data-nosnippet>171</a>
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// The same, handing back the shaped paragraph beside the lines.
+<a href=#173 id=173 data-nosnippet>173</a>    ///
+<a href=#174 id=174 data-nosnippet>174</a>    /// A caller that can break this paragraph again keeps it.
+<a href=#175 id=175 data-nosnippet>175</a>    /// [`LineLayout::rebreak`] sets the same text to a different
+<a href=#176 id=176 data-nosnippet>176</a>    /// profile without shaping it twice.
+<a href=#177 id=177 data-nosnippet>177</a>    </span><span class="kw">pub fn </span>layout_shaped(
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#179 id=179 data-nosnippet>179</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#180 id=180 data-nosnippet>180</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#181 id=181 data-nosnippet>181</a>        styles: <span class="kw-2">&amp;</span><span class="kw">dyn </span>InlineStyles,
+<a href=#182 id=182 data-nosnippet>182</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#183 id=183 data-nosnippet>183</a>        options: LineBreakOptions,
+<a href=#184 id=184 data-nosnippet>184</a>        opening: Opening,
+<a href=#185 id=185 data-nosnippet>185</a>    ) -&gt; (Broken, <span class="prelude-ty">Option</span>&lt;Shaped&gt;) {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">let </span>(broken, <span class="kw">_</span>, shaped) =
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="self">self</span>.broken_shaped(inlines, style, styles, measure, options, opening);
+<a href=#188 id=188 data-nosnippet>188</a>        (broken, shaped)
+<a href=#189 id=189 data-nosnippet>189</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// Breaks a paragraph that was already shaped to `measure`,
+<a href=#192 id=192 data-nosnippet>192</a>    /// starting from the end of the line `from`, which is `0` for the
+<a href=#193 id=193 data-nosnippet>193</a>    /// whole of it.
+<a href=#194 id=194 data-nosnippet>194</a>    ///
+<a href=#195 id=195 data-nosnippet>195</a>    /// The style over the opening line is not held to the text it
+<a href=#196 id=196 data-nosnippet>196</a>    /// covered before. The profile decides where the lines end. A
+<a href=#197 id=197 data-nosnippet>197</a>    /// line pinned to a width it no longer has runs past that width.
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">pub fn </span>rebreak(<span class="kw-2">&amp;</span><span class="self">self</span>, shaped: <span class="kw-2">&amp;</span>Shaped, measure: <span class="kw-2">&amp;</span>Measure, from: usize) -&gt; Broken {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="self">self</span>.break_shaped(shaped, measure, from, <span class="prelude-val">None</span>)
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Breaks one paragraph, and how many times the breaker ran.
+<a href=#203 id=203 data-nosnippet>203</a>    ///
+<a href=#204 id=204 data-nosnippet>204</a>    /// A first-line style takes two runs. What it sets changes the
+<a href=#205 id=205 data-nosnippet>205</a>    /// width of the opening run, the width moves where the paragraph
+<a href=#206 id=206 data-nosnippet>206</a>    /// breaks, and the break decides how much text the opening line
+<a href=#207 id=207 data-nosnippet>207</a>    /// holds. The first run sets the paragraph's leading run in the
+<a href=#208 id=208 data-nosnippet>208</a>    /// opening style to the end and breaks the whole of it. The
+<a href=#209 id=209 data-nosnippet>209</a>    /// second sets as far as the extent that break gave and breaks
+<a href=#210 id=210 data-nosnippet>210</a>    /// again with the opening line ending there, so the style covers
+<a href=#211 id=211 data-nosnippet>211</a>    /// the text the line comes to hold. The count is fixed at two,
+<a href=#212 id=212 data-nosnippet>212</a>    /// because a line count that depended on how long a paragraph
+<a href=#213 id=213 data-nosnippet>213</a>    /// took to settle would not be deterministic.
+<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">fn </span>broken(
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#216 id=216 data-nosnippet>216</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#217 id=217 data-nosnippet>217</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#218 id=218 data-nosnippet>218</a>        styles: <span class="kw-2">&amp;</span><span class="kw">dyn </span>InlineStyles,
+<a href=#219 id=219 data-nosnippet>219</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#220 id=220 data-nosnippet>220</a>        options: LineBreakOptions,
+<a href=#221 id=221 data-nosnippet>221</a>        opening: Opening,
+<a href=#222 id=222 data-nosnippet>222</a>    ) -&gt; (Vec&lt;Line&gt;, u8) {
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span>(broken, runs, <span class="kw">_</span>) =
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="self">self</span>.broken_shaped(inlines, style, styles, measure, options, opening);
+<a href=#225 id=225 data-nosnippet>225</a>        (broken.lines, runs)
+<a href=#226 id=226 data-nosnippet>226</a>    }
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// The same, handing back what the paragraph was shaped from.
+<a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">fn </span>broken_shaped(
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#231 id=231 data-nosnippet>231</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#232 id=232 data-nosnippet>232</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#233 id=233 data-nosnippet>233</a>        styles: <span class="kw-2">&amp;</span><span class="kw">dyn </span>InlineStyles,
+<a href=#234 id=234 data-nosnippet>234</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#235 id=235 data-nosnippet>235</a>        options: LineBreakOptions,
+<a href=#236 id=236 data-nosnippet>236</a>        opening: Opening,
+<a href=#237 id=237 data-nosnippet>237</a>    ) -&gt; (Broken, u8, <span class="prelude-ty">Option</span>&lt;Shaped&gt;) {
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>lead = Lead {
+<a href=#239 id=239 data-nosnippet>239</a>            style: opening.first_line,
+<a href=#240 id=240 data-nosnippet>240</a>            extent: <span class="prelude-val">None</span>,
+<a href=#241 id=241 data-nosnippet>241</a>            taken: opening.taken,
+<a href=#242 id=242 data-nosnippet>242</a>            pseudo_element: (opening.first_line.is_some()
+<a href=#243 id=243 data-nosnippet>243</a>                &amp;&amp; opening.node != <span class="kw">crate</span>::content::NodeId::UNASSIGNED)
+<a href=#244 id=244 data-nosnippet>244</a>                .then(|| {
+<a href=#245 id=245 data-nosnippet>245</a>                    opening
+<a href=#246 id=246 data-nosnippet>246</a>                        .node
+<a href=#247 id=247 data-nosnippet>247</a>                        .pseudo(<span class="kw">crate</span>::content::PseudoElement::FirstLine)
+<a href=#248 id=248 data-nosnippet>248</a>                }),
+<a href=#249 id=249 data-nosnippet>249</a>        };
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">let </span>once = |lead| {
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">let </span>shaped = <span class="self">self</span>.shaped(inlines, style, styles, options, lead);
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">let </span>broken = shaped
+<a href=#253 id=253 data-nosnippet>253</a>                .as_ref()
+<a href=#254 id=254 data-nosnippet>254</a>                .map(|shaped| <span class="self">self</span>.break_shaped(shaped, measure, <span class="number">0</span>, shaped.opening))
+<a href=#255 id=255 data-nosnippet>255</a>                .unwrap_or_default();
+<a href=#256 id=256 data-nosnippet>256</a>            (broken, shaped)
+<a href=#257 id=257 data-nosnippet>257</a>        };
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span>(broken, shaped) = once(lead);
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>lead.style.is_none() || broken.extent == <span class="number">0 </span>{
+<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">return </span>(broken, <span class="number">1</span>, shaped);
+<a href=#261 id=261 data-nosnippet>261</a>        }
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>lead = Lead {
+<a href=#263 id=263 data-nosnippet>263</a>            extent: <span class="prelude-val">Some</span>(broken.extent),
+<a href=#264 id=264 data-nosnippet>264</a>            ..lead
+<a href=#265 id=265 data-nosnippet>265</a>        };
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>(broken, shaped) = once(lead);
+<a href=#267 id=267 data-nosnippet>267</a>        (broken, <span class="number">2</span>, shaped)
+<a href=#268 id=268 data-nosnippet>268</a>    }
+<a href=#269 id=269 data-nosnippet>269</a>
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="doccomment">/// One paragraph flattened and shaped, which is everything about
+<a href=#271 id=271 data-nosnippet>271</a>    /// it that the measure does not decide.
+<a href=#272 id=272 data-nosnippet>272</a>    ///
+<a href=#273 id=273 data-nosnippet>273</a>    /// `lead` is the style the paragraph opens in, how far it reaches
+<a href=#274 id=274 data-nosnippet>274</a>    /// in bytes of that text, and what a drop cap took.
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">fn </span>shaped(
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#277 id=277 data-nosnippet>277</a>        inlines: <span class="kw-2">&amp;</span>[Inline],
+<a href=#278 id=278 data-nosnippet>278</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#279 id=279 data-nosnippet>279</a>        styles: <span class="kw-2">&amp;</span><span class="kw">dyn </span>InlineStyles,
+<a href=#280 id=280 data-nosnippet>280</a>        options: LineBreakOptions,
+<a href=#281 id=281 data-nosnippet>281</a>        lead: Lead,
+<a href=#282 id=282 data-nosnippet>282</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;Shaped&gt; {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span>flat = <span class="self">self</span>.flatten(inlines, style, styles, lead);
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="self">self</span>.shape_flat(flat, style, options, lead.extent)
+<a href=#285 id=285 data-nosnippet>285</a>    }
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="doccomment">/// Breaks the text of the generated box `node` into lines of
+<a href=#288 id=288 data-nosnippet>288</a>    /// `measure`: what `::before` and `::after` generate on a block.
+<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>layout_generated(
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#291 id=291 data-nosnippet>291</a>        text: <span class="kw-2">&amp;</span>str,
+<a href=#292 id=292 data-nosnippet>292</a>        node: <span class="kw">crate</span>::content::NodeId,
+<a href=#293 id=293 data-nosnippet>293</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#294 id=294 data-nosnippet>294</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#295 id=295 data-nosnippet>295</a>        options: LineBreakOptions,
+<a href=#296 id=296 data-nosnippet>296</a>    ) -&gt; Vec&lt;Line&gt; {
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span>flat = <span class="self">self</span>.flatten_generated(text, node, style);
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="self">self</span>.shape_flat(flat, style, options, <span class="prelude-val">None</span>)
+<a href=#299 id=299 data-nosnippet>299</a>            .map(|shaped| <span class="self">self</span>.break_shaped(<span class="kw-2">&amp;</span>shaped, measure, <span class="number">0</span>, <span class="prelude-val">None</span>).lines)
+<a href=#300 id=300 data-nosnippet>300</a>            .unwrap_or_default()
+<a href=#301 id=301 data-nosnippet>301</a>    }
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="doccomment">/// Breaks the preformatted text of `node` into lines: one line per
+<a href=#304 id=304 data-nosnippet>304</a>    /// newline the author wrote, whatever the measure.
+<a href=#305 id=305 data-nosnippet>305</a>    ///
+<a href=#306 id=306 data-nosnippet>306</a>    /// A line wider than the measure runs past it, because there is
+<a href=#307 id=307 data-nosnippet>307</a>    /// nowhere else for it to end.
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>layout_preformatted(
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#310 id=310 data-nosnippet>310</a>        text: <span class="kw-2">&amp;</span>str,
+<a href=#311 id=311 data-nosnippet>311</a>        node: <span class="kw">crate</span>::content::NodeId,
+<a href=#312 id=312 data-nosnippet>312</a>        position: <span class="prelude-ty">Option</span>&lt;SourcePos&gt;,
+<a href=#313 id=313 data-nosnippet>313</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#314 id=314 data-nosnippet>314</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#315 id=315 data-nosnippet>315</a>        options: LineBreakOptions,
+<a href=#316 id=316 data-nosnippet>316</a>    ) -&gt; Vec&lt;Line&gt; {
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span>flat = <span class="self">self</span>.flatten_preformatted(text, node, position, style);
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="self">self</span>.shape_flat(flat, style, options, <span class="prelude-val">None</span>)
+<a href=#319 id=319 data-nosnippet>319</a>            .map(|shaped| <span class="self">self</span>.break_shaped(<span class="kw-2">&amp;</span>shaped, measure, <span class="number">0</span>, <span class="prelude-val">None</span>).lines)
+<a href=#320 id=320 data-nosnippet>320</a>            .unwrap_or_default()
+<a href=#321 id=321 data-nosnippet>321</a>    }
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="doccomment">/// One flattened paragraph shaped. `opening` is where the line the
+<a href=#324 id=324 data-nosnippet>324</a>    /// paragraph opens on has to end.
+<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="kw">fn </span>shape_flat(
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#327 id=327 data-nosnippet>327</a>        flat: flatten::FlatParagraph,
+<a href=#328 id=328 data-nosnippet>328</a>        style: <span class="kw-2">&amp;</span>ParagraphStyle,
+<a href=#329 id=329 data-nosnippet>329</a>        options: LineBreakOptions,
+<a href=#330 id=330 data-nosnippet>330</a>        opening: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#331 id=331 data-nosnippet>331</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;Shaped&gt; {
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">if </span>flat.text.is_empty() {
+<a href=#333 id=333 data-nosnippet>333</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#334 id=334 data-nosnippet>334</a>        }
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span>upem = <span class="self">self</span>.registry.metrics(style.font_id)<span class="question-mark">?</span>.units_per_em <span class="kw">as </span>f32;
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span>spans = <span class="self">self</span>.shape_spans(<span class="kw-2">&amp;</span>flat, style, upem);
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="prelude-val">Some</span>(Shaped {
+<a href=#338 id=338 data-nosnippet>338</a>            flat,
+<a href=#339 id=339 data-nosnippet>339</a>            spans,
+<a href=#340 id=340 data-nosnippet>340</a>            style: style.clone(),
+<a href=#341 id=341 data-nosnippet>341</a>            options,
+<a href=#342 id=342 data-nosnippet>342</a>            upem,
+<a href=#343 id=343 data-nosnippet>343</a>            opening,
+<a href=#344 id=344 data-nosnippet>344</a>        })
+<a href=#345 id=345 data-nosnippet>345</a>    }
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="doccomment">/// Breaks a shaped paragraph to `measure`, starting from the
+<a href=#348 id=348 data-nosnippet>348</a>    /// break `from`.
+<a href=#349 id=349 data-nosnippet>349</a>    ///
+<a href=#350 id=350 data-nosnippet>350</a>    /// `opening` is where the line the paragraph opens on has to end,
+<a href=#351 id=351 data-nosnippet>351</a>    /// which is the extent of the style over it.
+<a href=#352 id=352 data-nosnippet>352</a>    </span><span class="kw">fn </span>break_shaped(
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#354 id=354 data-nosnippet>354</a>        shaped: <span class="kw-2">&amp;</span>Shaped,
+<a href=#355 id=355 data-nosnippet>355</a>        measure: <span class="kw-2">&amp;</span>Measure,
+<a href=#356 id=356 data-nosnippet>356</a>        from: usize,
+<a href=#357 id=357 data-nosnippet>357</a>        opening: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#358 id=358 data-nosnippet>358</a>    ) -&gt; Broken {
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span>Shaped {
+<a href=#360 id=360 data-nosnippet>360</a>            flat,
+<a href=#361 id=361 data-nosnippet>361</a>            spans,
+<a href=#362 id=362 data-nosnippet>362</a>            style,
+<a href=#363 id=363 data-nosnippet>363</a>            options,
+<a href=#364 id=364 data-nosnippet>364</a>            upem,
+<a href=#365 id=365 data-nosnippet>365</a>            ..
+<a href=#366 id=366 data-nosnippet>366</a>        } = shaped;
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>(options, upem) = (<span class="kw-2">*</span>options, <span class="kw-2">*</span>upem);
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="comment">// Points → font units: measure / size gives ems, ems *
+<a href=#369 id=369 data-nosnippet>369</a>        // units_per_em gives font units.
+<a href=#370 id=370 data-nosnippet>370</a>        </span><span class="kw">let </span>to_points = |units: f32| units / upem * style.size;
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="comment">// Points into the paragraph's own font units: what an
+<a href=#373 id=373 data-nosnippet>373</a>        // inline box's edges are charged in.
+<a href=#374 id=374 data-nosnippet>374</a>        </span><span class="kw">let </span>units = <span class="kw">if </span>style.size &gt; <span class="number">0.0 </span>{
+<a href=#375 id=375 data-nosnippet>375</a>            upem / style.size
+<a href=#376 id=376 data-nosnippet>376</a>        } <span class="kw">else </span>{
+<a href=#377 id=377 data-nosnippet>377</a>            <span class="number">0.0
+<a href=#378 id=378 data-nosnippet>378</a>        </span>};
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>widths = Widths::build(flat, spans, units);
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span>hyphen = <span class="self">self</span>.hyphen_advance(style) <span class="kw">as </span>f32;
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">let </span>breaks = <span class="self">self</span>.break_points(<span class="kw-2">&amp;</span>flat.text, <span class="kw-2">&amp;</span>widths, hyphen, options);
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">let </span>breaker = Breaker {
+<a href=#383 id=383 data-nosnippet>383</a>            breaks: <span class="kw-2">&amp;</span>breaks,
+<a href=#384 id=384 data-nosnippet>384</a>            widths: <span class="kw-2">&amp;</span>widths,
+<a href=#385 id=385 data-nosnippet>385</a>            measure,
+<a href=#386 id=386 data-nosnippet>386</a>            rest: measure.at(measure.settled()),
+<a href=#387 id=387 data-nosnippet>387</a>            settled: measure.settled(),
+<a href=#388 id=388 data-nosnippet>388</a>            first_band: (<span class="number">0</span>..).find(|slot| measure.at(<span class="kw-2">*</span>slot).ends_band).unwrap_or(<span class="number">0</span>),
+<a href=#389 id=389 data-nosnippet>389</a>            upem,
+<a href=#390 id=390 data-nosnippet>390</a>            size: style.size,
+<a href=#391 id=391 data-nosnippet>391</a>            hyphen,
+<a href=#392 id=392 data-nosnippet>392</a>            options,
+<a href=#393 id=393 data-nosnippet>393</a>            from,
+<a href=#394 id=394 data-nosnippet>394</a>            opening: opening
+<a href=#395 id=395 data-nosnippet>395</a>                .and_then(|extent| breaks.iter().position(|at| at.content_end == extent)),
+<a href=#396 id=396 data-nosnippet>396</a>        };
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span><span class="kw-2">mut </span>broken = Broken::default();
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span><span class="kw-2">mut </span>start = breaks[from.min(breaks.len() - <span class="number">1</span>)].next;
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="comment">// The band being filled, and where its first span was set:
+<a href=#401 id=401 data-nosnippet>401</a>        // a span's offset is from there, so a painter handed the
+<a href=#402 id=402 data-nosnippet>402</a>        // line's leading edge places the rest. One buffer gathers the
+<a href=#403 id=403 data-nosnippet>403</a>        // spans of every band.
+<a href=#404 id=404 data-nosnippet>404</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>band: <span class="prelude-ty">Option</span>&lt;(Line, f32)&gt; = <span class="prelude-val">None</span>;
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span><span class="kw-2">mut </span>spans = Vec::new();
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">for </span>fit <span class="kw">in </span>breaker.run() {
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="kw">let </span>at = <span class="kw-2">&amp;</span>breaks[fit.at];
+<a href=#408 id=408 data-nosnippet>408</a>            <span class="kw">let </span>span = measure.at(fit.slot);
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="kw">if </span>at.content_end &gt; start {
+<a href=#410 id=410 data-nosnippet>410</a>                <span class="kw">let </span>(line, origin) = band.get_or_insert_with(|| {
+<a href=#411 id=411 data-nosnippet>411</a>                    <span class="kw">let </span><span class="kw-2">mut </span>line = Line::empty();
+<a href=#412 id=412 data-nosnippet>412</a>                    line.protrusion = to_points(fit.protrusion);
+<a href=#413 id=413 data-nosnippet>413</a>                    (line, span.origin)
+<a href=#414 id=414 data-nosnippet>414</a>                });
+<a href=#415 id=415 data-nosnippet>415</a>                <span class="kw">let </span>first = line.runs.len();
+<a href=#416 id=416 data-nosnippet>416</a>                line.runs
+<a href=#417 id=417 data-nosnippet>417</a>                    .extend(cut_runs(flat, <span class="kw-2">&amp;</span>shaped.spans, start, at.content_end));
+<a href=#418 id=418 data-nosnippet>418</a>                adjust(<span class="kw-2">&amp;mut </span>line.runs[first..], <span class="kw-2">&amp;</span>flat.text, fit.ratio, options);
+<a href=#419 id=419 data-nosnippet>419</a>                <span class="kw">if </span>at.hyphen {
+<a href=#420 id=420 data-nosnippet>420</a>                    <span class="self">self</span>.hyphenate(<span class="kw-2">&amp;mut </span>line.runs, style);
+<a href=#421 id=421 data-nosnippet>421</a>                }
+<a href=#422 id=422 data-nosnippet>422</a>                <span class="kw">let </span><span class="kw-2">mut </span>boxes = <span class="self">self</span>.inline_fragments(
+<a href=#423 id=423 data-nosnippet>423</a>                    flat,
+<a href=#424 id=424 data-nosnippet>424</a>                    <span class="kw-2">&amp;mut </span>line.runs[first..],
+<a href=#425 id=425 data-nosnippet>425</a>                    spans.len(),
+<a href=#426 id=426 data-nosnippet>426</a>                    start..at.content_end,
+<a href=#427 id=427 data-nosnippet>427</a>                );
+<a href=#428 id=428 data-nosnippet>428</a>                line.boxes.append(<span class="kw-2">&amp;mut </span>boxes);
+<a href=#429 id=429 data-nosnippet>429</a>                <span class="kw">let </span>offset = span.origin - <span class="kw-2">*</span>origin;
+<a href=#430 id=430 data-nosnippet>430</a>                <span class="kw">let </span>width = line.runs[first..].iter().map(|run| run.advance).sum();
+<a href=#431 id=431 data-nosnippet>431</a>                spans.push(LineSpan {
+<a href=#432 id=432 data-nosnippet>432</a>                    runs: first..line.runs.len(),
+<a href=#433 id=433 data-nosnippet>433</a>                    offset,
+<a href=#434 id=434 data-nosnippet>434</a>                    width,
+<a href=#435 id=435 data-nosnippet>435</a>                });
+<a href=#436 id=436 data-nosnippet>436</a>                line.width += width;
+<a href=#437 id=437 data-nosnippet>437</a>            }
+<a href=#438 id=438 data-nosnippet>438</a>            start = at.next;
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="kw">let </span>hard = at.forced &amp;&amp; fit.at != breaker.end();
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="kw">if </span>!span.ends_band &amp;&amp; !hard {
+<a href=#441 id=441 data-nosnippet>441</a>                <span class="kw">continue</span>;
+<a href=#442 id=442 data-nosnippet>442</a>            }
+<a href=#443 id=443 data-nosnippet>443</a>            <span class="comment">// A blank line of preformatted text takes a line of its
+<a href=#444 id=444 data-nosnippet>444</a>            // own, so what the author wrote under it stays where it
+<a href=#445 id=445 data-nosnippet>445</a>            // was written.
+<a href=#446 id=446 data-nosnippet>446</a>            </span><span class="kw">if </span>band.is_none() &amp;&amp; options.preformatted &amp;&amp; hard {
+<a href=#447 id=447 data-nosnippet>447</a>                spans.push(LineSpan {
+<a href=#448 id=448 data-nosnippet>448</a>                    runs: <span class="number">0</span>..<span class="number">0</span>,
+<a href=#449 id=449 data-nosnippet>449</a>                    offset: <span class="number">0.0</span>,
+<a href=#450 id=450 data-nosnippet>450</a>                    width: <span class="number">0</span>,
+<a href=#451 id=451 data-nosnippet>451</a>                });
+<a href=#452 id=452 data-nosnippet>452</a>                band = <span class="prelude-val">Some</span>((Line::empty(), span.origin));
+<a href=#453 id=453 data-nosnippet>453</a>            }
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>line, <span class="kw">_</span>)) = band.take() <span class="kw">else </span>{
+<a href=#455 id=455 data-nosnippet>455</a>                <span class="kw">continue</span>;
+<a href=#456 id=456 data-nosnippet>456</a>            };
+<a href=#457 id=457 data-nosnippet>457</a>            line.overhang = to_points(fit.overhang);
+<a href=#458 id=458 data-nosnippet>458</a>            line.box_ = <span class="self">self</span>.line_box(<span class="kw-2">&amp;</span>line.runs, style);
+<a href=#459 id=459 data-nosnippet>459</a>            line.spans = gather(<span class="kw-2">&amp;mut </span>spans);
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">if </span>broken.lines.is_empty() {
+<a href=#461 id=461 data-nosnippet>461</a>                broken.extent = at.content_end;
+<a href=#462 id=462 data-nosnippet>462</a>            }
+<a href=#463 id=463 data-nosnippet>463</a>            broken.lines.push(line);
+<a href=#464 id=464 data-nosnippet>464</a>            broken.ends.push(fit.at);
+<a href=#465 id=465 data-nosnippet>465</a>        }
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="comment">// A paragraph that ran out inside a band still sets what it
+<a href=#467 id=467 data-nosnippet>467</a>        // reached.
+<a href=#468 id=468 data-nosnippet>468</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>line, <span class="kw">_</span>)) = band.take() {
+<a href=#469 id=469 data-nosnippet>469</a>            line.box_ = <span class="self">self</span>.line_box(<span class="kw-2">&amp;</span>line.runs, style);
+<a href=#470 id=470 data-nosnippet>470</a>            line.spans = gather(<span class="kw-2">&amp;mut </span>spans);
+<a href=#471 id=471 data-nosnippet>471</a>            broken.lines.push(line);
+<a href=#472 id=472 data-nosnippet>472</a>            broken.ends.push(breaker.end());
+<a href=#473 id=473 data-nosnippet>473</a>        }
+<a href=#474 id=474 data-nosnippet>474</a>        tile(<span class="kw-2">&amp;mut </span>broken.lines, flat);
+<a href=#475 id=475 data-nosnippet>475</a>        broken
+<a href=#476 id=476 data-nosnippet>476</a>    }
+<a href=#477 id=477 data-nosnippet>477</a>}
+<a href=#478 id=478 data-nosnippet>478</a>
+<a href=#479 id=479 data-nosnippet>479</a><span class="doccomment">/// A paragraph shaped once, and everything about it the measure does
+<a href=#480 id=480 data-nosnippet>480</a>/// not decide: the flattened text, the runs it shaped into, and the
+<a href=#481 id=481 data-nosnippet>481</a>/// style and options it was set with.
+<a href=#482 id=482 data-nosnippet>482</a>///
+<a href=#483 id=483 data-nosnippet>483</a>/// Shaping is the expensive half of setting a paragraph, and it does
+<a href=#484 id=484 data-nosnippet>484</a>/// not depend on where the lines end. A caller that can break the
+<a href=#485 id=485 data-nosnippet>485</a>/// same paragraph again against a different profile keeps this. It
+<a href=#486 id=486 data-nosnippet>486</a>/// breaks the paragraph through [`LineLayout::rebreak`].
+<a href=#487 id=487 data-nosnippet>487</a></span><span class="kw">pub struct </span>Shaped {
+<a href=#488 id=488 data-nosnippet>488</a>    flat: FlatParagraph,
+<a href=#489 id=489 data-nosnippet>489</a>    spans: Vec&lt;ShapedSpan&gt;,
+<a href=#490 id=490 data-nosnippet>490</a>    style: ParagraphStyle,
+<a href=#491 id=491 data-nosnippet>491</a>    options: LineBreakOptions,
+<a href=#492 id=492 data-nosnippet>492</a>    upem: f32,
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="doccomment">/// Where the line the paragraph opens on has to end, when an
+<a href=#494 id=494 data-nosnippet>494</a>    /// opening style covers exactly that much of the text.
+<a href=#495 id=495 data-nosnippet>495</a>    </span>opening: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#496 id=496 data-nosnippet>496</a>}
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a><span class="kw">impl </span>std::fmt::Debug <span class="kw">for </span>Shaped {
+<a href=#499 id=499 data-nosnippet>499</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+<a href=#500 id=500 data-nosnippet>500</a>        f.debug_struct(<span class="string">"Shaped"</span>)
+<a href=#501 id=501 data-nosnippet>501</a>            .field(<span class="string">"text"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.flat.text)
+<a href=#502 id=502 data-nosnippet>502</a>            .finish_non_exhaustive()
+<a href=#503 id=503 data-nosnippet>503</a>    }
+<a href=#504 id=504 data-nosnippet>504</a>}
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a><span class="kw">impl </span>Shaped {
+<a href=#507 id=507 data-nosnippet>507</a>    <span class="doccomment">/// The style the paragraph is set in.
+<a href=#508 id=508 data-nosnippet>508</a>    </span><span class="kw">pub fn </span>style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ParagraphStyle {
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.style
+<a href=#510 id=510 data-nosnippet>510</a>    }
+<a href=#511 id=511 data-nosnippet>511</a>}
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a><span class="doccomment">/// One paragraph broken into lines: the lines themselves, and where
+<a href=#514 id=514 data-nosnippet>514</a>/// each of them ended.
+<a href=#515 id=515 data-nosnippet>515</a></span><span class="attr">#[derive(Debug, Default)]
+<a href=#516 id=516 data-nosnippet>516</a></span><span class="kw">pub struct </span>Broken {
+<a href=#517 id=517 data-nosnippet>517</a>    <span class="doccomment">/// The lines, in reading order.
+<a href=#518 id=518 data-nosnippet>518</a>    </span><span class="kw">pub </span>lines: Vec&lt;Line&gt;,
+<a href=#519 id=519 data-nosnippet>519</a>    <span class="doccomment">/// Where each line ended, as the paragraph counts the places it
+<a href=#520 id=520 data-nosnippet>520</a>    /// can be broken. A break from the end of a line sets the text
+<a href=#521 id=521 data-nosnippet>521</a>    /// that line left.
+<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">pub </span>ends: Vec&lt;usize&gt;,
+<a href=#523 id=523 data-nosnippet>523</a>    <span class="doccomment">/// Where the first line ended in the shaped text.
+<a href=#524 id=524 data-nosnippet>524</a>    </span>extent: usize,
+<a href=#525 id=525 data-nosnippet>525</a>}
+<a href=#526 id=526 data-nosnippet>526</a>
+<a href=#527 id=527 data-nosnippet>527</a><span class="attr">#[cfg(test)]
+<a href=#528 id=528 data-nosnippet>528</a></span><span class="kw">mod </span>tests {
+<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">use </span><span class="kw">crate</span>::content::NodeId;
+<a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">use </span><span class="kw">crate</span>::fonts::FaceAttributes;
+<a href=#531 id=531 data-nosnippet>531</a>    <span class="kw">use </span><span class="kw">crate</span>::lines::flatten::SMALL_CAPS_RATIO;
+<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">use </span><span class="kw">crate</span>::lines::testing::{
+<a href=#533 id=533 data-nosnippet>533</a>        DISPLAY, OPENING, body, divided_band, drawn, emphasis, layout_body, layout_first,
+<a href=#534 id=534 data-nosnippet>534</a>        line_text, one_run, registry, two_families, units_per_em, with_breaks,
+<a href=#535 id=535 data-nosnippet>535</a>    };
+<a href=#536 id=536 data-nosnippet>536</a>    <span class="kw">use </span><span class="kw">crate</span>::lines::{
+<a href=#537 id=537 data-nosnippet>537</a>        Face, FirstLine, Inherited, InlineStyles, Line, LineBreakOptions, LineLayout, Measure,
+<a href=#538 id=538 data-nosnippet>538</a>        Opening, ParagraphStyle,
+<a href=#539 id=539 data-nosnippet>539</a>    };
+<a href=#540 id=540 data-nosnippet>540</a>    <span class="kw">use </span><span class="kw">crate</span>::style::{FontVariantCaps, TextTransform};
+<a href=#541 id=541 data-nosnippet>541</a>
+<a href=#542 id=542 data-nosnippet>542</a>    <span class="doccomment">/// The opening line set in `face` and nothing else.
+<a href=#543 id=543 data-nosnippet>543</a>    </span><span class="kw">fn </span>faced(face: Face) -&gt; <span class="prelude-ty">Option</span>&lt;FirstLine&gt; {
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="prelude-val">Some</span>(FirstLine {
+<a href=#545 id=545 data-nosnippet>545</a>            face: <span class="prelude-val">Some</span>(face),
+<a href=#546 id=546 data-nosnippet>546</a>            ..FirstLine::default()
+<a href=#547 id=547 data-nosnippet>547</a>        })
+<a href=#548 id=548 data-nosnippet>548</a>    }
+<a href=#549 id=549 data-nosnippet>549</a>
+<a href=#550 id=550 data-nosnippet>550</a>    <span class="doccomment">/// The cut of the bundled family at one slope and weight.
+<a href=#551 id=551 data-nosnippet>551</a>    </span><span class="kw">fn </span>cut(italic: bool, weight: u16) -&gt; u16 {
+<a href=#552 id=552 data-nosnippet>552</a>        registry()
+<a href=#553 id=553 data-nosnippet>553</a>            .select(<span class="string">"eb garamond"</span>, FaceAttributes { italic, weight })
+<a href=#554 id=554 data-nosnippet>554</a>            .expect(<span class="string">"the bundled family has cuts"</span>)
+<a href=#555 id=555 data-nosnippet>555</a>            .id
+<a href=#556 id=556 data-nosnippet>556</a>    }
+<a href=#557 id=557 data-nosnippet>557</a>
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="doccomment">/// The face every run of `line` is shaped with, where they agree.
+<a href=#559 id=559 data-nosnippet>559</a>    </span><span class="kw">fn </span>face_of(line: <span class="kw-2">&amp;</span>Line) -&gt; u16 {
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span>first = line.runs[<span class="number">0</span>].font_id;
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="macro">assert!</span>(
+<a href=#562 id=562 data-nosnippet>562</a>            line.runs.iter().all(|run| run.font_id == first),
+<a href=#563 id=563 data-nosnippet>563</a>            <span class="string">"the line is set in more than one face: {:?}"</span>,
+<a href=#564 id=564 data-nosnippet>564</a>            line.runs.iter().map(|run| run.font_id).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#565 id=565 data-nosnippet>565</a>        );
+<a href=#566 id=566 data-nosnippet>566</a>        first
+<a href=#567 id=567 data-nosnippet>567</a>    }
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>    <span class="doccomment">/// A hard break ends the band it falls in. The text after a break
+<a href=#570 id=570 data-nosnippet>570</a>    /// in the first span of a divided band opens the band under it,
+<a href=#571 id=571 data-nosnippet>571</a>    /// not the span beside it.
+<a href=#572 id=572 data-nosnippet>572</a>    </span><span class="attr">#[test]
+<a href=#573 id=573 data-nosnippet>573</a>    </span><span class="kw">fn </span>a_hard_break_in_a_divided_band_opens_the_next_band() {
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>lines = layout.layout(
+<a href=#576 id=576 data-nosnippet>576</a>            <span class="kw-2">&amp;</span>with_breaks(<span class="string">"one\ntwo"</span>),
+<a href=#577 id=577 data-nosnippet>577</a>            <span class="kw-2">&amp;</span>body(),
+<a href=#578 id=578 data-nosnippet>578</a>            divided_band(<span class="number">100.0</span>, <span class="number">20.0</span>),
+<a href=#579 id=579 data-nosnippet>579</a>            LineBreakOptions::default(),
+<a href=#580 id=580 data-nosnippet>580</a>        );
+<a href=#581 id=581 data-nosnippet>581</a>        <span class="macro">assert_eq!</span>(drawn(<span class="kw-2">&amp;</span>lines), [<span class="string">"one"</span>, <span class="string">"two"</span>]);
+<a href=#582 id=582 data-nosnippet>582</a>        <span class="macro">assert_eq!</span>(lines[<span class="number">0</span>].spans.len(), <span class="number">1</span>, <span class="string">"{:?}"</span>, lines[<span class="number">0</span>].spans);
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="macro">assert_eq!</span>(lines[<span class="number">1</span>].spans[<span class="number">0</span>].offset, <span class="number">0.0</span>);
+<a href=#584 id=584 data-nosnippet>584</a>    }
+<a href=#585 id=585 data-nosnippet>585</a>
+<a href=#586 id=586 data-nosnippet>586</a>    <span class="doccomment">/// A paragraph shaped once breaks to the same lines as the same
+<a href=#587 id=587 data-nosnippet>587</a>    /// text shaped and broken together. A break from the end of one
+<a href=#588 id=588 data-nosnippet>588</a>    /// line sets the text that line left.
+<a href=#589 id=589 data-nosnippet>589</a>    </span><span class="attr">#[test]
+<a href=#590 id=590 data-nosnippet>590</a>    </span><span class="kw">fn </span>a_shaped_paragraph_breaks_again_to_the_same_lines() {
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">let </span>measure = Measure::uniform(<span class="number">120.0</span>);
+<a href=#593 id=593 data-nosnippet>593</a>        <span class="kw">let </span>(first, shaped) = layout.layout_shaped(
+<a href=#594 id=594 data-nosnippet>594</a>            <span class="kw-2">&amp;</span>one_run(OPENING),
+<a href=#595 id=595 data-nosnippet>595</a>            <span class="kw-2">&amp;</span>body(),
+<a href=#596 id=596 data-nosnippet>596</a>            <span class="kw-2">&amp;</span>Inherited,
+<a href=#597 id=597 data-nosnippet>597</a>            <span class="kw-2">&amp;</span>measure,
+<a href=#598 id=598 data-nosnippet>598</a>            LineBreakOptions::default(),
+<a href=#599 id=599 data-nosnippet>599</a>            Opening::default(),
+<a href=#600 id=600 data-nosnippet>600</a>        );
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="kw">let </span>shaped = shaped.expect(<span class="string">"the paragraph shaped"</span>);
+<a href=#602 id=602 data-nosnippet>602</a>        <span class="kw">let </span>lines = first.lines;
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">3</span>, <span class="string">"{} lines is too few to cut"</span>, lines.len());
+<a href=#604 id=604 data-nosnippet>604</a>
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw">let </span>again = layout.rebreak(<span class="kw-2">&amp;</span>shaped, <span class="kw-2">&amp;</span>measure, <span class="number">0</span>);
+<a href=#606 id=606 data-nosnippet>606</a>        <span class="macro">assert_eq!</span>(drawn(<span class="kw-2">&amp;</span>again.lines), drawn(<span class="kw-2">&amp;</span>lines));
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="macro">assert_eq!</span>(again.ends.len(), again.lines.len());
+<a href=#608 id=608 data-nosnippet>608</a>
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="kw">let </span>tail = layout.rebreak(<span class="kw-2">&amp;</span>shaped, <span class="kw-2">&amp;</span>measure, again.ends[<span class="number">1</span>]);
+<a href=#610 id=610 data-nosnippet>610</a>        <span class="macro">assert_eq!</span>(drawn(<span class="kw-2">&amp;</span>tail.lines), drawn(<span class="kw-2">&amp;</span>lines[<span class="number">2</span>..]));
+<a href=#611 id=611 data-nosnippet>611</a>    }
+<a href=#612 id=612 data-nosnippet>612</a>
+<a href=#613 id=613 data-nosnippet>613</a>    <span class="doccomment">/// The same paragraph broken to a narrower measure holds the same
+<a href=#614 id=614 data-nosnippet>614</a>    /// words in more lines. No line runs past the measure it was set
+<a href=#615 id=615 data-nosnippet>615</a>    /// to.
+<a href=#616 id=616 data-nosnippet>616</a>    </span><span class="attr">#[test]
+<a href=#617 id=617 data-nosnippet>617</a>    </span><span class="kw">fn </span>a_shaped_paragraph_breaks_again_to_a_narrower_measure() {
+<a href=#618 id=618 data-nosnippet>618</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#619 id=619 data-nosnippet>619</a>        <span class="kw">let </span>(wide, shaped) = layout.layout_shaped(
+<a href=#620 id=620 data-nosnippet>620</a>            <span class="kw-2">&amp;</span>one_run(OPENING),
+<a href=#621 id=621 data-nosnippet>621</a>            <span class="kw-2">&amp;</span>body(),
+<a href=#622 id=622 data-nosnippet>622</a>            <span class="kw-2">&amp;</span>Inherited,
+<a href=#623 id=623 data-nosnippet>623</a>            <span class="kw-2">&amp;</span>Measure::uniform(<span class="number">200.0</span>),
+<a href=#624 id=624 data-nosnippet>624</a>            LineBreakOptions::default(),
+<a href=#625 id=625 data-nosnippet>625</a>            Opening::default(),
+<a href=#626 id=626 data-nosnippet>626</a>        );
+<a href=#627 id=627 data-nosnippet>627</a>        <span class="kw">let </span>shaped = shaped.expect(<span class="string">"the paragraph shaped"</span>);
+<a href=#628 id=628 data-nosnippet>628</a>        <span class="kw">let </span>lines = wide.lines;
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw">let </span>narrow = Measure::uniform(<span class="number">100.0</span>);
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">let </span>again = layout.rebreak(<span class="kw-2">&amp;</span>shaped, <span class="kw-2">&amp;</span>narrow, <span class="number">0</span>);
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="macro">assert!</span>(again.lines.len() &gt; lines.len());
+<a href=#632 id=632 data-nosnippet>632</a>        <span class="macro">assert_eq!</span>(
+<a href=#633 id=633 data-nosnippet>633</a>            drawn(<span class="kw-2">&amp;</span>again.lines).join(<span class="string">" "</span>).replace(<span class="string">"  "</span>, <span class="string">" "</span>),
+<a href=#634 id=634 data-nosnippet>634</a>            drawn(<span class="kw-2">&amp;</span>lines).join(<span class="string">" "</span>).replace(<span class="string">"  "</span>, <span class="string">" "</span>)
+<a href=#635 id=635 data-nosnippet>635</a>        );
+<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw">let </span>upem = units_per_em() <span class="kw">as </span>f32;
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="kw">for </span>line <span class="kw">in </span><span class="kw-2">&amp;</span>again.lines {
+<a href=#638 id=638 data-nosnippet>638</a>            <span class="kw">let </span>width = line.width <span class="kw">as </span>f32 / upem * body().size;
+<a href=#639 id=639 data-nosnippet>639</a>            <span class="macro">assert!</span>(width &lt;= <span class="number">100.0 </span>+ <span class="number">0.5</span>, <span class="string">"{width} runs past the measure"</span>);
+<a href=#640 id=640 data-nosnippet>640</a>        }
+<a href=#641 id=641 data-nosnippet>641</a>    }
+<a href=#642 id=642 data-nosnippet>642</a>
+<a href=#643 id=643 data-nosnippet>643</a>    <span class="doccomment">/// Empty paragraph → no lines.
+<a href=#644 id=644 data-nosnippet>644</a>    </span><span class="attr">#[test]
+<a href=#645 id=645 data-nosnippet>645</a>    </span><span class="kw">fn </span>empty_paragraph_yields_no_lines() {
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="macro">assert!</span>(layout_body(<span class="string">""</span>, <span class="number">200.0</span>).is_empty());
+<a href=#647 id=647 data-nosnippet>647</a>    }
+<a href=#648 id=648 data-nosnippet>648</a>
+<a href=#649 id=649 data-nosnippet>649</a>    <span class="doccomment">/// A word that fits stays on one line, and its width is the
+<a href=#650 id=650 data-nosnippet>650</a>    /// shaped advance of exactly its glyphs.
+<a href=#651 id=651 data-nosnippet>651</a>    </span><span class="attr">#[test]
+<a href=#652 id=652 data-nosnippet>652</a>    </span><span class="kw">fn </span>short_text_is_one_line() {
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="kw">let </span>lines = layout_body(<span class="string">"hello"</span>, <span class="number">200.0</span>);
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="macro">assert_eq!</span>(lines.len(), <span class="number">1</span>);
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="macro">assert_eq!</span>(line_text(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]), <span class="string">"hello"</span>);
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">let </span>glyph_count: usize = lines[<span class="number">0</span>].runs.iter().map(|r| r.glyphs.len()).sum();
+<a href=#657 id=657 data-nosnippet>657</a>        <span class="macro">assert_eq!</span>(glyph_count, <span class="number">5</span>);
+<a href=#658 id=658 data-nosnippet>658</a>    }
+<a href=#659 id=659 data-nosnippet>659</a>
+<a href=#660 id=660 data-nosnippet>660</a>    <span class="doccomment">/// Words flow to later lines once the measure overflows; nothing
+<a href=#661 id=661 data-nosnippet>661</a>    /// is lost and nothing is reordered.
+<a href=#662 id=662 data-nosnippet>662</a>    </span><span class="attr">#[test]
+<a href=#663 id=663 data-nosnippet>663</a>    </span><span class="kw">fn </span>text_wraps_and_preserves_every_word() {
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span>text = <span class="string">"one two three four five six seven eight"</span>;
+<a href=#665 id=665 data-nosnippet>665</a>        <span class="kw">let </span>lines = layout_body(text, <span class="number">60.0</span>);
+<a href=#666 id=666 data-nosnippet>666</a>        <span class="macro">assert!</span>(lines.len() &gt;= <span class="number">2</span>, <span class="string">"expected wrapping, got {lines:?}"</span>);
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="kw">let </span>reconstructed: String = lines
+<a href=#668 id=668 data-nosnippet>668</a>            .iter()
+<a href=#669 id=669 data-nosnippet>669</a>            .map(|l| line_text(l).trim_end().to_string())
+<a href=#670 id=670 data-nosnippet>670</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#671 id=671 data-nosnippet>671</a>            .join(<span class="string">" "</span>);
+<a href=#672 id=672 data-nosnippet>672</a>        <span class="macro">assert_eq!</span>(reconstructed, text);
+<a href=#673 id=673 data-nosnippet>673</a>    }
+<a href=#674 id=674 data-nosnippet>674</a>
+<a href=#675 id=675 data-nosnippet>675</a>    <span class="doccomment">/// A paragraph with only one sensible answer gets it: everything
+<a href=#676 id=676 data-nosnippet>676</a>    /// that fits on one line stays on it.
+<a href=#677 id=677 data-nosnippet>677</a>    </span><span class="attr">#[test]
+<a href=#678 id=678 data-nosnippet>678</a>    </span><span class="kw">fn </span>a_paragraph_with_one_answer_gets_it() {
+<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw">let </span>text = <span class="string">"aa bb cc"</span>;
+<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">let </span>lines = layout_body(text, <span class="number">100.0</span>);
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="macro">assert_eq!</span>(lines.len(), <span class="number">1</span>, <span class="string">"everything fits: {lines:?}"</span>);
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span>lines = layout_body(text, <span class="number">30.0</span>);
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="macro">assert_eq!</span>(line_text(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]), <span class="string">"aa bb"</span>);
+<a href=#684 id=684 data-nosnippet>684</a>    }
+<a href=#685 id=685 data-nosnippet>685</a>
+<a href=#686 id=686 data-nosnippet>686</a>    <span class="doccomment">/// A first-line style takes two runs of the breaker and a
+<a href=#687 id=687 data-nosnippet>687</a>    /// paragraph without one takes a single run, whether or not the
+<a href=#688 id=688 data-nosnippet>688</a>    /// two runs agree on where the paragraph breaks.
+<a href=#689 id=689 data-nosnippet>689</a>    </span><span class="attr">#[test]
+<a href=#690 id=690 data-nosnippet>690</a>    </span><span class="kw">fn </span>a_first_line_style_breaks_the_paragraph_twice() {
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#692 id=692 data-nosnippet>692</a>        <span class="kw">let </span>inlines = one_run(OPENING);
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">let </span>broken = |first_line| {
+<a href=#694 id=694 data-nosnippet>694</a>            layout
+<a href=#695 id=695 data-nosnippet>695</a>                .broken(
+<a href=#696 id=696 data-nosnippet>696</a>                    <span class="kw-2">&amp;</span>inlines,
+<a href=#697 id=697 data-nosnippet>697</a>                    <span class="kw-2">&amp;</span>body(),
+<a href=#698 id=698 data-nosnippet>698</a>                    <span class="kw-2">&amp;</span>Inherited,
+<a href=#699 id=699 data-nosnippet>699</a>                    <span class="kw-2">&amp;</span>Measure::uniform(<span class="number">160.0</span>),
+<a href=#700 id=700 data-nosnippet>700</a>                    LineBreakOptions::default(),
+<a href=#701 id=701 data-nosnippet>701</a>                    Opening {
+<a href=#702 id=702 data-nosnippet>702</a>                        first_line,
+<a href=#703 id=703 data-nosnippet>703</a>                        ..Opening::default()
+<a href=#704 id=704 data-nosnippet>704</a>                    },
+<a href=#705 id=705 data-nosnippet>705</a>                )
+<a href=#706 id=706 data-nosnippet>706</a>                .<span class="number">1
+<a href=#707 id=707 data-nosnippet>707</a>        </span>};
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="macro">assert_eq!</span>(broken(<span class="prelude-val">None</span>), <span class="number">1</span>);
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="macro">assert_eq!</span>(
+<a href=#710 id=710 data-nosnippet>710</a>            broken(<span class="prelude-val">Some</span>(FirstLine {
+<a href=#711 id=711 data-nosnippet>711</a>                caps: <span class="prelude-val">Some</span>(FontVariantCaps::SmallCaps),
+<a href=#712 id=712 data-nosnippet>712</a>                ..FirstLine::default()
+<a href=#713 id=713 data-nosnippet>713</a>            })),
+<a href=#714 id=714 data-nosnippet>714</a>            <span class="number">2</span>,
+<a href=#715 id=715 data-nosnippet>715</a>        );
+<a href=#716 id=716 data-nosnippet>716</a>    }
+<a href=#717 id=717 data-nosnippet>717</a>
+<a href=#718 id=718 data-nosnippet>718</a>    <span class="doccomment">/// Small capitals on the opening line stop at the break the
+<a href=#719 id=719 data-nosnippet>719</a>    /// second run chose: the last word of the first line is set in
+<a href=#720 id=720 data-nosnippet>720</a>    /// them throughout and the first word of the second line is none
+<a href=#721 id=721 data-nosnippet>721</a>    /// of it. What the author wrote comes back off the runs either
+<a href=#722 id=722 data-nosnippet>722</a>    /// way.
+<a href=#723 id=723 data-nosnippet>723</a>    </span><span class="attr">#[test]
+<a href=#724 id=724 data-nosnippet>724</a>    </span><span class="kw">fn </span>a_first_line_is_small_capitals_as_far_as_the_break() {
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="comment">// The face with no substitutions of its own synthesises its
+<a href=#726 id=726 data-nosnippet>726</a>        // small capitals, which puts the boundary in the drawn text.
+<a href=#727 id=727 data-nosnippet>727</a>        </span><span class="kw">let </span>bare = <span class="kw">crate</span>::fonts::registry_without_substitutions();
+<a href=#728 id=728 data-nosnippet>728</a>        <span class="kw">let </span>layout = LineLayout::new(<span class="kw-2">&amp;</span>bare);
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#730 id=730 data-nosnippet>730</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#731 id=731 data-nosnippet>731</a>            <span class="number">160.0</span>,
+<a href=#732 id=732 data-nosnippet>732</a>            <span class="prelude-val">Some</span>(FirstLine {
+<a href=#733 id=733 data-nosnippet>733</a>                caps: <span class="prelude-val">Some</span>(FontVariantCaps::SmallCaps),
+<a href=#734 id=734 data-nosnippet>734</a>                ..FirstLine::default()
+<a href=#735 id=735 data-nosnippet>735</a>            }),
+<a href=#736 id=736 data-nosnippet>736</a>        );
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">2</span>, <span class="string">"the paragraph did not break"</span>);
+<a href=#738 id=738 data-nosnippet>738</a>
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">let </span>opening = line_text(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]);
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">let </span>next = line_text(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]);
+<a href=#741 id=741 data-nosnippet>741</a>        <span class="kw">let </span>last_word = opening.split_whitespace().next_back().expect(<span class="string">"a word"</span>);
+<a href=#742 id=742 data-nosnippet>742</a>        <span class="kw">let </span>first_word = next.split_whitespace().next().expect(<span class="string">"a word"</span>);
+<a href=#743 id=743 data-nosnippet>743</a>        <span class="macro">assert_eq!</span>(
+<a href=#744 id=744 data-nosnippet>744</a>            last_word,
+<a href=#745 id=745 data-nosnippet>745</a>            last_word.to_uppercase(),
+<a href=#746 id=746 data-nosnippet>746</a>            <span class="string">"the first line's last word is not small capitals throughout: {opening:?}"</span>,
+<a href=#747 id=747 data-nosnippet>747</a>        );
+<a href=#748 id=748 data-nosnippet>748</a>        <span class="macro">assert_eq!</span>(
+<a href=#749 id=749 data-nosnippet>749</a>            first_word,
+<a href=#750 id=750 data-nosnippet>750</a>            first_word.to_lowercase(),
+<a href=#751 id=751 data-nosnippet>751</a>            <span class="string">"the small capitals ran past the first line: {next:?}"</span>,
+<a href=#752 id=752 data-nosnippet>752</a>        );
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert_eq!</span>(opening, opening.to_uppercase());
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert_eq!</span>(next, next.to_lowercase());
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="macro">assert!</span>(
+<a href=#756 id=756 data-nosnippet>756</a>            lines[<span class="number">0</span>]
+<a href=#757 id=757 data-nosnippet>757</a>                .runs
+<a href=#758 id=758 data-nosnippet>758</a>                .iter()
+<a href=#759 id=759 data-nosnippet>759</a>                .any(|run| run.size == body().size * SMALL_CAPS_RATIO),
+<a href=#760 id=760 data-nosnippet>760</a>            <span class="string">"nothing on the opening line was set at the reduced size"</span>,
+<a href=#761 id=761 data-nosnippet>761</a>        );
+<a href=#762 id=762 data-nosnippet>762</a>        <span class="macro">assert!</span>(
+<a href=#763 id=763 data-nosnippet>763</a>            lines[<span class="number">1</span>].runs.iter().all(|run| run.size == body().size),
+<a href=#764 id=764 data-nosnippet>764</a>            <span class="string">"the reduced size reached the second line"</span>,
+<a href=#765 id=765 data-nosnippet>765</a>        );
+<a href=#766 id=766 data-nosnippet>766</a>
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="comment">// What the author wrote is on the runs beside what was drawn.
+<a href=#768 id=768 data-nosnippet>768</a>        </span><span class="kw">let </span>written: String = lines[<span class="number">0</span>]
+<a href=#769 id=769 data-nosnippet>769</a>            .runs
+<a href=#770 id=770 data-nosnippet>770</a>            .iter()
+<a href=#771 id=771 data-nosnippet>771</a>            .map(|run| <span class="kw">match </span>run.source.is_empty() {
+<a href=#772 id=772 data-nosnippet>772</a>                <span class="bool-val">true </span>=&gt; run.text.as_str(),
+<a href=#773 id=773 data-nosnippet>773</a>                <span class="bool-val">false </span>=&gt; run.source.as_str(),
+<a href=#774 id=774 data-nosnippet>774</a>            })
+<a href=#775 id=775 data-nosnippet>775</a>            .collect();
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="macro">assert!</span>(
+<a href=#777 id=777 data-nosnippet>777</a>            OPENING.starts_with(<span class="kw-2">&amp;</span>written),
+<a href=#778 id=778 data-nosnippet>778</a>            <span class="string">"the opening line lost the manuscript: {written:?}"</span>,
+<a href=#779 id=779 data-nosnippet>779</a>        );
+<a href=#780 id=780 data-nosnippet>780</a>    }
+<a href=#781 id=781 data-nosnippet>781</a>
+<a href=#782 id=782 data-nosnippet>782</a>    <span class="doccomment">/// Tracking on the opening line is width like any other, so the
+<a href=#783 id=783 data-nosnippet>783</a>    /// line the paragraph breaks at holds less than it does
+<a href=#784 id=784 data-nosnippet>784</a>    /// untracked.
+<a href=#785 id=785 data-nosnippet>785</a>    </span><span class="attr">#[test]
+<a href=#786 id=786 data-nosnippet>786</a>    </span><span class="kw">fn </span>a_tracked_first_line_breaks_earlier() {
+<a href=#787 id=787 data-nosnippet>787</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#788 id=788 data-nosnippet>788</a>        <span class="kw">let </span>plain = layout_first(<span class="kw-2">&amp;</span>layout, <span class="number">160.0</span>, <span class="prelude-val">None</span>);
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw">let </span>tracked = layout_first(
+<a href=#790 id=790 data-nosnippet>790</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#791 id=791 data-nosnippet>791</a>            <span class="number">160.0</span>,
+<a href=#792 id=792 data-nosnippet>792</a>            <span class="prelude-val">Some</span>(FirstLine {
+<a href=#793 id=793 data-nosnippet>793</a>                letter_spacing: <span class="prelude-val">Some</span>(<span class="number">0.12 </span>* body().size),
+<a href=#794 id=794 data-nosnippet>794</a>                ..FirstLine::default()
+<a href=#795 id=795 data-nosnippet>795</a>            }),
+<a href=#796 id=796 data-nosnippet>796</a>        );
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="macro">assert!</span>(
+<a href=#798 id=798 data-nosnippet>798</a>            line_text(<span class="kw-2">&amp;</span>tracked[<span class="number">0</span>]).len() &lt; line_text(<span class="kw-2">&amp;</span>plain[<span class="number">0</span>]).len(),
+<a href=#799 id=799 data-nosnippet>799</a>            <span class="string">"the tracked line held as much: {:?} against {:?}"</span>,
+<a href=#800 id=800 data-nosnippet>800</a>            line_text(<span class="kw-2">&amp;</span>tracked[<span class="number">0</span>]),
+<a href=#801 id=801 data-nosnippet>801</a>            line_text(<span class="kw-2">&amp;</span>plain[<span class="number">0</span>]),
+<a href=#802 id=802 data-nosnippet>802</a>        );
+<a href=#803 id=803 data-nosnippet>803</a>    }
+<a href=#804 id=804 data-nosnippet>804</a>
+<a href=#805 id=805 data-nosnippet>805</a>    <span class="doccomment">/// A first line set larger grows its own line box around the
+<a href=#806 id=806 data-nosnippet>806</a>    /// baseline the paragraph shares, and leaves the lines under it
+<a href=#807 id=807 data-nosnippet>807</a>    /// the size they were.
+<a href=#808 id=808 data-nosnippet>808</a>    </span><span class="attr">#[test]
+<a href=#809 id=809 data-nosnippet>809</a>    </span><span class="kw">fn </span>a_first_line_set_larger_grows_its_line_box() {
+<a href=#810 id=810 data-nosnippet>810</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#811 id=811 data-nosnippet>811</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#812 id=812 data-nosnippet>812</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#813 id=813 data-nosnippet>813</a>            <span class="number">240.0</span>,
+<a href=#814 id=814 data-nosnippet>814</a>            <span class="prelude-val">Some</span>(FirstLine {
+<a href=#815 id=815 data-nosnippet>815</a>                size: <span class="prelude-val">Some</span>(body().size * <span class="number">1.6</span>),
+<a href=#816 id=816 data-nosnippet>816</a>                ..FirstLine::default()
+<a href=#817 id=817 data-nosnippet>817</a>            }),
+<a href=#818 id=818 data-nosnippet>818</a>        );
+<a href=#819 id=819 data-nosnippet>819</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">1</span>, <span class="string">"the paragraph did not break"</span>);
+<a href=#820 id=820 data-nosnippet>820</a>        <span class="macro">assert!</span>(
+<a href=#821 id=821 data-nosnippet>821</a>            lines[<span class="number">0</span>].box_.height &gt; lines[<span class="number">1</span>].box_.height,
+<a href=#822 id=822 data-nosnippet>822</a>            <span class="string">"the opening line did not grow: {:?} against {:?}"</span>,
+<a href=#823 id=823 data-nosnippet>823</a>            lines[<span class="number">0</span>].box_,
+<a href=#824 id=824 data-nosnippet>824</a>            lines[<span class="number">1</span>].box_,
+<a href=#825 id=825 data-nosnippet>825</a>        );
+<a href=#826 id=826 data-nosnippet>826</a>        <span class="macro">assert!</span>(
+<a href=#827 id=827 data-nosnippet>827</a>            lines[<span class="number">0</span>].box_.baseline &gt; lines[<span class="number">1</span>].box_.baseline,
+<a href=#828 id=828 data-nosnippet>828</a>            <span class="string">"the opening line grew below the baseline alone"</span>,
+<a href=#829 id=829 data-nosnippet>829</a>        );
+<a href=#830 id=830 data-nosnippet>830</a>        <span class="macro">assert_eq!</span>(
+<a href=#831 id=831 data-nosnippet>831</a>            lines[<span class="number">0</span>].runs[<span class="number">0</span>].size,
+<a href=#832 id=832 data-nosnippet>832</a>            body().size * <span class="number">1.6</span>,
+<a href=#833 id=833 data-nosnippet>833</a>            <span class="string">"the opening run was not set larger"</span>,
+<a href=#834 id=834 data-nosnippet>834</a>        );
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="macro">assert_eq!</span>(lines[<span class="number">1</span>].runs[<span class="number">0</span>].size, body().size);
+<a href=#836 id=836 data-nosnippet>836</a>    }
+<a href=#837 id=837 data-nosnippet>837</a>
+<a href=#838 id=838 data-nosnippet>838</a>    <span class="doccomment">/// Acceptance: `font-style: italic` on the opening line sets it
+<a href=#839 id=839 data-nosnippet>839</a>    /// in the italic of the family the paragraph is set in, and
+<a href=#840 id=840 data-nosnippet>840</a>    /// leaves the lines under it upright.
+<a href=#841 id=841 data-nosnippet>841</a>    </span><span class="attr">#[test]
+<a href=#842 id=842 data-nosnippet>842</a>    </span><span class="kw">fn </span>an_italic_first_line_is_set_in_the_italic_cut() {
+<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#844 id=844 data-nosnippet>844</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#845 id=845 data-nosnippet>845</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#846 id=846 data-nosnippet>846</a>            <span class="number">160.0</span>,
+<a href=#847 id=847 data-nosnippet>847</a>            faced(Face {
+<a href=#848 id=848 data-nosnippet>848</a>                italic: <span class="prelude-val">Some</span>(<span class="bool-val">true</span>),
+<a href=#849 id=849 data-nosnippet>849</a>                ..Face::default()
+<a href=#850 id=850 data-nosnippet>850</a>            }),
+<a href=#851 id=851 data-nosnippet>851</a>        );
+<a href=#852 id=852 data-nosnippet>852</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">1</span>, <span class="string">"the paragraph did not break"</span>);
+<a href=#853 id=853 data-nosnippet>853</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]), cut(<span class="bool-val">true</span>, <span class="number">400</span>));
+<a href=#854 id=854 data-nosnippet>854</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]), body().font_id);
+<a href=#855 id=855 data-nosnippet>855</a>    }
+<a href=#856 id=856 data-nosnippet>856</a>
+<a href=#857 id=857 data-nosnippet>857</a>    <span class="doccomment">/// Acceptance: `font-family` on the opening line sets it in
+<a href=#858 id=858 data-nosnippet>858</a>    /// another family, and the lines under it keep the paragraph's
+<a href=#859 id=859 data-nosnippet>859</a>    /// own.
+<a href=#860 id=860 data-nosnippet>860</a>    </span><span class="attr">#[test]
+<a href=#861 id=861 data-nosnippet>861</a>    </span><span class="kw">fn </span>a_first_line_takes_another_family() {
+<a href=#862 id=862 data-nosnippet>862</a>        <span class="kw">let </span>registry = two_families();
+<a href=#863 id=863 data-nosnippet>863</a>        <span class="kw">let </span>layout = LineLayout::new(registry);
+<a href=#864 id=864 data-nosnippet>864</a>        <span class="kw">let </span>display = registry
+<a href=#865 id=865 data-nosnippet>865</a>            .select(DISPLAY, FaceAttributes::REGULAR)
+<a href=#866 id=866 data-nosnippet>866</a>            .expect(<span class="string">"the second family is registered"</span>)
+<a href=#867 id=867 data-nosnippet>867</a>            .id;
+<a href=#868 id=868 data-nosnippet>868</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#869 id=869 data-nosnippet>869</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#870 id=870 data-nosnippet>870</a>            <span class="number">160.0</span>,
+<a href=#871 id=871 data-nosnippet>871</a>            faced(Face {
+<a href=#872 id=872 data-nosnippet>872</a>                family: <span class="prelude-val">Some</span>(display),
+<a href=#873 id=873 data-nosnippet>873</a>                ..Face::default()
+<a href=#874 id=874 data-nosnippet>874</a>            }),
+<a href=#875 id=875 data-nosnippet>875</a>        );
+<a href=#876 id=876 data-nosnippet>876</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">1</span>, <span class="string">"the paragraph did not break"</span>);
+<a href=#877 id=877 data-nosnippet>877</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]), display);
+<a href=#878 id=878 data-nosnippet>878</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]), body().font_id);
+<a href=#879 id=879 data-nosnippet>879</a>    }
+<a href=#880 id=880 data-nosnippet>880</a>
+<a href=#881 id=881 data-nosnippet>881</a>    <span class="doccomment">/// Acceptance: `font-weight` on the opening line picks another
+<a href=#882 id=882 data-nosnippet>882</a>    /// cut of the same family.
+<a href=#883 id=883 data-nosnippet>883</a>    </span><span class="attr">#[test]
+<a href=#884 id=884 data-nosnippet>884</a>    </span><span class="kw">fn </span>a_first_line_set_bold_picks_the_bold_cut() {
+<a href=#885 id=885 data-nosnippet>885</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#886 id=886 data-nosnippet>886</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#887 id=887 data-nosnippet>887</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#888 id=888 data-nosnippet>888</a>            <span class="number">160.0</span>,
+<a href=#889 id=889 data-nosnippet>889</a>            faced(Face {
+<a href=#890 id=890 data-nosnippet>890</a>                weight: <span class="prelude-val">Some</span>(<span class="number">700</span>),
+<a href=#891 id=891 data-nosnippet>891</a>                ..Face::default()
+<a href=#892 id=892 data-nosnippet>892</a>            }),
+<a href=#893 id=893 data-nosnippet>893</a>        );
+<a href=#894 id=894 data-nosnippet>894</a>        <span class="macro">assert!</span>(lines.len() &gt; <span class="number">1</span>, <span class="string">"the paragraph did not break"</span>);
+<a href=#895 id=895 data-nosnippet>895</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]), cut(<span class="bool-val">false</span>, <span class="number">700</span>));
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="macro">assert_eq!</span>(face_of(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]), body().font_id);
+<a href=#897 id=897 data-nosnippet>897</a>    }
+<a href=#898 id=898 data-nosnippet>898</a>
+<a href=#899 id=899 data-nosnippet>899</a>    <span class="doccomment">/// What the rule leaves alone an inline element keeps: an italic
+<a href=#900 id=900 data-nosnippet>900</a>    /// opening line over an inline element set bold is set in the
+<a href=#901 id=901 data-nosnippet>901</a>    /// bold italic, not in the regular one.
+<a href=#902 id=902 data-nosnippet>902</a>    </span><span class="attr">#[test]
+<a href=#903 id=903 data-nosnippet>903</a>    </span><span class="kw">fn </span>a_face_on_the_first_line_keeps_the_cut_an_inline_element_brought() {
+<a href=#904 id=904 data-nosnippet>904</a>        <span class="doccomment">/// A style tree that sets one node bold and everything else
+<a href=#905 id=905 data-nosnippet>905</a>        /// as the block is set.
+<a href=#906 id=906 data-nosnippet>906</a>        </span><span class="kw">struct </span>Bold(NodeId);
+<a href=#907 id=907 data-nosnippet>907</a>        <span class="kw">impl </span>InlineStyles <span class="kw">for </span>Bold {
+<a href=#908 id=908 data-nosnippet>908</a>            <span class="kw">fn </span>style(<span class="kw-2">&amp;</span><span class="self">self</span>, id: NodeId, block: <span class="kw-2">&amp;</span>ParagraphStyle) -&gt; ParagraphStyle {
+<a href=#909 id=909 data-nosnippet>909</a>                <span class="kw">let </span>font_id = <span class="kw">match </span>id == <span class="self">self</span>.<span class="number">0 </span>{
+<a href=#910 id=910 data-nosnippet>910</a>                    <span class="bool-val">true </span>=&gt; cut(<span class="bool-val">false</span>, <span class="number">700</span>),
+<a href=#911 id=911 data-nosnippet>911</a>                    <span class="bool-val">false </span>=&gt; block.font_id,
+<a href=#912 id=912 data-nosnippet>912</a>                };
+<a href=#913 id=913 data-nosnippet>913</a>                ParagraphStyle {
+<a href=#914 id=914 data-nosnippet>914</a>                    font_id,
+<a href=#915 id=915 data-nosnippet>915</a>                    ..block.clone()
+<a href=#916 id=916 data-nosnippet>916</a>                }
+<a href=#917 id=917 data-nosnippet>917</a>            }
+<a href=#918 id=918 data-nosnippet>918</a>        }
+<a href=#919 id=919 data-nosnippet>919</a>
+<a href=#920 id=920 data-nosnippet>920</a>        <span class="kw">let </span>bold = NodeId::new(<span class="number">3</span>);
+<a href=#921 id=921 data-nosnippet>921</a>        <span class="kw">let </span><span class="kw-2">mut </span>inlines = one_run(<span class="string">"she said "</span>);
+<a href=#922 id=922 data-nosnippet>922</a>        inlines.push(emphasis(bold, one_run(<span class="string">"never"</span>)));
+<a href=#923 id=923 data-nosnippet>923</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="kw">let </span>lines = layout.layout_styled(
+<a href=#925 id=925 data-nosnippet>925</a>            <span class="kw-2">&amp;</span>inlines,
+<a href=#926 id=926 data-nosnippet>926</a>            <span class="kw-2">&amp;</span>body(),
+<a href=#927 id=927 data-nosnippet>927</a>            <span class="kw-2">&amp;</span>Bold(bold),
+<a href=#928 id=928 data-nosnippet>928</a>            <span class="kw-2">&amp;</span>Measure::uniform(<span class="number">200.0</span>),
+<a href=#929 id=929 data-nosnippet>929</a>            LineBreakOptions::default(),
+<a href=#930 id=930 data-nosnippet>930</a>            Opening {
+<a href=#931 id=931 data-nosnippet>931</a>                first_line: faced(Face {
+<a href=#932 id=932 data-nosnippet>932</a>                    italic: <span class="prelude-val">Some</span>(<span class="bool-val">true</span>),
+<a href=#933 id=933 data-nosnippet>933</a>                    ..Face::default()
+<a href=#934 id=934 data-nosnippet>934</a>                }),
+<a href=#935 id=935 data-nosnippet>935</a>                ..Opening::default()
+<a href=#936 id=936 data-nosnippet>936</a>            },
+<a href=#937 id=937 data-nosnippet>937</a>        );
+<a href=#938 id=938 data-nosnippet>938</a>        <span class="kw">let </span>faces: Vec&lt;u16&gt; = lines[<span class="number">0</span>].runs.iter().map(|run| run.font_id).collect();
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="macro">assert_eq!</span>(
+<a href=#940 id=940 data-nosnippet>940</a>            faces,
+<a href=#941 id=941 data-nosnippet>941</a>            [cut(<span class="bool-val">true</span>, <span class="number">400</span>), cut(<span class="bool-val">true</span>, <span class="number">700</span>)],
+<a href=#942 id=942 data-nosnippet>942</a>            <span class="string">"{:?}"</span>,
+<a href=#943 id=943 data-nosnippet>943</a>            lines[<span class="number">0</span>].runs
+<a href=#944 id=944 data-nosnippet>944</a>        );
+<a href=#945 id=945 data-nosnippet>945</a>    }
+<a href=#946 id=946 data-nosnippet>946</a>
+<a href=#947 id=947 data-nosnippet>947</a>    <span class="doccomment">/// Acceptance: a face on the opening line re-breaks it. The bold
+<a href=#948 id=948 data-nosnippet>948</a>    /// cut is wider, so the line holds less, and the word it dropped
+<a href=#949 id=949 data-nosnippet>949</a>    /// opens the line under it.
+<a href=#950 id=950 data-nosnippet>950</a>    </span><span class="attr">#[test]
+<a href=#951 id=951 data-nosnippet>951</a>    </span><span class="kw">fn </span>a_face_on_the_first_line_rebreaks_it() {
+<a href=#952 id=952 data-nosnippet>952</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#953 id=953 data-nosnippet>953</a>        <span class="kw">let </span>plain = layout_first(<span class="kw-2">&amp;</span>layout, <span class="number">160.0</span>, <span class="prelude-val">None</span>);
+<a href=#954 id=954 data-nosnippet>954</a>        <span class="kw">let </span>bold = layout_first(
+<a href=#955 id=955 data-nosnippet>955</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#956 id=956 data-nosnippet>956</a>            <span class="number">160.0</span>,
+<a href=#957 id=957 data-nosnippet>957</a>            faced(Face {
+<a href=#958 id=958 data-nosnippet>958</a>                weight: <span class="prelude-val">Some</span>(<span class="number">700</span>),
+<a href=#959 id=959 data-nosnippet>959</a>                ..Face::default()
+<a href=#960 id=960 data-nosnippet>960</a>            }),
+<a href=#961 id=961 data-nosnippet>961</a>        );
+<a href=#962 id=962 data-nosnippet>962</a>        <span class="macro">assert!</span>(
+<a href=#963 id=963 data-nosnippet>963</a>            line_text(<span class="kw-2">&amp;</span>bold[<span class="number">0</span>]).len() &lt; line_text(<span class="kw-2">&amp;</span>plain[<span class="number">0</span>]).len(),
+<a href=#964 id=964 data-nosnippet>964</a>            <span class="string">"the bold line held as much: {:?} against {:?}"</span>,
+<a href=#965 id=965 data-nosnippet>965</a>            line_text(<span class="kw-2">&amp;</span>bold[<span class="number">0</span>]),
+<a href=#966 id=966 data-nosnippet>966</a>            line_text(<span class="kw-2">&amp;</span>plain[<span class="number">0</span>]),
+<a href=#967 id=967 data-nosnippet>967</a>        );
+<a href=#968 id=968 data-nosnippet>968</a>        <span class="kw">let </span>dropped = line_text(<span class="kw-2">&amp;</span>plain[<span class="number">0</span>])
+<a href=#969 id=969 data-nosnippet>969</a>            .split_whitespace()
+<a href=#970 id=970 data-nosnippet>970</a>            .next_back()
+<a href=#971 id=971 data-nosnippet>971</a>            .expect(<span class="string">"a word"</span>)
+<a href=#972 id=972 data-nosnippet>972</a>            .to_string();
+<a href=#973 id=973 data-nosnippet>973</a>        <span class="macro">assert!</span>(
+<a href=#974 id=974 data-nosnippet>974</a>            line_text(<span class="kw-2">&amp;</span>bold[<span class="number">1</span>]).starts_with(<span class="kw-2">&amp;</span>dropped),
+<a href=#975 id=975 data-nosnippet>975</a>            <span class="string">"the word the opening line dropped did not open the second: {:?}"</span>,
+<a href=#976 id=976 data-nosnippet>976</a>            line_text(<span class="kw-2">&amp;</span>bold[<span class="number">1</span>]),
+<a href=#977 id=977 data-nosnippet>977</a>        );
+<a href=#978 id=978 data-nosnippet>978</a>    }
+<a href=#979 id=979 data-nosnippet>979</a>
+<a href=#980 id=980 data-nosnippet>980</a>    <span class="doccomment">/// `text-transform` on the opening line changes what is shaped
+<a href=#981 id=981 data-nosnippet>981</a>    /// and leaves what the author wrote on the run beside it, the way
+<a href=#982 id=982 data-nosnippet>982</a>    /// it does on a whole paragraph.
+<a href=#983 id=983 data-nosnippet>983</a>    </span><span class="attr">#[test]
+<a href=#984 id=984 data-nosnippet>984</a>    </span><span class="kw">fn </span>a_transformed_first_line_keeps_the_manuscript() {
+<a href=#985 id=985 data-nosnippet>985</a>        <span class="kw">let </span>layout = LineLayout::new(registry());
+<a href=#986 id=986 data-nosnippet>986</a>        <span class="kw">let </span>lines = layout_first(
+<a href=#987 id=987 data-nosnippet>987</a>            <span class="kw-2">&amp;</span>layout,
+<a href=#988 id=988 data-nosnippet>988</a>            <span class="number">160.0</span>,
+<a href=#989 id=989 data-nosnippet>989</a>            <span class="prelude-val">Some</span>(FirstLine {
+<a href=#990 id=990 data-nosnippet>990</a>                transform: <span class="prelude-val">Some</span>(TextTransform::Uppercase),
+<a href=#991 id=991 data-nosnippet>991</a>                ..FirstLine::default()
+<a href=#992 id=992 data-nosnippet>992</a>            }),
+<a href=#993 id=993 data-nosnippet>993</a>        );
+<a href=#994 id=994 data-nosnippet>994</a>        <span class="kw">let </span>opening = line_text(<span class="kw-2">&amp;</span>lines[<span class="number">0</span>]);
+<a href=#995 id=995 data-nosnippet>995</a>        <span class="macro">assert_eq!</span>(opening, opening.to_uppercase());
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="macro">assert_eq!</span>(line_text(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]), line_text(<span class="kw-2">&amp;</span>lines[<span class="number">1</span>]).to_lowercase());
+<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span>written: String = lines[<span class="number">0</span>]
+<a href=#998 id=998 data-nosnippet>998</a>            .runs
+<a href=#999 id=999 data-nosnippet>999</a>            .iter()
+<a href=#1000 id=1000 data-nosnippet>1000</a>            .map(|run| run.source.as_str())
+<a href=#1001 id=1001 data-nosnippet>1001</a>            .collect();
+<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="macro">assert!</span>(
+<a href=#1003 id=1003 data-nosnippet>1003</a>            OPENING.starts_with(<span class="kw-2">&amp;</span>written) &amp;&amp; written == written.to_lowercase(),
+<a href=#1004 id=1004 data-nosnippet>1004</a>            <span class="string">"the opening line lost the manuscript: {written:?}"</span>,
+<a href=#1005 id=1005 data-nosnippet>1005</a>        );
+<a href=#1006 id=1006 data-nosnippet>1006</a>    }
+<a href=#1007 id=1007 data-nosnippet>1007</a>}
+</code></pre></div></section></main></body></html>

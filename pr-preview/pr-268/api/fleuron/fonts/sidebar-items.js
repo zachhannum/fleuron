@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BUNDLED_FONT","BUNDLED_ITALIC"],"enum":["FontError","GenericFamily"],"fn":["bundled_registry"],"struct":["AxisSetting","FaceAttributes","FaceMatch","FeatureSet","FeatureSetting","Features","FontMetricsTable","FontRefEntry","FontRegistry","FontSource","Rule","ShapedGlyph"]};
