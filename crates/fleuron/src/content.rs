@@ -195,7 +195,7 @@ impl SourceSpan {
     }
 
     /// How many bytes of the source it covers.
-    fn width(self) -> u32 {
+    pub(crate) fn width(self) -> u32 {
         self.end.saturating_sub(self.start)
     }
 }

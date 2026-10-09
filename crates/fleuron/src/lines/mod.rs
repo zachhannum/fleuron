@@ -21,7 +21,10 @@
 //! on a line that was set to its measure, and `line` is what comes
 //! out.
 
-use crate::content::Inline;
+use std::cell::RefCell;
+use std::collections::HashSet;
+
+use crate::content::{Inline, SourcePos};
 use crate::fonts::FontRegistry;
 use crate::linebox::{LineBox, Strut};
 use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
@@ -57,6 +60,28 @@ use shape::ShapedSpan;
 pub struct LineLayout<'a> {
     registry: &'a FontRegistry,
     segmenter: WordSegmenterBorrowedStatic,
+    /// The characters shaping found no glyph for, since they were
+    /// last taken.
+    uncovered: RefCell<Found>,
+}
+
+/// A character the face it was set in has no glyph for, where it was
+/// first written.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Uncovered {
+    pub(crate) character: char,
+    /// The face that has no glyph for it.
+    pub(crate) font_id: u16,
+    /// `None` where the manuscript does not hold the character.
+    pub(crate) position: Option<SourcePos>,
+}
+
+/// The characters with no glyph, each one once, in the order they
+/// were shaped.
+#[derive(Default)]
+struct Found {
+    seen: HashSet<char>,
+    list: Vec<Uncovered>,
 }
 
 /// The borrowed, 'static segmenter `WordSegmenter::new_auto` returns.
@@ -68,7 +93,14 @@ impl<'a> LineLayout<'a> {
         LineLayout {
             registry,
             segmenter: WordSegmenter::new_auto(WordBreakInvariantOptions::default()),
+            uncovered: RefCell::new(Found::default()),
         }
+    }
+
+    /// Hands over the characters shaping found no glyph for, each
+    /// one once, and starts over.
+    pub(crate) fn take_uncovered(&self) -> Vec<Uncovered> {
+        std::mem::take(&mut *self.uncovered.borrow_mut()).list
     }
 }
 
@@ -302,11 +334,12 @@ impl LineLayout<'_> {
         &self,
         text: &str,
         node: crate::content::NodeId,
+        position: Option<SourcePos>,
         style: &ParagraphStyle,
         measure: &Measure,
         options: LineBreakOptions,
     ) -> Vec<Line> {
-        let flat = self.flatten_preformatted(text, node, style);
+        let flat = self.flatten_preformatted(text, node, position, style);
         self.shape_flat(flat, style, options, None)
             .map(|shaped| self.break_shaped(&shaped, measure, 0, None).lines)
             .unwrap_or_default()

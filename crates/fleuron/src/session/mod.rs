@@ -48,7 +48,9 @@ use std::borrow::Cow;
 use crate::content::{Book, Names, NodeId, SourceRange};
 use crate::fonts::{FontError, FontRegistry};
 use crate::images::{Assets, Contours};
-use crate::layout::{Fragment, Numbering, PageInfo, Piece, References, no_assets};
+use crate::layout::{
+    Fragment, Numbering, PageInfo, Piece, References, UncoveredWarning, no_assets,
+};
 use crate::pages::PageBox;
 use crate::style::{FontLoader, StyleTree, Stylesheets};
 use crate::{LayoutOutput, Warning};
@@ -163,6 +165,8 @@ struct Cached {
     section: NodeId,
     fragments: Vec<Fragment>,
     warnings: Vec<Warning>,
+    /// The characters the section set with no glyph.
+    uncovered: Vec<UncoveredWarning>,
 }
 
 impl Cached {
