@@ -1481,7 +1481,7 @@ h2 + p::first-letter {
 
 ```
 color font-family font-size font-style font-weight
-font-variant-caps letter-spacing text-transform
+font-variant-caps line-height letter-spacing text-transform
 text-decoration-line text-decoration-color
 text-decoration-style text-decoration-thickness
 text-decoration
@@ -1515,6 +1515,17 @@ h2 + p::first-line {
 Which words fall on that line depends on the style applied to it. A property that changes the width of the text moves the break, and the style then applies to whatever words end up on the line. The properties that pick a face or a size change widths. So do `font-variant-caps`, `letter-spacing`, and `text-transform`.
 
 `font-size` grows the line around the baseline the paragraph shares. `color` and the rules `text-decoration` draws change no widths. Lines break the same way with them or without them.
+
+`line-height` gives the opening line a height of its own. The other lines keep the line height of the paragraph. A number or a percentage multiplies the `font-size` of the opening line. `line-height` does not change where the lines break.
+
+The following example makes the opening line of a chapter taller than the lines under it:
+
+```css
+h2 + p::first-line {
+  font-variant-caps: small-caps;
+  line-height: 1.8;
+}
+```
 
 ## Cross-references
 

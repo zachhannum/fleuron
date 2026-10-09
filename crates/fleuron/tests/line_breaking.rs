@@ -443,6 +443,7 @@ proptest! {
         let first_line = Some(FirstLine {
             face: Some(Face { family: None, italic: Some(italic), weight: Some(700) }),
             size: Some(body().size * 1.4),
+            line_height: None,
             letter_spacing: Some(letter_spacing),
             caps: Some(FontVariantCaps::SmallCaps),
             transform: Some(TextTransform::Uppercase),

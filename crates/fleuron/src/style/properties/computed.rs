@@ -580,6 +580,7 @@ impl ComputedStyle {
         crate::lines::FirstLine {
             face: (face != crate::lines::Face::default()).then_some(face),
             size: set(self.font_size != element.font_size, self.font_size),
+            line_height: set(self.line_height != element.line_height, self.line_height),
             letter_spacing: set(
                 self.letter_spacing != element.letter_spacing,
                 self.letter_spacing,

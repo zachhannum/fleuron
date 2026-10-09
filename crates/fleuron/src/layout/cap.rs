@@ -36,7 +36,14 @@ impl Paginator<'_> {
         }
         let body_metrics = self.registry.metrics(body.font_id)?;
         let body_cap = cap_height(body_metrics) / body_metrics.units_per_em as f32 * body.size;
-        let sunk = (sink - 1) as f32 * self.lines.strut(&body).height() + body_cap;
+        // The sunk lines are the paragraph's own height apart, and
+        // the opening line stands off the second by what is under
+        // its own baseline.
+        let strut = self.lines.strut(&body);
+        let opening = self
+            .lines
+            .opening_strut(&body, self.styles.opening_line(id));
+        let sunk = (sink - 1) as f32 * strut.height() + opening.below - strut.below + body_cap;
         let style = ParagraphStyle {
             size: sunk * cap_metrics.units_per_em as f32 / cap_units,
             ..cap_style.paragraph()
@@ -341,6 +348,59 @@ mod tests {
             !opening.is_empty() && opening.iter().all(|(_, small)| *small),
             "the line beside the cap is not small capitals: {opening:?}",
         );
+    }
+
+    /// Acceptance: a drop cap beside a first line with a line height
+    /// of its own still sits on the third baseline, and its top stays
+    /// on that line's cap height, whether the line is taller than the
+    /// paragraph's own or shorter.
+    #[test]
+    fn a_drop_cap_reads_the_line_height_of_the_first_line() {
+        for line_height in ["3", "1"] {
+            let pages = paginate_styled(
+                &format!(
+                    "p::first-letter {{ initial-letter: 3 }}
+                     p::first-line {{ line-height: {line_height} }}"
+                ),
+                vec![section(vec![paragraph(
+                    &"my father had a small estate in nottinghamshire ".repeat(12),
+                )])],
+            );
+            let lines = content_lines(&pages[0]);
+            assert!(lines.len() > 4, "not enough lines to sink into");
+
+            let body = ua().root();
+            let (cap_index, (cap_baseline, cap_size)) = lines
+                .iter()
+                .enumerate()
+                .find(|(_, (_, runs))| runs[0].1 > body.font_size)
+                .map(|(index, (baseline, runs))| (index, (*baseline, runs[0].1)))
+                .expect("a drop cap paints");
+            let prose: Vec<f32> = lines
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != cap_index)
+                .map(|(_, (baseline, _))| *baseline)
+                .collect();
+            let leading = prose[3] - prose[2];
+            assert!(
+                (prose[1] - prose[0] - leading).abs() > 1.0,
+                "line-height: {line_height} left the first line where it was",
+            );
+            assert!(
+                (cap_baseline - prose[2]).abs() < 1e-3,
+                "line-height: {line_height}: the cap is not on the third baseline",
+            );
+
+            let metrics = registry().metrics(body.font_id).unwrap();
+            let cap_height =
+                |size: f32| metrics.cap_height as f32 / metrics.units_per_em as f32 * size;
+            let top = cap_baseline - cap_height(cap_size);
+            assert!(
+                (top - (prose[0] - cap_height(body.font_size))).abs() < 1e-2,
+                "line-height: {line_height}: the cap's top is not the first line's cap height",
+            );
+        }
     }
 
     /// Acceptance: a three-line drop cap sits on the third baseline,

@@ -325,6 +325,7 @@ export const SUBSET: Subset = {
       'font-style',
       'font-weight',
       'font-variant-caps',
+      'line-height',
       'letter-spacing',
       'text-transform',
       'text-decoration-line',

@@ -67,7 +67,8 @@ pub(crate) const PSEUDO_ELEMENTS: &[(&str, &str)] = &[
 /// `font-variant-caps`, `letter-spacing` and `text-transform` change
 /// the width of the shaped run, which is what the second breaking
 /// pass is for. `color` and the rules `text-decoration` draws are
-/// paint alone, and break the same either way.
+/// paint alone, and break the same either way. `line-height` is the
+/// height of the line and nothing about its runs.
 pub(crate) const FIRST_LINE_PROPERTIES: &[&str] = &[
     "color",
     "font-family",
@@ -75,6 +76,7 @@ pub(crate) const FIRST_LINE_PROPERTIES: &[&str] = &[
     "font-style",
     "font-weight",
     "font-variant-caps",
+    "line-height",
     "letter-spacing",
     "text-transform",
     "text-decoration-line",
