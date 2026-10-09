@@ -16,10 +16,10 @@ use super::counter::{Content, ListStyleType, StringSet};
 use super::edges::{Border, BorderRadius, CornerRadius, Edges};
 use super::exclusion::{Coord, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow};
 use super::value::{
-    BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine, DecorationStyle,
-    Family, FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures,
-    FontVariantNumeric, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign, TextDecoration,
-    TextJustify, TextTransform, Width,
+    BlendMode, BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine,
+    DecorationStyle, Family, FontStyle, FontVariantAlternates, FontVariantCaps,
+    FontVariantLigatures, FontVariantNumeric, Hyphens, Length, NORMAL_LINE_HEIGHT, TextAlign,
+    TextDecoration, TextJustify, TextTransform, Width,
 };
 
 /// One node's resolved style: what every downstream pass reads.
@@ -130,6 +130,14 @@ pub struct ComputedStyle {
     /// of their own.
     #[serde(skip_serializing_if = "opaque")]
     pub opacity: f32,
+    /// How what the element draws is mixed with what is under it,
+    /// from `mix-blend-mode`.
+    #[serde(skip_serializing_if = "BlendMode::is_normal")]
+    pub mix_blend_mode: BlendMode,
+    /// The mode of the nearest element around this one that names
+    /// one. An element is part of what the elements around it draw.
+    #[serde(skip)]
+    pub blend_around: BlendMode,
     /// Which side of this element the prose sets on, from `wrap-flow`.
     #[serde(skip_serializing_if = "wraps_nothing")]
     pub wrap_flow: WrapFlow,
@@ -241,6 +249,8 @@ impl ComputedStyle {
             inset: Edges::all(Inset::Auto),
             z_index: 0,
             opacity: 1.0,
+            mix_blend_mode: BlendMode::Normal,
+            blend_around: BlendMode::Normal,
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -289,6 +299,8 @@ impl ComputedStyle {
             inset: Edges::all(Inset::Auto),
             z_index: 0,
             opacity: 1.0,
+            mix_blend_mode: BlendMode::Normal,
+            blend_around: self.blend(),
             wrap_flow: WrapFlow::Auto,
             shape_outside: ShapeOutside::None,
             shape_margin: 0.0,
@@ -364,6 +376,7 @@ impl ComputedStyle {
             }
             Declaration::ZIndex(layer) => self.z_index = *layer,
             Declaration::Opacity(opacity) => self.opacity = *opacity,
+            Declaration::MixBlendMode(mode) => self.mix_blend_mode = *mode,
             Declaration::WrapFlow(wrap) => self.wrap_flow = *wrap,
             Declaration::ShapeOutside(shape) => {
                 self.shape_outside = match shape {
@@ -489,6 +502,7 @@ impl ComputedStyle {
             Declaration::Inset(edge, _) => *self.inset.edge(*edge) = base.inset.get(*edge),
             Declaration::ZIndex(_) => self.z_index = base.z_index,
             Declaration::Opacity(_) => self.opacity = base.opacity,
+            Declaration::MixBlendMode(_) => self.mix_blend_mode = base.mix_blend_mode,
             Declaration::WrapFlow(_) => self.wrap_flow = base.wrap_flow,
             Declaration::ShapeOutside(_) => self.shape_outside = base.shape_outside.clone(),
             Declaration::ShapeMargin(_) => self.shape_margin = base.shape_margin,
@@ -632,6 +646,15 @@ impl ComputedStyle {
         })
     }
 
+    /// The mode what this element draws is mixed in: its own, and
+    /// otherwise the one the elements around it draw in.
+    pub fn blend(&self) -> BlendMode {
+        match self.mix_blend_mode {
+            BlendMode::Normal => self.blend_around,
+            mode => mode,
+        }
+    }
+
     /// Everything line layout needs from a style.
     pub fn paragraph(&self) -> crate::lines::ParagraphStyle {
         crate::lines::ParagraphStyle {
@@ -644,6 +667,7 @@ impl ComputedStyle {
             features: self.features(),
             transform: self.text_transform,
             decoration: self.decoration(),
+            blend: self.blend(),
         }
     }
 

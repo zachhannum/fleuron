@@ -14,14 +14,14 @@ use crate::style::properties::{
 use super::color::{background_color, border_color, color, decoration_color};
 use super::custom::{mentions_var, raw};
 use super::value::{
-    background_image, background_position, background_repeat, background_size, border_collapse,
-    border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
-    decoration_break, decoration_keyword, decoration_line, decoration_style, decoration_thickness,
-    edges, families, feature_settings, font_style, generated, hanging, hyphens, inset, keyword_or,
-    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
-    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
-    text_transform, variant_alternates, variant_caps, variant_ligatures, variant_numeric, weight,
-    width, wrap_flow, z_index,
+    background_image, background_position, background_repeat, background_size, blend_mode,
+    border_collapse, border_radius, break_value, ceiling, column_span, corner_radius, count,
+    counter_reset, decoration_break, decoration_keyword, decoration_line, decoration_style,
+    decoration_thickness, edges, families, feature_settings, font_style, generated, hanging,
+    hyphens, inset, keyword_or, length, letter_spacing, line_height, line_style, line_width,
+    list_style_type, opacity, page_name, positioning, property, shape_outside, string_set,
+    text_align, text_justify, text_transform, variant_alternates, variant_caps, variant_ligatures,
+    variant_numeric, weight, width, wrap_flow, z_index,
 };
 use super::vocabulary::FIRST_LINE_PROPERTIES;
 use super::{Importance, SheetPosition, StyleError, Written, position, warning};
@@ -735,6 +735,13 @@ pub(crate) const PROPERTIES: &[Spec<Declaration>] = &[
         syntax: "<number> | <percentage>",
         examples: &["0.05", "50%"],
         read: |name, input| longhand(name, input, opacity, Declaration::Opacity),
+    },
+    Spec {
+        name: "mix-blend-mode",
+        inherited: false,
+        syntax: "normal | multiply | screen | overlay | darken | lighten | color-dodge | color-burn | hard-light | soft-light | difference | exclusion | hue | saturation | color | luminosity",
+        examples: &["multiply", "screen", "difference"],
+        read: |name, input| longhand(name, input, blend_mode, Declaration::MixBlendMode),
     },
     Spec {
         name: "wrap-flow",

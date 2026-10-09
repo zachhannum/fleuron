@@ -6,7 +6,9 @@ use std::sync::Arc;
 use crate::content::NodeId;
 use crate::lines::Line;
 use crate::pages::{DrawItem, PageBox};
-use crate::style::{BorderRadius, BoxDecorationBreak, Break, Color, ComputedStyle, Edges};
+use crate::style::{
+    BlendMode, BorderRadius, BoxDecorationBreak, Break, Color, ComputedStyle, Edges,
+};
 
 use super::background::Backdrop;
 
@@ -49,6 +51,8 @@ pub enum Piece {
         height: f32,
         /// Index into the asset table.
         asset: u32,
+        /// How the image is mixed with what is under it.
+        blend: BlendMode,
     },
     /// Space with nothing in it: what a thematic break set in space
     /// rather than in an ornament comes to.
@@ -245,6 +249,8 @@ pub struct Decoration {
     /// `opacity` of the block and the blocks around it, multiplied
     /// together.
     pub opacity: f32,
+    /// How what the border box paints is mixed with what is under it.
+    pub blend: BlendMode,
 }
 
 /// What a fragment tells the page it lands on: the running strings
@@ -307,5 +313,6 @@ pub(super) fn decoration(
         layer: style.z_index,
         offset,
         opacity,
+        blend: style.blend(),
     }
 }

@@ -9,7 +9,7 @@
 
 use crate::images::Intrinsic;
 use crate::pages::{Corners, DrawItem};
-use crate::style::{Background, BackgroundRepeat, BackgroundSize, Color, Coord, Edges};
+use crate::style::{Background, BackgroundRepeat, BackgroundSize, BlendMode, Color, Coord, Edges};
 
 /// What one box paints behind its content, with the image's own size
 /// already read from its header.
@@ -97,6 +97,7 @@ impl Backdrop {
                     h,
                     color,
                     layer,
+                    blend: BlendMode::Normal,
                 }
             } else {
                 DrawItem::Rounded {
@@ -108,6 +109,7 @@ impl Backdrop {
                     ring: Edges::all(0.0),
                     color,
                     layer,
+                    blend: BlendMode::Normal,
                 }
             });
         }
@@ -140,6 +142,7 @@ impl Tile {
             asset: self.asset,
             alpha: 255,
             layer,
+            blend: BlendMode::Normal,
         })
     }
 

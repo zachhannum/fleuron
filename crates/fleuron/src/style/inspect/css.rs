@@ -135,6 +135,7 @@ fn value(style: &ComputedStyle, property: &str) -> String {
         "left" => inset(style.inset.left),
         "z-index" => style.z_index.to_string(),
         "opacity" => number(style.opacity),
+        "mix-blend-mode" => style.mix_blend_mode.keyword().into(),
         "wrap-flow" => match style.wrap_flow {
             WrapFlow::Auto => "auto",
             WrapFlow::Both => "both",

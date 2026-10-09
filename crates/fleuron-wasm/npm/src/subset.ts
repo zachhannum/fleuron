@@ -880,6 +880,34 @@ export const SUBSET: Subset = {
       ]
     },
     {
+      name: 'mix-blend-mode',
+      inherited: false,
+      syntax: 'normal | multiply | screen | overlay | darken | lighten | color-dodge | color-burn | hard-light | soft-light | difference | exclusion | hue | saturation | color | luminosity',
+      keywords: [
+        'normal',
+        'multiply',
+        'screen',
+        'overlay',
+        'darken',
+        'lighten',
+        'color-dodge',
+        'color-burn',
+        'hard-light',
+        'soft-light',
+        'difference',
+        'exclusion',
+        'hue',
+        'saturation',
+        'color',
+        'luminosity'
+      ],
+      examples: [
+        'multiply',
+        'screen',
+        'difference'
+      ]
+    },
+    {
       name: 'wrap-flow',
       inherited: false,
       syntax: 'auto | both | start | end',

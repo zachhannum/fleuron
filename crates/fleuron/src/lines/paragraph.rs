@@ -3,7 +3,7 @@
 
 use crate::content::{Inline, Metadata, NodeId};
 use crate::fonts::{FaceAttributes, FeatureSetting, FontRegistry};
-use crate::style::{Color, Edges, FontVariantCaps, TextDecoration, TextTransform};
+use crate::style::{BlendMode, Color, Edges, FontVariantCaps, TextDecoration, TextTransform};
 use serde::Serialize;
 
 /// Everything one paragraph's layout depends on, and the colour its
@@ -34,6 +34,9 @@ pub struct ParagraphStyle {
     /// What is drawn across the run. Nothing measures it either: the
     /// rules are painted over the advance the glyphs already took.
     pub decoration: TextDecoration,
+    /// How the run and its rules are mixed with what is under them.
+    /// Nothing measures it.
+    pub blend: BlendMode,
 }
 
 /// What `::first-line` changes about the paragraph it opens.

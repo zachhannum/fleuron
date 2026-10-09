@@ -5,6 +5,7 @@ use fleuron::content::{Attributes, Inline, NodeId};
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::linebox::LineBox;
 use fleuron::lines::{LineBreakOptions, LineLayout, ParagraphStyle};
+use fleuron::style::BlendMode;
 use proptest::prelude::*;
 
 fn registry() -> &'static FontRegistry {
@@ -131,6 +132,7 @@ fn run(size: f32) -> fleuron::lines::ShapedRun {
         decoration: fleuron::style::TextDecoration::NONE,
         glyphs: Vec::new(),
         advance: 0,
+        blend: BlendMode::Normal,
     }
 }
 

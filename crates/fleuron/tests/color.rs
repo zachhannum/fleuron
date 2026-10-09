@@ -9,7 +9,7 @@ use fleuron::content::{Attributes, Block, Book, HeadingLevel, Inline, NodeId, Se
 use fleuron::fonts::{FontRegistry, bundled_registry};
 use fleuron::layout::Paginator;
 use fleuron::pages::{Corners, DrawItem, Page};
-use fleuron::style::{Color, Source, StyleTree, Stylesheets};
+use fleuron::style::{BlendMode, Color, Source, StyleTree, Stylesheets};
 
 /// A sheet that sets a page and a heading and names no colour.
 const PLAIN_CSS: &str = r#"
@@ -169,6 +169,17 @@ fn translucent(alpha: u8) -> String {
     }
 }
 
+/// The mode an item is mixed in, and nothing at all for `normal`: a
+/// book whose sheet names no `mix-blend-mode` describes itself the
+/// way it did before there was one.
+fn mixed(blend: BlendMode) -> String {
+    if blend.is_normal() {
+        String::new()
+    } else {
+        format!(" blend {}", blend.keyword())
+    }
+}
+
 /// One draw item, every field of it, on one line. The match names
 /// each field rather than eliding it, so a field added to the display
 /// structure has to be answered for here.
@@ -191,6 +202,7 @@ fn described(item: &DrawItem) -> String {
             color: _,
             glyphs,
             layer,
+            blend,
         } => {
             let pseudo = pseudo_element
                 .map(|id| format!(" pseudo {}", id.get()))
@@ -215,10 +227,11 @@ fn described(item: &DrawItem) -> String {
             };
             format!(
                 "text {x:?} {y:?} font {font_id} at {size:?}pt wide {width:?} {text:?} source {source:?} {source_map:?} \
-                 written {written}{pseudo} small-caps {} glyphs {}{}",
+                 written {written}{pseudo} small-caps {} glyphs {}{}{}",
                 features.small_caps(),
                 placed.join(" "),
-                layered(*layer)
+                layered(*layer),
+                mixed(*blend)
             )
         }
         DrawItem::Rect {
@@ -228,7 +241,12 @@ fn described(item: &DrawItem) -> String {
             h,
             color: _,
             layer,
-        } => format!("rect {x:?} {y:?} {w:?} {h:?}{}", layered(*layer)),
+            blend,
+        } => format!(
+            "rect {x:?} {y:?} {w:?} {h:?}{}{}",
+            layered(*layer),
+            mixed(*blend)
+        ),
         DrawItem::Image {
             x,
             y,
@@ -237,11 +255,13 @@ fn described(item: &DrawItem) -> String {
             asset,
             alpha,
             layer,
+            blend,
         } => {
             format!(
-                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}{}",
+                "image {x:?} {y:?} {w:?} {h:?} asset {asset}{}{}{}",
                 translucent(*alpha),
-                layered(*layer)
+                layered(*layer),
+                mixed(*blend)
             )
         }
         DrawItem::Background {
@@ -258,12 +278,14 @@ fn described(item: &DrawItem) -> String {
             asset,
             alpha,
             layer,
+            blend,
         } => format!(
             "background {x:?} {y:?} {w:?} {h:?}{} tile {tile_x:?} {tile_y:?} {tile_w:?} {tile_h:?} \
-             repeat {repeat} asset {asset}{}{}",
+             repeat {repeat} asset {asset}{}{}{}",
             cornered(radii),
             translucent(*alpha),
-            layered(*layer)
+            layered(*layer),
+            mixed(*blend)
         ),
         DrawItem::Rounded {
             x,
@@ -274,10 +296,12 @@ fn described(item: &DrawItem) -> String {
             ring,
             color: _,
             layer,
+            blend,
         } => format!(
-            "rounded {x:?} {y:?} {w:?} {h:?}{} ring {ring:?}{}",
+            "rounded {x:?} {y:?} {w:?} {h:?}{} ring {ring:?}{}{}",
             cornered(radii),
-            layered(*layer)
+            layered(*layer),
+            mixed(*blend)
         ),
     }
 }

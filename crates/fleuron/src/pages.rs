@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::content::{NodeId, SourceRange};
 use crate::fonts::Features;
-use crate::style::{Color, Edges};
+use crate::style::{BlendMode, Color, Edges};
 
 /// Which side of the spread a page falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -169,6 +169,9 @@ pub enum DrawItem {
         glyphs: Vec<Glyph>,
         /// Which layer the run paints in.
         layer: i32,
+        /// How the run is mixed with what is already painted
+        /// under it.
+        blend: BlendMode,
     },
     /// Filled rectangle: rules, borders, backgrounds.
     Rect {
@@ -184,6 +187,9 @@ pub enum DrawItem {
         color: Color,
         /// Which layer the rectangle paints in.
         layer: i32,
+        /// How the rectangle is mixed with what is already painted
+        /// under it.
+        blend: BlendMode,
     },
     /// Placed image; `asset` indexes the asset table.
     Image {
@@ -202,6 +208,9 @@ pub enum DrawItem {
         alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
+        /// How the image is mixed with what is already painted
+        /// under it.
+        blend: BlendMode,
     },
     /// An image painted behind a box: the page's own, or a block's
     /// border box.
@@ -239,6 +248,9 @@ pub enum DrawItem {
         alpha: u8,
         /// Which layer the image paints in.
         layer: i32,
+        /// How the image is mixed with what is already painted
+        /// under it.
+        blend: BlendMode,
     },
     /// A filled box with rounded corners: a background, or a border
     /// drawn as a ring.
@@ -266,6 +278,9 @@ pub enum DrawItem {
         color: Color,
         /// Which layer the shape paints in.
         layer: i32,
+        /// How the shape is mixed with what is already painted
+        /// under it.
+        blend: BlendMode,
     },
 }
 
@@ -368,6 +383,17 @@ impl DrawItem {
             | DrawItem::Image { layer, .. }
             | DrawItem::Background { layer, .. }
             | DrawItem::Rounded { layer, .. } => *layer,
+        }
+    }
+
+    /// How this item is mixed with what is already painted under it.
+    pub fn blend(&self) -> BlendMode {
+        match self {
+            DrawItem::Text { blend, .. }
+            | DrawItem::Rect { blend, .. }
+            | DrawItem::Image { blend, .. }
+            | DrawItem::Background { blend, .. }
+            | DrawItem::Rounded { blend, .. } => *blend,
         }
     }
 }

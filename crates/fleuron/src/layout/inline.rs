@@ -11,7 +11,7 @@ use crate::pages::{DrawItem, Radius};
 use crate::style::Edges;
 
 use super::Paginator;
-use super::flow::box_items;
+use super::flow::{box_items, mix};
 
 impl Paginator<'_> {
     /// The boxes the inline elements on one line paint there, in
@@ -59,7 +59,7 @@ impl Paginator<'_> {
                 .get(fragment.span)
                 .map(|span| span.offset)
                 .unwrap_or_default();
-            items.extend(box_items(
+            let mut painted = box_items(
                 x + offset + fragment.x,
                 baseline - fragment.above,
                 w,
@@ -69,7 +69,9 @@ impl Paginator<'_> {
                 colors,
                 &backdrop,
                 layer,
-            ));
+            );
+            mix(&mut painted, style.blend());
+            items.append(&mut painted);
         }
         items
     }

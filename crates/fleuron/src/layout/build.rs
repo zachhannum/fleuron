@@ -963,6 +963,7 @@ impl Builder<'_, '_> {
                 width,
                 height,
                 asset,
+                blend: style.blend(),
             },
         );
     }

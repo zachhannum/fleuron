@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use crate::content::{Inline, NodeId, PseudoElement, SourceRange};
 use crate::fonts::Features;
-use crate::style::{Color, FontVariantCaps, TextDecoration, TextTransform};
+use crate::style::{BlendMode, Color, FontVariantCaps, TextDecoration, TextTransform};
 
 use super::LineLayout;
 use super::paragraph::{InlineBox, InlineStyles, Lead, ParagraphStyle};
@@ -91,6 +91,7 @@ pub(super) struct StyleSpan {
     pub(super) color: Color,
     /// What is drawn across the span.
     pub(super) decoration: TextDecoration,
+    pub(super) blend: BlendMode,
     /// The innermost inline element the span was written in.
     pub(super) inline: Option<NodeId>,
     /// Byte range in the paragraph's shaped text.
@@ -108,6 +109,7 @@ impl StyleSpan {
             && self.features == other.features
             && self.color == other.color
             && self.decoration == other.decoration
+            && self.blend == other.blend
             && self.inline == other.inline
     }
 }
@@ -348,6 +350,7 @@ impl FlatParagraph {
             features: Features::new(caps == SmallCaps::Feature, style.features.clone()),
             color: style.color,
             decoration: style.decoration,
+            blend: style.blend,
             inline: self.inline,
             range: start..self.text.len(),
         };

@@ -763,6 +763,21 @@ fn a_paragraph_margin_in_the_book_stays_in_the_epub() {
     assert!(reset < author, "{sheet}");
 }
 
+/// Acceptance: a blend mode the sheet names stays in the EPUB, on the
+/// rule it was written in, and raises no warning.
+#[test]
+fn a_blend_mode_in_the_book_stays_in_the_epub() {
+    let epub = write(
+        &read(EVERY_VARIANT),
+        "h1 { mix-blend-mode: multiply }\nem { mix-blend-mode: screen }",
+    );
+    assert!(epub.warnings.is_empty(), "{:?}", epub.warnings);
+    let sheet = entry(&epub.bytes, "EPUB/book.css");
+    for rule in ["mix-blend-mode: multiply", "mix-blend-mode: screen"] {
+        assert!(sheet.contains(rule), "no {rule} in:\n{sheet}");
+    }
+}
+
 /// A file the host cannot hand over warns, and the run goes on
 /// without it.
 #[test]

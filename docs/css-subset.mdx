@@ -745,7 +745,7 @@ Where a line break splits the element, `box-decoration-break` decides which edge
 
 The engine paints the box over the background of the block around it, and under the text it sits behind. A block that the sheet puts against the page carries the boxes of its own runs with it.
 
-`position`, `z-index`, and `opacity` on an inline element are not in the subset. The element takes the layer and the opacity of the block around it.
+`position`, `z-index`, and `opacity` on an inline element are not in the subset. The element takes the layer and the opacity of the block around it. `mix-blend-mode` does apply to an inline element. See [blend modes](#blend-modes).
 
 The following example sets a keyword in white on a gray chip with rounded corners:
 
@@ -774,6 +774,7 @@ These do not inherit. A block is a paragraph, a heading, a quotation, an image, 
 | `top`, `right`, `bottom`, `left` | `top: 0` |
 | `z-index` | `z-index: 10` |
 | `opacity` | `opacity: 0.05` |
+| `mix-blend-mode` | `mix-blend-mode: multiply` |
 | `wrap-flow` | `wrap-flow: end` |
 | `shape-outside` | `shape-outside: polygon(0 0, 100% 0, 100% 100%)` |
 | `shape-margin` | `shape-margin: 6pt` |
@@ -810,6 +811,7 @@ bottom:                     auto | <length> | <percentage>;
 left:                       auto | <length> | <percentage>;
 z-index:                    auto | <integer>;
 opacity:                    <number> | <percentage>;
+mix-blend-mode:             normal | multiply | screen | overlay | darken | lighten | color-dodge | color-burn | hard-light | soft-light | difference | exclusion | hue | saturation | color | luminosity;
 wrap-flow:                  auto | both | start | end;
 shape-outside:              none | auto | polygon( [ <length> | <percentage> ]{2} [ , [ <length> | <percentage> ]{2} ]* );
 shape-margin:               <length> | <percentage>;
@@ -1026,6 +1028,39 @@ The following example puts a large transparent ornament against the opening page
   left: 0;
   font-size: 160pt;
   opacity: 0.05;
+}
+```
+
+### Blend modes
+
+`mix-blend-mode` mixes the colors of an element with the colors under it. Without a blend mode, an element covers what is under it.
+
+The property takes `normal`, or one of these fifteen blend modes:
+
+```text
+multiply  screen  overlay  darken  lighten  color-dodge  color-burn
+hard-light  soft-light  difference  exclusion  hue  saturation  color
+luminosity
+```
+
+Each mode mixes two colors the way it does in a browser. For example, `multiply` darkens the colors under the element, and `screen` lightens them.
+
+A blend mode applies to a block or to an inline element, and to everything in the element: the text, the backgrounds, the borders, and the images. An element inside it can have a blend mode of its own.
+
+The colors under an element include the background of the page, the backgrounds of the blocks around the element, and anything in a [layer](#layers) below it.
+
+Where an element has a blend mode and a background of its own, its text blends with that background as well. In a browser, it does not.
+
+The following example gives a note a yellow background and multiplies its emphasized words with that background:
+
+```css
+p.note {
+  background-color: #fff3c4;
+}
+
+p.note em {
+  color: #b3261e;
+  mix-blend-mode: multiply;
 }
 ```
 
@@ -1809,6 +1844,7 @@ A reading system uses the CSS that it supports. The support is different from on
 | table boxes | a border or a background on `thead` or `tbody`, and `width` on anything but an image or a cell of the first row |
 | positioning | `position: fixed` and `position: sticky`, the `inset` shorthand, `wrap-flow: clear`, `minimum` and `maximum`, a width or a height on a positioned block, and `position`, `z-index` or `opacity` on an inline element |
 | contours | `shape-outside: circle()`, `ellipse()`, `inset()`, `path()`, `url()` and the `<box>` keywords, `shape-image-threshold`, and a contour on an image you leave among the paragraphs |
+| blend modes | `isolation`, `background-blend-mode`, and an element with a blend mode and a background of its own blended as one picture |
 | code blocks | `white-space`, `tab-size`, and syntax highlighting |
 | at-rules | media queries |
 | custom properties | a custom property declared in `@page` or in a margin box, `var()` in `@font-face`, and the `@property` rule |

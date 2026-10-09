@@ -34,7 +34,7 @@ use crate::content::Metadata;
 use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::pages::{Corners, DrawItem, Glyph, LinkTo, OutlineEntry, Page, PageBox};
-use crate::style::Color;
+use crate::style::{BlendMode, Color};
 
 mod svg;
 
@@ -297,7 +297,27 @@ fn written(date: &str) -> Option<DateTime> {
     Some(stamp)
 }
 
+/// Paints one item, mixed with what the page already holds where the
+/// item names a mode.
 fn paint(
+    surface: &mut Surface,
+    item: &DrawItem,
+    page: &Page,
+    fonts: &[Font],
+    images: &[Embedded],
+    registry: &FontRegistry,
+) -> Result<(), PdfError> {
+    let mode = item.blend();
+    if mode.is_normal() {
+        return draw(surface, item, page, fonts, images, registry);
+    }
+    surface.push_blend_mode(blend_mode(mode));
+    let drawn = draw(surface, item, page, fonts, images, registry);
+    surface.pop();
+    drawn
+}
+
+fn draw(
     surface: &mut Surface,
     item: &DrawItem,
     page: &Page,
@@ -326,6 +346,8 @@ fn paint(
             // The page's items arrived in paint order, so the layer
             // that put them in it is spent.
             layer: _,
+            // `paint` pushed the mode before it came here.
+            blend: _,
             color,
             glyphs,
         } => {
@@ -354,6 +376,7 @@ fn paint(
             h,
             color,
             layer: _,
+            blend: _,
         } => {
             ink(surface, *color);
             let rect = Rect::from_xywh(*x, *y, *w, *h).ok_or(PdfError::Geometry {
@@ -380,6 +403,7 @@ fn paint(
             asset,
             alpha,
             layer: _,
+            blend: _,
         } => {
             let image = images
                 .get(*asset as usize)
@@ -411,6 +435,7 @@ fn paint(
             asset,
             alpha,
             layer: _,
+            blend: _,
         } => {
             let image = images
                 .get(*asset as usize)
@@ -457,6 +482,7 @@ fn paint(
             ring,
             color,
             layer: _,
+            blend: _,
         } => {
             surface.set_fill(Some(Fill {
                 paint: rgb::Color::new(color.r, color.g, color.b).into(),
@@ -593,6 +619,28 @@ fn ink(surface: &mut Surface, color: Color) {
         opacity: opacity(color.a),
         ..Fill::default()
     }));
+}
+
+/// A mode of `mix-blend-mode` as the one krilla takes.
+fn blend_mode(mode: BlendMode) -> krilla::blend::BlendMode {
+    match mode {
+        BlendMode::Normal => krilla::blend::BlendMode::Normal,
+        BlendMode::Multiply => krilla::blend::BlendMode::Multiply,
+        BlendMode::Screen => krilla::blend::BlendMode::Screen,
+        BlendMode::Overlay => krilla::blend::BlendMode::Overlay,
+        BlendMode::Darken => krilla::blend::BlendMode::Darken,
+        BlendMode::Lighten => krilla::blend::BlendMode::Lighten,
+        BlendMode::ColorDodge => krilla::blend::BlendMode::ColorDodge,
+        BlendMode::ColorBurn => krilla::blend::BlendMode::ColorBurn,
+        BlendMode::HardLight => krilla::blend::BlendMode::HardLight,
+        BlendMode::SoftLight => krilla::blend::BlendMode::SoftLight,
+        BlendMode::Difference => krilla::blend::BlendMode::Difference,
+        BlendMode::Exclusion => krilla::blend::BlendMode::Exclusion,
+        BlendMode::Hue => krilla::blend::BlendMode::Hue,
+        BlendMode::Saturation => krilla::blend::BlendMode::Saturation,
+        BlendMode::Color => krilla::blend::BlendMode::Color,
+        BlendMode::Luminosity => krilla::blend::BlendMode::Luminosity,
+    }
 }
 
 /// An eight-bit alpha as the opacity krilla takes.
@@ -927,6 +975,7 @@ mod tests {
                     range: 1..2,
                 },
             ],
+            blend: BlendMode::Normal,
         }];
         let pdf = readable(&page_of(items, 200.0, 200.0), &Metadata::default());
         // 1pt tighter than the font advance, at 10pt: 100/1000 em,
@@ -957,6 +1006,7 @@ mod tests {
                 h: 100.0,
                 color: under,
                 layer: -1,
+                blend: BlendMode::Normal,
             },
             DrawItem::Rect {
                 x: 20.0,
@@ -965,6 +1015,7 @@ mod tests {
                 h: 60.0,
                 color: over,
                 layer: 10,
+                blend: BlendMode::Normal,
             },
         ];
         let painted = content(&readable(
@@ -993,6 +1044,7 @@ mod tests {
             h: 0.5,
             color: Color::BLACK,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let pdf = readable(&page_of(items, 432.0, 648.0), &Metadata::default());
         assert!(
@@ -1082,6 +1134,7 @@ mod tests {
                 h: 0.5,
                 color: Color::rgb(0, 51, 102),
                 layer: 0,
+                blend: BlendMode::Normal,
             }],
             200.0,
             200.0,
@@ -1096,6 +1149,51 @@ mod tests {
         assert!(
             !black.contains(" rg"),
             "a page in black wrote a colour of its own:\n{black}"
+        );
+    }
+
+    /// Acceptance: an item that names a mode is drawn in it, text
+    /// included, and a book that asks for none writes no blend mode.
+    #[test]
+    fn an_item_with_a_blend_mode_is_drawn_in_that_mode() {
+        let rect = |x: f32, color: Color, blend: BlendMode| DrawItem::Rect {
+            x,
+            y: 40.0,
+            w: 100.0,
+            h: 100.0,
+            color,
+            layer: 0,
+            blend,
+        };
+        let mixed = page_of(
+            vec![
+                rect(10.0, Color::rgb(255, 221, 0), BlendMode::Normal),
+                rect(60.0, Color::rgb(0, 51, 102), BlendMode::Multiply),
+            ],
+            200.0,
+            200.0,
+        );
+        let pdf = readable(&mixed, &Metadata::default());
+        assert_eq!(
+            pdf.matches("/BM /Multiply").count(),
+            1,
+            "one rectangle is multiplied in:\n{pdf}"
+        );
+
+        let book = chapter();
+        let sheet = crate::style::Source::author("blend.css", "h1 { mix-blend-mode: screen }");
+        let styles = crate::style::Stylesheets::parse(&[sheet]).compile(&book, registry());
+        let output = crate::layout::layout_book(&book, &styles, registry(), &Assets::none());
+        let pdf = readable(&output, &Metadata::default());
+        assert!(
+            pdf.contains("/BM /Screen"),
+            "the heading is not screened in:\n{pdf}"
+        );
+
+        let plain = readable(&laid_out(&book), &Metadata::default());
+        assert!(
+            !plain.contains("/BM"),
+            "a plain book wrote a blend mode:\n{plain}"
         );
     }
 
@@ -1160,6 +1258,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
         let bytes = bytes_of(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -1185,6 +1284,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("tailpiece.svg", TAILPIECE)]);
         let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -1224,6 +1324,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("tailpiece.svg", TAILPIECE)]);
         let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -1263,6 +1364,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("plate.svg", svg)]);
         let pdf = with_images(&page_of(items, 432.0, 648.0), &table, &Metadata::default());
@@ -1290,6 +1392,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -1329,6 +1432,7 @@ mod tests {
                     h: 648.0,
                     color: Color::BLACK,
                     layer: 0,
+                    blend: BlendMode::Normal,
                 },
                 DrawItem::Image {
                     x: 200.0,
@@ -1338,6 +1442,7 @@ mod tests {
                     asset: 0,
                     alpha: 255,
                     layer: 0,
+                    blend: BlendMode::Normal,
                 },
             ];
             let table = assets(&[(url, bytes)]);
@@ -1385,6 +1490,7 @@ mod tests {
                 ring: crate::style::Edges::all(0.0),
                 color: Color::rgb(0xf4, 0xf1, 0xea),
                 layer: 0,
+                blend: BlendMode::Normal,
             },
             DrawItem::Rounded {
                 x: 20.0,
@@ -1395,6 +1501,7 @@ mod tests {
                 ring: crate::style::Edges::all(2.0),
                 color: Color::rgb(0, 51, 102),
                 layer: 0,
+                blend: BlendMode::Normal,
             },
         ];
         let painted = content(&readable(
@@ -1468,6 +1575,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
         let painted = content(&with_images(
@@ -1505,6 +1613,7 @@ mod tests {
                 asset: 0,
                 alpha: 255,
                 layer: DrawItem::PAGE_BACKGROUND,
+                blend: BlendMode::Normal,
             },
             DrawItem::Rect {
                 x: 54.0,
@@ -1513,6 +1622,7 @@ mod tests {
                 h: 120.0,
                 color: Color::rgba(0, 0, 0, 64),
                 layer: 0,
+                blend: BlendMode::Normal,
             },
         ];
         let table = assets(&[("plate.jpg", MAP)]);
@@ -1544,6 +1654,7 @@ mod tests {
                 asset: 0,
                 alpha,
                 layer: 0,
+                blend: BlendMode::Normal,
             }]
         };
         let table = assets(&[("plate.jpg", MAP)]);
@@ -1577,6 +1688,7 @@ mod tests {
             asset: 0,
             alpha: 255,
             layer: 0,
+            blend: BlendMode::Normal,
         }];
         let table = assets(&[("plate.jpg", MAP)]);
         let (width, height) = table

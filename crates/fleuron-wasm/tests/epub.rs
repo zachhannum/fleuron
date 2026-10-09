@@ -205,7 +205,7 @@ fn the_warnings_come_back_as_a_render_s_do() {
 /// Acceptance: the wire version goes up, and the reply leads with it.
 #[test]
 fn the_reply_leads_with_the_wire_version() {
-    assert_eq!(wire::VERSION, 20);
+    assert_eq!(wire::VERSION, 21);
     let bytes = session(BOOK, CSS).export_epub().unwrap();
     assert_eq!(wire::version(&bytes).unwrap(), fleuron_wasm::wire_version());
 }

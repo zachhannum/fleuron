@@ -42,7 +42,7 @@ pub(crate) use inspect::element_of;
 pub use inspect::{Ancestor, InspectedDeclaration, Inspection, MatchedRule};
 pub use properties::{
     Align, AlignContent, Background, BackgroundPosition, BackgroundRepeat, BackgroundSize, Band,
-    Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
+    BlendMode, Border, BorderCollapse, BorderRadius, BorderStyle, BoxDecorationBreak, Break, Color,
     ColumnRule, ColumnSpan, Columns, ComputedStyle, Content, ContentPiece, Coord, Corner,
     CornerRadius, CounterStyle, DecorationLine, DecorationStyle, Edge, Edges, Family, Figures,
     FontStyle, FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric,
@@ -2643,11 +2643,17 @@ mod tests {
     #[test]
     fn the_property_table_says_what_inherits() {
         let book = sample();
-        let baseline = first(&compile(&book, ""), "p");
+        // The mode the elements around a node draw in is kept beside
+        // the node's own values, and is none of them.
+        let own = |style: &ComputedStyle| ComputedStyle {
+            blend_around: BlendMode::Normal,
+            ..style.clone()
+        };
+        let baseline = own(&first(&compile(&book, ""), "p"));
         for spec in sheet::PROPERTIES {
             let reached = spec.examples.iter().any(|example| {
                 let css = format!("section {{ {}: {example} }}", spec.name);
-                first(&compile(&book, &css), "p") != baseline
+                own(&first(&compile(&book, &css), "p")) != baseline
             });
             assert_eq!(reached, spec.inherited, "{}", spec.name);
         }

@@ -118,6 +118,7 @@ impl LineLayout<'_> {
         // The hyphen belongs to the word it broke, so a rule drawn
         // across that word is drawn across it too.
         let decoration = runs.last().map_or(style.decoration, |run| run.decoration);
+        let blend = runs.last().map_or(style.blend, |run| run.blend);
         // The hyphen belongs to the word it broke, so it sits inside
         // whatever box that word is in.
         let inline = runs.last().and_then(|run| run.inline);
@@ -155,6 +156,7 @@ impl LineLayout<'_> {
                 features: Features::NONE,
                 color,
                 decoration,
+                blend,
                 glyphs: vec![ShapedGlyph {
                     id,
                     x_advance: advance,

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::content::{NodeId, Section};
 use crate::pages::{Corners, DrawItem, Page, PageBox, Radius, Side};
-use crate::style::{AlignContent, Break, Color, Edges, PageQuery, Situation};
+use crate::style::{AlignContent, BlendMode, Break, Color, Edges, PageQuery, Situation};
 
 use super::Paginator;
 use super::background::Backdrop;
@@ -1139,6 +1139,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                             h: feet[column - 1].max(feet[column]) - tier.top,
                             color,
                             layer: 0,
+                            blend: BlendMode::Normal,
                         }
                     }),
             );
@@ -1235,6 +1236,7 @@ impl Painted {
             layer,
         );
         fade(&mut items, self.decoration.opacity);
+        mix(&mut items, self.decoration.blend);
         items
     }
 }
@@ -1270,6 +1272,7 @@ pub(super) fn box_items(
                 h,
                 color,
                 layer,
+                blend: BlendMode::Normal,
             });
         }
     };
@@ -1375,6 +1378,7 @@ fn rings(
         ring,
         color,
         layer,
+        blend: BlendMode::Normal,
     };
     let none = Edges::all(0.0);
     let edges = [
@@ -1436,6 +1440,28 @@ pub(super) fn fade(items: &mut [DrawItem], opacity: f32) {
             | DrawItem::Rounded { color, .. } => *color = color.faded(opacity),
             DrawItem::Image { alpha, .. } | DrawItem::Background { alpha, .. } => {
                 *alpha = crate::pages::fade(*alpha, opacity)
+            }
+        }
+    }
+}
+
+/// Mixes each item in `mode` where it has no mode of its own: what
+/// the `mix-blend-mode` of the element the items came out of comes
+/// to.
+pub(super) fn mix(items: &mut [DrawItem], mode: BlendMode) {
+    if mode.is_normal() {
+        return;
+    }
+    for item in items {
+        match item {
+            DrawItem::Text { blend, .. }
+            | DrawItem::Rect { blend, .. }
+            | DrawItem::Image { blend, .. }
+            | DrawItem::Background { blend, .. }
+            | DrawItem::Rounded { blend, .. } => {
+                if blend.is_normal() {
+                    *blend = mode;
+                }
             }
         }
     }
