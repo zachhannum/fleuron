@@ -147,6 +147,9 @@ enum Ending {
 pub(super) struct Tier {
     /// Top, from the content box's top.
     pub(super) top: f32,
+    /// The space between it and the tier above, which every one of
+    /// its columns opens under.
+    above: f32,
     /// Whether it holds blocks that span the columns.
     pub(super) spanning: bool,
     /// Where in `placed` it begins.
@@ -158,6 +161,7 @@ impl Tier {
     fn head(spanning: bool) -> Tier {
         Tier {
             top: 0.0,
+            above: 0.0,
             spanning,
             start: 0,
         }
@@ -441,10 +445,10 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut forced = false;
         loop {
             if fragment.spanning != self.tier().spanning {
-                self.open_tier(fragment.spanning);
+                self.open_tier(fragment.spanning, fragment.lead);
             }
             let opening = self.opening();
-            let lead = if opening { 0.0 } else { fragment.lead };
+            let lead = self.lead(fragment);
             let room = self.room(fragment);
             if opening || self.cursor + lead + fragment.fixed + fragment.height <= room {
                 let headed = opening && repeats(fragment) && self.head_rows();
@@ -558,27 +562,42 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.column_empty() && (self.column > 0 || self.tier().start == 0)
     }
 
+    /// The space above the next fragment. The head of a column has
+    /// none: a break dropped it, or the tier took it for every column.
+    pub(super) fn lead(&self, fragment: &Fragment) -> f32 {
+        if self.column_empty() {
+            0.0
+        } else {
+            fragment.lead
+        }
+    }
+
     /// The tier being filled.
     pub(super) fn tier(&self) -> Tier {
         *self.tiers.last().expect("a page has a tier")
     }
 
-    /// Closes the tier being filled and opens one under the foot of
-    /// its tallest column, for blocks that span the columns or for
-    /// blocks that do not. The columns of the tier it closes keep the
-    /// heights they filled to.
-    pub(super) fn open_tier(&mut self, spanning: bool) {
+    /// Closes the tier being filled and opens one `above` under the
+    /// foot of its tallest column, for blocks that span the columns or
+    /// for blocks that do not. The columns of the tier it closes keep
+    /// the heights they filled to.
+    pub(super) fn open_tier(&mut self, spanning: bool, above: f32) {
         let tier = self.tier();
-        let top = self.placed[tier.start..]
+        let foot = self.placed[tier.start..]
             .iter()
             .map(|placed| placed.top + placed.height)
             .fold(tier.top, f32::max);
-        // A tier with nothing in it yet becomes the one asked for.
-        if tier.start == self.placed.len() {
+        // A tier with nothing in it yet becomes the one asked for,
+        // where it stands.
+        let (top, above) = if tier.start == self.placed.len() {
             self.tiers.pop();
-        }
+            (tier.top, tier.above)
+        } else {
+            (foot + above, above)
+        };
         self.tiers.push(Tier {
             top,
+            above,
             spanning,
             start: self.placed.len(),
         });
@@ -651,7 +670,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         };
         let mut tier = carried[0].tier;
         if self.tier().spanning != tiers[tier].spanning {
-            self.open_tier(tiers[tier].spanning);
+            self.open_tier(tiers[tier].spanning, 0.0);
         }
         // A table's body row carried to the head of the column has the
         // header rows set above it.
@@ -665,7 +684,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         for (mut placed, (from_x, from_y)) in carried.into_iter().zip(from) {
             if placed.tier != tier {
                 tier = placed.tier;
-                self.open_tier(tiers[tier].spanning);
+                self.open_tier(tiers[tier].spanning, tiers[tier].above);
                 down = self.cursor - tiers[tier].top;
             }
             let (to_x, to_y) = self.origin();
@@ -1788,6 +1807,70 @@ mod tests {
             tokens.windows(2).all(|pair| pair[0] <= pair[1]),
             "the paragraphs are out of order: {tokens:?}"
         );
+    }
+
+    /// Where each column under the heading of a page opens: the
+    /// baseline of its first line, less the heading's.
+    fn under_the_heading(css: &str, page: &Page) -> Option<[f32; 2]> {
+        let lines = laid(css, page);
+        let at = lines.iter().position(|line| line.heading)?;
+        let opens = |column: u32| {
+            lines[at + 1..]
+                .iter()
+                .find(|line| line.column == column)
+                .map(|line| line.baseline - lines[at].baseline)
+        };
+        Some([opens(0)?, opens(1)?])
+    }
+
+    /// The margin under a spanning heading lowers every column under
+    /// it, not only the first.
+    #[test]
+    fn the_margin_under_a_spanning_heading_lowers_every_column() {
+        let blocks = [vec![prose(), heading("Across")], tagged_prose(4)].concat();
+        let under = |css: &str| {
+            let pages = paginate_styled(css, vec![section(blocks.clone())]);
+            under_the_heading(css, &pages[0]).expect("both columns fill under the heading")
+        };
+        let plain = under(SPANNING);
+        let spaced = under(&format!("{SPANNING} h1 {{ margin-bottom: 30pt }}"));
+        for column in 0..2 {
+            let lowered = spaced[column] - plain[column];
+            assert!(
+                (lowered - 30.0).abs() < 1e-3,
+                "column {column} opens {lowered} lower under the margin"
+            );
+        }
+    }
+
+    /// A spanning heading that moves to the next page with the prose
+    /// under it keeps the margin under it, above every column.
+    #[test]
+    fn a_spanning_heading_that_moves_keeps_the_margin_under_it() {
+        let css = format!("{SPANNING} h1 {{ margin-bottom: 30pt }}");
+        let mut moved = 0;
+        for filler in 24..=37 {
+            let blocks = [fillers(filler), vec![heading("Across")], tagged_prose(4)].concat();
+            let under = |css: &str| {
+                let pages = paginate_styled(css, vec![section(blocks.clone())]);
+                pages
+                    .iter()
+                    .skip(1)
+                    .find_map(|page| under_the_heading(css, page))
+            };
+            let (Some(plain), Some(spaced)) = (under(SPANNING), under(&css)) else {
+                continue;
+            };
+            moved += 1;
+            for column in 0..2 {
+                let lowered = spaced[column] - plain[column];
+                assert!(
+                    (lowered - 30.0).abs() < 1e-3,
+                    "{filler} fillers: column {column} opens {lowered} lower under the margin"
+                );
+            }
+        }
+        assert!(moved > 1, "only {moved} heading(s) moved to a second page");
     }
 
     /// Acceptance: a spanning heading that lands near the foot of a

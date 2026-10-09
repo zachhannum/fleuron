@@ -862,11 +862,11 @@ impl Flow<'_, '_> {
         let mut narrowed = false;
         while at < set.len() {
             if set[at].spanning != self.tier().spanning {
-                self.open_tier(set[at].spanning);
+                self.open_tier(set[at].spanning, set[at].lead);
             }
             // The profile is read against where the line sits, which
             // is where `place` is about to put it.
-            let lead = if self.opening() { 0.0 } else { set[at].lead };
+            let lead = self.lead(&set[at]);
             let from = if at == 0 { 0 } else { ends[at - 1] };
             // A line set again keeps none of the gap it was broken
             // with. That gap was the page it left.
