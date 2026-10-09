@@ -172,159 +172,160 @@
 <a href=#172 id=172 data-nosnippet>172</a>            Inline::Emphasis { children, .. }
 <a href=#173 id=173 data-nosnippet>173</a>            | Inline::Strong { children, .. }
 <a href=#174 id=174 data-nosnippet>174</a>            | Inline::Strikethrough { children, .. }
-<a href=#175 id=175 data-nosnippet>175</a>            | Inline::Span { children, .. } =&gt; links_in_inlines(children, source, out),
-<a href=#176 id=176 data-nosnippet>176</a>            Inline::Note { blocks, .. } =&gt; links_in_blocks(blocks, source, out),
-<a href=#177 id=177 data-nosnippet>177</a>            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } =&gt; {}
-<a href=#178 id=178 data-nosnippet>178</a>        }
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>}
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a><span class="doccomment">/// Puts on each page the links set on it, with one area for each line.
-<a href=#183 id=183 data-nosnippet>183</a>///
-<a href=#184 id=184 data-nosnippet>184</a>/// Runs of one link on one baseline that meet, or nearly meet, are one
-<a href=#185 id=185 data-nosnippet>185</a>/// area. A link that runs to the foot of one column and on at the head
-<a href=#186 id=186 data-nosnippet>186</a>/// of the next is two areas. A link that runs on to the next page is on
-<a href=#187 id=187 data-nosnippet>187</a>/// both pages.
-<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">fn </span>place_links(
-<a href=#189 id=189 data-nosnippet>189</a>    pages: <span class="kw-2">&amp;mut </span>[Page],
-<a href=#190 id=190 data-nosnippet>190</a>    written: <span class="kw-2">&amp;</span>[Written&lt;<span class="lifetime">'_</span>&gt;],
-<a href=#191 id=191 data-nosnippet>191</a>    places: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;LinkTo&gt;],
-<a href=#192 id=192 data-nosnippet>192</a>    registry: <span class="kw-2">&amp;</span>FontRegistry,
-<a href=#193 id=193 data-nosnippet>193</a>) {
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">for </span>(index, page) <span class="kw">in </span>pages.iter_mut().enumerate() {
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="comment">// Each area with the link it belongs to, the baseline it is on,
-<a href=#196 id=196 data-nosnippet>196</a>        // and the size of its face, which is how near two runs have to
-<a href=#197 id=197 data-nosnippet>197</a>        // be to meet.
-<a href=#198 id=198 data-nosnippet>198</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>open: Vec&lt;(usize, f32, f32, PageBox)&gt; = Vec::new();
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">for </span>item <span class="kw">in </span><span class="kw-2">&amp;</span>page.items {
-<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">let </span>DrawItem::Text {
-<a href=#201 id=201 data-nosnippet>201</a>                y,
-<a href=#202 id=202 data-nosnippet>202</a>                size,
-<a href=#203 id=203 data-nosnippet>203</a>                origin: <span class="prelude-val">Some</span>(origin),
-<a href=#204 id=204 data-nosnippet>204</a>                ..
-<a href=#205 id=205 data-nosnippet>205</a>            } = item
-<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">else </span>{
-<a href=#207 id=207 data-nosnippet>207</a>                <span class="kw">continue</span>;
-<a href=#208 id=208 data-nosnippet>208</a>            };
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">let </span>node = origin.node.element().get();
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">let </span>at = written.partition_point(|link| link.nodes.start &lt;= node);
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(which) = at.checked_sub(<span class="number">1</span>) <span class="kw">else </span>{
-<a href=#212 id=212 data-nosnippet>212</a>                <span class="kw">continue</span>;
-<a href=#213 id=213 data-nosnippet>213</a>            };
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">if </span>!written[which].nodes.contains(<span class="kw-2">&amp;</span>node) || places[which].is_none() {
-<a href=#215 id=215 data-nosnippet>215</a>                <span class="kw">continue</span>;
-<a href=#216 id=216 data-nosnippet>216</a>            }
-<a href=#217 id=217 data-nosnippet>217</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="kw">_</span>, area)) = run_area(registry, index, item) <span class="kw">else </span>{
-<a href=#218 id=218 data-nosnippet>218</a>                <span class="kw">continue</span>;
-<a href=#219 id=219 data-nosnippet>219</a>            };
-<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">let </span>meets = |other: <span class="kw-2">&amp;</span>PageBox, size: f32| {
-<a href=#221 id=221 data-nosnippet>221</a>                area.x &lt;= other.x + other.width + size &amp;&amp; other.x &lt;= area.x + area.width + size
-<a href=#222 id=222 data-nosnippet>222</a>            };
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">match </span>open.iter_mut().find(|(link, baseline, near, other)| {
-<a href=#224 id=224 data-nosnippet>224</a>                <span class="kw-2">*</span>link == which &amp;&amp; baseline == y &amp;&amp; meets(other, near.max(<span class="kw-2">*</span>size))
-<a href=#225 id=225 data-nosnippet>225</a>            }) {
-<a href=#226 id=226 data-nosnippet>226</a>                <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="kw">_</span>, near, other)) =&gt; {
-<a href=#227 id=227 data-nosnippet>227</a>                    <span class="kw-2">*</span>near = near.max(<span class="kw-2">*</span>size);
-<a href=#228 id=228 data-nosnippet>228</a>                    <span class="kw-2">*</span>other = union(other, <span class="kw-2">&amp;</span>area);
-<a href=#229 id=229 data-nosnippet>229</a>                }
-<a href=#230 id=230 data-nosnippet>230</a>                <span class="prelude-val">None </span>=&gt; open.push((which, <span class="kw-2">*</span>y, <span class="kw-2">*</span>size, area)),
-<a href=#231 id=231 data-nosnippet>231</a>            }
-<a href=#232 id=232 data-nosnippet>232</a>        }
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span><span class="kw-2">mut </span>links: Vec&lt;(usize, Link)&gt; = Vec::new();
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">for </span>(which, <span class="kw">_</span>, <span class="kw">_</span>, area) <span class="kw">in </span>open {
-<a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">match </span>links.iter_mut().find(|(link, <span class="kw">_</span>)| <span class="kw-2">*</span>link == which) {
-<a href=#236 id=236 data-nosnippet>236</a>                <span class="prelude-val">Some</span>((<span class="kw">_</span>, link)) =&gt; link.areas.push(area),
-<a href=#237 id=237 data-nosnippet>237</a>                <span class="prelude-val">None </span>=&gt; links.push((
-<a href=#238 id=238 data-nosnippet>238</a>                    which,
-<a href=#239 id=239 data-nosnippet>239</a>                    Link {
-<a href=#240 id=240 data-nosnippet>240</a>                        areas: <span class="macro">vec!</span>[area],
-<a href=#241 id=241 data-nosnippet>241</a>                        to: places[which]
-<a href=#242 id=242 data-nosnippet>242</a>                            .clone()
-<a href=#243 id=243 data-nosnippet>243</a>                            .expect(<span class="string">"only a link that goes somewhere is open"</span>),
-<a href=#244 id=244 data-nosnippet>244</a>                    },
-<a href=#245 id=245 data-nosnippet>245</a>                )),
-<a href=#246 id=246 data-nosnippet>246</a>            }
-<a href=#247 id=247 data-nosnippet>247</a>        }
-<a href=#248 id=248 data-nosnippet>248</a>        page.links = links.into_iter().map(|(<span class="kw">_</span>, link)| link).collect();
-<a href=#249 id=249 data-nosnippet>249</a>    }
-<a href=#250 id=250 data-nosnippet>250</a>}
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a><span class="doccomment">/// The smallest box that holds both.
-<a href=#253 id=253 data-nosnippet>253</a></span><span class="kw">fn </span>union(one: <span class="kw-2">&amp;</span>PageBox, other: <span class="kw-2">&amp;</span>PageBox) -&gt; PageBox {
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>(left, top) = (one.x.min(other.x), one.y.min(other.y));
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">let </span>right = (one.x + one.width).max(other.x + other.width);
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">let </span>bottom = (one.y + one.height).max(other.y + other.height);
-<a href=#257 id=257 data-nosnippet>257</a>    PageBox {
-<a href=#258 id=258 data-nosnippet>258</a>        page: one.page,
-<a href=#259 id=259 data-nosnippet>259</a>        x: left,
-<a href=#260 id=260 data-nosnippet>260</a>        y: top,
-<a href=#261 id=261 data-nosnippet>261</a>        width: right - left,
-<a href=#262 id=262 data-nosnippet>262</a>        height: bottom - top,
-<a href=#263 id=263 data-nosnippet>263</a>    }
-<a href=#264 id=264 data-nosnippet>264</a>}
-<a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a><span class="doccomment">/// The headings, nested by level: each takes the headings after it
-<a href=#267 id=267 data-nosnippet>267</a>/// that are deeper, up to the next one at its level or above. A
-<a href=#268 id=268 data-nosnippet>268</a>/// heading that is on no page is left out.
-<a href=#269 id=269 data-nosnippet>269</a></span><span class="kw">fn </span>outline(headings: <span class="kw-2">&amp;</span>[Heading], targets: <span class="kw-2">&amp;</span>BTreeMap&lt;NodeId, PageBox&gt;) -&gt; Vec&lt;OutlineEntry&gt; {
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let </span><span class="kw-2">mut </span>roots: Vec&lt;OutlineEntry&gt; = Vec::new();
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">for </span>heading <span class="kw">in </span>headings {
-<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(place) = targets.get(<span class="kw-2">&amp;</span>heading.node) <span class="kw">else </span>{
-<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">continue</span>;
-<a href=#274 id=274 data-nosnippet>274</a>        };
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>entry = OutlineEntry {
-<a href=#276 id=276 data-nosnippet>276</a>            title: heading.title.clone(),
-<a href=#277 id=277 data-nosnippet>277</a>            level: heading.level,
-<a href=#278 id=278 data-nosnippet>278</a>            place: <span class="kw-2">*</span>place,
-<a href=#279 id=279 data-nosnippet>279</a>            children: Vec::new(),
-<a href=#280 id=280 data-nosnippet>280</a>        };
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span><span class="kw-2">mut </span>siblings = <span class="kw-2">&amp;mut </span>roots;
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">while </span>siblings.last().is_some_and(|last| last.level &lt; entry.level) {
-<a href=#283 id=283 data-nosnippet>283</a>            siblings = <span class="kw-2">&amp;mut </span>siblings.last_mut().expect(<span class="string">"checked above"</span>).children;
-<a href=#284 id=284 data-nosnippet>284</a>        }
-<a href=#285 id=285 data-nosnippet>285</a>        siblings.push(entry);
-<a href=#286 id=286 data-nosnippet>286</a>    }
-<a href=#287 id=287 data-nosnippet>287</a>    roots
-<a href=#288 id=288 data-nosnippet>288</a>}
-<a href=#289 id=289 data-nosnippet>289</a>
-<a href=#290 id=290 data-nosnippet>290</a><span class="doccomment">/// The node a run of text was written in, the pseudo-element it was
-<a href=#291 id=291 data-nosnippet>291</a>/// cut from, and the area the run covers on the page at `index`: its
-<a href=#292 id=292 data-nosnippet>292</a>/// glyphs across, and its face's ascent and descent down. Nothing for
-<a href=#293 id=293 data-nosnippet>293</a>/// text the engine wrote itself.
-<a href=#294 id=294 data-nosnippet>294</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>run_area(
-<a href=#295 id=295 data-nosnippet>295</a>    registry: <span class="kw-2">&amp;</span>FontRegistry,
-<a href=#296 id=296 data-nosnippet>296</a>    index: usize,
-<a href=#297 id=297 data-nosnippet>297</a>    item: <span class="kw-2">&amp;</span>DrawItem,
-<a href=#298 id=298 data-nosnippet>298</a>) -&gt; <span class="prelude-ty">Option</span>&lt;(NodeId, <span class="prelude-ty">Option</span>&lt;NodeId&gt;, PageBox)&gt; {
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">let </span>DrawItem::Text {
-<a href=#300 id=300 data-nosnippet>300</a>        y,
-<a href=#301 id=301 data-nosnippet>301</a>        font_id,
-<a href=#302 id=302 data-nosnippet>302</a>        size,
-<a href=#303 id=303 data-nosnippet>303</a>        glyphs,
-<a href=#304 id=304 data-nosnippet>304</a>        origin: <span class="prelude-val">Some</span>(origin),
-<a href=#305 id=305 data-nosnippet>305</a>        pseudo_element,
-<a href=#306 id=306 data-nosnippet>306</a>        ..
-<a href=#307 id=307 data-nosnippet>307</a>    } = item
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">else </span>{
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#310 id=310 data-nosnippet>310</a>    };
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>metrics = registry.metrics(<span class="kw-2">*</span>font_id)<span class="question-mark">?</span>;
-<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>scale = size / metrics.units_per_em <span class="kw">as </span>f32;
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>(first, last) = (glyphs.first()<span class="question-mark">?</span>, glyphs.last()<span class="question-mark">?</span>);
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">let </span>advance = registry.advance_width(<span class="kw-2">*</span>font_id, last.id).unwrap_or(<span class="number">0</span>) <span class="kw">as </span>f32 * scale;
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span>(left, right) = (first.x.min(last.x), first.x.max(last.x + advance));
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span>top = y - metrics.ascender <span class="kw">as </span>f32 * scale;
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>bottom = y - metrics.descender <span class="kw">as </span>f32 * scale;
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="prelude-val">Some</span>((
-<a href=#319 id=319 data-nosnippet>319</a>        origin.node,
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw-2">*</span>pseudo_element,
-<a href=#321 id=321 data-nosnippet>321</a>        PageBox {
-<a href=#322 id=322 data-nosnippet>322</a>            page: index <span class="kw">as </span>u32,
-<a href=#323 id=323 data-nosnippet>323</a>            x: left,
-<a href=#324 id=324 data-nosnippet>324</a>            y: top,
-<a href=#325 id=325 data-nosnippet>325</a>            width: right - left,
-<a href=#326 id=326 data-nosnippet>326</a>            height: bottom - top,
-<a href=#327 id=327 data-nosnippet>327</a>        },
-<a href=#328 id=328 data-nosnippet>328</a>    ))
-<a href=#329 id=329 data-nosnippet>329</a>}
+<a href=#175 id=175 data-nosnippet>175</a>            | Inline::Highlight { children, .. }
+<a href=#176 id=176 data-nosnippet>176</a>            | Inline::Span { children, .. } =&gt; links_in_inlines(children, source, out),
+<a href=#177 id=177 data-nosnippet>177</a>            Inline::Note { blocks, .. } =&gt; links_in_blocks(blocks, source, out),
+<a href=#178 id=178 data-nosnippet>178</a>            Inline::Text { .. } | Inline::Code { .. } | Inline::Break { .. } =&gt; {}
+<a href=#179 id=179 data-nosnippet>179</a>        }
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>}
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a><span class="doccomment">/// Puts on each page the links set on it, with one area for each line.
+<a href=#184 id=184 data-nosnippet>184</a>///
+<a href=#185 id=185 data-nosnippet>185</a>/// Runs of one link on one baseline that meet, or nearly meet, are one
+<a href=#186 id=186 data-nosnippet>186</a>/// area. A link that runs to the foot of one column and on at the head
+<a href=#187 id=187 data-nosnippet>187</a>/// of the next is two areas. A link that runs on to the next page is on
+<a href=#188 id=188 data-nosnippet>188</a>/// both pages.
+<a href=#189 id=189 data-nosnippet>189</a></span><span class="kw">fn </span>place_links(
+<a href=#190 id=190 data-nosnippet>190</a>    pages: <span class="kw-2">&amp;mut </span>[Page],
+<a href=#191 id=191 data-nosnippet>191</a>    written: <span class="kw-2">&amp;</span>[Written&lt;<span class="lifetime">'_</span>&gt;],
+<a href=#192 id=192 data-nosnippet>192</a>    places: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;LinkTo&gt;],
+<a href=#193 id=193 data-nosnippet>193</a>    registry: <span class="kw-2">&amp;</span>FontRegistry,
+<a href=#194 id=194 data-nosnippet>194</a>) {
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">for </span>(index, page) <span class="kw">in </span>pages.iter_mut().enumerate() {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="comment">// Each area with the link it belongs to, the baseline it is on,
+<a href=#197 id=197 data-nosnippet>197</a>        // and the size of its face, which is how near two runs have to
+<a href=#198 id=198 data-nosnippet>198</a>        // be to meet.
+<a href=#199 id=199 data-nosnippet>199</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>open: Vec&lt;(usize, f32, f32, PageBox)&gt; = Vec::new();
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">for </span>item <span class="kw">in </span><span class="kw-2">&amp;</span>page.items {
+<a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">let </span>DrawItem::Text {
+<a href=#202 id=202 data-nosnippet>202</a>                y,
+<a href=#203 id=203 data-nosnippet>203</a>                size,
+<a href=#204 id=204 data-nosnippet>204</a>                origin: <span class="prelude-val">Some</span>(origin),
+<a href=#205 id=205 data-nosnippet>205</a>                ..
+<a href=#206 id=206 data-nosnippet>206</a>            } = item
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">else </span>{
+<a href=#208 id=208 data-nosnippet>208</a>                <span class="kw">continue</span>;
+<a href=#209 id=209 data-nosnippet>209</a>            };
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">let </span>node = origin.node.element().get();
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">let </span>at = written.partition_point(|link| link.nodes.start &lt;= node);
+<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(which) = at.checked_sub(<span class="number">1</span>) <span class="kw">else </span>{
+<a href=#213 id=213 data-nosnippet>213</a>                <span class="kw">continue</span>;
+<a href=#214 id=214 data-nosnippet>214</a>            };
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">if </span>!written[which].nodes.contains(<span class="kw-2">&amp;</span>node) || places[which].is_none() {
+<a href=#216 id=216 data-nosnippet>216</a>                <span class="kw">continue</span>;
+<a href=#217 id=217 data-nosnippet>217</a>            }
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="kw">_</span>, area)) = run_area(registry, index, item) <span class="kw">else </span>{
+<a href=#219 id=219 data-nosnippet>219</a>                <span class="kw">continue</span>;
+<a href=#220 id=220 data-nosnippet>220</a>            };
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">let </span>meets = |other: <span class="kw-2">&amp;</span>PageBox, size: f32| {
+<a href=#222 id=222 data-nosnippet>222</a>                area.x &lt;= other.x + other.width + size &amp;&amp; other.x &lt;= area.x + area.width + size
+<a href=#223 id=223 data-nosnippet>223</a>            };
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">match </span>open.iter_mut().find(|(link, baseline, near, other)| {
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw-2">*</span>link == which &amp;&amp; baseline == y &amp;&amp; meets(other, near.max(<span class="kw-2">*</span>size))
+<a href=#226 id=226 data-nosnippet>226</a>            }) {
+<a href=#227 id=227 data-nosnippet>227</a>                <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="kw">_</span>, near, other)) =&gt; {
+<a href=#228 id=228 data-nosnippet>228</a>                    <span class="kw-2">*</span>near = near.max(<span class="kw-2">*</span>size);
+<a href=#229 id=229 data-nosnippet>229</a>                    <span class="kw-2">*</span>other = union(other, <span class="kw-2">&amp;</span>area);
+<a href=#230 id=230 data-nosnippet>230</a>                }
+<a href=#231 id=231 data-nosnippet>231</a>                <span class="prelude-val">None </span>=&gt; open.push((which, <span class="kw-2">*</span>y, <span class="kw-2">*</span>size, area)),
+<a href=#232 id=232 data-nosnippet>232</a>            }
+<a href=#233 id=233 data-nosnippet>233</a>        }
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span><span class="kw-2">mut </span>links: Vec&lt;(usize, Link)&gt; = Vec::new();
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">for </span>(which, <span class="kw">_</span>, <span class="kw">_</span>, area) <span class="kw">in </span>open {
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">match </span>links.iter_mut().find(|(link, <span class="kw">_</span>)| <span class="kw-2">*</span>link == which) {
+<a href=#237 id=237 data-nosnippet>237</a>                <span class="prelude-val">Some</span>((<span class="kw">_</span>, link)) =&gt; link.areas.push(area),
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="prelude-val">None </span>=&gt; links.push((
+<a href=#239 id=239 data-nosnippet>239</a>                    which,
+<a href=#240 id=240 data-nosnippet>240</a>                    Link {
+<a href=#241 id=241 data-nosnippet>241</a>                        areas: <span class="macro">vec!</span>[area],
+<a href=#242 id=242 data-nosnippet>242</a>                        to: places[which]
+<a href=#243 id=243 data-nosnippet>243</a>                            .clone()
+<a href=#244 id=244 data-nosnippet>244</a>                            .expect(<span class="string">"only a link that goes somewhere is open"</span>),
+<a href=#245 id=245 data-nosnippet>245</a>                    },
+<a href=#246 id=246 data-nosnippet>246</a>                )),
+<a href=#247 id=247 data-nosnippet>247</a>            }
+<a href=#248 id=248 data-nosnippet>248</a>        }
+<a href=#249 id=249 data-nosnippet>249</a>        page.links = links.into_iter().map(|(<span class="kw">_</span>, link)| link).collect();
+<a href=#250 id=250 data-nosnippet>250</a>    }
+<a href=#251 id=251 data-nosnippet>251</a>}
+<a href=#252 id=252 data-nosnippet>252</a>
+<a href=#253 id=253 data-nosnippet>253</a><span class="doccomment">/// The smallest box that holds both.
+<a href=#254 id=254 data-nosnippet>254</a></span><span class="kw">fn </span>union(one: <span class="kw-2">&amp;</span>PageBox, other: <span class="kw-2">&amp;</span>PageBox) -&gt; PageBox {
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">let </span>(left, top) = (one.x.min(other.x), one.y.min(other.y));
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">let </span>right = (one.x + one.width).max(other.x + other.width);
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">let </span>bottom = (one.y + one.height).max(other.y + other.height);
+<a href=#258 id=258 data-nosnippet>258</a>    PageBox {
+<a href=#259 id=259 data-nosnippet>259</a>        page: one.page,
+<a href=#260 id=260 data-nosnippet>260</a>        x: left,
+<a href=#261 id=261 data-nosnippet>261</a>        y: top,
+<a href=#262 id=262 data-nosnippet>262</a>        width: right - left,
+<a href=#263 id=263 data-nosnippet>263</a>        height: bottom - top,
+<a href=#264 id=264 data-nosnippet>264</a>    }
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="doccomment">/// The headings, nested by level: each takes the headings after it
+<a href=#268 id=268 data-nosnippet>268</a>/// that are deeper, up to the next one at its level or above. A
+<a href=#269 id=269 data-nosnippet>269</a>/// heading that is on no page is left out.
+<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">fn </span>outline(headings: <span class="kw-2">&amp;</span>[Heading], targets: <span class="kw-2">&amp;</span>BTreeMap&lt;NodeId, PageBox&gt;) -&gt; Vec&lt;OutlineEntry&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span><span class="kw-2">mut </span>roots: Vec&lt;OutlineEntry&gt; = Vec::new();
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">for </span>heading <span class="kw">in </span>headings {
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(place) = targets.get(<span class="kw-2">&amp;</span>heading.node) <span class="kw">else </span>{
+<a href=#274 id=274 data-nosnippet>274</a>            <span class="kw">continue</span>;
+<a href=#275 id=275 data-nosnippet>275</a>        };
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>entry = OutlineEntry {
+<a href=#277 id=277 data-nosnippet>277</a>            title: heading.title.clone(),
+<a href=#278 id=278 data-nosnippet>278</a>            level: heading.level,
+<a href=#279 id=279 data-nosnippet>279</a>            place: <span class="kw-2">*</span>place,
+<a href=#280 id=280 data-nosnippet>280</a>            children: Vec::new(),
+<a href=#281 id=281 data-nosnippet>281</a>        };
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span><span class="kw-2">mut </span>siblings = <span class="kw-2">&amp;mut </span>roots;
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">while </span>siblings.last().is_some_and(|last| last.level &lt; entry.level) {
+<a href=#284 id=284 data-nosnippet>284</a>            siblings = <span class="kw-2">&amp;mut </span>siblings.last_mut().expect(<span class="string">"checked above"</span>).children;
+<a href=#285 id=285 data-nosnippet>285</a>        }
+<a href=#286 id=286 data-nosnippet>286</a>        siblings.push(entry);
+<a href=#287 id=287 data-nosnippet>287</a>    }
+<a href=#288 id=288 data-nosnippet>288</a>    roots
+<a href=#289 id=289 data-nosnippet>289</a>}
+<a href=#290 id=290 data-nosnippet>290</a>
+<a href=#291 id=291 data-nosnippet>291</a><span class="doccomment">/// The node a run of text was written in, the pseudo-element it was
+<a href=#292 id=292 data-nosnippet>292</a>/// cut from, and the area the run covers on the page at `index`: its
+<a href=#293 id=293 data-nosnippet>293</a>/// glyphs across, and its face's ascent and descent down. Nothing for
+<a href=#294 id=294 data-nosnippet>294</a>/// text the engine wrote itself.
+<a href=#295 id=295 data-nosnippet>295</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>run_area(
+<a href=#296 id=296 data-nosnippet>296</a>    registry: <span class="kw-2">&amp;</span>FontRegistry,
+<a href=#297 id=297 data-nosnippet>297</a>    index: usize,
+<a href=#298 id=298 data-nosnippet>298</a>    item: <span class="kw-2">&amp;</span>DrawItem,
+<a href=#299 id=299 data-nosnippet>299</a>) -&gt; <span class="prelude-ty">Option</span>&lt;(NodeId, <span class="prelude-ty">Option</span>&lt;NodeId&gt;, PageBox)&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">let </span>DrawItem::Text {
+<a href=#301 id=301 data-nosnippet>301</a>        y,
+<a href=#302 id=302 data-nosnippet>302</a>        font_id,
+<a href=#303 id=303 data-nosnippet>303</a>        size,
+<a href=#304 id=304 data-nosnippet>304</a>        glyphs,
+<a href=#305 id=305 data-nosnippet>305</a>        origin: <span class="prelude-val">Some</span>(origin),
+<a href=#306 id=306 data-nosnippet>306</a>        pseudo_element,
+<a href=#307 id=307 data-nosnippet>307</a>        ..
+<a href=#308 id=308 data-nosnippet>308</a>    } = item
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">else </span>{
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#311 id=311 data-nosnippet>311</a>    };
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>metrics = registry.metrics(<span class="kw-2">*</span>font_id)<span class="question-mark">?</span>;
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>scale = size / metrics.units_per_em <span class="kw">as </span>f32;
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">let </span>(first, last) = (glyphs.first()<span class="question-mark">?</span>, glyphs.last()<span class="question-mark">?</span>);
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span>advance = registry.advance_width(<span class="kw-2">*</span>font_id, last.id).unwrap_or(<span class="number">0</span>) <span class="kw">as </span>f32 * scale;
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span>(left, right) = (first.x.min(last.x), first.x.max(last.x + advance));
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>top = y - metrics.ascender <span class="kw">as </span>f32 * scale;
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span>bottom = y - metrics.descender <span class="kw">as </span>f32 * scale;
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="prelude-val">Some</span>((
+<a href=#320 id=320 data-nosnippet>320</a>        origin.node,
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw-2">*</span>pseudo_element,
+<a href=#322 id=322 data-nosnippet>322</a>        PageBox {
+<a href=#323 id=323 data-nosnippet>323</a>            page: index <span class="kw">as </span>u32,
+<a href=#324 id=324 data-nosnippet>324</a>            x: left,
+<a href=#325 id=325 data-nosnippet>325</a>            y: top,
+<a href=#326 id=326 data-nosnippet>326</a>            width: right - left,
+<a href=#327 id=327 data-nosnippet>327</a>            height: bottom - top,
+<a href=#328 id=328 data-nosnippet>328</a>        },
+<a href=#329 id=329 data-nosnippet>329</a>    ))
+<a href=#330 id=330 data-nosnippet>330</a>}
 </code></pre></div></section></main></body></html>
