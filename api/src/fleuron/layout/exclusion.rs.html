@@ -862,11 +862,11 @@
 <a href=#862 id=862 data-nosnippet>862</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>narrowed = <span class="bool-val">false</span>;
 <a href=#863 id=863 data-nosnippet>863</a>        <span class="kw">while </span>at &lt; set.len() {
 <a href=#864 id=864 data-nosnippet>864</a>            <span class="kw">if </span>set[at].spanning != <span class="self">self</span>.tier().spanning {
-<a href=#865 id=865 data-nosnippet>865</a>                <span class="self">self</span>.open_tier(set[at].spanning);
+<a href=#865 id=865 data-nosnippet>865</a>                <span class="self">self</span>.open_tier(set[at].spanning, set[at].lead);
 <a href=#866 id=866 data-nosnippet>866</a>            }
 <a href=#867 id=867 data-nosnippet>867</a>            <span class="comment">// The profile is read against where the line sits, which
 <a href=#868 id=868 data-nosnippet>868</a>            // is where `place` is about to put it.
-<a href=#869 id=869 data-nosnippet>869</a>            </span><span class="kw">let </span>lead = <span class="kw">if </span><span class="self">self</span>.opening() { <span class="number">0.0 </span>} <span class="kw">else </span>{ set[at].lead };
+<a href=#869 id=869 data-nosnippet>869</a>            </span><span class="kw">let </span>lead = <span class="self">self</span>.lead(<span class="kw-2">&amp;</span>set[at]);
 <a href=#870 id=870 data-nosnippet>870</a>            <span class="kw">let </span>from = <span class="kw">if </span>at == <span class="number">0 </span>{ <span class="number">0 </span>} <span class="kw">else </span>{ ends[at - <span class="number">1</span>] };
 <a href=#871 id=871 data-nosnippet>871</a>            <span class="comment">// A line set again keeps none of the gap it was broken
 <a href=#872 id=872 data-nosnippet>872</a>            // with. That gap was the page it left.
