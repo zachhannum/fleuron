@@ -14,14 +14,14 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">super</span>::color::{background_color, border_color, color, decoration_color};
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">super</span>::custom::{mentions_var, raw};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">super</span>::value::{
-<a href=#17 id=17 data-nosnippet>17</a>    background_image, background_position, background_repeat, background_size, border_collapse,
-<a href=#18 id=18 data-nosnippet>18</a>    border_radius, break_value, ceiling, column_span, corner_radius, count, counter_reset,
-<a href=#19 id=19 data-nosnippet>19</a>    decoration_break, decoration_keyword, decoration_line, decoration_style, decoration_thickness,
-<a href=#20 id=20 data-nosnippet>20</a>    edges, families, feature_settings, font_style, generated, hanging, hyphens, inset, keyword_or,
-<a href=#21 id=21 data-nosnippet>21</a>    length, letter_spacing, line_height, line_style, line_width, list_style_type, opacity,
-<a href=#22 id=22 data-nosnippet>22</a>    page_name, positioning, property, shape_outside, string_set, text_align, text_justify,
-<a href=#23 id=23 data-nosnippet>23</a>    text_transform, variant_alternates, variant_caps, variant_ligatures, variant_numeric, weight,
-<a href=#24 id=24 data-nosnippet>24</a>    width, wrap_flow, z_index,
+<a href=#17 id=17 data-nosnippet>17</a>    background_image, background_position, background_repeat, background_size, blend_mode,
+<a href=#18 id=18 data-nosnippet>18</a>    border_collapse, border_radius, break_value, ceiling, column_span, corner_radius, count,
+<a href=#19 id=19 data-nosnippet>19</a>    counter_reset, decoration_break, decoration_keyword, decoration_line, decoration_style,
+<a href=#20 id=20 data-nosnippet>20</a>    decoration_thickness, edges, families, feature_settings, font_style, generated, hanging,
+<a href=#21 id=21 data-nosnippet>21</a>    hyphens, inset, keyword_or, length, letter_spacing, line_height, line_style, line_width,
+<a href=#22 id=22 data-nosnippet>22</a>    list_style_type, opacity, page_name, positioning, property, shape_outside, string_set,
+<a href=#23 id=23 data-nosnippet>23</a>    text_align, text_justify, text_transform, variant_alternates, variant_caps, variant_ligatures,
+<a href=#24 id=24 data-nosnippet>24</a>    variant_numeric, weight, width, wrap_flow, z_index,
 <a href=#25 id=25 data-nosnippet>25</a>};
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span><span class="kw">super</span>::vocabulary::FIRST_LINE_PROPERTIES;
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use super</span>::{Importance, SheetPosition, StyleError, Written, position, warning};
@@ -737,373 +737,380 @@
 <a href=#737 id=737 data-nosnippet>737</a>        read: |name, input| longhand(name, input, opacity, Declaration::Opacity),
 <a href=#738 id=738 data-nosnippet>738</a>    },
 <a href=#739 id=739 data-nosnippet>739</a>    Spec {
-<a href=#740 id=740 data-nosnippet>740</a>        name: <span class="string">"wrap-flow"</span>,
+<a href=#740 id=740 data-nosnippet>740</a>        name: <span class="string">"mix-blend-mode"</span>,
 <a href=#741 id=741 data-nosnippet>741</a>        inherited: <span class="bool-val">false</span>,
-<a href=#742 id=742 data-nosnippet>742</a>        syntax: <span class="string">"auto | both | start | end"</span>,
-<a href=#743 id=743 data-nosnippet>743</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"end"</span>],
-<a href=#744 id=744 data-nosnippet>744</a>        read: |name, input| longhand(name, input, wrap_flow, Declaration::WrapFlow),
+<a href=#742 id=742 data-nosnippet>742</a>        syntax: <span class="string">"normal | multiply | screen | overlay | darken | lighten | color-dodge | color-burn | hard-light | soft-light | difference | exclusion | hue | saturation | color | luminosity"</span>,
+<a href=#743 id=743 data-nosnippet>743</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"multiply"</span>, <span class="string">"screen"</span>, <span class="string">"difference"</span>],
+<a href=#744 id=744 data-nosnippet>744</a>        read: |name, input| longhand(name, input, blend_mode, Declaration::MixBlendMode),
 <a href=#745 id=745 data-nosnippet>745</a>    },
 <a href=#746 id=746 data-nosnippet>746</a>    Spec {
-<a href=#747 id=747 data-nosnippet>747</a>        name: <span class="string">"shape-outside"</span>,
+<a href=#747 id=747 data-nosnippet>747</a>        name: <span class="string">"wrap-flow"</span>,
 <a href=#748 id=748 data-nosnippet>748</a>        inherited: <span class="bool-val">false</span>,
-<a href=#749 id=749 data-nosnippet>749</a>        syntax: <span class="string">"none | auto | polygon( [ &lt;length&gt; | &lt;percentage&gt; ]{2} [ , [ &lt;length&gt; | &lt;percentage&gt; ]{2} ]* )"</span>,
-<a href=#750 id=750 data-nosnippet>750</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"polygon(0 0, 100% 0, 100% 100%)"</span>],
-<a href=#751 id=751 data-nosnippet>751</a>        read: |name, input| longhand(name, input, shape_outside, Declaration::ShapeOutside),
+<a href=#749 id=749 data-nosnippet>749</a>        syntax: <span class="string">"auto | both | start | end"</span>,
+<a href=#750 id=750 data-nosnippet>750</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"end"</span>],
+<a href=#751 id=751 data-nosnippet>751</a>        read: |name, input| longhand(name, input, wrap_flow, Declaration::WrapFlow),
 <a href=#752 id=752 data-nosnippet>752</a>    },
 <a href=#753 id=753 data-nosnippet>753</a>    Spec {
-<a href=#754 id=754 data-nosnippet>754</a>        name: <span class="string">"shape-margin"</span>,
+<a href=#754 id=754 data-nosnippet>754</a>        name: <span class="string">"shape-outside"</span>,
 <a href=#755 id=755 data-nosnippet>755</a>        inherited: <span class="bool-val">false</span>,
-<a href=#756 id=756 data-nosnippet>756</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#757 id=757 data-nosnippet>757</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
-<a href=#758 id=758 data-nosnippet>758</a>        read: |name, input| longhand(name, input, length, Declaration::ShapeMargin),
+<a href=#756 id=756 data-nosnippet>756</a>        syntax: <span class="string">"none | auto | polygon( [ &lt;length&gt; | &lt;percentage&gt; ]{2} [ , [ &lt;length&gt; | &lt;percentage&gt; ]{2} ]* )"</span>,
+<a href=#757 id=757 data-nosnippet>757</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"polygon(0 0, 100% 0, 100% 100%)"</span>],
+<a href=#758 id=758 data-nosnippet>758</a>        read: |name, input| longhand(name, input, shape_outside, Declaration::ShapeOutside),
 <a href=#759 id=759 data-nosnippet>759</a>    },
 <a href=#760 id=760 data-nosnippet>760</a>    Spec {
-<a href=#761 id=761 data-nosnippet>761</a>        name: <span class="string">"width"</span>,
+<a href=#761 id=761 data-nosnippet>761</a>        name: <span class="string">"shape-margin"</span>,
 <a href=#762 id=762 data-nosnippet>762</a>        inherited: <span class="bool-val">false</span>,
-<a href=#763 id=763 data-nosnippet>763</a>        syntax: <span class="string">"auto | &lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#764 id=764 data-nosnippet>764</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"8em"</span>, <span class="string">"25%"</span>],
-<a href=#765 id=765 data-nosnippet>765</a>        read: |name, input| longhand(name, input, width, Declaration::Width),
+<a href=#763 id=763 data-nosnippet>763</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#764 id=764 data-nosnippet>764</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
+<a href=#765 id=765 data-nosnippet>765</a>        read: |name, input| longhand(name, input, length, Declaration::ShapeMargin),
 <a href=#766 id=766 data-nosnippet>766</a>    },
 <a href=#767 id=767 data-nosnippet>767</a>    Spec {
-<a href=#768 id=768 data-nosnippet>768</a>        name: <span class="string">"height"</span>,
+<a href=#768 id=768 data-nosnippet>768</a>        name: <span class="string">"width"</span>,
 <a href=#769 id=769 data-nosnippet>769</a>        inherited: <span class="bool-val">false</span>,
 <a href=#770 id=770 data-nosnippet>770</a>        syntax: <span class="string">"auto | &lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#771 id=771 data-nosnippet>771</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"3in"</span>, <span class="string">"50%"</span>],
-<a href=#772 id=772 data-nosnippet>772</a>        read: |name, input| longhand(name, input, width, Declaration::Height),
+<a href=#771 id=771 data-nosnippet>771</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"8em"</span>, <span class="string">"25%"</span>],
+<a href=#772 id=772 data-nosnippet>772</a>        read: |name, input| longhand(name, input, width, Declaration::Width),
 <a href=#773 id=773 data-nosnippet>773</a>    },
 <a href=#774 id=774 data-nosnippet>774</a>    Spec {
-<a href=#775 id=775 data-nosnippet>775</a>        name: <span class="string">"min-height"</span>,
+<a href=#775 id=775 data-nosnippet>775</a>        name: <span class="string">"height"</span>,
 <a href=#776 id=776 data-nosnippet>776</a>        inherited: <span class="bool-val">false</span>,
 <a href=#777 id=777 data-nosnippet>777</a>        syntax: <span class="string">"auto | &lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#778 id=778 data-nosnippet>778</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"2in"</span>, <span class="string">"25%"</span>],
-<a href=#779 id=779 data-nosnippet>779</a>        read: |name, input| longhand(name, input, width, Declaration::MinHeight),
+<a href=#778 id=778 data-nosnippet>778</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"3in"</span>, <span class="string">"50%"</span>],
+<a href=#779 id=779 data-nosnippet>779</a>        read: |name, input| longhand(name, input, width, Declaration::Height),
 <a href=#780 id=780 data-nosnippet>780</a>    },
 <a href=#781 id=781 data-nosnippet>781</a>    Spec {
-<a href=#782 id=782 data-nosnippet>782</a>        name: <span class="string">"max-width"</span>,
+<a href=#782 id=782 data-nosnippet>782</a>        name: <span class="string">"min-height"</span>,
 <a href=#783 id=783 data-nosnippet>783</a>        inherited: <span class="bool-val">false</span>,
-<a href=#784 id=784 data-nosnippet>784</a>        syntax: <span class="string">"none | &lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#785 id=785 data-nosnippet>785</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"4in"</span>, <span class="string">"50%"</span>],
-<a href=#786 id=786 data-nosnippet>786</a>        read: |name, input| longhand(name, input, ceiling, Declaration::MaxWidth),
+<a href=#784 id=784 data-nosnippet>784</a>        syntax: <span class="string">"auto | &lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#785 id=785 data-nosnippet>785</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"2in"</span>, <span class="string">"25%"</span>],
+<a href=#786 id=786 data-nosnippet>786</a>        read: |name, input| longhand(name, input, width, Declaration::MinHeight),
 <a href=#787 id=787 data-nosnippet>787</a>    },
 <a href=#788 id=788 data-nosnippet>788</a>    Spec {
-<a href=#789 id=789 data-nosnippet>789</a>        name: <span class="string">"max-height"</span>,
+<a href=#789 id=789 data-nosnippet>789</a>        name: <span class="string">"max-width"</span>,
 <a href=#790 id=790 data-nosnippet>790</a>        inherited: <span class="bool-val">false</span>,
 <a href=#791 id=791 data-nosnippet>791</a>        syntax: <span class="string">"none | &lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#792 id=792 data-nosnippet>792</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"3in"</span>, <span class="string">"40%"</span>],
-<a href=#793 id=793 data-nosnippet>793</a>        read: |name, input| longhand(name, input, ceiling, Declaration::MaxHeight),
+<a href=#792 id=792 data-nosnippet>792</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"4in"</span>, <span class="string">"50%"</span>],
+<a href=#793 id=793 data-nosnippet>793</a>        read: |name, input| longhand(name, input, ceiling, Declaration::MaxWidth),
 <a href=#794 id=794 data-nosnippet>794</a>    },
 <a href=#795 id=795 data-nosnippet>795</a>    Spec {
-<a href=#796 id=796 data-nosnippet>796</a>        name: <span class="string">"margin"</span>,
+<a href=#796 id=796 data-nosnippet>796</a>        name: <span class="string">"max-height"</span>,
 <a href=#797 id=797 data-nosnippet>797</a>        inherited: <span class="bool-val">false</span>,
-<a href=#798 id=798 data-nosnippet>798</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4}"</span>,
-<a href=#799 id=799 data-nosnippet>799</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>, <span class="string">"1em 2em"</span>, <span class="string">"1em 2em 0"</span>, <span class="string">"54pt 42pt 54pt 54pt"</span>],
-<a href=#800 id=800 data-nosnippet>800</a>        read: |name, input| sides(name, input, length, Declaration::Margin),
+<a href=#798 id=798 data-nosnippet>798</a>        syntax: <span class="string">"none | &lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#799 id=799 data-nosnippet>799</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"3in"</span>, <span class="string">"40%"</span>],
+<a href=#800 id=800 data-nosnippet>800</a>        read: |name, input| longhand(name, input, ceiling, Declaration::MaxHeight),
 <a href=#801 id=801 data-nosnippet>801</a>    },
 <a href=#802 id=802 data-nosnippet>802</a>    Spec {
-<a href=#803 id=803 data-nosnippet>803</a>        name: <span class="string">"margin-top"</span>,
+<a href=#803 id=803 data-nosnippet>803</a>        name: <span class="string">"margin"</span>,
 <a href=#804 id=804 data-nosnippet>804</a>        inherited: <span class="bool-val">false</span>,
-<a href=#805 id=805 data-nosnippet>805</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#806 id=806 data-nosnippet>806</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
-<a href=#807 id=807 data-nosnippet>807</a>        read: |name, input| {
-<a href=#808 id=808 data-nosnippet>808</a>            longhand(name, input, length, |length| {
-<a href=#809 id=809 data-nosnippet>809</a>                Declaration::Margin(Edge::Top, length)
-<a href=#810 id=810 data-nosnippet>810</a>            })
-<a href=#811 id=811 data-nosnippet>811</a>        },
-<a href=#812 id=812 data-nosnippet>812</a>    },
-<a href=#813 id=813 data-nosnippet>813</a>    Spec {
-<a href=#814 id=814 data-nosnippet>814</a>        name: <span class="string">"margin-right"</span>,
-<a href=#815 id=815 data-nosnippet>815</a>        inherited: <span class="bool-val">false</span>,
-<a href=#816 id=816 data-nosnippet>816</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#817 id=817 data-nosnippet>817</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
-<a href=#818 id=818 data-nosnippet>818</a>        read: |name, input| {
-<a href=#819 id=819 data-nosnippet>819</a>            longhand(name, input, length, |length| {
-<a href=#820 id=820 data-nosnippet>820</a>                Declaration::Margin(Edge::Right, length)
-<a href=#821 id=821 data-nosnippet>821</a>            })
-<a href=#822 id=822 data-nosnippet>822</a>        },
-<a href=#823 id=823 data-nosnippet>823</a>    },
-<a href=#824 id=824 data-nosnippet>824</a>    Spec {
-<a href=#825 id=825 data-nosnippet>825</a>        name: <span class="string">"margin-bottom"</span>,
-<a href=#826 id=826 data-nosnippet>826</a>        inherited: <span class="bool-val">false</span>,
-<a href=#827 id=827 data-nosnippet>827</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#828 id=828 data-nosnippet>828</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
-<a href=#829 id=829 data-nosnippet>829</a>        read: |name, input| {
-<a href=#830 id=830 data-nosnippet>830</a>            longhand(name, input, length, |length| {
-<a href=#831 id=831 data-nosnippet>831</a>                Declaration::Margin(Edge::Bottom, length)
-<a href=#832 id=832 data-nosnippet>832</a>            })
-<a href=#833 id=833 data-nosnippet>833</a>        },
-<a href=#834 id=834 data-nosnippet>834</a>    },
-<a href=#835 id=835 data-nosnippet>835</a>    Spec {
-<a href=#836 id=836 data-nosnippet>836</a>        name: <span class="string">"margin-left"</span>,
-<a href=#837 id=837 data-nosnippet>837</a>        inherited: <span class="bool-val">false</span>,
-<a href=#838 id=838 data-nosnippet>838</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#839 id=839 data-nosnippet>839</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
-<a href=#840 id=840 data-nosnippet>840</a>        read: |name, input| {
-<a href=#841 id=841 data-nosnippet>841</a>            longhand(name, input, length, |length| {
-<a href=#842 id=842 data-nosnippet>842</a>                Declaration::Margin(Edge::Left, length)
-<a href=#843 id=843 data-nosnippet>843</a>            })
-<a href=#844 id=844 data-nosnippet>844</a>        },
-<a href=#845 id=845 data-nosnippet>845</a>    },
-<a href=#846 id=846 data-nosnippet>846</a>    Spec {
-<a href=#847 id=847 data-nosnippet>847</a>        name: <span class="string">"padding"</span>,
-<a href=#848 id=848 data-nosnippet>848</a>        inherited: <span class="bool-val">false</span>,
-<a href=#849 id=849 data-nosnippet>849</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4}"</span>,
-<a href=#850 id=850 data-nosnippet>850</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"12pt"</span>, <span class="string">"6pt 12pt"</span>, <span class="string">"6pt 12pt 0"</span>, <span class="string">"6pt 12pt 6pt 12pt"</span>],
-<a href=#851 id=851 data-nosnippet>851</a>        read: |name, input| sides(name, input, length, Declaration::Padding),
+<a href=#805 id=805 data-nosnippet>805</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4}"</span>,
+<a href=#806 id=806 data-nosnippet>806</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>, <span class="string">"1em 2em"</span>, <span class="string">"1em 2em 0"</span>, <span class="string">"54pt 42pt 54pt 54pt"</span>],
+<a href=#807 id=807 data-nosnippet>807</a>        read: |name, input| sides(name, input, length, Declaration::Margin),
+<a href=#808 id=808 data-nosnippet>808</a>    },
+<a href=#809 id=809 data-nosnippet>809</a>    Spec {
+<a href=#810 id=810 data-nosnippet>810</a>        name: <span class="string">"margin-top"</span>,
+<a href=#811 id=811 data-nosnippet>811</a>        inherited: <span class="bool-val">false</span>,
+<a href=#812 id=812 data-nosnippet>812</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#813 id=813 data-nosnippet>813</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
+<a href=#814 id=814 data-nosnippet>814</a>        read: |name, input| {
+<a href=#815 id=815 data-nosnippet>815</a>            longhand(name, input, length, |length| {
+<a href=#816 id=816 data-nosnippet>816</a>                Declaration::Margin(Edge::Top, length)
+<a href=#817 id=817 data-nosnippet>817</a>            })
+<a href=#818 id=818 data-nosnippet>818</a>        },
+<a href=#819 id=819 data-nosnippet>819</a>    },
+<a href=#820 id=820 data-nosnippet>820</a>    Spec {
+<a href=#821 id=821 data-nosnippet>821</a>        name: <span class="string">"margin-right"</span>,
+<a href=#822 id=822 data-nosnippet>822</a>        inherited: <span class="bool-val">false</span>,
+<a href=#823 id=823 data-nosnippet>823</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#824 id=824 data-nosnippet>824</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
+<a href=#825 id=825 data-nosnippet>825</a>        read: |name, input| {
+<a href=#826 id=826 data-nosnippet>826</a>            longhand(name, input, length, |length| {
+<a href=#827 id=827 data-nosnippet>827</a>                Declaration::Margin(Edge::Right, length)
+<a href=#828 id=828 data-nosnippet>828</a>            })
+<a href=#829 id=829 data-nosnippet>829</a>        },
+<a href=#830 id=830 data-nosnippet>830</a>    },
+<a href=#831 id=831 data-nosnippet>831</a>    Spec {
+<a href=#832 id=832 data-nosnippet>832</a>        name: <span class="string">"margin-bottom"</span>,
+<a href=#833 id=833 data-nosnippet>833</a>        inherited: <span class="bool-val">false</span>,
+<a href=#834 id=834 data-nosnippet>834</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#835 id=835 data-nosnippet>835</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
+<a href=#836 id=836 data-nosnippet>836</a>        read: |name, input| {
+<a href=#837 id=837 data-nosnippet>837</a>            longhand(name, input, length, |length| {
+<a href=#838 id=838 data-nosnippet>838</a>                Declaration::Margin(Edge::Bottom, length)
+<a href=#839 id=839 data-nosnippet>839</a>            })
+<a href=#840 id=840 data-nosnippet>840</a>        },
+<a href=#841 id=841 data-nosnippet>841</a>    },
+<a href=#842 id=842 data-nosnippet>842</a>    Spec {
+<a href=#843 id=843 data-nosnippet>843</a>        name: <span class="string">"margin-left"</span>,
+<a href=#844 id=844 data-nosnippet>844</a>        inherited: <span class="bool-val">false</span>,
+<a href=#845 id=845 data-nosnippet>845</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#846 id=846 data-nosnippet>846</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"1em"</span>],
+<a href=#847 id=847 data-nosnippet>847</a>        read: |name, input| {
+<a href=#848 id=848 data-nosnippet>848</a>            longhand(name, input, length, |length| {
+<a href=#849 id=849 data-nosnippet>849</a>                Declaration::Margin(Edge::Left, length)
+<a href=#850 id=850 data-nosnippet>850</a>            })
+<a href=#851 id=851 data-nosnippet>851</a>        },
 <a href=#852 id=852 data-nosnippet>852</a>    },
 <a href=#853 id=853 data-nosnippet>853</a>    Spec {
-<a href=#854 id=854 data-nosnippet>854</a>        name: <span class="string">"padding-top"</span>,
+<a href=#854 id=854 data-nosnippet>854</a>        name: <span class="string">"padding"</span>,
 <a href=#855 id=855 data-nosnippet>855</a>        inherited: <span class="bool-val">false</span>,
-<a href=#856 id=856 data-nosnippet>856</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#857 id=857 data-nosnippet>857</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
-<a href=#858 id=858 data-nosnippet>858</a>        read: |name, input| {
-<a href=#859 id=859 data-nosnippet>859</a>            longhand(name, input, length, |length| {
-<a href=#860 id=860 data-nosnippet>860</a>                Declaration::Padding(Edge::Top, length)
-<a href=#861 id=861 data-nosnippet>861</a>            })
-<a href=#862 id=862 data-nosnippet>862</a>        },
-<a href=#863 id=863 data-nosnippet>863</a>    },
-<a href=#864 id=864 data-nosnippet>864</a>    Spec {
-<a href=#865 id=865 data-nosnippet>865</a>        name: <span class="string">"padding-right"</span>,
-<a href=#866 id=866 data-nosnippet>866</a>        inherited: <span class="bool-val">false</span>,
-<a href=#867 id=867 data-nosnippet>867</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#868 id=868 data-nosnippet>868</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
-<a href=#869 id=869 data-nosnippet>869</a>        read: |name, input| {
-<a href=#870 id=870 data-nosnippet>870</a>            longhand(name, input, length, |length| {
-<a href=#871 id=871 data-nosnippet>871</a>                Declaration::Padding(Edge::Right, length)
-<a href=#872 id=872 data-nosnippet>872</a>            })
-<a href=#873 id=873 data-nosnippet>873</a>        },
-<a href=#874 id=874 data-nosnippet>874</a>    },
-<a href=#875 id=875 data-nosnippet>875</a>    Spec {
-<a href=#876 id=876 data-nosnippet>876</a>        name: <span class="string">"padding-bottom"</span>,
-<a href=#877 id=877 data-nosnippet>877</a>        inherited: <span class="bool-val">false</span>,
-<a href=#878 id=878 data-nosnippet>878</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#879 id=879 data-nosnippet>879</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
-<a href=#880 id=880 data-nosnippet>880</a>        read: |name, input| {
-<a href=#881 id=881 data-nosnippet>881</a>            longhand(name, input, length, |length| {
-<a href=#882 id=882 data-nosnippet>882</a>                Declaration::Padding(Edge::Bottom, length)
-<a href=#883 id=883 data-nosnippet>883</a>            })
-<a href=#884 id=884 data-nosnippet>884</a>        },
-<a href=#885 id=885 data-nosnippet>885</a>    },
-<a href=#886 id=886 data-nosnippet>886</a>    Spec {
-<a href=#887 id=887 data-nosnippet>887</a>        name: <span class="string">"padding-left"</span>,
-<a href=#888 id=888 data-nosnippet>888</a>        inherited: <span class="bool-val">false</span>,
-<a href=#889 id=889 data-nosnippet>889</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
-<a href=#890 id=890 data-nosnippet>890</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
-<a href=#891 id=891 data-nosnippet>891</a>        read: |name, input| {
-<a href=#892 id=892 data-nosnippet>892</a>            longhand(name, input, length, |length| {
-<a href=#893 id=893 data-nosnippet>893</a>                Declaration::Padding(Edge::Left, length)
-<a href=#894 id=894 data-nosnippet>894</a>            })
-<a href=#895 id=895 data-nosnippet>895</a>        },
-<a href=#896 id=896 data-nosnippet>896</a>    },
-<a href=#897 id=897 data-nosnippet>897</a>    Spec {
-<a href=#898 id=898 data-nosnippet>898</a>        name: <span class="string">"border"</span>,
-<a href=#899 id=899 data-nosnippet>899</a>        inherited: <span class="bool-val">false</span>,
-<a href=#900 id=900 data-nosnippet>900</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
-<a href=#901 id=901 data-nosnippet>901</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
-<a href=#902 id=902 data-nosnippet>902</a>        read: |name, input| border(name, input, ALL_EDGES),
+<a href=#856 id=856 data-nosnippet>856</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4}"</span>,
+<a href=#857 id=857 data-nosnippet>857</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"12pt"</span>, <span class="string">"6pt 12pt"</span>, <span class="string">"6pt 12pt 0"</span>, <span class="string">"6pt 12pt 6pt 12pt"</span>],
+<a href=#858 id=858 data-nosnippet>858</a>        read: |name, input| sides(name, input, length, Declaration::Padding),
+<a href=#859 id=859 data-nosnippet>859</a>    },
+<a href=#860 id=860 data-nosnippet>860</a>    Spec {
+<a href=#861 id=861 data-nosnippet>861</a>        name: <span class="string">"padding-top"</span>,
+<a href=#862 id=862 data-nosnippet>862</a>        inherited: <span class="bool-val">false</span>,
+<a href=#863 id=863 data-nosnippet>863</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#864 id=864 data-nosnippet>864</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
+<a href=#865 id=865 data-nosnippet>865</a>        read: |name, input| {
+<a href=#866 id=866 data-nosnippet>866</a>            longhand(name, input, length, |length| {
+<a href=#867 id=867 data-nosnippet>867</a>                Declaration::Padding(Edge::Top, length)
+<a href=#868 id=868 data-nosnippet>868</a>            })
+<a href=#869 id=869 data-nosnippet>869</a>        },
+<a href=#870 id=870 data-nosnippet>870</a>    },
+<a href=#871 id=871 data-nosnippet>871</a>    Spec {
+<a href=#872 id=872 data-nosnippet>872</a>        name: <span class="string">"padding-right"</span>,
+<a href=#873 id=873 data-nosnippet>873</a>        inherited: <span class="bool-val">false</span>,
+<a href=#874 id=874 data-nosnippet>874</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#875 id=875 data-nosnippet>875</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
+<a href=#876 id=876 data-nosnippet>876</a>        read: |name, input| {
+<a href=#877 id=877 data-nosnippet>877</a>            longhand(name, input, length, |length| {
+<a href=#878 id=878 data-nosnippet>878</a>                Declaration::Padding(Edge::Right, length)
+<a href=#879 id=879 data-nosnippet>879</a>            })
+<a href=#880 id=880 data-nosnippet>880</a>        },
+<a href=#881 id=881 data-nosnippet>881</a>    },
+<a href=#882 id=882 data-nosnippet>882</a>    Spec {
+<a href=#883 id=883 data-nosnippet>883</a>        name: <span class="string">"padding-bottom"</span>,
+<a href=#884 id=884 data-nosnippet>884</a>        inherited: <span class="bool-val">false</span>,
+<a href=#885 id=885 data-nosnippet>885</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#886 id=886 data-nosnippet>886</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
+<a href=#887 id=887 data-nosnippet>887</a>        read: |name, input| {
+<a href=#888 id=888 data-nosnippet>888</a>            longhand(name, input, length, |length| {
+<a href=#889 id=889 data-nosnippet>889</a>                Declaration::Padding(Edge::Bottom, length)
+<a href=#890 id=890 data-nosnippet>890</a>            })
+<a href=#891 id=891 data-nosnippet>891</a>        },
+<a href=#892 id=892 data-nosnippet>892</a>    },
+<a href=#893 id=893 data-nosnippet>893</a>    Spec {
+<a href=#894 id=894 data-nosnippet>894</a>        name: <span class="string">"padding-left"</span>,
+<a href=#895 id=895 data-nosnippet>895</a>        inherited: <span class="bool-val">false</span>,
+<a href=#896 id=896 data-nosnippet>896</a>        syntax: <span class="string">"&lt;length&gt; | &lt;percentage&gt;"</span>,
+<a href=#897 id=897 data-nosnippet>897</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"6pt"</span>],
+<a href=#898 id=898 data-nosnippet>898</a>        read: |name, input| {
+<a href=#899 id=899 data-nosnippet>899</a>            longhand(name, input, length, |length| {
+<a href=#900 id=900 data-nosnippet>900</a>                Declaration::Padding(Edge::Left, length)
+<a href=#901 id=901 data-nosnippet>901</a>            })
+<a href=#902 id=902 data-nosnippet>902</a>        },
 <a href=#903 id=903 data-nosnippet>903</a>    },
 <a href=#904 id=904 data-nosnippet>904</a>    Spec {
-<a href=#905 id=905 data-nosnippet>905</a>        name: <span class="string">"border-top"</span>,
+<a href=#905 id=905 data-nosnippet>905</a>        name: <span class="string">"border"</span>,
 <a href=#906 id=906 data-nosnippet>906</a>        inherited: <span class="bool-val">false</span>,
 <a href=#907 id=907 data-nosnippet>907</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
 <a href=#908 id=908 data-nosnippet>908</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
-<a href=#909 id=909 data-nosnippet>909</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Top]),
+<a href=#909 id=909 data-nosnippet>909</a>        read: |name, input| border(name, input, ALL_EDGES),
 <a href=#910 id=910 data-nosnippet>910</a>    },
 <a href=#911 id=911 data-nosnippet>911</a>    Spec {
-<a href=#912 id=912 data-nosnippet>912</a>        name: <span class="string">"border-right"</span>,
+<a href=#912 id=912 data-nosnippet>912</a>        name: <span class="string">"border-top"</span>,
 <a href=#913 id=913 data-nosnippet>913</a>        inherited: <span class="bool-val">false</span>,
 <a href=#914 id=914 data-nosnippet>914</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
 <a href=#915 id=915 data-nosnippet>915</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
-<a href=#916 id=916 data-nosnippet>916</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Right]),
+<a href=#916 id=916 data-nosnippet>916</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Top]),
 <a href=#917 id=917 data-nosnippet>917</a>    },
 <a href=#918 id=918 data-nosnippet>918</a>    Spec {
-<a href=#919 id=919 data-nosnippet>919</a>        name: <span class="string">"border-bottom"</span>,
+<a href=#919 id=919 data-nosnippet>919</a>        name: <span class="string">"border-right"</span>,
 <a href=#920 id=920 data-nosnippet>920</a>        inherited: <span class="bool-val">false</span>,
 <a href=#921 id=921 data-nosnippet>921</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
 <a href=#922 id=922 data-nosnippet>922</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
-<a href=#923 id=923 data-nosnippet>923</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Bottom]),
+<a href=#923 id=923 data-nosnippet>923</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Right]),
 <a href=#924 id=924 data-nosnippet>924</a>    },
 <a href=#925 id=925 data-nosnippet>925</a>    Spec {
-<a href=#926 id=926 data-nosnippet>926</a>        name: <span class="string">"border-left"</span>,
+<a href=#926 id=926 data-nosnippet>926</a>        name: <span class="string">"border-bottom"</span>,
 <a href=#927 id=927 data-nosnippet>927</a>        inherited: <span class="bool-val">false</span>,
 <a href=#928 id=928 data-nosnippet>928</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
 <a href=#929 id=929 data-nosnippet>929</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
-<a href=#930 id=930 data-nosnippet>930</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Left]),
+<a href=#930 id=930 data-nosnippet>930</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Bottom]),
 <a href=#931 id=931 data-nosnippet>931</a>    },
 <a href=#932 id=932 data-nosnippet>932</a>    Spec {
-<a href=#933 id=933 data-nosnippet>933</a>        name: <span class="string">"border-width"</span>,
+<a href=#933 id=933 data-nosnippet>933</a>        name: <span class="string">"border-left"</span>,
 <a href=#934 id=934 data-nosnippet>934</a>        inherited: <span class="bool-val">false</span>,
-<a href=#935 id=935 data-nosnippet>935</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ]{1,4}"</span>,
-<a href=#936 id=936 data-nosnippet>936</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt"</span>, <span class="string">"thin thick"</span>, <span class="string">"1pt 2pt 1pt 2pt"</span>],
-<a href=#937 id=937 data-nosnippet>937</a>        read: |name, input| sides(name, input, line_width, Declaration::BorderWidth),
+<a href=#935 id=935 data-nosnippet>935</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ] || [ none | solid ] || &lt;color&gt;"</span>,
+<a href=#936 id=936 data-nosnippet>936</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt solid"</span>, <span class="string">"thin solid crimson"</span>, <span class="string">"none"</span>],
+<a href=#937 id=937 data-nosnippet>937</a>        read: |name, input| border(name, input, <span class="kw-2">&amp;</span>[Edge::Left]),
 <a href=#938 id=938 data-nosnippet>938</a>    },
 <a href=#939 id=939 data-nosnippet>939</a>    Spec {
-<a href=#940 id=940 data-nosnippet>940</a>        name: <span class="string">"border-style"</span>,
+<a href=#940 id=940 data-nosnippet>940</a>        name: <span class="string">"border-width"</span>,
 <a href=#941 id=941 data-nosnippet>941</a>        inherited: <span class="bool-val">false</span>,
-<a href=#942 id=942 data-nosnippet>942</a>        syntax: <span class="string">"[ none | solid ]{1,4}"</span>,
-<a href=#943 id=943 data-nosnippet>943</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"solid"</span>, <span class="string">"none solid"</span>],
-<a href=#944 id=944 data-nosnippet>944</a>        read: |name, input| sides(name, input, line_style, Declaration::BorderStyle),
+<a href=#942 id=942 data-nosnippet>942</a>        syntax: <span class="string">"[ &lt;length&gt; | thin | medium | thick ]{1,4}"</span>,
+<a href=#943 id=943 data-nosnippet>943</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"2pt"</span>, <span class="string">"thin thick"</span>, <span class="string">"1pt 2pt 1pt 2pt"</span>],
+<a href=#944 id=944 data-nosnippet>944</a>        read: |name, input| sides(name, input, line_width, Declaration::BorderWidth),
 <a href=#945 id=945 data-nosnippet>945</a>    },
 <a href=#946 id=946 data-nosnippet>946</a>    Spec {
-<a href=#947 id=947 data-nosnippet>947</a>        name: <span class="string">"border-color"</span>,
+<a href=#947 id=947 data-nosnippet>947</a>        name: <span class="string">"border-style"</span>,
 <a href=#948 id=948 data-nosnippet>948</a>        inherited: <span class="bool-val">false</span>,
-<a href=#949 id=949 data-nosnippet>949</a>        syntax: <span class="string">"&lt;color&gt;{1,4}"</span>,
-<a href=#950 id=950 data-nosnippet>950</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"crimson"</span>, <span class="string">"#369 black"</span>],
-<a href=#951 id=951 data-nosnippet>951</a>        read: |name, input| sides(name, input, border_color, Declaration::BorderColor),
+<a href=#949 id=949 data-nosnippet>949</a>        syntax: <span class="string">"[ none | solid ]{1,4}"</span>,
+<a href=#950 id=950 data-nosnippet>950</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"solid"</span>, <span class="string">"none solid"</span>],
+<a href=#951 id=951 data-nosnippet>951</a>        read: |name, input| sides(name, input, line_style, Declaration::BorderStyle),
 <a href=#952 id=952 data-nosnippet>952</a>    },
 <a href=#953 id=953 data-nosnippet>953</a>    Spec {
-<a href=#954 id=954 data-nosnippet>954</a>        name: <span class="string">"border-radius"</span>,
+<a href=#954 id=954 data-nosnippet>954</a>        name: <span class="string">"border-color"</span>,
 <a href=#955 id=955 data-nosnippet>955</a>        inherited: <span class="bool-val">false</span>,
-<a href=#956 id=956 data-nosnippet>956</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4} [ / [ &lt;length&gt; | &lt;percentage&gt; ]{1,4} ]?"</span>,
-<a href=#957 id=957 data-nosnippet>957</a>        examples: <span class="kw-2">&amp;</span>[
-<a href=#958 id=958 data-nosnippet>958</a>            <span class="string">"3pt"</span>,
-<a href=#959 id=959 data-nosnippet>959</a>            <span class="string">"3pt 6pt"</span>,
-<a href=#960 id=960 data-nosnippet>960</a>            <span class="string">"3pt 6pt 0"</span>,
-<a href=#961 id=961 data-nosnippet>961</a>            <span class="string">"3pt 6pt 0 1em"</span>,
-<a href=#962 id=962 data-nosnippet>962</a>            <span class="string">"50%"</span>,
-<a href=#963 id=963 data-nosnippet>963</a>            <span class="string">"12pt / 6pt"</span>,
-<a href=#964 id=964 data-nosnippet>964</a>        ],
-<a href=#965 id=965 data-nosnippet>965</a>        read: |name, input| {
-<a href=#966 id=966 data-nosnippet>966</a>            <span class="kw">let </span>corners = keyword_or(input, border_radius, || {
-<a href=#967 id=967 data-nosnippet>967</a>                StyleError::UnsupportedValue(name.clone())
-<a href=#968 id=968 data-nosnippet>968</a>            })<span class="question-mark">?</span>;
-<a href=#969 id=969 data-nosnippet>969</a>            <span class="prelude-val">Ok</span>(corners
-<a href=#970 id=970 data-nosnippet>970</a>                .into_iter()
-<a href=#971 id=971 data-nosnippet>971</a>                .map(|(corner, x, y)| Declaration::BorderRadius(corner, x, y))
-<a href=#972 id=972 data-nosnippet>972</a>                .collect())
-<a href=#973 id=973 data-nosnippet>973</a>        },
-<a href=#974 id=974 data-nosnippet>974</a>    },
-<a href=#975 id=975 data-nosnippet>975</a>    Spec {
-<a href=#976 id=976 data-nosnippet>976</a>        name: <span class="string">"border-top-left-radius"</span>,
-<a href=#977 id=977 data-nosnippet>977</a>        inherited: <span class="bool-val">false</span>,
-<a href=#978 id=978 data-nosnippet>978</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
-<a href=#979 id=979 data-nosnippet>979</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
-<a href=#980 id=980 data-nosnippet>980</a>        read: |name, input| {
-<a href=#981 id=981 data-nosnippet>981</a>            longhand(name, input, corner_radius, |(x, y)| {
-<a href=#982 id=982 data-nosnippet>982</a>                Declaration::BorderRadius(Corner::TopLeft, x, y)
-<a href=#983 id=983 data-nosnippet>983</a>            })
-<a href=#984 id=984 data-nosnippet>984</a>        },
-<a href=#985 id=985 data-nosnippet>985</a>    },
-<a href=#986 id=986 data-nosnippet>986</a>    Spec {
-<a href=#987 id=987 data-nosnippet>987</a>        name: <span class="string">"border-top-right-radius"</span>,
-<a href=#988 id=988 data-nosnippet>988</a>        inherited: <span class="bool-val">false</span>,
-<a href=#989 id=989 data-nosnippet>989</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
-<a href=#990 id=990 data-nosnippet>990</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
-<a href=#991 id=991 data-nosnippet>991</a>        read: |name, input| {
-<a href=#992 id=992 data-nosnippet>992</a>            longhand(name, input, corner_radius, |(x, y)| {
-<a href=#993 id=993 data-nosnippet>993</a>                Declaration::BorderRadius(Corner::TopRight, x, y)
-<a href=#994 id=994 data-nosnippet>994</a>            })
-<a href=#995 id=995 data-nosnippet>995</a>        },
-<a href=#996 id=996 data-nosnippet>996</a>    },
-<a href=#997 id=997 data-nosnippet>997</a>    Spec {
-<a href=#998 id=998 data-nosnippet>998</a>        name: <span class="string">"border-bottom-right-radius"</span>,
-<a href=#999 id=999 data-nosnippet>999</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1000 id=1000 data-nosnippet>1000</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
-<a href=#1001 id=1001 data-nosnippet>1001</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
-<a href=#1002 id=1002 data-nosnippet>1002</a>        read: |name, input| {
-<a href=#1003 id=1003 data-nosnippet>1003</a>            longhand(name, input, corner_radius, |(x, y)| {
-<a href=#1004 id=1004 data-nosnippet>1004</a>                Declaration::BorderRadius(Corner::BottomRight, x, y)
-<a href=#1005 id=1005 data-nosnippet>1005</a>            })
-<a href=#1006 id=1006 data-nosnippet>1006</a>        },
-<a href=#1007 id=1007 data-nosnippet>1007</a>    },
-<a href=#1008 id=1008 data-nosnippet>1008</a>    Spec {
-<a href=#1009 id=1009 data-nosnippet>1009</a>        name: <span class="string">"border-bottom-left-radius"</span>,
-<a href=#1010 id=1010 data-nosnippet>1010</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1011 id=1011 data-nosnippet>1011</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
-<a href=#1012 id=1012 data-nosnippet>1012</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
-<a href=#1013 id=1013 data-nosnippet>1013</a>        read: |name, input| {
-<a href=#1014 id=1014 data-nosnippet>1014</a>            longhand(name, input, corner_radius, |(x, y)| {
-<a href=#1015 id=1015 data-nosnippet>1015</a>                Declaration::BorderRadius(Corner::BottomLeft, x, y)
-<a href=#1016 id=1016 data-nosnippet>1016</a>            })
-<a href=#1017 id=1017 data-nosnippet>1017</a>        },
-<a href=#1018 id=1018 data-nosnippet>1018</a>    },
-<a href=#1019 id=1019 data-nosnippet>1019</a>    Spec {
-<a href=#1020 id=1020 data-nosnippet>1020</a>        name: <span class="string">"background-color"</span>,
-<a href=#1021 id=1021 data-nosnippet>1021</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1022 id=1022 data-nosnippet>1022</a>        syntax: <span class="string">"&lt;color&gt; | transparent"</span>,
-<a href=#1023 id=1023 data-nosnippet>1023</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"#f4f1ea"</span>, <span class="string">"transparent"</span>],
-<a href=#1024 id=1024 data-nosnippet>1024</a>        read: |name, input| longhand(name, input, background_color, Declaration::BackgroundColor),
+<a href=#956 id=956 data-nosnippet>956</a>        syntax: <span class="string">"&lt;color&gt;{1,4}"</span>,
+<a href=#957 id=957 data-nosnippet>957</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"crimson"</span>, <span class="string">"#369 black"</span>],
+<a href=#958 id=958 data-nosnippet>958</a>        read: |name, input| sides(name, input, border_color, Declaration::BorderColor),
+<a href=#959 id=959 data-nosnippet>959</a>    },
+<a href=#960 id=960 data-nosnippet>960</a>    Spec {
+<a href=#961 id=961 data-nosnippet>961</a>        name: <span class="string">"border-radius"</span>,
+<a href=#962 id=962 data-nosnippet>962</a>        inherited: <span class="bool-val">false</span>,
+<a href=#963 id=963 data-nosnippet>963</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,4} [ / [ &lt;length&gt; | &lt;percentage&gt; ]{1,4} ]?"</span>,
+<a href=#964 id=964 data-nosnippet>964</a>        examples: <span class="kw-2">&amp;</span>[
+<a href=#965 id=965 data-nosnippet>965</a>            <span class="string">"3pt"</span>,
+<a href=#966 id=966 data-nosnippet>966</a>            <span class="string">"3pt 6pt"</span>,
+<a href=#967 id=967 data-nosnippet>967</a>            <span class="string">"3pt 6pt 0"</span>,
+<a href=#968 id=968 data-nosnippet>968</a>            <span class="string">"3pt 6pt 0 1em"</span>,
+<a href=#969 id=969 data-nosnippet>969</a>            <span class="string">"50%"</span>,
+<a href=#970 id=970 data-nosnippet>970</a>            <span class="string">"12pt / 6pt"</span>,
+<a href=#971 id=971 data-nosnippet>971</a>        ],
+<a href=#972 id=972 data-nosnippet>972</a>        read: |name, input| {
+<a href=#973 id=973 data-nosnippet>973</a>            <span class="kw">let </span>corners = keyword_or(input, border_radius, || {
+<a href=#974 id=974 data-nosnippet>974</a>                StyleError::UnsupportedValue(name.clone())
+<a href=#975 id=975 data-nosnippet>975</a>            })<span class="question-mark">?</span>;
+<a href=#976 id=976 data-nosnippet>976</a>            <span class="prelude-val">Ok</span>(corners
+<a href=#977 id=977 data-nosnippet>977</a>                .into_iter()
+<a href=#978 id=978 data-nosnippet>978</a>                .map(|(corner, x, y)| Declaration::BorderRadius(corner, x, y))
+<a href=#979 id=979 data-nosnippet>979</a>                .collect())
+<a href=#980 id=980 data-nosnippet>980</a>        },
+<a href=#981 id=981 data-nosnippet>981</a>    },
+<a href=#982 id=982 data-nosnippet>982</a>    Spec {
+<a href=#983 id=983 data-nosnippet>983</a>        name: <span class="string">"border-top-left-radius"</span>,
+<a href=#984 id=984 data-nosnippet>984</a>        inherited: <span class="bool-val">false</span>,
+<a href=#985 id=985 data-nosnippet>985</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
+<a href=#986 id=986 data-nosnippet>986</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
+<a href=#987 id=987 data-nosnippet>987</a>        read: |name, input| {
+<a href=#988 id=988 data-nosnippet>988</a>            longhand(name, input, corner_radius, |(x, y)| {
+<a href=#989 id=989 data-nosnippet>989</a>                Declaration::BorderRadius(Corner::TopLeft, x, y)
+<a href=#990 id=990 data-nosnippet>990</a>            })
+<a href=#991 id=991 data-nosnippet>991</a>        },
+<a href=#992 id=992 data-nosnippet>992</a>    },
+<a href=#993 id=993 data-nosnippet>993</a>    Spec {
+<a href=#994 id=994 data-nosnippet>994</a>        name: <span class="string">"border-top-right-radius"</span>,
+<a href=#995 id=995 data-nosnippet>995</a>        inherited: <span class="bool-val">false</span>,
+<a href=#996 id=996 data-nosnippet>996</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
+<a href=#997 id=997 data-nosnippet>997</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
+<a href=#998 id=998 data-nosnippet>998</a>        read: |name, input| {
+<a href=#999 id=999 data-nosnippet>999</a>            longhand(name, input, corner_radius, |(x, y)| {
+<a href=#1000 id=1000 data-nosnippet>1000</a>                Declaration::BorderRadius(Corner::TopRight, x, y)
+<a href=#1001 id=1001 data-nosnippet>1001</a>            })
+<a href=#1002 id=1002 data-nosnippet>1002</a>        },
+<a href=#1003 id=1003 data-nosnippet>1003</a>    },
+<a href=#1004 id=1004 data-nosnippet>1004</a>    Spec {
+<a href=#1005 id=1005 data-nosnippet>1005</a>        name: <span class="string">"border-bottom-right-radius"</span>,
+<a href=#1006 id=1006 data-nosnippet>1006</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1007 id=1007 data-nosnippet>1007</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
+<a href=#1008 id=1008 data-nosnippet>1008</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
+<a href=#1009 id=1009 data-nosnippet>1009</a>        read: |name, input| {
+<a href=#1010 id=1010 data-nosnippet>1010</a>            longhand(name, input, corner_radius, |(x, y)| {
+<a href=#1011 id=1011 data-nosnippet>1011</a>                Declaration::BorderRadius(Corner::BottomRight, x, y)
+<a href=#1012 id=1012 data-nosnippet>1012</a>            })
+<a href=#1013 id=1013 data-nosnippet>1013</a>        },
+<a href=#1014 id=1014 data-nosnippet>1014</a>    },
+<a href=#1015 id=1015 data-nosnippet>1015</a>    Spec {
+<a href=#1016 id=1016 data-nosnippet>1016</a>        name: <span class="string">"border-bottom-left-radius"</span>,
+<a href=#1017 id=1017 data-nosnippet>1017</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1018 id=1018 data-nosnippet>1018</a>        syntax: <span class="string">"[ &lt;length&gt; | &lt;percentage&gt; ]{1,2}"</span>,
+<a href=#1019 id=1019 data-nosnippet>1019</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"3pt"</span>, <span class="string">"6pt 3pt"</span>],
+<a href=#1020 id=1020 data-nosnippet>1020</a>        read: |name, input| {
+<a href=#1021 id=1021 data-nosnippet>1021</a>            longhand(name, input, corner_radius, |(x, y)| {
+<a href=#1022 id=1022 data-nosnippet>1022</a>                Declaration::BorderRadius(Corner::BottomLeft, x, y)
+<a href=#1023 id=1023 data-nosnippet>1023</a>            })
+<a href=#1024 id=1024 data-nosnippet>1024</a>        },
 <a href=#1025 id=1025 data-nosnippet>1025</a>    },
 <a href=#1026 id=1026 data-nosnippet>1026</a>    Spec {
-<a href=#1027 id=1027 data-nosnippet>1027</a>        name: <span class="string">"background-image"</span>,
+<a href=#1027 id=1027 data-nosnippet>1027</a>        name: <span class="string">"background-color"</span>,
 <a href=#1028 id=1028 data-nosnippet>1028</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1029 id=1029 data-nosnippet>1029</a>        syntax: <span class="string">"none | &lt;url&gt;"</span>,
-<a href=#1030 id=1030 data-nosnippet>1030</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"url(\"scan.webp\")"</span>, <span class="string">"url(art/plate.png)"</span>],
-<a href=#1031 id=1031 data-nosnippet>1031</a>        read: |name, input| longhand(name, input, background_image, Declaration::BackgroundImage),
+<a href=#1029 id=1029 data-nosnippet>1029</a>        syntax: <span class="string">"&lt;color&gt; | transparent"</span>,
+<a href=#1030 id=1030 data-nosnippet>1030</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"#f4f1ea"</span>, <span class="string">"transparent"</span>],
+<a href=#1031 id=1031 data-nosnippet>1031</a>        read: |name, input| longhand(name, input, background_color, Declaration::BackgroundColor),
 <a href=#1032 id=1032 data-nosnippet>1032</a>    },
 <a href=#1033 id=1033 data-nosnippet>1033</a>    Spec {
-<a href=#1034 id=1034 data-nosnippet>1034</a>        name: <span class="string">"background-repeat"</span>,
+<a href=#1034 id=1034 data-nosnippet>1034</a>        name: <span class="string">"background-image"</span>,
 <a href=#1035 id=1035 data-nosnippet>1035</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1036 id=1036 data-nosnippet>1036</a>        syntax: <span class="string">"repeat | no-repeat"</span>,
-<a href=#1037 id=1037 data-nosnippet>1037</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"repeat"</span>, <span class="string">"no-repeat"</span>],
-<a href=#1038 id=1038 data-nosnippet>1038</a>        read: |name, input| {
-<a href=#1039 id=1039 data-nosnippet>1039</a>            longhand(
-<a href=#1040 id=1040 data-nosnippet>1040</a>                name,
-<a href=#1041 id=1041 data-nosnippet>1041</a>                input,
-<a href=#1042 id=1042 data-nosnippet>1042</a>                background_repeat,
-<a href=#1043 id=1043 data-nosnippet>1043</a>                Declaration::BackgroundRepeat,
-<a href=#1044 id=1044 data-nosnippet>1044</a>            )
-<a href=#1045 id=1045 data-nosnippet>1045</a>        },
-<a href=#1046 id=1046 data-nosnippet>1046</a>    },
-<a href=#1047 id=1047 data-nosnippet>1047</a>    Spec {
-<a href=#1048 id=1048 data-nosnippet>1048</a>        name: <span class="string">"background-size"</span>,
-<a href=#1049 id=1049 data-nosnippet>1049</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1050 id=1050 data-nosnippet>1050</a>        syntax: <span class="string">"auto | cover | contain | [ &lt;length&gt; | &lt;percentage&gt; | auto ]{1,2}"</span>,
-<a href=#1051 id=1051 data-nosnippet>1051</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"cover"</span>, <span class="string">"contain"</span>, <span class="string">"120pt"</span>, <span class="string">"100% auto"</span>],
-<a href=#1052 id=1052 data-nosnippet>1052</a>        read: |name, input| longhand(name, input, background_size, Declaration::BackgroundSize),
+<a href=#1036 id=1036 data-nosnippet>1036</a>        syntax: <span class="string">"none | &lt;url&gt;"</span>,
+<a href=#1037 id=1037 data-nosnippet>1037</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"none"</span>, <span class="string">"url(\"scan.webp\")"</span>, <span class="string">"url(art/plate.png)"</span>],
+<a href=#1038 id=1038 data-nosnippet>1038</a>        read: |name, input| longhand(name, input, background_image, Declaration::BackgroundImage),
+<a href=#1039 id=1039 data-nosnippet>1039</a>    },
+<a href=#1040 id=1040 data-nosnippet>1040</a>    Spec {
+<a href=#1041 id=1041 data-nosnippet>1041</a>        name: <span class="string">"background-repeat"</span>,
+<a href=#1042 id=1042 data-nosnippet>1042</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1043 id=1043 data-nosnippet>1043</a>        syntax: <span class="string">"repeat | no-repeat"</span>,
+<a href=#1044 id=1044 data-nosnippet>1044</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"repeat"</span>, <span class="string">"no-repeat"</span>],
+<a href=#1045 id=1045 data-nosnippet>1045</a>        read: |name, input| {
+<a href=#1046 id=1046 data-nosnippet>1046</a>            longhand(
+<a href=#1047 id=1047 data-nosnippet>1047</a>                name,
+<a href=#1048 id=1048 data-nosnippet>1048</a>                input,
+<a href=#1049 id=1049 data-nosnippet>1049</a>                background_repeat,
+<a href=#1050 id=1050 data-nosnippet>1050</a>                Declaration::BackgroundRepeat,
+<a href=#1051 id=1051 data-nosnippet>1051</a>            )
+<a href=#1052 id=1052 data-nosnippet>1052</a>        },
 <a href=#1053 id=1053 data-nosnippet>1053</a>    },
 <a href=#1054 id=1054 data-nosnippet>1054</a>    Spec {
-<a href=#1055 id=1055 data-nosnippet>1055</a>        name: <span class="string">"background-position"</span>,
+<a href=#1055 id=1055 data-nosnippet>1055</a>        name: <span class="string">"background-size"</span>,
 <a href=#1056 id=1056 data-nosnippet>1056</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1057 id=1057 data-nosnippet>1057</a>        syntax: <span class="string">"[ left | center | right | &lt;length&gt; | &lt;percentage&gt; ] \
-<a href=#1058 id=1058 data-nosnippet>1058</a>                 [ top | center | bottom | &lt;length&gt; | &lt;percentage&gt; ]?"</span>,
-<a href=#1059 id=1059 data-nosnippet>1059</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"center"</span>, <span class="string">"right bottom"</span>, <span class="string">"50% 50%"</span>, <span class="string">"12pt 18pt"</span>, <span class="string">"top left"</span>],
-<a href=#1060 id=1060 data-nosnippet>1060</a>        read: |name, input| {
-<a href=#1061 id=1061 data-nosnippet>1061</a>            longhand(name, input, background_position, |(x, y)| {
-<a href=#1062 id=1062 data-nosnippet>1062</a>                Declaration::BackgroundPosition(x, y)
-<a href=#1063 id=1063 data-nosnippet>1063</a>            })
-<a href=#1064 id=1064 data-nosnippet>1064</a>        },
-<a href=#1065 id=1065 data-nosnippet>1065</a>    },
-<a href=#1066 id=1066 data-nosnippet>1066</a>    Spec {
-<a href=#1067 id=1067 data-nosnippet>1067</a>        name: <span class="string">"box-decoration-break"</span>,
-<a href=#1068 id=1068 data-nosnippet>1068</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1069 id=1069 data-nosnippet>1069</a>        syntax: <span class="string">"slice | clone"</span>,
-<a href=#1070 id=1070 data-nosnippet>1070</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"slice"</span>, <span class="string">"clone"</span>],
-<a href=#1071 id=1071 data-nosnippet>1071</a>        read: |name, input| {
-<a href=#1072 id=1072 data-nosnippet>1072</a>            longhand(
-<a href=#1073 id=1073 data-nosnippet>1073</a>                name,
-<a href=#1074 id=1074 data-nosnippet>1074</a>                input,
-<a href=#1075 id=1075 data-nosnippet>1075</a>                decoration_break,
-<a href=#1076 id=1076 data-nosnippet>1076</a>                Declaration::BoxDecorationBreak,
-<a href=#1077 id=1077 data-nosnippet>1077</a>            )
-<a href=#1078 id=1078 data-nosnippet>1078</a>        },
-<a href=#1079 id=1079 data-nosnippet>1079</a>    },
-<a href=#1080 id=1080 data-nosnippet>1080</a>    Spec {
-<a href=#1081 id=1081 data-nosnippet>1081</a>        name: <span class="string">"break-before"</span>,
-<a href=#1082 id=1082 data-nosnippet>1082</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1083 id=1083 data-nosnippet>1083</a>        syntax: <span class="string">"auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso"</span>,
-<a href=#1084 id=1084 data-nosnippet>1084</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"recto"</span>],
-<a href=#1085 id=1085 data-nosnippet>1085</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakBefore),
+<a href=#1057 id=1057 data-nosnippet>1057</a>        syntax: <span class="string">"auto | cover | contain | [ &lt;length&gt; | &lt;percentage&gt; | auto ]{1,2}"</span>,
+<a href=#1058 id=1058 data-nosnippet>1058</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"auto"</span>, <span class="string">"cover"</span>, <span class="string">"contain"</span>, <span class="string">"120pt"</span>, <span class="string">"100% auto"</span>],
+<a href=#1059 id=1059 data-nosnippet>1059</a>        read: |name, input| longhand(name, input, background_size, Declaration::BackgroundSize),
+<a href=#1060 id=1060 data-nosnippet>1060</a>    },
+<a href=#1061 id=1061 data-nosnippet>1061</a>    Spec {
+<a href=#1062 id=1062 data-nosnippet>1062</a>        name: <span class="string">"background-position"</span>,
+<a href=#1063 id=1063 data-nosnippet>1063</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1064 id=1064 data-nosnippet>1064</a>        syntax: <span class="string">"[ left | center | right | &lt;length&gt; | &lt;percentage&gt; ] \
+<a href=#1065 id=1065 data-nosnippet>1065</a>                 [ top | center | bottom | &lt;length&gt; | &lt;percentage&gt; ]?"</span>,
+<a href=#1066 id=1066 data-nosnippet>1066</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"center"</span>, <span class="string">"right bottom"</span>, <span class="string">"50% 50%"</span>, <span class="string">"12pt 18pt"</span>, <span class="string">"top left"</span>],
+<a href=#1067 id=1067 data-nosnippet>1067</a>        read: |name, input| {
+<a href=#1068 id=1068 data-nosnippet>1068</a>            longhand(name, input, background_position, |(x, y)| {
+<a href=#1069 id=1069 data-nosnippet>1069</a>                Declaration::BackgroundPosition(x, y)
+<a href=#1070 id=1070 data-nosnippet>1070</a>            })
+<a href=#1071 id=1071 data-nosnippet>1071</a>        },
+<a href=#1072 id=1072 data-nosnippet>1072</a>    },
+<a href=#1073 id=1073 data-nosnippet>1073</a>    Spec {
+<a href=#1074 id=1074 data-nosnippet>1074</a>        name: <span class="string">"box-decoration-break"</span>,
+<a href=#1075 id=1075 data-nosnippet>1075</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1076 id=1076 data-nosnippet>1076</a>        syntax: <span class="string">"slice | clone"</span>,
+<a href=#1077 id=1077 data-nosnippet>1077</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"slice"</span>, <span class="string">"clone"</span>],
+<a href=#1078 id=1078 data-nosnippet>1078</a>        read: |name, input| {
+<a href=#1079 id=1079 data-nosnippet>1079</a>            longhand(
+<a href=#1080 id=1080 data-nosnippet>1080</a>                name,
+<a href=#1081 id=1081 data-nosnippet>1081</a>                input,
+<a href=#1082 id=1082 data-nosnippet>1082</a>                decoration_break,
+<a href=#1083 id=1083 data-nosnippet>1083</a>                Declaration::BoxDecorationBreak,
+<a href=#1084 id=1084 data-nosnippet>1084</a>            )
+<a href=#1085 id=1085 data-nosnippet>1085</a>        },
 <a href=#1086 id=1086 data-nosnippet>1086</a>    },
 <a href=#1087 id=1087 data-nosnippet>1087</a>    Spec {
-<a href=#1088 id=1088 data-nosnippet>1088</a>        name: <span class="string">"break-after"</span>,
+<a href=#1088 id=1088 data-nosnippet>1088</a>        name: <span class="string">"break-before"</span>,
 <a href=#1089 id=1089 data-nosnippet>1089</a>        inherited: <span class="bool-val">false</span>,
 <a href=#1090 id=1090 data-nosnippet>1090</a>        syntax: <span class="string">"auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso"</span>,
-<a href=#1091 id=1091 data-nosnippet>1091</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"avoid"</span>],
-<a href=#1092 id=1092 data-nosnippet>1092</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakAfter),
+<a href=#1091 id=1091 data-nosnippet>1091</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"recto"</span>],
+<a href=#1092 id=1092 data-nosnippet>1092</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakBefore),
 <a href=#1093 id=1093 data-nosnippet>1093</a>    },
 <a href=#1094 id=1094 data-nosnippet>1094</a>    Spec {
-<a href=#1095 id=1095 data-nosnippet>1095</a>        name: <span class="string">"break-inside"</span>,
+<a href=#1095 id=1095 data-nosnippet>1095</a>        name: <span class="string">"break-after"</span>,
 <a href=#1096 id=1096 data-nosnippet>1096</a>        inherited: <span class="bool-val">false</span>,
 <a href=#1097 id=1097 data-nosnippet>1097</a>        syntax: <span class="string">"auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso"</span>,
 <a href=#1098 id=1098 data-nosnippet>1098</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"avoid"</span>],
-<a href=#1099 id=1099 data-nosnippet>1099</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakInside),
+<a href=#1099 id=1099 data-nosnippet>1099</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakAfter),
 <a href=#1100 id=1100 data-nosnippet>1100</a>    },
 <a href=#1101 id=1101 data-nosnippet>1101</a>    Spec {
-<a href=#1102 id=1102 data-nosnippet>1102</a>        name: <span class="string">"column-span"</span>,
+<a href=#1102 id=1102 data-nosnippet>1102</a>        name: <span class="string">"break-inside"</span>,
 <a href=#1103 id=1103 data-nosnippet>1103</a>        inherited: <span class="bool-val">false</span>,
-<a href=#1104 id=1104 data-nosnippet>1104</a>        syntax: <span class="string">"none | all"</span>,
-<a href=#1105 id=1105 data-nosnippet>1105</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"all"</span>],
-<a href=#1106 id=1106 data-nosnippet>1106</a>        read: |name, input| longhand(name, input, column_span, Declaration::ColumnSpan),
+<a href=#1104 id=1104 data-nosnippet>1104</a>        syntax: <span class="string">"auto | avoid | avoid-page | avoid-column | column | page | always | left | right | recto | verso"</span>,
+<a href=#1105 id=1105 data-nosnippet>1105</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"avoid"</span>],
+<a href=#1106 id=1106 data-nosnippet>1106</a>        read: |name, input| longhand(name, input, break_value, Declaration::BreakInside),
 <a href=#1107 id=1107 data-nosnippet>1107</a>    },
-<a href=#1108 id=1108 data-nosnippet>1108</a>];
+<a href=#1108 id=1108 data-nosnippet>1108</a>    Spec {
+<a href=#1109 id=1109 data-nosnippet>1109</a>        name: <span class="string">"column-span"</span>,
+<a href=#1110 id=1110 data-nosnippet>1110</a>        inherited: <span class="bool-val">false</span>,
+<a href=#1111 id=1111 data-nosnippet>1111</a>        syntax: <span class="string">"none | all"</span>,
+<a href=#1112 id=1112 data-nosnippet>1112</a>        examples: <span class="kw-2">&amp;</span>[<span class="string">"all"</span>],
+<a href=#1113 id=1113 data-nosnippet>1113</a>        read: |name, input| longhand(name, input, column_span, Declaration::ColumnSpan),
+<a href=#1114 id=1114 data-nosnippet>1114</a>    },
+<a href=#1115 id=1115 data-nosnippet>1115</a>];
 </code></pre></div></section></main></body></html>
