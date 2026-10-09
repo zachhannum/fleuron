@@ -3274,474 +3274,530 @@
 <a href=#3274 id=3274 data-nosnippet>3274</a>        <span class="macro">assert!</span>(tree.opening_line(<span class="kw-2">*</span>second).is_none());
 <a href=#3275 id=3275 data-nosnippet>3275</a>    }
 <a href=#3276 id=3276 data-nosnippet>3276</a>
-<a href=#3277 id=3277 data-nosnippet>3277</a>    <span class="doccomment">/// `::first-line` takes the properties that change a run's width
-<a href=#3278 id=3278 data-nosnippet>3278</a>    /// and its colour. Anything else warns naming the property, is
-<a href=#3279 id=3279 data-nosnippet>3279</a>    /// dropped, and leaves the rest of the rule standing.
-<a href=#3280 id=3280 data-nosnippet>3280</a>    </span><span class="attr">#[test]
-<a href=#3281 id=3281 data-nosnippet>3281</a>    </span><span class="kw">fn </span>a_property_outside_the_first_line_set_warns_and_is_dropped() {
-<a href=#3282 id=3282 data-nosnippet>3282</a>        <span class="kw">let </span>book = sample();
-<a href=#3283 id=3283 data-nosnippet>3283</a>        <span class="kw">let </span>tree = compile(
-<a href=#3284 id=3284 data-nosnippet>3284</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3285 id=3285 data-nosnippet>3285</a>            <span class="string">"p::first-line { line-height: 2; text-transform: uppercase }"</span>,
-<a href=#3286 id=3286 data-nosnippet>3286</a>        );
-<a href=#3287 id=3287 data-nosnippet>3287</a>        <span class="macro">assert!</span>(
-<a href=#3288 id=3288 data-nosnippet>3288</a>            tree.warnings().iter().any(|warning| {
-<a href=#3289 id=3289 data-nosnippet>3289</a>                warning.message
-<a href=#3290 id=3290 data-nosnippet>3290</a>                    == <span class="string">"Unsupported property `line-height` on `::first-line`. \
-<a href=#3291 id=3291 data-nosnippet>3291</a>                        The declaration is ignored."
-<a href=#3292 id=3292 data-nosnippet>3292</a>            </span>}),
-<a href=#3293 id=3293 data-nosnippet>3293</a>            <span class="string">"{:?}"</span>,
-<a href=#3294 id=3294 data-nosnippet>3294</a>            tree.warnings(),
-<a href=#3295 id=3295 data-nosnippet>3295</a>        );
-<a href=#3296 id=3296 data-nosnippet>3296</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
-<a href=#3297 id=3297 data-nosnippet>3297</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
-<a href=#3298 id=3298 data-nosnippet>3298</a>        };
-<a href=#3299 id=3299 data-nosnippet>3299</a>        <span class="kw">let </span>opening = tree.opening_line(<span class="kw-2">*</span>id).expect(<span class="string">"the opening line's overlay"</span>);
-<a href=#3300 id=3300 data-nosnippet>3300</a>        <span class="macro">assert_eq!</span>(opening.transform, <span class="prelude-val">Some</span>(TextTransform::Uppercase));
-<a href=#3301 id=3301 data-nosnippet>3301</a>        <span class="macro">assert_eq!</span>(
-<a href=#3302 id=3302 data-nosnippet>3302</a>            tree.first_line(<span class="kw-2">*</span>id).unwrap().line_height,
-<a href=#3303 id=3303 data-nosnippet>3303</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).line_height,
-<a href=#3304 id=3304 data-nosnippet>3304</a>            <span class="string">"the line height the rule asked for was dropped"</span>,
-<a href=#3305 id=3305 data-nosnippet>3305</a>        );
-<a href=#3306 id=3306 data-nosnippet>3306</a>    }
-<a href=#3307 id=3307 data-nosnippet>3307</a>
-<a href=#3308 id=3308 data-nosnippet>3308</a>    <span class="doccomment">/// Acceptance: `font-family`, `font-style` and `font-weight` on
-<a href=#3309 id=3309 data-nosnippet>3309</a>    /// `::first-line` warn about none of themselves, and each one
-<a href=#3310 id=3310 data-nosnippet>3310</a>    /// reaches the overlay line layout reads.
-<a href=#3311 id=3311 data-nosnippet>3311</a>    </span><span class="attr">#[test]
-<a href=#3312 id=3312 data-nosnippet>3312</a>    </span><span class="kw">fn </span>the_font_properties_set_on_a_first_line() {
-<a href=#3313 id=3313 data-nosnippet>3313</a>        <span class="kw">let </span>book = sample();
-<a href=#3314 id=3314 data-nosnippet>3314</a>        <span class="kw">let </span><span class="kw-2">mut </span>registry = bundled_registry().expect(<span class="string">"bundled font parses"</span>);
-<a href=#3315 id=3315 data-nosnippet>3315</a>        <span class="kw">let </span><span class="kw-2">mut </span>display =
-<a href=#3316 id=3316 data-nosnippet>3316</a>            <span class="kw">crate</span>::fonts::FontSource::from_bytes(<span class="kw">crate</span>::fonts::BUNDLED_ITALIC.to_vec())
-<a href=#3317 id=3317 data-nosnippet>3317</a>                .expect(<span class="string">"the face parses"</span>);
-<a href=#3318 id=3318 data-nosnippet>3318</a>        display.family = <span class="string">"display"</span>.into();
-<a href=#3319 id=3319 data-nosnippet>3319</a>        registry.add(display).expect(<span class="string">"the face registers"</span>);
-<a href=#3320 id=3320 data-nosnippet>3320</a>        <span class="kw">let </span>css = <span class="string">"p { font-family: \"EB Garamond\" }
-<a href=#3321 id=3321 data-nosnippet>3321</a>                   p::first-line { font-family: display; font-style: italic;
-<a href=#3322 id=3322 data-nosnippet>3322</a>                                   font-weight: bold }"</span>;
-<a href=#3323 id=3323 data-nosnippet>3323</a>        <span class="kw">let </span>tree =
-<a href=#3324 id=3324 data-nosnippet>3324</a>            Stylesheets::parse(<span class="kw-2">&amp;</span>[Source::author(<span class="string">"author.css"</span>, css)]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>registry);
-<a href=#3325 id=3325 data-nosnippet>3325</a>        <span class="macro">assert_eq!</span>(
-<a href=#3326 id=3326 data-nosnippet>3326</a>            tree.warnings()
-<a href=#3327 id=3327 data-nosnippet>3327</a>                .iter()
-<a href=#3328 id=3328 data-nosnippet>3328</a>                .filter(|warning| warning.message.contains(<span class="string">"`::first-line`"</span>))
-<a href=#3329 id=3329 data-nosnippet>3329</a>                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#3330 id=3330 data-nosnippet>3330</a>            Vec::&lt;<span class="kw-2">&amp;</span>Warning&gt;::new(),
-<a href=#3331 id=3331 data-nosnippet>3331</a>        );
-<a href=#3332 id=3332 data-nosnippet>3332</a>
-<a href=#3333 id=3333 data-nosnippet>3333</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
-<a href=#3334 id=3334 data-nosnippet>3334</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
-<a href=#3335 id=3335 data-nosnippet>3335</a>        };
-<a href=#3336 id=3336 data-nosnippet>3336</a>        <span class="kw">let </span>face = tree
-<a href=#3337 id=3337 data-nosnippet>3337</a>            .opening_line(<span class="kw-2">*</span>id)
-<a href=#3338 id=3338 data-nosnippet>3338</a>            .expect(<span class="string">"the opening line's overlay"</span>)
-<a href=#3339 id=3339 data-nosnippet>3339</a>            .face
-<a href=#3340 id=3340 data-nosnippet>3340</a>            .expect(<span class="string">"the rule asked for another face"</span>);
-<a href=#3341 id=3341 data-nosnippet>3341</a>        <span class="macro">assert_eq!</span>(face.italic, <span class="prelude-val">Some</span>(<span class="bool-val">true</span>));
-<a href=#3342 id=3342 data-nosnippet>3342</a>        <span class="macro">assert_eq!</span>(face.weight, <span class="prelude-val">Some</span>(<span class="number">700</span>));
-<a href=#3343 id=3343 data-nosnippet>3343</a>        <span class="macro">assert_eq!</span>(
-<a href=#3344 id=3344 data-nosnippet>3344</a>            registry
-<a href=#3345 id=3345 data-nosnippet>3345</a>                .font_ref(face.family.expect(<span class="string">"the rule named a family"</span>))
-<a href=#3346 id=3346 data-nosnippet>3346</a>                .map(|entry| entry.family.as_str()),
-<a href=#3347 id=3347 data-nosnippet>3347</a>            <span class="prelude-val">Some</span>(<span class="string">"display"</span>),
-<a href=#3348 id=3348 data-nosnippet>3348</a>        );
-<a href=#3349 id=3349 data-nosnippet>3349</a>    }
-<a href=#3350 id=3350 data-nosnippet>3350</a>
-<a href=#3351 id=3351 data-nosnippet>3351</a>    <span class="doccomment">/// A book whose one paragraph nests `strong` inside `em`.
-<a href=#3352 id=3352 data-nosnippet>3352</a>    </span><span class="kw">fn </span>nested() -&gt; Book {
-<a href=#3353 id=3353 data-nosnippet>3353</a>        <span class="kw">let </span><span class="kw-2">mut </span>book = Book {
-<a href=#3354 id=3354 data-nosnippet>3354</a>            metadata: Metadata::default(),
-<a href=#3355 id=3355 data-nosnippet>3355</a>            sections: <span class="macro">vec!</span>[Section {
-<a href=#3356 id=3356 data-nosnippet>3356</a>                attributes: Default::default(),
-<a href=#3357 id=3357 data-nosnippet>3357</a>                blocks: <span class="macro">vec!</span>[Block::Paragraph {
-<a href=#3358 id=3358 data-nosnippet>3358</a>                    id: NodeId::UNASSIGNED,
-<a href=#3359 id=3359 data-nosnippet>3359</a>                    inlines: <span class="macro">vec!</span>[
-<a href=#3360 id=3360 data-nosnippet>3360</a>                        text(<span class="string">"She said "</span>),
-<a href=#3361 id=3361 data-nosnippet>3361</a>                        Inline::Emphasis {
-<a href=#3362 id=3362 data-nosnippet>3362</a>                            id: NodeId::UNASSIGNED,
-<a href=#3363 id=3363 data-nosnippet>3363</a>                            children: <span class="macro">vec!</span>[
-<a href=#3364 id=3364 data-nosnippet>3364</a>                                text(<span class="string">"never "</span>),
-<a href=#3365 id=3365 data-nosnippet>3365</a>                                Inline::Strong {
-<a href=#3366 id=3366 data-nosnippet>3366</a>                                    id: NodeId::UNASSIGNED,
-<a href=#3367 id=3367 data-nosnippet>3367</a>                                    children: <span class="macro">vec!</span>[text(<span class="string">"again"</span>)],
-<a href=#3368 id=3368 data-nosnippet>3368</a>                                    attributes: Attributes::default(),
-<a href=#3369 id=3369 data-nosnippet>3369</a>                                    position: <span class="prelude-val">None</span>,
-<a href=#3370 id=3370 data-nosnippet>3370</a>                                    span: <span class="prelude-val">None</span>,
-<a href=#3371 id=3371 data-nosnippet>3371</a>                                },
-<a href=#3372 id=3372 data-nosnippet>3372</a>                            ],
-<a href=#3373 id=3373 data-nosnippet>3373</a>                            attributes: Attributes::default(),
-<a href=#3374 id=3374 data-nosnippet>3374</a>                            position: <span class="prelude-val">None</span>,
-<a href=#3375 id=3375 data-nosnippet>3375</a>                            span: <span class="prelude-val">None</span>,
-<a href=#3376 id=3376 data-nosnippet>3376</a>                        },
-<a href=#3377 id=3377 data-nosnippet>3377</a>                        text(<span class="string">"."</span>),
-<a href=#3378 id=3378 data-nosnippet>3378</a>                    ],
-<a href=#3379 id=3379 data-nosnippet>3379</a>                    attributes: Attributes::default(),
-<a href=#3380 id=3380 data-nosnippet>3380</a>                    position: <span class="prelude-val">None</span>,
-<a href=#3381 id=3381 data-nosnippet>3381</a>                    span: <span class="prelude-val">None</span>,
-<a href=#3382 id=3382 data-nosnippet>3382</a>                }],
-<a href=#3383 id=3383 data-nosnippet>3383</a>                ..Default::default()
-<a href=#3384 id=3384 data-nosnippet>3384</a>            }],
-<a href=#3385 id=3385 data-nosnippet>3385</a>        };
-<a href=#3386 id=3386 data-nosnippet>3386</a>        book.assign_node_ids();
-<a href=#3387 id=3387 data-nosnippet>3387</a>        book
-<a href=#3388 id=3388 data-nosnippet>3388</a>    }
-<a href=#3389 id=3389 data-nosnippet>3389</a>
-<a href=#3390 id=3390 data-nosnippet>3390</a>    <span class="doccomment">/// Slope and weight reach the face through the cascade: `em` and
-<a href=#3391 id=3391 data-nosnippet>3391</a>    /// `strong` set properties like any other rule, and `strong`
-<a href=#3392 id=3392 data-nosnippet>3392</a>    /// inside `em` inherits the slope on its way to a bold italic
-<a href=#3393 id=3393 data-nosnippet>3393</a>    /// face.
-<a href=#3394 id=3394 data-nosnippet>3394</a>    </span><span class="attr">#[test]
-<a href=#3395 id=3395 data-nosnippet>3395</a>    </span><span class="kw">fn </span>emphasis_and_strong_resolve_to_their_own_faces() {
-<a href=#3396 id=3396 data-nosnippet>3396</a>        <span class="kw">let </span>book = nested();
-<a href=#3397 id=3397 data-nosnippet>3397</a>        <span class="kw">let </span>tree = defaults(<span class="kw-2">&amp;</span>book, registry());
-<a href=#3398 id=3398 data-nosnippet>3398</a>        <span class="kw">let </span>face = |italic, weight| {
-<a href=#3399 id=3399 data-nosnippet>3399</a>            registry()
-<a href=#3400 id=3400 data-nosnippet>3400</a>                .select(<span class="string">"eb garamond"</span>, FaceAttributes { italic, weight })
-<a href=#3401 id=3401 data-nosnippet>3401</a>                .unwrap()
-<a href=#3402 id=3402 data-nosnippet>3402</a>                .id
-<a href=#3403 id=3403 data-nosnippet>3403</a>        };
-<a href=#3404 id=3404 data-nosnippet>3404</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id, face(<span class="bool-val">false</span>, <span class="number">400</span>));
-<a href=#3405 id=3405 data-nosnippet>3405</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_id, face(<span class="bool-val">true</span>, <span class="number">400</span>));
-<a href=#3406 id=3406 data-nosnippet>3406</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"strong"</span>).font_id, face(<span class="bool-val">true</span>, <span class="number">700</span>));
-<a href=#3407 id=3407 data-nosnippet>3407</a>        <span class="comment">// The cascade, not the element name: an author who unsets
-<a href=#3408 id=3408 data-nosnippet>3408</a>        // the slope gets the upright bold cut under the same markup.
-<a href=#3409 id=3409 data-nosnippet>3409</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"em { font-style: normal }"</span>);
-<a href=#3410 id=3410 data-nosnippet>3410</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"strong"</span>).font_id, face(<span class="bool-val">false</span>, <span class="number">700</span>));
-<a href=#3411 id=3411 data-nosnippet>3411</a>    }
-<a href=#3412 id=3412 data-nosnippet>3412</a>
-<a href=#3413 id=3413 data-nosnippet>3413</a>    <span class="doccomment">/// A face the registry cannot supply is a diagnostic and the
-<a href=#3414 id=3414 data-nosnippet>3414</a>    /// nearest cut, once, however many nodes asked for it.
-<a href=#3415 id=3415 data-nosnippet>3415</a>    </span><span class="attr">#[test]
-<a href=#3416 id=3416 data-nosnippet>3416</a>    </span><span class="kw">fn </span>a_face_the_registry_lacks_warns_and_lays_out_anyway() {
-<a href=#3417 id=3417 data-nosnippet>3417</a>        <span class="kw">let </span><span class="kw-2">mut </span>upright = FontRegistry::new();
-<a href=#3418 id=3418 data-nosnippet>3418</a>        upright
-<a href=#3419 id=3419 data-nosnippet>3419</a>            .add(<span class="kw">crate</span>::fonts::FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
-<a href=#3420 id=3420 data-nosnippet>3420</a>            .unwrap();
-<a href=#3421 id=3421 data-nosnippet>3421</a>        upright
-<a href=#3422 id=3422 data-nosnippet>3422</a>            .map_generic(GenericFamily::Serif, <span class="string">"eb garamond"</span>)
-<a href=#3423 id=3423 data-nosnippet>3423</a>            .unwrap();
-<a href=#3424 id=3424 data-nosnippet>3424</a>        <span class="kw">let </span>book = nested();
-<a href=#3425 id=3425 data-nosnippet>3425</a>        <span class="kw">let </span>tree = Stylesheets::parse(<span class="kw-2">&amp;</span>[]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>upright);
-<a href=#3426 id=3426 data-nosnippet>3426</a>        <span class="macro">assert_eq!</span>(
-<a href=#3427 id=3427 data-nosnippet>3427</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_id,
-<a href=#3428 id=3428 data-nosnippet>3428</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id,
-<a href=#3429 id=3429 data-nosnippet>3429</a>            <span class="string">"there is no italic cut, so emphasis takes the upright one"</span>,
-<a href=#3430 id=3430 data-nosnippet>3430</a>        );
-<a href=#3431 id=3431 data-nosnippet>3431</a>        <span class="kw">let </span>complaints: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
-<a href=#3432 id=3432 data-nosnippet>3432</a>            .warnings()
-<a href=#3433 id=3433 data-nosnippet>3433</a>            .iter()
-<a href=#3434 id=3434 data-nosnippet>3434</a>            .map(|warning| warning.message.as_str())
-<a href=#3435 id=3435 data-nosnippet>3435</a>            .filter(|message| message.contains(<span class="string">"italic"</span>))
-<a href=#3436 id=3436 data-nosnippet>3436</a>            .collect();
-<a href=#3437 id=3437 data-nosnippet>3437</a>        <span class="macro">assert_eq!</span>(
-<a href=#3438 id=3438 data-nosnippet>3438</a>            complaints,
-<a href=#3439 id=3439 data-nosnippet>3439</a>            <span class="macro">vec!</span>[<span class="string">"eb garamond has no italic face. Italic text falls back to upright."</span>],
-<a href=#3440 id=3440 data-nosnippet>3440</a>        );
-<a href=#3441 id=3441 data-nosnippet>3441</a>
-<a href=#3442 id=3442 data-nosnippet>3442</a>        <span class="comment">// A stack that resolves nothing at all says so, and the book
-<a href=#3443 id=3443 data-nosnippet>3443</a>        // still lays out on the first registered face.
-<a href=#3444 id=3444 data-nosnippet>3444</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-family: \"Nowhere\", \"Nor here\" }"</span>);
-<a href=#3445 id=3445 data-nosnippet>3445</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id, <span class="number">0</span>);
-<a href=#3446 id=3446 data-nosnippet>3446</a>        <span class="macro">assert!</span>(
-<a href=#3447 id=3447 data-nosnippet>3447</a>            tree.warnings().iter().any(|warning| {
-<a href=#3448 id=3448 data-nosnippet>3448</a>                warning.message
-<a href=#3449 id=3449 data-nosnippet>3449</a>                    == <span class="string">"No registered font matches Nowhere, Nor here. \
-<a href=#3450 id=3450 data-nosnippet>3450</a>                        The first registered font is used instead."
-<a href=#3451 id=3451 data-nosnippet>3451</a>            </span>}),
-<a href=#3452 id=3452 data-nosnippet>3452</a>            <span class="string">"{:?}"</span>,
-<a href=#3453 id=3453 data-nosnippet>3453</a>            tree.warnings(),
-<a href=#3454 id=3454 data-nosnippet>3454</a>        );
-<a href=#3455 id=3455 data-nosnippet>3455</a>    }
-<a href=#3456 id=3456 data-nosnippet>3456</a>
-<a href=#3457 id=3457 data-nosnippet>3457</a>    <span class="doccomment">/// The display-typography properties parse, cascade and inherit:
-<a href=#3458 id=3458 data-nosnippet>3458</a>    /// a rule on the book reaches the paragraph inside it, a rule on
-<a href=#3459 id=3459 data-nosnippet>3459</a>    /// the paragraph overrides it, and `em` inside picks up what the
-<a href=#3460 id=3460 data-nosnippet>3460</a>    /// paragraph set without being named.
-<a href=#3461 id=3461 data-nosnippet>3461</a>    </span><span class="attr">#[test]
-<a href=#3462 id=3462 data-nosnippet>3462</a>    </span><span class="kw">fn </span>display_typography_parses_cascades_and_inherits() {
-<a href=#3463 id=3463 data-nosnippet>3463</a>        <span class="kw">let </span>book = nested();
-<a href=#3464 id=3464 data-nosnippet>3464</a>        <span class="kw">let </span>tree = compile(
-<a href=#3465 id=3465 data-nosnippet>3465</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3466 id=3466 data-nosnippet>3466</a>            <span class="string">"book { letter-spacing: 0.1em; font-variant-caps: small-caps;
-<a href=#3467 id=3467 data-nosnippet>3467</a>                    text-transform: uppercase }
-<a href=#3468 id=3468 data-nosnippet>3468</a>             p { letter-spacing: 2pt }"</span>,
-<a href=#3469 id=3469 data-nosnippet>3469</a>        );
-<a href=#3470 id=3470 data-nosnippet>3470</a>        <span class="kw">let </span>paragraph = first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>);
-<a href=#3471 id=3471 data-nosnippet>3471</a>        <span class="macro">assert_eq!</span>(paragraph.letter_spacing, <span class="number">2.0</span>, <span class="string">"the closer rule lost"</span>);
-<a href=#3472 id=3472 data-nosnippet>3472</a>        <span class="macro">assert_eq!</span>(paragraph.font_variant_caps, FontVariantCaps::SmallCaps);
-<a href=#3473 id=3473 data-nosnippet>3473</a>        <span class="macro">assert_eq!</span>(paragraph.text_transform, TextTransform::Uppercase);
-<a href=#3474 id=3474 data-nosnippet>3474</a>        <span class="kw">let </span>emphasis = first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>);
-<a href=#3475 id=3475 data-nosnippet>3475</a>        <span class="macro">assert_eq!</span>(
-<a href=#3476 id=3476 data-nosnippet>3476</a>            (
-<a href=#3477 id=3477 data-nosnippet>3477</a>                emphasis.letter_spacing,
-<a href=#3478 id=3478 data-nosnippet>3478</a>                emphasis.font_variant_caps,
-<a href=#3479 id=3479 data-nosnippet>3479</a>                emphasis.text_transform,
-<a href=#3480 id=3480 data-nosnippet>3480</a>            ),
-<a href=#3481 id=3481 data-nosnippet>3481</a>            (<span class="number">2.0</span>, FontVariantCaps::SmallCaps, TextTransform::Uppercase,),
-<a href=#3482 id=3482 data-nosnippet>3482</a>            <span class="string">"emphasis did not inherit what the paragraph set"</span>,
-<a href=#3483 id=3483 data-nosnippet>3483</a>        );
-<a href=#3484 id=3484 data-nosnippet>3484</a>
-<a href=#3485 id=3485 data-nosnippet>3485</a>        <span class="comment">// `em` is a multiple of the element's own size, `normal` and
-<a href=#3486 id=3486 data-nosnippet>3486</a>        // `none` are the initial values written out, and the defaults
-<a href=#3487 id=3487 data-nosnippet>3487</a>        // are what a book gets when nothing says otherwise.
-<a href=#3488 id=3488 data-nosnippet>3488</a>        </span><span class="kw">let </span>tree = compile(
-<a href=#3489 id=3489 data-nosnippet>3489</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3490 id=3490 data-nosnippet>3490</a>            <span class="string">"book { letter-spacing: 0.1em; text-transform: uppercase }
-<a href=#3491 id=3491 data-nosnippet>3491</a>             p { font-size: 20pt; letter-spacing: 0.1em }
-<a href=#3492 id=3492 data-nosnippet>3492</a>             em { letter-spacing: normal; text-transform: none;
-<a href=#3493 id=3493 data-nosnippet>3493</a>                  font-variant-caps: normal }"</span>,
-<a href=#3494 id=3494 data-nosnippet>3494</a>        );
-<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).letter_spacing, <span class="number">2.0</span>);
-<a href=#3496 id=3496 data-nosnippet>3496</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).letter_spacing, <span class="number">0.0</span>);
-<a href=#3497 id=3497 data-nosnippet>3497</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).text_transform, TextTransform::None);
-<a href=#3498 id=3498 data-nosnippet>3498</a>        <span class="kw">let </span>plain = first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>);
-<a href=#3499 id=3499 data-nosnippet>3499</a>        <span class="macro">assert_eq!</span>(plain.letter_spacing, <span class="number">0.0</span>);
-<a href=#3500 id=3500 data-nosnippet>3500</a>        <span class="macro">assert_eq!</span>(plain.font_variant_caps, FontVariantCaps::Normal);
-<a href=#3501 id=3501 data-nosnippet>3501</a>        <span class="macro">assert_eq!</span>(plain.text_transform, TextTransform::None);
-<a href=#3502 id=3502 data-nosnippet>3502</a>
-<a href=#3503 id=3503 data-nosnippet>3503</a>        <span class="comment">// A value none of the three has is a diagnostic, not a rule.
-<a href=#3504 id=3504 data-nosnippet>3504</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { text-transform: full-width }"</span>);
-<a href=#3505 id=3505 data-nosnippet>3505</a>        <span class="macro">assert!</span>(
-<a href=#3506 id=3506 data-nosnippet>3506</a>            tree.warnings().iter().any(|warning| {
-<a href=#3507 id=3507 data-nosnippet>3507</a>                warning.message
-<a href=#3508 id=3508 data-nosnippet>3508</a>                    == <span class="string">"Unsupported value for `text-transform`. The declaration is ignored."
-<a href=#3509 id=3509 data-nosnippet>3509</a>            </span>}),
-<a href=#3510 id=3510 data-nosnippet>3510</a>            <span class="string">"{:?}"</span>,
-<a href=#3511 id=3511 data-nosnippet>3511</a>            tree.warnings(),
-<a href=#3512 id=3512 data-nosnippet>3512</a>        );
-<a href=#3513 id=3513 data-nosnippet>3513</a>    }
-<a href=#3514 id=3514 data-nosnippet>3514</a>
-<a href=#3515 id=3515 data-nosnippet>3515</a>    <span class="doccomment">/// Part: `font-feature-settings` reads a tag and a value, in
-<a href=#3516 id=3516 data-nosnippet>3516</a>    /// each of the three ways a value is written, and it inherits.
+<a href=#3277 id=3277 data-nosnippet>3277</a>    <span class="doccomment">/// `::first-line` takes the properties that change a run's width,
+<a href=#3278 id=3278 data-nosnippet>3278</a>    /// its colour and the height of its line. Anything else warns
+<a href=#3279 id=3279 data-nosnippet>3279</a>    /// naming the property, is dropped, and leaves the rest of the
+<a href=#3280 id=3280 data-nosnippet>3280</a>    /// rule standing.
+<a href=#3281 id=3281 data-nosnippet>3281</a>    </span><span class="attr">#[test]
+<a href=#3282 id=3282 data-nosnippet>3282</a>    </span><span class="kw">fn </span>a_property_outside_the_first_line_set_warns_and_is_dropped() {
+<a href=#3283 id=3283 data-nosnippet>3283</a>        <span class="kw">let </span>book = sample();
+<a href=#3284 id=3284 data-nosnippet>3284</a>        <span class="kw">let </span>tree = compile(
+<a href=#3285 id=3285 data-nosnippet>3285</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3286 id=3286 data-nosnippet>3286</a>            <span class="string">"p::first-line { margin-top: 2em; text-transform: uppercase }"</span>,
+<a href=#3287 id=3287 data-nosnippet>3287</a>        );
+<a href=#3288 id=3288 data-nosnippet>3288</a>        <span class="macro">assert!</span>(
+<a href=#3289 id=3289 data-nosnippet>3289</a>            tree.warnings().iter().any(|warning| {
+<a href=#3290 id=3290 data-nosnippet>3290</a>                warning.message
+<a href=#3291 id=3291 data-nosnippet>3291</a>                    == <span class="string">"Unsupported property `margin-top` on `::first-line`. \
+<a href=#3292 id=3292 data-nosnippet>3292</a>                        The declaration is ignored."
+<a href=#3293 id=3293 data-nosnippet>3293</a>            </span>}),
+<a href=#3294 id=3294 data-nosnippet>3294</a>            <span class="string">"{:?}"</span>,
+<a href=#3295 id=3295 data-nosnippet>3295</a>            tree.warnings(),
+<a href=#3296 id=3296 data-nosnippet>3296</a>        );
+<a href=#3297 id=3297 data-nosnippet>3297</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
+<a href=#3298 id=3298 data-nosnippet>3298</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
+<a href=#3299 id=3299 data-nosnippet>3299</a>        };
+<a href=#3300 id=3300 data-nosnippet>3300</a>        <span class="kw">let </span>opening = tree.opening_line(<span class="kw-2">*</span>id).expect(<span class="string">"the opening line's overlay"</span>);
+<a href=#3301 id=3301 data-nosnippet>3301</a>        <span class="macro">assert_eq!</span>(opening.transform, <span class="prelude-val">Some</span>(TextTransform::Uppercase));
+<a href=#3302 id=3302 data-nosnippet>3302</a>        <span class="macro">assert_eq!</span>(
+<a href=#3303 id=3303 data-nosnippet>3303</a>            tree.first_line(<span class="kw-2">*</span>id).unwrap().margin.top,
+<a href=#3304 id=3304 data-nosnippet>3304</a>            <span class="number">0.0</span>,
+<a href=#3305 id=3305 data-nosnippet>3305</a>            <span class="string">"the margin the rule asked for was dropped"</span>,
+<a href=#3306 id=3306 data-nosnippet>3306</a>        );
+<a href=#3307 id=3307 data-nosnippet>3307</a>    }
+<a href=#3308 id=3308 data-nosnippet>3308</a>
+<a href=#3309 id=3309 data-nosnippet>3309</a>    <span class="doccomment">/// Acceptance: `line-height` on `::first-line` does not warn, and
+<a href=#3310 id=3310 data-nosnippet>3310</a>    /// reaches the overlay line layout reads. A rule that leaves it
+<a href=#3311 id=3311 data-nosnippet>3311</a>    /// alone sets nothing.
+<a href=#3312 id=3312 data-nosnippet>3312</a>    </span><span class="attr">#[test]
+<a href=#3313 id=3313 data-nosnippet>3313</a>    </span><span class="kw">fn </span>a_line_height_sets_on_a_first_line() {
+<a href=#3314 id=3314 data-nosnippet>3314</a>        <span class="kw">let </span>book = sample();
+<a href=#3315 id=3315 data-nosnippet>3315</a>        <span class="kw">let </span>tree = compile(
+<a href=#3316 id=3316 data-nosnippet>3316</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3317 id=3317 data-nosnippet>3317</a>            <span class="string">"p { line-height: 1.5 }
+<a href=#3318 id=3318 data-nosnippet>3318</a>             h1 + p::first-line { line-height: 2 }
+<a href=#3319 id=3319 data-nosnippet>3319</a>             p::first-line { color: #112233 }"</span>,
+<a href=#3320 id=3320 data-nosnippet>3320</a>        );
+<a href=#3321 id=3321 data-nosnippet>3321</a>        <span class="macro">assert_eq!</span>(
+<a href=#3322 id=3322 data-nosnippet>3322</a>            tree.warnings()
+<a href=#3323 id=3323 data-nosnippet>3323</a>                .iter()
+<a href=#3324 id=3324 data-nosnippet>3324</a>                .filter(|warning| warning.message.contains(<span class="string">"`::first-line`"</span>))
+<a href=#3325 id=3325 data-nosnippet>3325</a>                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#3326 id=3326 data-nosnippet>3326</a>            Vec::&lt;<span class="kw-2">&amp;</span>Warning&gt;::new(),
+<a href=#3327 id=3327 data-nosnippet>3327</a>        );
+<a href=#3328 id=3328 data-nosnippet>3328</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
+<a href=#3329 id=3329 data-nosnippet>3329</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
+<a href=#3330 id=3330 data-nosnippet>3330</a>        };
+<a href=#3331 id=3331 data-nosnippet>3331</a>        <span class="kw">let </span>opening = tree.opening_line(<span class="kw-2">*</span>id).expect(<span class="string">"the opening line's overlay"</span>);
+<a href=#3332 id=3332 data-nosnippet>3332</a>        <span class="macro">assert_eq!</span>(opening.line_height, <span class="prelude-val">Some</span>(<span class="number">2.0</span>));
+<a href=#3333 id=3333 data-nosnippet>3333</a>        <span class="macro">assert_eq!</span>(
+<a href=#3334 id=3334 data-nosnippet>3334</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).line_height,
+<a href=#3335 id=3335 data-nosnippet>3335</a>            <span class="number">1.5</span>,
+<a href=#3336 id=3336 data-nosnippet>3336</a>            <span class="string">"the element keeps its own"
+<a href=#3337 id=3337 data-nosnippet>3337</a>        </span>);
+<a href=#3338 id=3338 data-nosnippet>3338</a>
+<a href=#3339 id=3339 data-nosnippet>3339</a>        <span class="kw">let </span>Block::Paragraph { id: second, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">2</span>] <span class="kw">else </span>{
+<a href=#3340 id=3340 data-nosnippet>3340</a>            <span class="macro">panic!</span>(<span class="string">"the third block is a paragraph"</span>);
+<a href=#3341 id=3341 data-nosnippet>3341</a>        };
+<a href=#3342 id=3342 data-nosnippet>3342</a>        <span class="kw">let </span>untouched = tree.opening_line(<span class="kw-2">*</span>second).expect(<span class="string">"the colour rule matched"</span>);
+<a href=#3343 id=3343 data-nosnippet>3343</a>        <span class="macro">assert_eq!</span>(untouched.line_height, <span class="prelude-val">None</span>);
+<a href=#3344 id=3344 data-nosnippet>3344</a>    }
+<a href=#3345 id=3345 data-nosnippet>3345</a>
+<a href=#3346 id=3346 data-nosnippet>3346</a>    <span class="doccomment">/// Acceptance: a length on `::first-line` is read against the
+<a href=#3347 id=3347 data-nosnippet>3347</a>    /// first line's own `font-size`, not the paragraph's.
+<a href=#3348 id=3348 data-nosnippet>3348</a>    </span><span class="attr">#[test]
+<a href=#3349 id=3349 data-nosnippet>3349</a>    </span><span class="kw">fn </span>a_first_line_length_is_read_against_its_own_size() {
+<a href=#3350 id=3350 data-nosnippet>3350</a>        <span class="kw">let </span>book = sample();
+<a href=#3351 id=3351 data-nosnippet>3351</a>        <span class="kw">let </span>tree = compile(
+<a href=#3352 id=3352 data-nosnippet>3352</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3353 id=3353 data-nosnippet>3353</a>            <span class="string">"p { font-size: 12pt }
+<a href=#3354 id=3354 data-nosnippet>3354</a>             h1 + p::first-line { font-size: 8pt; line-height: 20pt }"</span>,
+<a href=#3355 id=3355 data-nosnippet>3355</a>        );
+<a href=#3356 id=3356 data-nosnippet>3356</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
+<a href=#3357 id=3357 data-nosnippet>3357</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
+<a href=#3358 id=3358 data-nosnippet>3358</a>        };
+<a href=#3359 id=3359 data-nosnippet>3359</a>        <span class="kw">let </span>opening = tree.opening_line(<span class="kw-2">*</span>id).expect(<span class="string">"the opening line's overlay"</span>);
+<a href=#3360 id=3360 data-nosnippet>3360</a>        <span class="macro">assert_eq!</span>(opening.size, <span class="prelude-val">Some</span>(<span class="number">8.0</span>));
+<a href=#3361 id=3361 data-nosnippet>3361</a>        <span class="macro">assert_eq!</span>(opening.line_height, <span class="prelude-val">Some</span>(<span class="number">2.5</span>));
+<a href=#3362 id=3362 data-nosnippet>3362</a>    }
+<a href=#3363 id=3363 data-nosnippet>3363</a>
+<a href=#3364 id=3364 data-nosnippet>3364</a>    <span class="doccomment">/// Acceptance: `font-family`, `font-style` and `font-weight` on
+<a href=#3365 id=3365 data-nosnippet>3365</a>    /// `::first-line` warn about none of themselves, and each one
+<a href=#3366 id=3366 data-nosnippet>3366</a>    /// reaches the overlay line layout reads.
+<a href=#3367 id=3367 data-nosnippet>3367</a>    </span><span class="attr">#[test]
+<a href=#3368 id=3368 data-nosnippet>3368</a>    </span><span class="kw">fn </span>the_font_properties_set_on_a_first_line() {
+<a href=#3369 id=3369 data-nosnippet>3369</a>        <span class="kw">let </span>book = sample();
+<a href=#3370 id=3370 data-nosnippet>3370</a>        <span class="kw">let </span><span class="kw-2">mut </span>registry = bundled_registry().expect(<span class="string">"bundled font parses"</span>);
+<a href=#3371 id=3371 data-nosnippet>3371</a>        <span class="kw">let </span><span class="kw-2">mut </span>display =
+<a href=#3372 id=3372 data-nosnippet>3372</a>            <span class="kw">crate</span>::fonts::FontSource::from_bytes(<span class="kw">crate</span>::fonts::BUNDLED_ITALIC.to_vec())
+<a href=#3373 id=3373 data-nosnippet>3373</a>                .expect(<span class="string">"the face parses"</span>);
+<a href=#3374 id=3374 data-nosnippet>3374</a>        display.family = <span class="string">"display"</span>.into();
+<a href=#3375 id=3375 data-nosnippet>3375</a>        registry.add(display).expect(<span class="string">"the face registers"</span>);
+<a href=#3376 id=3376 data-nosnippet>3376</a>        <span class="kw">let </span>css = <span class="string">"p { font-family: \"EB Garamond\" }
+<a href=#3377 id=3377 data-nosnippet>3377</a>                   p::first-line { font-family: display; font-style: italic;
+<a href=#3378 id=3378 data-nosnippet>3378</a>                                   font-weight: bold }"</span>;
+<a href=#3379 id=3379 data-nosnippet>3379</a>        <span class="kw">let </span>tree =
+<a href=#3380 id=3380 data-nosnippet>3380</a>            Stylesheets::parse(<span class="kw-2">&amp;</span>[Source::author(<span class="string">"author.css"</span>, css)]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>registry);
+<a href=#3381 id=3381 data-nosnippet>3381</a>        <span class="macro">assert_eq!</span>(
+<a href=#3382 id=3382 data-nosnippet>3382</a>            tree.warnings()
+<a href=#3383 id=3383 data-nosnippet>3383</a>                .iter()
+<a href=#3384 id=3384 data-nosnippet>3384</a>                .filter(|warning| warning.message.contains(<span class="string">"`::first-line`"</span>))
+<a href=#3385 id=3385 data-nosnippet>3385</a>                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#3386 id=3386 data-nosnippet>3386</a>            Vec::&lt;<span class="kw-2">&amp;</span>Warning&gt;::new(),
+<a href=#3387 id=3387 data-nosnippet>3387</a>        );
+<a href=#3388 id=3388 data-nosnippet>3388</a>
+<a href=#3389 id=3389 data-nosnippet>3389</a>        <span class="kw">let </span>Block::Paragraph { id, .. } = <span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>].blocks[<span class="number">1</span>] <span class="kw">else </span>{
+<a href=#3390 id=3390 data-nosnippet>3390</a>            <span class="macro">panic!</span>(<span class="string">"the second block is a paragraph"</span>);
+<a href=#3391 id=3391 data-nosnippet>3391</a>        };
+<a href=#3392 id=3392 data-nosnippet>3392</a>        <span class="kw">let </span>face = tree
+<a href=#3393 id=3393 data-nosnippet>3393</a>            .opening_line(<span class="kw-2">*</span>id)
+<a href=#3394 id=3394 data-nosnippet>3394</a>            .expect(<span class="string">"the opening line's overlay"</span>)
+<a href=#3395 id=3395 data-nosnippet>3395</a>            .face
+<a href=#3396 id=3396 data-nosnippet>3396</a>            .expect(<span class="string">"the rule asked for another face"</span>);
+<a href=#3397 id=3397 data-nosnippet>3397</a>        <span class="macro">assert_eq!</span>(face.italic, <span class="prelude-val">Some</span>(<span class="bool-val">true</span>));
+<a href=#3398 id=3398 data-nosnippet>3398</a>        <span class="macro">assert_eq!</span>(face.weight, <span class="prelude-val">Some</span>(<span class="number">700</span>));
+<a href=#3399 id=3399 data-nosnippet>3399</a>        <span class="macro">assert_eq!</span>(
+<a href=#3400 id=3400 data-nosnippet>3400</a>            registry
+<a href=#3401 id=3401 data-nosnippet>3401</a>                .font_ref(face.family.expect(<span class="string">"the rule named a family"</span>))
+<a href=#3402 id=3402 data-nosnippet>3402</a>                .map(|entry| entry.family.as_str()),
+<a href=#3403 id=3403 data-nosnippet>3403</a>            <span class="prelude-val">Some</span>(<span class="string">"display"</span>),
+<a href=#3404 id=3404 data-nosnippet>3404</a>        );
+<a href=#3405 id=3405 data-nosnippet>3405</a>    }
+<a href=#3406 id=3406 data-nosnippet>3406</a>
+<a href=#3407 id=3407 data-nosnippet>3407</a>    <span class="doccomment">/// A book whose one paragraph nests `strong` inside `em`.
+<a href=#3408 id=3408 data-nosnippet>3408</a>    </span><span class="kw">fn </span>nested() -&gt; Book {
+<a href=#3409 id=3409 data-nosnippet>3409</a>        <span class="kw">let </span><span class="kw-2">mut </span>book = Book {
+<a href=#3410 id=3410 data-nosnippet>3410</a>            metadata: Metadata::default(),
+<a href=#3411 id=3411 data-nosnippet>3411</a>            sections: <span class="macro">vec!</span>[Section {
+<a href=#3412 id=3412 data-nosnippet>3412</a>                attributes: Default::default(),
+<a href=#3413 id=3413 data-nosnippet>3413</a>                blocks: <span class="macro">vec!</span>[Block::Paragraph {
+<a href=#3414 id=3414 data-nosnippet>3414</a>                    id: NodeId::UNASSIGNED,
+<a href=#3415 id=3415 data-nosnippet>3415</a>                    inlines: <span class="macro">vec!</span>[
+<a href=#3416 id=3416 data-nosnippet>3416</a>                        text(<span class="string">"She said "</span>),
+<a href=#3417 id=3417 data-nosnippet>3417</a>                        Inline::Emphasis {
+<a href=#3418 id=3418 data-nosnippet>3418</a>                            id: NodeId::UNASSIGNED,
+<a href=#3419 id=3419 data-nosnippet>3419</a>                            children: <span class="macro">vec!</span>[
+<a href=#3420 id=3420 data-nosnippet>3420</a>                                text(<span class="string">"never "</span>),
+<a href=#3421 id=3421 data-nosnippet>3421</a>                                Inline::Strong {
+<a href=#3422 id=3422 data-nosnippet>3422</a>                                    id: NodeId::UNASSIGNED,
+<a href=#3423 id=3423 data-nosnippet>3423</a>                                    children: <span class="macro">vec!</span>[text(<span class="string">"again"</span>)],
+<a href=#3424 id=3424 data-nosnippet>3424</a>                                    attributes: Attributes::default(),
+<a href=#3425 id=3425 data-nosnippet>3425</a>                                    position: <span class="prelude-val">None</span>,
+<a href=#3426 id=3426 data-nosnippet>3426</a>                                    span: <span class="prelude-val">None</span>,
+<a href=#3427 id=3427 data-nosnippet>3427</a>                                },
+<a href=#3428 id=3428 data-nosnippet>3428</a>                            ],
+<a href=#3429 id=3429 data-nosnippet>3429</a>                            attributes: Attributes::default(),
+<a href=#3430 id=3430 data-nosnippet>3430</a>                            position: <span class="prelude-val">None</span>,
+<a href=#3431 id=3431 data-nosnippet>3431</a>                            span: <span class="prelude-val">None</span>,
+<a href=#3432 id=3432 data-nosnippet>3432</a>                        },
+<a href=#3433 id=3433 data-nosnippet>3433</a>                        text(<span class="string">"."</span>),
+<a href=#3434 id=3434 data-nosnippet>3434</a>                    ],
+<a href=#3435 id=3435 data-nosnippet>3435</a>                    attributes: Attributes::default(),
+<a href=#3436 id=3436 data-nosnippet>3436</a>                    position: <span class="prelude-val">None</span>,
+<a href=#3437 id=3437 data-nosnippet>3437</a>                    span: <span class="prelude-val">None</span>,
+<a href=#3438 id=3438 data-nosnippet>3438</a>                }],
+<a href=#3439 id=3439 data-nosnippet>3439</a>                ..Default::default()
+<a href=#3440 id=3440 data-nosnippet>3440</a>            }],
+<a href=#3441 id=3441 data-nosnippet>3441</a>        };
+<a href=#3442 id=3442 data-nosnippet>3442</a>        book.assign_node_ids();
+<a href=#3443 id=3443 data-nosnippet>3443</a>        book
+<a href=#3444 id=3444 data-nosnippet>3444</a>    }
+<a href=#3445 id=3445 data-nosnippet>3445</a>
+<a href=#3446 id=3446 data-nosnippet>3446</a>    <span class="doccomment">/// Slope and weight reach the face through the cascade: `em` and
+<a href=#3447 id=3447 data-nosnippet>3447</a>    /// `strong` set properties like any other rule, and `strong`
+<a href=#3448 id=3448 data-nosnippet>3448</a>    /// inside `em` inherits the slope on its way to a bold italic
+<a href=#3449 id=3449 data-nosnippet>3449</a>    /// face.
+<a href=#3450 id=3450 data-nosnippet>3450</a>    </span><span class="attr">#[test]
+<a href=#3451 id=3451 data-nosnippet>3451</a>    </span><span class="kw">fn </span>emphasis_and_strong_resolve_to_their_own_faces() {
+<a href=#3452 id=3452 data-nosnippet>3452</a>        <span class="kw">let </span>book = nested();
+<a href=#3453 id=3453 data-nosnippet>3453</a>        <span class="kw">let </span>tree = defaults(<span class="kw-2">&amp;</span>book, registry());
+<a href=#3454 id=3454 data-nosnippet>3454</a>        <span class="kw">let </span>face = |italic, weight| {
+<a href=#3455 id=3455 data-nosnippet>3455</a>            registry()
+<a href=#3456 id=3456 data-nosnippet>3456</a>                .select(<span class="string">"eb garamond"</span>, FaceAttributes { italic, weight })
+<a href=#3457 id=3457 data-nosnippet>3457</a>                .unwrap()
+<a href=#3458 id=3458 data-nosnippet>3458</a>                .id
+<a href=#3459 id=3459 data-nosnippet>3459</a>        };
+<a href=#3460 id=3460 data-nosnippet>3460</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id, face(<span class="bool-val">false</span>, <span class="number">400</span>));
+<a href=#3461 id=3461 data-nosnippet>3461</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_id, face(<span class="bool-val">true</span>, <span class="number">400</span>));
+<a href=#3462 id=3462 data-nosnippet>3462</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"strong"</span>).font_id, face(<span class="bool-val">true</span>, <span class="number">700</span>));
+<a href=#3463 id=3463 data-nosnippet>3463</a>        <span class="comment">// The cascade, not the element name: an author who unsets
+<a href=#3464 id=3464 data-nosnippet>3464</a>        // the slope gets the upright bold cut under the same markup.
+<a href=#3465 id=3465 data-nosnippet>3465</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"em { font-style: normal }"</span>);
+<a href=#3466 id=3466 data-nosnippet>3466</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"strong"</span>).font_id, face(<span class="bool-val">false</span>, <span class="number">700</span>));
+<a href=#3467 id=3467 data-nosnippet>3467</a>    }
+<a href=#3468 id=3468 data-nosnippet>3468</a>
+<a href=#3469 id=3469 data-nosnippet>3469</a>    <span class="doccomment">/// A face the registry cannot supply is a diagnostic and the
+<a href=#3470 id=3470 data-nosnippet>3470</a>    /// nearest cut, once, however many nodes asked for it.
+<a href=#3471 id=3471 data-nosnippet>3471</a>    </span><span class="attr">#[test]
+<a href=#3472 id=3472 data-nosnippet>3472</a>    </span><span class="kw">fn </span>a_face_the_registry_lacks_warns_and_lays_out_anyway() {
+<a href=#3473 id=3473 data-nosnippet>3473</a>        <span class="kw">let </span><span class="kw-2">mut </span>upright = FontRegistry::new();
+<a href=#3474 id=3474 data-nosnippet>3474</a>        upright
+<a href=#3475 id=3475 data-nosnippet>3475</a>            .add(<span class="kw">crate</span>::fonts::FontSource::from_bytes(BUNDLED_FONT.to_vec()).unwrap())
+<a href=#3476 id=3476 data-nosnippet>3476</a>            .unwrap();
+<a href=#3477 id=3477 data-nosnippet>3477</a>        upright
+<a href=#3478 id=3478 data-nosnippet>3478</a>            .map_generic(GenericFamily::Serif, <span class="string">"eb garamond"</span>)
+<a href=#3479 id=3479 data-nosnippet>3479</a>            .unwrap();
+<a href=#3480 id=3480 data-nosnippet>3480</a>        <span class="kw">let </span>book = nested();
+<a href=#3481 id=3481 data-nosnippet>3481</a>        <span class="kw">let </span>tree = Stylesheets::parse(<span class="kw-2">&amp;</span>[]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>upright);
+<a href=#3482 id=3482 data-nosnippet>3482</a>        <span class="macro">assert_eq!</span>(
+<a href=#3483 id=3483 data-nosnippet>3483</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_id,
+<a href=#3484 id=3484 data-nosnippet>3484</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id,
+<a href=#3485 id=3485 data-nosnippet>3485</a>            <span class="string">"there is no italic cut, so emphasis takes the upright one"</span>,
+<a href=#3486 id=3486 data-nosnippet>3486</a>        );
+<a href=#3487 id=3487 data-nosnippet>3487</a>        <span class="kw">let </span>complaints: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
+<a href=#3488 id=3488 data-nosnippet>3488</a>            .warnings()
+<a href=#3489 id=3489 data-nosnippet>3489</a>            .iter()
+<a href=#3490 id=3490 data-nosnippet>3490</a>            .map(|warning| warning.message.as_str())
+<a href=#3491 id=3491 data-nosnippet>3491</a>            .filter(|message| message.contains(<span class="string">"italic"</span>))
+<a href=#3492 id=3492 data-nosnippet>3492</a>            .collect();
+<a href=#3493 id=3493 data-nosnippet>3493</a>        <span class="macro">assert_eq!</span>(
+<a href=#3494 id=3494 data-nosnippet>3494</a>            complaints,
+<a href=#3495 id=3495 data-nosnippet>3495</a>            <span class="macro">vec!</span>[<span class="string">"eb garamond has no italic face. Italic text falls back to upright."</span>],
+<a href=#3496 id=3496 data-nosnippet>3496</a>        );
+<a href=#3497 id=3497 data-nosnippet>3497</a>
+<a href=#3498 id=3498 data-nosnippet>3498</a>        <span class="comment">// A stack that resolves nothing at all says so, and the book
+<a href=#3499 id=3499 data-nosnippet>3499</a>        // still lays out on the first registered face.
+<a href=#3500 id=3500 data-nosnippet>3500</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-family: \"Nowhere\", \"Nor here\" }"</span>);
+<a href=#3501 id=3501 data-nosnippet>3501</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_id, <span class="number">0</span>);
+<a href=#3502 id=3502 data-nosnippet>3502</a>        <span class="macro">assert!</span>(
+<a href=#3503 id=3503 data-nosnippet>3503</a>            tree.warnings().iter().any(|warning| {
+<a href=#3504 id=3504 data-nosnippet>3504</a>                warning.message
+<a href=#3505 id=3505 data-nosnippet>3505</a>                    == <span class="string">"No registered font matches Nowhere, Nor here. \
+<a href=#3506 id=3506 data-nosnippet>3506</a>                        The first registered font is used instead."
+<a href=#3507 id=3507 data-nosnippet>3507</a>            </span>}),
+<a href=#3508 id=3508 data-nosnippet>3508</a>            <span class="string">"{:?}"</span>,
+<a href=#3509 id=3509 data-nosnippet>3509</a>            tree.warnings(),
+<a href=#3510 id=3510 data-nosnippet>3510</a>        );
+<a href=#3511 id=3511 data-nosnippet>3511</a>    }
+<a href=#3512 id=3512 data-nosnippet>3512</a>
+<a href=#3513 id=3513 data-nosnippet>3513</a>    <span class="doccomment">/// The display-typography properties parse, cascade and inherit:
+<a href=#3514 id=3514 data-nosnippet>3514</a>    /// a rule on the book reaches the paragraph inside it, a rule on
+<a href=#3515 id=3515 data-nosnippet>3515</a>    /// the paragraph overrides it, and `em` inside picks up what the
+<a href=#3516 id=3516 data-nosnippet>3516</a>    /// paragraph set without being named.
 <a href=#3517 id=3517 data-nosnippet>3517</a>    </span><span class="attr">#[test]
-<a href=#3518 id=3518 data-nosnippet>3518</a>    </span><span class="kw">fn </span>font_feature_settings_read_a_tag_and_a_value_and_inherit() {
+<a href=#3518 id=3518 data-nosnippet>3518</a>    </span><span class="kw">fn </span>display_typography_parses_cascades_and_inherits() {
 <a href=#3519 id=3519 data-nosnippet>3519</a>        <span class="kw">let </span>book = nested();
 <a href=#3520 id=3520 data-nosnippet>3520</a>        <span class="kw">let </span>tree = compile(
 <a href=#3521 id=3521 data-nosnippet>3521</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3522 id=3522 data-nosnippet>3522</a>            <span class="string">"book { font-feature-settings: \"ss01\" 1, \"liga\" off, \"onum\" }"</span>,
-<a href=#3523 id=3523 data-nosnippet>3523</a>        );
-<a href=#3524 id=3524 data-nosnippet>3524</a>        <span class="kw">let </span>asked = [
-<a href=#3525 id=3525 data-nosnippet>3525</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"ss01"</span>, <span class="number">1</span>),
-<a href=#3526 id=3526 data-nosnippet>3526</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"liga"</span>, <span class="number">0</span>),
-<a href=#3527 id=3527 data-nosnippet>3527</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">1</span>),
-<a href=#3528 id=3528 data-nosnippet>3528</a>        ];
-<a href=#3529 id=3529 data-nosnippet>3529</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_feature_settings, asked);
-<a href=#3530 id=3530 data-nosnippet>3530</a>        <span class="macro">assert_eq!</span>(
-<a href=#3531 id=3531 data-nosnippet>3531</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_feature_settings,
-<a href=#3532 id=3532 data-nosnippet>3532</a>            asked,
-<a href=#3533 id=3533 data-nosnippet>3533</a>            <span class="string">"emphasis did not inherit what the book asked for"</span>,
-<a href=#3534 id=3534 data-nosnippet>3534</a>        );
-<a href=#3535 id=3535 data-nosnippet>3535</a>        <span class="macro">assert!</span>(
-<a href=#3536 id=3536 data-nosnippet>3536</a>            first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>)
-<a href=#3537 id=3537 data-nosnippet>3537</a>                .font_feature_settings
-<a href=#3538 id=3538 data-nosnippet>3538</a>                .is_empty(),
-<a href=#3539 id=3539 data-nosnippet>3539</a>            <span class="string">"a book that asks for nothing asks for nothing"</span>,
-<a href=#3540 id=3540 data-nosnippet>3540</a>        );
-<a href=#3541 id=3541 data-nosnippet>3541</a>
-<a href=#3542 id=3542 data-nosnippet>3542</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: normal }"</span>);
-<a href=#3543 id=3543 data-nosnippet>3543</a>        <span class="macro">assert!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_feature_settings.is_empty());
-<a href=#3544 id=3544 data-nosnippet>3544</a>
-<a href=#3545 id=3545 data-nosnippet>3545</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: ss01 }"</span>);
-<a href=#3546 id=3546 data-nosnippet>3546</a>        <span class="macro">assert!</span>(
-<a href=#3547 id=3547 data-nosnippet>3547</a>            tree.warnings().iter().any(|warning| warning.message
-<a href=#3548 id=3548 data-nosnippet>3548</a>                == <span class="string">"Unsupported value for `font-feature-settings`. The declaration is ignored."</span>),
-<a href=#3549 id=3549 data-nosnippet>3549</a>            <span class="string">"{:?}"</span>,
-<a href=#3550 id=3550 data-nosnippet>3550</a>            tree.warnings(),
-<a href=#3551 id=3551 data-nosnippet>3551</a>        );
-<a href=#3552 id=3552 data-nosnippet>3552</a>    }
-<a href=#3553 id=3553 data-nosnippet>3553</a>
-<a href=#3554 id=3554 data-nosnippet>3554</a>    <span class="doccomment">/// Part: the `font-variant` longhands name a feature without
-<a href=#3555 id=3555 data-nosnippet>3555</a>    /// spelling its tag, and the computed list merges over what the
-<a href=#3556 id=3556 data-nosnippet>3556</a>    /// engine asks for, `font-feature-settings` last.
-<a href=#3557 id=3557 data-nosnippet>3557</a>    </span><span class="attr">#[test]
-<a href=#3558 id=3558 data-nosnippet>3558</a>    </span><span class="kw">fn </span>the_font_variant_longhands_name_the_features_they_stand_for() {
-<a href=#3559 id=3559 data-nosnippet>3559</a>        <span class="kw">let </span>book = nested();
-<a href=#3560 id=3560 data-nosnippet>3560</a>        <span class="kw">let </span>tree = compile(
-<a href=#3561 id=3561 data-nosnippet>3561</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3562 id=3562 data-nosnippet>3562</a>            <span class="string">"p { font-variant-numeric: oldstyle-nums tabular-nums;
-<a href=#3563 id=3563 data-nosnippet>3563</a>                 font-variant-ligatures: no-common-ligatures discretionary-ligatures;
-<a href=#3564 id=3564 data-nosnippet>3564</a>                 font-variant-alternates: historical-forms;
-<a href=#3565 id=3565 data-nosnippet>3565</a>                 font-feature-settings: \"onum\" 0, \"ss01\" 1 }"</span>,
-<a href=#3566 id=3566 data-nosnippet>3566</a>        );
-<a href=#3567 id=3567 data-nosnippet>3567</a>        <span class="kw">let </span>paragraph = first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>);
-<a href=#3568 id=3568 data-nosnippet>3568</a>        <span class="macro">assert_eq!</span>(
-<a href=#3569 id=3569 data-nosnippet>3569</a>            paragraph.features(),
-<a href=#3570 id=3570 data-nosnippet>3570</a>            [
-<a href=#3571 id=3571 data-nosnippet>3571</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"liga"</span>, <span class="number">0</span>),
-<a href=#3572 id=3572 data-nosnippet>3572</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"clig"</span>, <span class="number">0</span>),
-<a href=#3573 id=3573 data-nosnippet>3573</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"dlig"</span>, <span class="number">1</span>),
-<a href=#3574 id=3574 data-nosnippet>3574</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">1</span>),
-<a href=#3575 id=3575 data-nosnippet>3575</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"tnum"</span>, <span class="number">1</span>),
-<a href=#3576 id=3576 data-nosnippet>3576</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"hist"</span>, <span class="number">1</span>),
-<a href=#3577 id=3577 data-nosnippet>3577</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">0</span>),
-<a href=#3578 id=3578 data-nosnippet>3578</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"ss01"</span>, <span class="number">1</span>),
-<a href=#3579 id=3579 data-nosnippet>3579</a>            ],
-<a href=#3580 id=3580 data-nosnippet>3580</a>            <span class="string">"the sheet's own settings are read after the named forms"</span>,
-<a href=#3581 id=3581 data-nosnippet>3581</a>        );
-<a href=#3582 id=3582 data-nosnippet>3582</a>
-<a href=#3583 id=3583 data-nosnippet>3583</a>        <span class="kw">let </span>plain = first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>);
-<a href=#3584 id=3584 data-nosnippet>3584</a>        <span class="macro">assert!</span>(plain.features().is_empty());
-<a href=#3585 id=3585 data-nosnippet>3585</a>    }
-<a href=#3586 id=3586 data-nosnippet>3586</a>
-<a href=#3587 id=3587 data-nosnippet>3587</a>    <span class="doccomment">/// Part: a face that carries none of a feature the sheet asked
-<a href=#3588 id=3588 data-nosnippet>3588</a>    /// for is named once, and a feature turned off is not.
-<a href=#3589 id=3589 data-nosnippet>3589</a>    </span><span class="attr">#[test]
-<a href=#3590 id=3590 data-nosnippet>3590</a>    </span><span class="kw">fn </span>a_face_without_a_requested_feature_is_named() {
-<a href=#3591 id=3591 data-nosnippet>3591</a>        <span class="kw">let </span>book = nested();
-<a href=#3592 id=3592 data-nosnippet>3592</a>        <span class="kw">let </span>tree = compile(
-<a href=#3593 id=3593 data-nosnippet>3593</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3594 id=3594 data-nosnippet>3594</a>            <span class="string">"book { font-feature-settings: \"zero\" 1 }
-<a href=#3595 id=3595 data-nosnippet>3595</a>             p { font-feature-settings: \"zero\" 1, \"ss01\" 1 }"</span>,
+<a href=#3522 id=3522 data-nosnippet>3522</a>            <span class="string">"book { letter-spacing: 0.1em; font-variant-caps: small-caps;
+<a href=#3523 id=3523 data-nosnippet>3523</a>                    text-transform: uppercase }
+<a href=#3524 id=3524 data-nosnippet>3524</a>             p { letter-spacing: 2pt }"</span>,
+<a href=#3525 id=3525 data-nosnippet>3525</a>        );
+<a href=#3526 id=3526 data-nosnippet>3526</a>        <span class="kw">let </span>paragraph = first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>);
+<a href=#3527 id=3527 data-nosnippet>3527</a>        <span class="macro">assert_eq!</span>(paragraph.letter_spacing, <span class="number">2.0</span>, <span class="string">"the closer rule lost"</span>);
+<a href=#3528 id=3528 data-nosnippet>3528</a>        <span class="macro">assert_eq!</span>(paragraph.font_variant_caps, FontVariantCaps::SmallCaps);
+<a href=#3529 id=3529 data-nosnippet>3529</a>        <span class="macro">assert_eq!</span>(paragraph.text_transform, TextTransform::Uppercase);
+<a href=#3530 id=3530 data-nosnippet>3530</a>        <span class="kw">let </span>emphasis = first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>);
+<a href=#3531 id=3531 data-nosnippet>3531</a>        <span class="macro">assert_eq!</span>(
+<a href=#3532 id=3532 data-nosnippet>3532</a>            (
+<a href=#3533 id=3533 data-nosnippet>3533</a>                emphasis.letter_spacing,
+<a href=#3534 id=3534 data-nosnippet>3534</a>                emphasis.font_variant_caps,
+<a href=#3535 id=3535 data-nosnippet>3535</a>                emphasis.text_transform,
+<a href=#3536 id=3536 data-nosnippet>3536</a>            ),
+<a href=#3537 id=3537 data-nosnippet>3537</a>            (<span class="number">2.0</span>, FontVariantCaps::SmallCaps, TextTransform::Uppercase,),
+<a href=#3538 id=3538 data-nosnippet>3538</a>            <span class="string">"emphasis did not inherit what the paragraph set"</span>,
+<a href=#3539 id=3539 data-nosnippet>3539</a>        );
+<a href=#3540 id=3540 data-nosnippet>3540</a>
+<a href=#3541 id=3541 data-nosnippet>3541</a>        <span class="comment">// `em` is a multiple of the element's own size, `normal` and
+<a href=#3542 id=3542 data-nosnippet>3542</a>        // `none` are the initial values written out, and the defaults
+<a href=#3543 id=3543 data-nosnippet>3543</a>        // are what a book gets when nothing says otherwise.
+<a href=#3544 id=3544 data-nosnippet>3544</a>        </span><span class="kw">let </span>tree = compile(
+<a href=#3545 id=3545 data-nosnippet>3545</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3546 id=3546 data-nosnippet>3546</a>            <span class="string">"book { letter-spacing: 0.1em; text-transform: uppercase }
+<a href=#3547 id=3547 data-nosnippet>3547</a>             p { font-size: 20pt; letter-spacing: 0.1em }
+<a href=#3548 id=3548 data-nosnippet>3548</a>             em { letter-spacing: normal; text-transform: none;
+<a href=#3549 id=3549 data-nosnippet>3549</a>                  font-variant-caps: normal }"</span>,
+<a href=#3550 id=3550 data-nosnippet>3550</a>        );
+<a href=#3551 id=3551 data-nosnippet>3551</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).letter_spacing, <span class="number">2.0</span>);
+<a href=#3552 id=3552 data-nosnippet>3552</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).letter_spacing, <span class="number">0.0</span>);
+<a href=#3553 id=3553 data-nosnippet>3553</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).text_transform, TextTransform::None);
+<a href=#3554 id=3554 data-nosnippet>3554</a>        <span class="kw">let </span>plain = first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>);
+<a href=#3555 id=3555 data-nosnippet>3555</a>        <span class="macro">assert_eq!</span>(plain.letter_spacing, <span class="number">0.0</span>);
+<a href=#3556 id=3556 data-nosnippet>3556</a>        <span class="macro">assert_eq!</span>(plain.font_variant_caps, FontVariantCaps::Normal);
+<a href=#3557 id=3557 data-nosnippet>3557</a>        <span class="macro">assert_eq!</span>(plain.text_transform, TextTransform::None);
+<a href=#3558 id=3558 data-nosnippet>3558</a>
+<a href=#3559 id=3559 data-nosnippet>3559</a>        <span class="comment">// A value none of the three has is a diagnostic, not a rule.
+<a href=#3560 id=3560 data-nosnippet>3560</a>        </span><span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { text-transform: full-width }"</span>);
+<a href=#3561 id=3561 data-nosnippet>3561</a>        <span class="macro">assert!</span>(
+<a href=#3562 id=3562 data-nosnippet>3562</a>            tree.warnings().iter().any(|warning| {
+<a href=#3563 id=3563 data-nosnippet>3563</a>                warning.message
+<a href=#3564 id=3564 data-nosnippet>3564</a>                    == <span class="string">"Unsupported value for `text-transform`. The declaration is ignored."
+<a href=#3565 id=3565 data-nosnippet>3565</a>            </span>}),
+<a href=#3566 id=3566 data-nosnippet>3566</a>            <span class="string">"{:?}"</span>,
+<a href=#3567 id=3567 data-nosnippet>3567</a>            tree.warnings(),
+<a href=#3568 id=3568 data-nosnippet>3568</a>        );
+<a href=#3569 id=3569 data-nosnippet>3569</a>    }
+<a href=#3570 id=3570 data-nosnippet>3570</a>
+<a href=#3571 id=3571 data-nosnippet>3571</a>    <span class="doccomment">/// Part: `font-feature-settings` reads a tag and a value, in
+<a href=#3572 id=3572 data-nosnippet>3572</a>    /// each of the three ways a value is written, and it inherits.
+<a href=#3573 id=3573 data-nosnippet>3573</a>    </span><span class="attr">#[test]
+<a href=#3574 id=3574 data-nosnippet>3574</a>    </span><span class="kw">fn </span>font_feature_settings_read_a_tag_and_a_value_and_inherit() {
+<a href=#3575 id=3575 data-nosnippet>3575</a>        <span class="kw">let </span>book = nested();
+<a href=#3576 id=3576 data-nosnippet>3576</a>        <span class="kw">let </span>tree = compile(
+<a href=#3577 id=3577 data-nosnippet>3577</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3578 id=3578 data-nosnippet>3578</a>            <span class="string">"book { font-feature-settings: \"ss01\" 1, \"liga\" off, \"onum\" }"</span>,
+<a href=#3579 id=3579 data-nosnippet>3579</a>        );
+<a href=#3580 id=3580 data-nosnippet>3580</a>        <span class="kw">let </span>asked = [
+<a href=#3581 id=3581 data-nosnippet>3581</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"ss01"</span>, <span class="number">1</span>),
+<a href=#3582 id=3582 data-nosnippet>3582</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"liga"</span>, <span class="number">0</span>),
+<a href=#3583 id=3583 data-nosnippet>3583</a>            FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">1</span>),
+<a href=#3584 id=3584 data-nosnippet>3584</a>        ];
+<a href=#3585 id=3585 data-nosnippet>3585</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_feature_settings, asked);
+<a href=#3586 id=3586 data-nosnippet>3586</a>        <span class="macro">assert_eq!</span>(
+<a href=#3587 id=3587 data-nosnippet>3587</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).font_feature_settings,
+<a href=#3588 id=3588 data-nosnippet>3588</a>            asked,
+<a href=#3589 id=3589 data-nosnippet>3589</a>            <span class="string">"emphasis did not inherit what the book asked for"</span>,
+<a href=#3590 id=3590 data-nosnippet>3590</a>        );
+<a href=#3591 id=3591 data-nosnippet>3591</a>        <span class="macro">assert!</span>(
+<a href=#3592 id=3592 data-nosnippet>3592</a>            first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>)
+<a href=#3593 id=3593 data-nosnippet>3593</a>                .font_feature_settings
+<a href=#3594 id=3594 data-nosnippet>3594</a>                .is_empty(),
+<a href=#3595 id=3595 data-nosnippet>3595</a>            <span class="string">"a book that asks for nothing asks for nothing"</span>,
 <a href=#3596 id=3596 data-nosnippet>3596</a>        );
-<a href=#3597 id=3597 data-nosnippet>3597</a>        <span class="kw">let </span>named: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
-<a href=#3598 id=3598 data-nosnippet>3598</a>            .warnings()
-<a href=#3599 id=3599 data-nosnippet>3599</a>            .iter()
-<a href=#3600 id=3600 data-nosnippet>3600</a>            .map(|warning| warning.message.as_str())
-<a href=#3601 id=3601 data-nosnippet>3601</a>            .filter(|message| message.contains(<span class="string">"feature"</span>))
-<a href=#3602 id=3602 data-nosnippet>3602</a>            .collect();
-<a href=#3603 id=3603 data-nosnippet>3603</a>        <span class="macro">assert_eq!</span>(
-<a href=#3604 id=3604 data-nosnippet>3604</a>            named,
-<a href=#3605 id=3605 data-nosnippet>3605</a>            [<span class="string">"eb garamond has no `zero` feature. The text is set without it."</span>],
-<a href=#3606 id=3606 data-nosnippet>3606</a>            <span class="string">"{:?}"</span>,
-<a href=#3607 id=3607 data-nosnippet>3607</a>            tree.warnings(),
-<a href=#3608 id=3608 data-nosnippet>3608</a>        );
+<a href=#3597 id=3597 data-nosnippet>3597</a>
+<a href=#3598 id=3598 data-nosnippet>3598</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: normal }"</span>);
+<a href=#3599 id=3599 data-nosnippet>3599</a>        <span class="macro">assert!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).font_feature_settings.is_empty());
+<a href=#3600 id=3600 data-nosnippet>3600</a>
+<a href=#3601 id=3601 data-nosnippet>3601</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: ss01 }"</span>);
+<a href=#3602 id=3602 data-nosnippet>3602</a>        <span class="macro">assert!</span>(
+<a href=#3603 id=3603 data-nosnippet>3603</a>            tree.warnings().iter().any(|warning| warning.message
+<a href=#3604 id=3604 data-nosnippet>3604</a>                == <span class="string">"Unsupported value for `font-feature-settings`. The declaration is ignored."</span>),
+<a href=#3605 id=3605 data-nosnippet>3605</a>            <span class="string">"{:?}"</span>,
+<a href=#3606 id=3606 data-nosnippet>3606</a>            tree.warnings(),
+<a href=#3607 id=3607 data-nosnippet>3607</a>        );
+<a href=#3608 id=3608 data-nosnippet>3608</a>    }
 <a href=#3609 id=3609 data-nosnippet>3609</a>
-<a href=#3610 id=3610 data-nosnippet>3610</a>        <span class="kw">let </span>quiet = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: \"zero\" 0 }"</span>);
-<a href=#3611 id=3611 data-nosnippet>3611</a>        <span class="macro">assert!</span>(
-<a href=#3612 id=3612 data-nosnippet>3612</a>            !quiet
-<a href=#3613 id=3613 data-nosnippet>3613</a>                .warnings()
-<a href=#3614 id=3614 data-nosnippet>3614</a>                .iter()
-<a href=#3615 id=3615 data-nosnippet>3615</a>                .any(|warning| warning.message.contains(<span class="string">"feature"</span>)),
-<a href=#3616 id=3616 data-nosnippet>3616</a>            <span class="string">"a feature asked to stay off is one the face need not carry: {:?}"</span>,
-<a href=#3617 id=3617 data-nosnippet>3617</a>            quiet.warnings(),
-<a href=#3618 id=3618 data-nosnippet>3618</a>        );
-<a href=#3619 id=3619 data-nosnippet>3619</a>    }
-<a href=#3620 id=3620 data-nosnippet>3620</a>
-<a href=#3621 id=3621 data-nosnippet>3621</a>    <span class="doccomment">/// `color` reads in each of the four forms the subset takes, and
-<a href=#3622 id=3622 data-nosnippet>3622</a>    /// a form outside it is a diagnostic rather than a rule.
-<a href=#3623 id=3623 data-nosnippet>3623</a>    </span><span class="attr">#[test]
-<a href=#3624 id=3624 data-nosnippet>3624</a>    </span><span class="kw">fn </span>colour_reads_in_every_form_the_subset_takes() {
-<a href=#3625 id=3625 data-nosnippet>3625</a>        <span class="kw">let </span>book = sample();
-<a href=#3626 id=3626 data-nosnippet>3626</a>        <span class="kw">let </span>tree = compile(
-<a href=#3627 id=3627 data-nosnippet>3627</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3628 id=3628 data-nosnippet>3628</a>            <span class="string">"h1 { color: darkred }
-<a href=#3629 id=3629 data-nosnippet>3629</a>             p { color: #036 }
-<a href=#3630 id=3630 data-nosnippet>3630</a>             blockquote { color: #b41e1e }
-<a href=#3631 id=3631 data-nosnippet>3631</a>             em { color: rgb(0% 20% 100%) }"</span>,
-<a href=#3632 id=3632 data-nosnippet>3632</a>        );
-<a href=#3633 id=3633 data-nosnippet>3633</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"h1"</span>).color, Color::rgb(<span class="number">139</span>, <span class="number">0</span>, <span class="number">0</span>));
-<a href=#3634 id=3634 data-nosnippet>3634</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">51</span>, <span class="number">102</span>));
-<a href=#3635 id=3635 data-nosnippet>3635</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"blockquote"</span>).color, Color::rgb(<span class="number">180</span>, <span class="number">30</span>, <span class="number">30</span>));
-<a href=#3636 id=3636 data-nosnippet>3636</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">51</span>, <span class="number">255</span>));
-<a href=#3637 id=3637 data-nosnippet>3637</a>        <span class="macro">assert_eq!</span>(
-<a href=#3638 id=3638 data-nosnippet>3638</a>            first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>).color,
-<a href=#3639 id=3639 data-nosnippet>3639</a>            Color::BLACK,
-<a href=#3640 id=3640 data-nosnippet>3640</a>            <span class="string">"a book nothing coloured is set in black"</span>,
-<a href=#3641 id=3641 data-nosnippet>3641</a>        );
+<a href=#3610 id=3610 data-nosnippet>3610</a>    <span class="doccomment">/// Part: the `font-variant` longhands name a feature without
+<a href=#3611 id=3611 data-nosnippet>3611</a>    /// spelling its tag, and the computed list merges over what the
+<a href=#3612 id=3612 data-nosnippet>3612</a>    /// engine asks for, `font-feature-settings` last.
+<a href=#3613 id=3613 data-nosnippet>3613</a>    </span><span class="attr">#[test]
+<a href=#3614 id=3614 data-nosnippet>3614</a>    </span><span class="kw">fn </span>the_font_variant_longhands_name_the_features_they_stand_for() {
+<a href=#3615 id=3615 data-nosnippet>3615</a>        <span class="kw">let </span>book = nested();
+<a href=#3616 id=3616 data-nosnippet>3616</a>        <span class="kw">let </span>tree = compile(
+<a href=#3617 id=3617 data-nosnippet>3617</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3618 id=3618 data-nosnippet>3618</a>            <span class="string">"p { font-variant-numeric: oldstyle-nums tabular-nums;
+<a href=#3619 id=3619 data-nosnippet>3619</a>                 font-variant-ligatures: no-common-ligatures discretionary-ligatures;
+<a href=#3620 id=3620 data-nosnippet>3620</a>                 font-variant-alternates: historical-forms;
+<a href=#3621 id=3621 data-nosnippet>3621</a>                 font-feature-settings: \"onum\" 0, \"ss01\" 1 }"</span>,
+<a href=#3622 id=3622 data-nosnippet>3622</a>        );
+<a href=#3623 id=3623 data-nosnippet>3623</a>        <span class="kw">let </span>paragraph = first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>);
+<a href=#3624 id=3624 data-nosnippet>3624</a>        <span class="macro">assert_eq!</span>(
+<a href=#3625 id=3625 data-nosnippet>3625</a>            paragraph.features(),
+<a href=#3626 id=3626 data-nosnippet>3626</a>            [
+<a href=#3627 id=3627 data-nosnippet>3627</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"liga"</span>, <span class="number">0</span>),
+<a href=#3628 id=3628 data-nosnippet>3628</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"clig"</span>, <span class="number">0</span>),
+<a href=#3629 id=3629 data-nosnippet>3629</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"dlig"</span>, <span class="number">1</span>),
+<a href=#3630 id=3630 data-nosnippet>3630</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">1</span>),
+<a href=#3631 id=3631 data-nosnippet>3631</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"tnum"</span>, <span class="number">1</span>),
+<a href=#3632 id=3632 data-nosnippet>3632</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"hist"</span>, <span class="number">1</span>),
+<a href=#3633 id=3633 data-nosnippet>3633</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"onum"</span>, <span class="number">0</span>),
+<a href=#3634 id=3634 data-nosnippet>3634</a>                FeatureSetting::new(<span class="kw-2">*</span><span class="string">b"ss01"</span>, <span class="number">1</span>),
+<a href=#3635 id=3635 data-nosnippet>3635</a>            ],
+<a href=#3636 id=3636 data-nosnippet>3636</a>            <span class="string">"the sheet's own settings are read after the named forms"</span>,
+<a href=#3637 id=3637 data-nosnippet>3637</a>        );
+<a href=#3638 id=3638 data-nosnippet>3638</a>
+<a href=#3639 id=3639 data-nosnippet>3639</a>        <span class="kw">let </span>plain = first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>);
+<a href=#3640 id=3640 data-nosnippet>3640</a>        <span class="macro">assert!</span>(plain.features().is_empty());
+<a href=#3641 id=3641 data-nosnippet>3641</a>    }
 <a href=#3642 id=3642 data-nosnippet>3642</a>
-<a href=#3643 id=3643 data-nosnippet>3643</a>        <span class="comment">// A name no colour has, and channels written half as
-<a href=#3644 id=3644 data-nosnippet>3644</a>        // numbers and half as percentages, neither of which CSS
-<a href=#3645 id=3645 data-nosnippet>3645</a>        // allows.
-<a href=#3646 id=3646 data-nosnippet>3646</a>        </span><span class="kw">for </span>css <span class="kw">in </span>[<span class="string">"p { color: octarine }"</span>, <span class="string">"p { color: rgb(10, 20%, 30) }"</span>] {
-<a href=#3647 id=3647 data-nosnippet>3647</a>            <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, css);
-<a href=#3648 id=3648 data-nosnippet>3648</a>            <span class="macro">assert!</span>(
-<a href=#3649 id=3649 data-nosnippet>3649</a>                tree.warnings().iter().any(|warning| warning.message
-<a href=#3650 id=3650 data-nosnippet>3650</a>                    == <span class="string">"Unsupported value for `color`. The declaration is ignored."</span>),
-<a href=#3651 id=3651 data-nosnippet>3651</a>                <span class="string">"{css}: {:?}"</span>,
-<a href=#3652 id=3652 data-nosnippet>3652</a>                tree.warnings(),
-<a href=#3653 id=3653 data-nosnippet>3653</a>            );
-<a href=#3654 id=3654 data-nosnippet>3654</a>        }
-<a href=#3655 id=3655 data-nosnippet>3655</a>    }
-<a href=#3656 id=3656 data-nosnippet>3656</a>
-<a href=#3657 id=3657 data-nosnippet>3657</a>    <span class="doccomment">/// Colour inherits: a rule on the section reaches the prose under
-<a href=#3658 id=3658 data-nosnippet>3658</a>    /// it, and a rule on the heading beats what it inherited.
-<a href=#3659 id=3659 data-nosnippet>3659</a>    </span><span class="attr">#[test]
-<a href=#3660 id=3660 data-nosnippet>3660</a>    </span><span class="kw">fn </span>a_colour_on_a_section_reaches_the_prose_under_it() {
-<a href=#3661 id=3661 data-nosnippet>3661</a>        <span class="kw">let </span>book = sample();
-<a href=#3662 id=3662 data-nosnippet>3662</a>        <span class="kw">let </span>tree = compile(
-<a href=#3663 id=3663 data-nosnippet>3663</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3664 id=3664 data-nosnippet>3664</a>            <span class="string">"section { color: #444444 }
-<a href=#3665 id=3665 data-nosnippet>3665</a>             h1 { color: rgb(180 30 30) }"</span>,
-<a href=#3666 id=3666 data-nosnippet>3666</a>        );
-<a href=#3667 id=3667 data-nosnippet>3667</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">68</span>, <span class="number">68</span>, <span class="number">68</span>));
-<a href=#3668 id=3668 data-nosnippet>3668</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">68</span>, <span class="number">68</span>, <span class="number">68</span>));
-<a href=#3669 id=3669 data-nosnippet>3669</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"h1"</span>).color, Color::rgb(<span class="number">180</span>, <span class="number">30</span>, <span class="number">30</span>));
-<a href=#3670 id=3670 data-nosnippet>3670</a>    }
-<a href=#3671 id=3671 data-nosnippet>3671</a>
-<a href=#3672 id=3672 data-nosnippet>3672</a>    <span class="doccomment">/// `color` is the ink a box is set in and `background-color` is
-<a href=#3673 id=3673 data-nosnippet>3673</a>    /// what is painted behind it. The text colour inherits and the
-<a href=#3674 id=3674 data-nosnippet>3674</a>    /// background does not, so the emphasis inside a tinted paragraph
-<a href=#3675 id=3675 data-nosnippet>3675</a>    /// takes the ink and leaves the tint.
-<a href=#3676 id=3676 data-nosnippet>3676</a>    </span><span class="attr">#[test]
-<a href=#3677 id=3677 data-nosnippet>3677</a>    </span><span class="kw">fn </span>colour_inherits_where_a_background_does_not() {
-<a href=#3678 id=3678 data-nosnippet>3678</a>        <span class="kw">let </span>book = nested();
-<a href=#3679 id=3679 data-nosnippet>3679</a>        <span class="kw">let </span>tree = compile(
-<a href=#3680 id=3680 data-nosnippet>3680</a>            <span class="kw-2">&amp;</span>book,
-<a href=#3681 id=3681 data-nosnippet>3681</a>            <span class="string">"p {\n  color: teal;\n  background-color: #f4f1ea;\n}\n"</span>,
-<a href=#3682 id=3682 data-nosnippet>3682</a>        );
-<a href=#3683 id=3683 data-nosnippet>3683</a>        <span class="macro">assert!</span>(tree.warnings().is_empty(), <span class="string">"{:?}"</span>, tree.warnings());
-<a href=#3684 id=3684 data-nosnippet>3684</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">128</span>, <span class="number">128</span>));
-<a href=#3685 id=3685 data-nosnippet>3685</a>        <span class="macro">assert_eq!</span>(
-<a href=#3686 id=3686 data-nosnippet>3686</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).background.color,
-<a href=#3687 id=3687 data-nosnippet>3687</a>            <span class="prelude-val">Some</span>(Color::rgb(<span class="number">0xf4</span>, <span class="number">0xf1</span>, <span class="number">0xea</span>))
+<a href=#3643 id=3643 data-nosnippet>3643</a>    <span class="doccomment">/// Part: a face that carries none of a feature the sheet asked
+<a href=#3644 id=3644 data-nosnippet>3644</a>    /// for is named once, and a feature turned off is not.
+<a href=#3645 id=3645 data-nosnippet>3645</a>    </span><span class="attr">#[test]
+<a href=#3646 id=3646 data-nosnippet>3646</a>    </span><span class="kw">fn </span>a_face_without_a_requested_feature_is_named() {
+<a href=#3647 id=3647 data-nosnippet>3647</a>        <span class="kw">let </span>book = nested();
+<a href=#3648 id=3648 data-nosnippet>3648</a>        <span class="kw">let </span>tree = compile(
+<a href=#3649 id=3649 data-nosnippet>3649</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3650 id=3650 data-nosnippet>3650</a>            <span class="string">"book { font-feature-settings: \"zero\" 1 }
+<a href=#3651 id=3651 data-nosnippet>3651</a>             p { font-feature-settings: \"zero\" 1, \"ss01\" 1 }"</span>,
+<a href=#3652 id=3652 data-nosnippet>3652</a>        );
+<a href=#3653 id=3653 data-nosnippet>3653</a>        <span class="kw">let </span>named: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
+<a href=#3654 id=3654 data-nosnippet>3654</a>            .warnings()
+<a href=#3655 id=3655 data-nosnippet>3655</a>            .iter()
+<a href=#3656 id=3656 data-nosnippet>3656</a>            .map(|warning| warning.message.as_str())
+<a href=#3657 id=3657 data-nosnippet>3657</a>            .filter(|message| message.contains(<span class="string">"feature"</span>))
+<a href=#3658 id=3658 data-nosnippet>3658</a>            .collect();
+<a href=#3659 id=3659 data-nosnippet>3659</a>        <span class="macro">assert_eq!</span>(
+<a href=#3660 id=3660 data-nosnippet>3660</a>            named,
+<a href=#3661 id=3661 data-nosnippet>3661</a>            [<span class="string">"eb garamond has no `zero` feature. The text is set without it."</span>],
+<a href=#3662 id=3662 data-nosnippet>3662</a>            <span class="string">"{:?}"</span>,
+<a href=#3663 id=3663 data-nosnippet>3663</a>            tree.warnings(),
+<a href=#3664 id=3664 data-nosnippet>3664</a>        );
+<a href=#3665 id=3665 data-nosnippet>3665</a>
+<a href=#3666 id=3666 data-nosnippet>3666</a>        <span class="kw">let </span>quiet = compile(<span class="kw-2">&amp;</span>book, <span class="string">"p { font-feature-settings: \"zero\" 0 }"</span>);
+<a href=#3667 id=3667 data-nosnippet>3667</a>        <span class="macro">assert!</span>(
+<a href=#3668 id=3668 data-nosnippet>3668</a>            !quiet
+<a href=#3669 id=3669 data-nosnippet>3669</a>                .warnings()
+<a href=#3670 id=3670 data-nosnippet>3670</a>                .iter()
+<a href=#3671 id=3671 data-nosnippet>3671</a>                .any(|warning| warning.message.contains(<span class="string">"feature"</span>)),
+<a href=#3672 id=3672 data-nosnippet>3672</a>            <span class="string">"a feature asked to stay off is one the face need not carry: {:?}"</span>,
+<a href=#3673 id=3673 data-nosnippet>3673</a>            quiet.warnings(),
+<a href=#3674 id=3674 data-nosnippet>3674</a>        );
+<a href=#3675 id=3675 data-nosnippet>3675</a>    }
+<a href=#3676 id=3676 data-nosnippet>3676</a>
+<a href=#3677 id=3677 data-nosnippet>3677</a>    <span class="doccomment">/// `color` reads in each of the four forms the subset takes, and
+<a href=#3678 id=3678 data-nosnippet>3678</a>    /// a form outside it is a diagnostic rather than a rule.
+<a href=#3679 id=3679 data-nosnippet>3679</a>    </span><span class="attr">#[test]
+<a href=#3680 id=3680 data-nosnippet>3680</a>    </span><span class="kw">fn </span>colour_reads_in_every_form_the_subset_takes() {
+<a href=#3681 id=3681 data-nosnippet>3681</a>        <span class="kw">let </span>book = sample();
+<a href=#3682 id=3682 data-nosnippet>3682</a>        <span class="kw">let </span>tree = compile(
+<a href=#3683 id=3683 data-nosnippet>3683</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3684 id=3684 data-nosnippet>3684</a>            <span class="string">"h1 { color: darkred }
+<a href=#3685 id=3685 data-nosnippet>3685</a>             p { color: #036 }
+<a href=#3686 id=3686 data-nosnippet>3686</a>             blockquote { color: #b41e1e }
+<a href=#3687 id=3687 data-nosnippet>3687</a>             em { color: rgb(0% 20% 100%) }"</span>,
 <a href=#3688 id=3688 data-nosnippet>3688</a>        );
-<a href=#3689 id=3689 data-nosnippet>3689</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">128</span>, <span class="number">128</span>));
-<a href=#3690 id=3690 data-nosnippet>3690</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).background.color, <span class="prelude-val">None</span>);
-<a href=#3691 id=3691 data-nosnippet>3691</a>    }
-<a href=#3692 id=3692 data-nosnippet>3692</a>
-<a href=#3693 id=3693 data-nosnippet>3693</a>    <span class="doccomment">/// A face with no small capitals of its own is reported once,
-<a href=#3694 id=3694 data-nosnippet>3694</a>    /// however many nodes asked for them, and the book is set anyway.
-<a href=#3695 id=3695 data-nosnippet>3695</a>    /// A face that has them is not reported at all.
-<a href=#3696 id=3696 data-nosnippet>3696</a>    </span><span class="attr">#[test]
-<a href=#3697 id=3697 data-nosnippet>3697</a>    </span><span class="kw">fn </span>a_face_without_small_capitals_says_so() {
-<a href=#3698 id=3698 data-nosnippet>3698</a>        <span class="kw">let </span>book = nested();
-<a href=#3699 id=3699 data-nosnippet>3699</a>        <span class="kw">let </span>bare = <span class="kw">crate</span>::fonts::registry_without_substitutions();
-<a href=#3700 id=3700 data-nosnippet>3700</a>        <span class="kw">let </span>css = <span class="string">"p, em, strong { font-variant-caps: small-caps }"</span>;
-<a href=#3701 id=3701 data-nosnippet>3701</a>        <span class="kw">let </span>tree = Stylesheets::parse(<span class="kw-2">&amp;</span>[Source::author(<span class="string">"author.css"</span>, css)]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>bare);
-<a href=#3702 id=3702 data-nosnippet>3702</a>        <span class="kw">let </span>complaints: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
-<a href=#3703 id=3703 data-nosnippet>3703</a>            .warnings()
-<a href=#3704 id=3704 data-nosnippet>3704</a>            .iter()
-<a href=#3705 id=3705 data-nosnippet>3705</a>            .map(|warning| warning.message.as_str())
-<a href=#3706 id=3706 data-nosnippet>3706</a>            .filter(|message| message.contains(<span class="string">"small capitals"</span>))
-<a href=#3707 id=3707 data-nosnippet>3707</a>            .collect();
-<a href=#3708 id=3708 data-nosnippet>3708</a>        <span class="macro">assert_eq!</span>(
-<a href=#3709 id=3709 data-nosnippet>3709</a>            complaints,
-<a href=#3710 id=3710 data-nosnippet>3710</a>            <span class="macro">vec!</span>[<span class="string">"eb garamond has no small capitals. Falling back to reduced capitals."</span>],
-<a href=#3711 id=3711 data-nosnippet>3711</a>        );
+<a href=#3689 id=3689 data-nosnippet>3689</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"h1"</span>).color, Color::rgb(<span class="number">139</span>, <span class="number">0</span>, <span class="number">0</span>));
+<a href=#3690 id=3690 data-nosnippet>3690</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">51</span>, <span class="number">102</span>));
+<a href=#3691 id=3691 data-nosnippet>3691</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"blockquote"</span>).color, Color::rgb(<span class="number">180</span>, <span class="number">30</span>, <span class="number">30</span>));
+<a href=#3692 id=3692 data-nosnippet>3692</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">51</span>, <span class="number">255</span>));
+<a href=#3693 id=3693 data-nosnippet>3693</a>        <span class="macro">assert_eq!</span>(
+<a href=#3694 id=3694 data-nosnippet>3694</a>            first(<span class="kw-2">&amp;</span>defaults(<span class="kw-2">&amp;</span>book, registry()), <span class="string">"p"</span>).color,
+<a href=#3695 id=3695 data-nosnippet>3695</a>            Color::BLACK,
+<a href=#3696 id=3696 data-nosnippet>3696</a>            <span class="string">"a book nothing coloured is set in black"</span>,
+<a href=#3697 id=3697 data-nosnippet>3697</a>        );
+<a href=#3698 id=3698 data-nosnippet>3698</a>
+<a href=#3699 id=3699 data-nosnippet>3699</a>        <span class="comment">// A name no colour has, and channels written half as
+<a href=#3700 id=3700 data-nosnippet>3700</a>        // numbers and half as percentages, neither of which CSS
+<a href=#3701 id=3701 data-nosnippet>3701</a>        // allows.
+<a href=#3702 id=3702 data-nosnippet>3702</a>        </span><span class="kw">for </span>css <span class="kw">in </span>[<span class="string">"p { color: octarine }"</span>, <span class="string">"p { color: rgb(10, 20%, 30) }"</span>] {
+<a href=#3703 id=3703 data-nosnippet>3703</a>            <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, css);
+<a href=#3704 id=3704 data-nosnippet>3704</a>            <span class="macro">assert!</span>(
+<a href=#3705 id=3705 data-nosnippet>3705</a>                tree.warnings().iter().any(|warning| warning.message
+<a href=#3706 id=3706 data-nosnippet>3706</a>                    == <span class="string">"Unsupported value for `color`. The declaration is ignored."</span>),
+<a href=#3707 id=3707 data-nosnippet>3707</a>                <span class="string">"{css}: {:?}"</span>,
+<a href=#3708 id=3708 data-nosnippet>3708</a>                tree.warnings(),
+<a href=#3709 id=3709 data-nosnippet>3709</a>            );
+<a href=#3710 id=3710 data-nosnippet>3710</a>        }
+<a href=#3711 id=3711 data-nosnippet>3711</a>    }
 <a href=#3712 id=3712 data-nosnippet>3712</a>
-<a href=#3713 id=3713 data-nosnippet>3713</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, css);
-<a href=#3714 id=3714 data-nosnippet>3714</a>        <span class="macro">assert!</span>(
-<a href=#3715 id=3715 data-nosnippet>3715</a>            !tree
-<a href=#3716 id=3716 data-nosnippet>3716</a>                .warnings()
-<a href=#3717 id=3717 data-nosnippet>3717</a>                .iter()
-<a href=#3718 id=3718 data-nosnippet>3718</a>                .any(|warning| warning.message.contains(<span class="string">"small capitals"</span>)),
-<a href=#3719 id=3719 data-nosnippet>3719</a>            <span class="string">"the bundled face has small capitals: {:?}"</span>,
-<a href=#3720 id=3720 data-nosnippet>3720</a>            tree.warnings(),
-<a href=#3721 id=3721 data-nosnippet>3721</a>        );
-<a href=#3722 id=3722 data-nosnippet>3722</a>    }
-<a href=#3723 id=3723 data-nosnippet>3723</a>
-<a href=#3724 id=3724 data-nosnippet>3724</a>    <span class="doccomment">/// Styles are interned: a book of thousands of nodes computes a
-<a href=#3725 id=3725 data-nosnippet>3725</a>    /// handful of distinct styles, and every node points at one.
-<a href=#3726 id=3726 data-nosnippet>3726</a>    </span><span class="attr">#[test]
-<a href=#3727 id=3727 data-nosnippet>3727</a>    </span><span class="kw">fn </span>styles_are_shared_between_nodes() {
-<a href=#3728 id=3728 data-nosnippet>3728</a>        <span class="kw">let </span>book = sample();
-<a href=#3729 id=3729 data-nosnippet>3729</a>        <span class="kw">let </span>tree = defaults(<span class="kw-2">&amp;</span>book, registry());
-<a href=#3730 id=3730 data-nosnippet>3730</a>        <span class="macro">assert!</span>(
-<a href=#3731 id=3731 data-nosnippet>3731</a>            tree.styles().len() &lt; tree.nodes().len(),
-<a href=#3732 id=3732 data-nosnippet>3732</a>            <span class="string">"{} styles for {} nodes"</span>,
-<a href=#3733 id=3733 data-nosnippet>3733</a>            tree.styles().len(),
-<a href=#3734 id=3734 data-nosnippet>3734</a>            tree.nodes().len()
-<a href=#3735 id=3735 data-nosnippet>3735</a>        );
-<a href=#3736 id=3736 data-nosnippet>3736</a>        <span class="kw">for </span>node <span class="kw">in </span>tree.nodes() {
-<a href=#3737 id=3737 data-nosnippet>3737</a>            <span class="macro">assert!</span>((node.style <span class="kw">as </span>usize) &lt; tree.styles().len());
-<a href=#3738 id=3738 data-nosnippet>3738</a>        }
-<a href=#3739 id=3739 data-nosnippet>3739</a>        <span class="comment">// A real node id resolves to the style its element got: the
-<a href=#3740 id=3740 data-nosnippet>3740</a>        // section is the second element, after the book itself.
-<a href=#3741 id=3741 data-nosnippet>3741</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#3742 id=3742 data-nosnippet>3742</a>            tree.style(book.sections[<span class="number">0</span>].id),
-<a href=#3743 id=3743 data-nosnippet>3743</a>            <span class="kw-2">&amp;</span>tree.styles()[tree.nodes()[<span class="number">1</span>].style <span class="kw">as </span>usize]
+<a href=#3713 id=3713 data-nosnippet>3713</a>    <span class="doccomment">/// Colour inherits: a rule on the section reaches the prose under
+<a href=#3714 id=3714 data-nosnippet>3714</a>    /// it, and a rule on the heading beats what it inherited.
+<a href=#3715 id=3715 data-nosnippet>3715</a>    </span><span class="attr">#[test]
+<a href=#3716 id=3716 data-nosnippet>3716</a>    </span><span class="kw">fn </span>a_colour_on_a_section_reaches_the_prose_under_it() {
+<a href=#3717 id=3717 data-nosnippet>3717</a>        <span class="kw">let </span>book = sample();
+<a href=#3718 id=3718 data-nosnippet>3718</a>        <span class="kw">let </span>tree = compile(
+<a href=#3719 id=3719 data-nosnippet>3719</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3720 id=3720 data-nosnippet>3720</a>            <span class="string">"section { color: #444444 }
+<a href=#3721 id=3721 data-nosnippet>3721</a>             h1 { color: rgb(180 30 30) }"</span>,
+<a href=#3722 id=3722 data-nosnippet>3722</a>        );
+<a href=#3723 id=3723 data-nosnippet>3723</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">68</span>, <span class="number">68</span>, <span class="number">68</span>));
+<a href=#3724 id=3724 data-nosnippet>3724</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">68</span>, <span class="number">68</span>, <span class="number">68</span>));
+<a href=#3725 id=3725 data-nosnippet>3725</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"h1"</span>).color, Color::rgb(<span class="number">180</span>, <span class="number">30</span>, <span class="number">30</span>));
+<a href=#3726 id=3726 data-nosnippet>3726</a>    }
+<a href=#3727 id=3727 data-nosnippet>3727</a>
+<a href=#3728 id=3728 data-nosnippet>3728</a>    <span class="doccomment">/// `color` is the ink a box is set in and `background-color` is
+<a href=#3729 id=3729 data-nosnippet>3729</a>    /// what is painted behind it. The text colour inherits and the
+<a href=#3730 id=3730 data-nosnippet>3730</a>    /// background does not, so the emphasis inside a tinted paragraph
+<a href=#3731 id=3731 data-nosnippet>3731</a>    /// takes the ink and leaves the tint.
+<a href=#3732 id=3732 data-nosnippet>3732</a>    </span><span class="attr">#[test]
+<a href=#3733 id=3733 data-nosnippet>3733</a>    </span><span class="kw">fn </span>colour_inherits_where_a_background_does_not() {
+<a href=#3734 id=3734 data-nosnippet>3734</a>        <span class="kw">let </span>book = nested();
+<a href=#3735 id=3735 data-nosnippet>3735</a>        <span class="kw">let </span>tree = compile(
+<a href=#3736 id=3736 data-nosnippet>3736</a>            <span class="kw-2">&amp;</span>book,
+<a href=#3737 id=3737 data-nosnippet>3737</a>            <span class="string">"p {\n  color: teal;\n  background-color: #f4f1ea;\n}\n"</span>,
+<a href=#3738 id=3738 data-nosnippet>3738</a>        );
+<a href=#3739 id=3739 data-nosnippet>3739</a>        <span class="macro">assert!</span>(tree.warnings().is_empty(), <span class="string">"{:?}"</span>, tree.warnings());
+<a href=#3740 id=3740 data-nosnippet>3740</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">128</span>, <span class="number">128</span>));
+<a href=#3741 id=3741 data-nosnippet>3741</a>        <span class="macro">assert_eq!</span>(
+<a href=#3742 id=3742 data-nosnippet>3742</a>            first(<span class="kw-2">&amp;</span>tree, <span class="string">"p"</span>).background.color,
+<a href=#3743 id=3743 data-nosnippet>3743</a>            <span class="prelude-val">Some</span>(Color::rgb(<span class="number">0xf4</span>, <span class="number">0xf1</span>, <span class="number">0xea</span>))
 <a href=#3744 id=3744 data-nosnippet>3744</a>        );
-<a href=#3745 id=3745 data-nosnippet>3745</a>    }
-<a href=#3746 id=3746 data-nosnippet>3746</a>}
+<a href=#3745 id=3745 data-nosnippet>3745</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).color, Color::rgb(<span class="number">0</span>, <span class="number">128</span>, <span class="number">128</span>));
+<a href=#3746 id=3746 data-nosnippet>3746</a>        <span class="macro">assert_eq!</span>(first(<span class="kw-2">&amp;</span>tree, <span class="string">"em"</span>).background.color, <span class="prelude-val">None</span>);
+<a href=#3747 id=3747 data-nosnippet>3747</a>    }
+<a href=#3748 id=3748 data-nosnippet>3748</a>
+<a href=#3749 id=3749 data-nosnippet>3749</a>    <span class="doccomment">/// A face with no small capitals of its own is reported once,
+<a href=#3750 id=3750 data-nosnippet>3750</a>    /// however many nodes asked for them, and the book is set anyway.
+<a href=#3751 id=3751 data-nosnippet>3751</a>    /// A face that has them is not reported at all.
+<a href=#3752 id=3752 data-nosnippet>3752</a>    </span><span class="attr">#[test]
+<a href=#3753 id=3753 data-nosnippet>3753</a>    </span><span class="kw">fn </span>a_face_without_small_capitals_says_so() {
+<a href=#3754 id=3754 data-nosnippet>3754</a>        <span class="kw">let </span>book = nested();
+<a href=#3755 id=3755 data-nosnippet>3755</a>        <span class="kw">let </span>bare = <span class="kw">crate</span>::fonts::registry_without_substitutions();
+<a href=#3756 id=3756 data-nosnippet>3756</a>        <span class="kw">let </span>css = <span class="string">"p, em, strong { font-variant-caps: small-caps }"</span>;
+<a href=#3757 id=3757 data-nosnippet>3757</a>        <span class="kw">let </span>tree = Stylesheets::parse(<span class="kw-2">&amp;</span>[Source::author(<span class="string">"author.css"</span>, css)]).compile(<span class="kw-2">&amp;</span>book, <span class="kw-2">&amp;</span>bare);
+<a href=#3758 id=3758 data-nosnippet>3758</a>        <span class="kw">let </span>complaints: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = tree
+<a href=#3759 id=3759 data-nosnippet>3759</a>            .warnings()
+<a href=#3760 id=3760 data-nosnippet>3760</a>            .iter()
+<a href=#3761 id=3761 data-nosnippet>3761</a>            .map(|warning| warning.message.as_str())
+<a href=#3762 id=3762 data-nosnippet>3762</a>            .filter(|message| message.contains(<span class="string">"small capitals"</span>))
+<a href=#3763 id=3763 data-nosnippet>3763</a>            .collect();
+<a href=#3764 id=3764 data-nosnippet>3764</a>        <span class="macro">assert_eq!</span>(
+<a href=#3765 id=3765 data-nosnippet>3765</a>            complaints,
+<a href=#3766 id=3766 data-nosnippet>3766</a>            <span class="macro">vec!</span>[<span class="string">"eb garamond has no small capitals. Falling back to reduced capitals."</span>],
+<a href=#3767 id=3767 data-nosnippet>3767</a>        );
+<a href=#3768 id=3768 data-nosnippet>3768</a>
+<a href=#3769 id=3769 data-nosnippet>3769</a>        <span class="kw">let </span>tree = compile(<span class="kw-2">&amp;</span>book, css);
+<a href=#3770 id=3770 data-nosnippet>3770</a>        <span class="macro">assert!</span>(
+<a href=#3771 id=3771 data-nosnippet>3771</a>            !tree
+<a href=#3772 id=3772 data-nosnippet>3772</a>                .warnings()
+<a href=#3773 id=3773 data-nosnippet>3773</a>                .iter()
+<a href=#3774 id=3774 data-nosnippet>3774</a>                .any(|warning| warning.message.contains(<span class="string">"small capitals"</span>)),
+<a href=#3775 id=3775 data-nosnippet>3775</a>            <span class="string">"the bundled face has small capitals: {:?}"</span>,
+<a href=#3776 id=3776 data-nosnippet>3776</a>            tree.warnings(),
+<a href=#3777 id=3777 data-nosnippet>3777</a>        );
+<a href=#3778 id=3778 data-nosnippet>3778</a>    }
+<a href=#3779 id=3779 data-nosnippet>3779</a>
+<a href=#3780 id=3780 data-nosnippet>3780</a>    <span class="doccomment">/// Styles are interned: a book of thousands of nodes computes a
+<a href=#3781 id=3781 data-nosnippet>3781</a>    /// handful of distinct styles, and every node points at one.
+<a href=#3782 id=3782 data-nosnippet>3782</a>    </span><span class="attr">#[test]
+<a href=#3783 id=3783 data-nosnippet>3783</a>    </span><span class="kw">fn </span>styles_are_shared_between_nodes() {
+<a href=#3784 id=3784 data-nosnippet>3784</a>        <span class="kw">let </span>book = sample();
+<a href=#3785 id=3785 data-nosnippet>3785</a>        <span class="kw">let </span>tree = defaults(<span class="kw-2">&amp;</span>book, registry());
+<a href=#3786 id=3786 data-nosnippet>3786</a>        <span class="macro">assert!</span>(
+<a href=#3787 id=3787 data-nosnippet>3787</a>            tree.styles().len() &lt; tree.nodes().len(),
+<a href=#3788 id=3788 data-nosnippet>3788</a>            <span class="string">"{} styles for {} nodes"</span>,
+<a href=#3789 id=3789 data-nosnippet>3789</a>            tree.styles().len(),
+<a href=#3790 id=3790 data-nosnippet>3790</a>            tree.nodes().len()
+<a href=#3791 id=3791 data-nosnippet>3791</a>        );
+<a href=#3792 id=3792 data-nosnippet>3792</a>        <span class="kw">for </span>node <span class="kw">in </span>tree.nodes() {
+<a href=#3793 id=3793 data-nosnippet>3793</a>            <span class="macro">assert!</span>((node.style <span class="kw">as </span>usize) &lt; tree.styles().len());
+<a href=#3794 id=3794 data-nosnippet>3794</a>        }
+<a href=#3795 id=3795 data-nosnippet>3795</a>        <span class="comment">// A real node id resolves to the style its element got: the
+<a href=#3796 id=3796 data-nosnippet>3796</a>        // section is the second element, after the book itself.
+<a href=#3797 id=3797 data-nosnippet>3797</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#3798 id=3798 data-nosnippet>3798</a>            tree.style(book.sections[<span class="number">0</span>].id),
+<a href=#3799 id=3799 data-nosnippet>3799</a>            <span class="kw-2">&amp;</span>tree.styles()[tree.nodes()[<span class="number">1</span>].style <span class="kw">as </span>usize]
+<a href=#3800 id=3800 data-nosnippet>3800</a>        );
+<a href=#3801 id=3801 data-nosnippet>3801</a>    }
+<a href=#3802 id=3802 data-nosnippet>3802</a>}
 </code></pre></div></section></main></body></html>

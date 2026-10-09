@@ -991,7 +991,7 @@
 <a href=#991 id=991 data-nosnippet>991</a>    <span class="comment">// The cap's baseline is the last sunk line's, which is only
 <a href=#992 id=992 data-nosnippet>992</a>    // known once the lines are broken.
 <a href=#993 id=993 data-nosnippet>993</a>    </span><span class="kw">let </span>drop = <span class="kw">if </span>sunk &gt; <span class="number">0 </span>{
-<a href=#994 id=994 data-nosnippet>994</a>        lines[<span class="number">1</span>..sunk]
+<a href=#994 id=994 data-nosnippet>994</a>        lines[..sunk - <span class="number">1</span>]
 <a href=#995 id=995 data-nosnippet>995</a>            .iter()
 <a href=#996 id=996 data-nosnippet>996</a>            .map(|line| line.box_.height)
 <a href=#997 id=997 data-nosnippet>997</a>            .sum::&lt;f32&gt;()
