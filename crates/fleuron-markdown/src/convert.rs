@@ -27,8 +27,11 @@ const UNSUPPORTED_HEADING_ATTRIBUTE: &str =
 
 /// Reads one source into sections and diagnostics.
 pub fn run(text: &str, source: &str, options: &Options) -> (Vec<Section>, Vec<Warning>) {
-    let mut converter = Converter::new(text, source, options);
-    for (event, range) in Parser::new_ext(text, parser_options(options)).into_offset_iter() {
+    let comments = comments(text, options);
+    let hidden = hide(text, &comments);
+    let read_as = hidden.as_deref().unwrap_or(text);
+    let mut converter = Converter::new(read_as, source, options, comments);
+    for (event, range) in Parser::new_ext(read_as, parser_options(options)).into_offset_iter() {
         converter.event(event, range);
     }
     let (mut sections, warnings) = converter.finish();
@@ -62,7 +65,9 @@ fn parser_options(options: &Options) -> ParserOptions {
         ParserOptions::ENABLE_YAML_STYLE_METADATA_BLOCKS,
         dialect.frontmatter,
     );
-    parser.set(ParserOptions::ENABLE_GFM, dialect.gfm);
+    // The parser reads GitHub's five alerts and no other type, so a
+    // dialect with callouts reads every marker itself.
+    parser.set(ParserOptions::ENABLE_GFM, dialect.gfm && !dialect.callouts);
     parser.set(ParserOptions::ENABLE_TABLES, dialect.tables);
     parser.set(ParserOptions::ENABLE_STRIKETHROUGH, dialect.gfm);
     parser.set(ParserOptions::ENABLE_TASKLISTS, dialect.gfm);
@@ -74,6 +79,66 @@ fn parser_options(options: &Options) -> ParserOptions {
         dialect.smart_punctuation,
     );
     parser
+}
+
+/// The bytes of every `%%comment%%` in a source, marks included, in
+/// the order they were written.
+///
+/// A comment opens in one block and may close in a later one, and a
+/// `%%` in code is not a mark, so the source is parsed once to find
+/// the marks that stand in prose. A mark with no partner is prose.
+fn comments(text: &str, options: &Options) -> Vec<Range<usize>> {
+    if !options.dialect.comments || !text.contains("%%") {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    let mut open = None;
+    let mut literal = 0u32;
+    for (event, range) in Parser::new_ext(text, parser_options(options)).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_) | Tag::MetadataBlock(_)) => literal += 1,
+            Event::End(TagEnd::CodeBlock | TagEnd::MetadataBlock(_)) => literal -= 1,
+            Event::Text(value) if literal == 0 && text.get(range.clone()) == Some(&*value) => {
+                for (at, _) in value.match_indices("%%") {
+                    let at = range.start + at;
+                    if escaped(text, at) {
+                        continue;
+                    }
+                    match open.take() {
+                        Some(start) => found.push(start..at + 2),
+                        None => open = Some(at),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// The source with every comment written over, byte for byte, so
+/// that nothing in a comment is markdown and every offset after it
+/// is the one it had. The filler is the comment's own mark, which
+/// means nothing to the parser and joins the text around it the way
+/// the mark did.
+fn hide(text: &str, comments: &[Range<usize>]) -> Option<String> {
+    if comments.is_empty() {
+        return None;
+    }
+    let mut bytes = text.as_bytes().to_vec();
+    for comment in comments {
+        for byte in &mut bytes[comment.clone()] {
+            if !matches!(byte, b'\n' | b'\r') {
+                *byte = b'%';
+            }
+        }
+    }
+    String::from_utf8(bytes).ok()
+}
+
+/// Whether the mark at this byte of the source follows a backslash.
+fn escaped(text: &str, at: usize) -> bool {
+    at > 0 && text.as_bytes()[at - 1] == b'\\'
 }
 
 /// Where one event was read from: the position a diagnostic quotes,
@@ -182,6 +247,20 @@ struct ListFrame {
     held: Option<Pending>,
 }
 
+/// The opening line of a callout: `> [!type] Title`.
+#[derive(Clone)]
+struct Callout {
+    /// The type, which is the class the quotation takes.
+    kind: String,
+    /// The byte the marker opens at, which is where the first
+    /// paragraph of the quotation does.
+    bracket: usize,
+    /// The byte the title starts at, past the marker.
+    title: usize,
+    /// The byte the opening line ends at.
+    line_end: usize,
+}
+
 /// A table while its rows are still arriving.
 struct TableFrame {
     read: Read,
@@ -228,6 +307,12 @@ struct Converter<'a> {
     /// One held attribute line per open blockquote: the line before a
     /// quote names the quote, and the blocks inside it are their own.
     quoted: Vec<Option<Pending>>,
+    /// One entry per open blockquote: the callout it is, if its
+    /// opening line wrote one.
+    callouts: Vec<Option<Callout>>,
+    /// The comments of the source, in order. The text is read with
+    /// each one written over, so these say which bytes are not prose.
+    comments: Vec<Range<usize>>,
     /// The lists being read, innermost last.
     lists: Vec<ListFrame>,
     /// The table being read. A cell holds only inlines, so tables do
@@ -270,7 +355,12 @@ struct NoteFrame {
 }
 
 impl<'a> Converter<'a> {
-    fn new(text: &'a str, source: &'a str, options: &'a Options) -> Converter<'a> {
+    fn new(
+        text: &'a str,
+        source: &'a str,
+        options: &'a Options,
+        comments: Vec<Range<usize>>,
+    ) -> Converter<'a> {
         Converter {
             text,
             source,
@@ -283,6 +373,8 @@ impl<'a> Converter<'a> {
             deferred: Vec::new(),
             pending: None,
             quoted: Vec::new(),
+            callouts: Vec::new(),
+            comments,
             lists: Vec::new(),
             table: None,
             code: None,
@@ -371,6 +463,7 @@ impl<'a> Converter<'a> {
             }
             Event::Start(Tag::BlockQuote(_)) => {
                 self.quoted.push(self.pending.take());
+                self.callouts.push(self.callout(read));
                 self.blocks.push(Vec::new());
             }
 
@@ -525,8 +618,76 @@ impl<'a> Converter<'a> {
         self.inlines.push((Vec::new(), kind, read));
     }
 
+    /// Files text, less whatever part of it a comment was written
+    /// over.
     fn text(&mut self, value: &str, read: Read) {
         if value.is_empty() || self.metadata > 0 {
+            return;
+        }
+        let (start, end) = (read.span.start as usize, read.span.end as usize);
+        let first = self.comments.partition_point(|comment| comment.end < start);
+        let over: Vec<Range<usize>> = self.comments[first..]
+            .iter()
+            .take_while(|comment| comment.start < end)
+            .cloned()
+            .collect();
+        if over.is_empty() {
+            return self.prose(value, read);
+        }
+        let follows = over[0].end == start;
+        let hidden = over
+            .iter()
+            .any(|comment| comment.start < end && start < comment.end);
+        // A wrapped line or an entity is one piece: its value is not
+        // the bytes it was read from.
+        if !hidden || self.text.get(start..end) != Some(value) {
+            let inside = over.iter().any(|c| c.start <= start && end <= c.end);
+            if !inside {
+                self.after_comment(value, read, follows);
+            }
+            return;
+        }
+        let (mut at, mut follows) = (start, false);
+        for comment in over {
+            if at < comment.start {
+                let piece = self.read(at..comment.start);
+                self.after_comment(&value[at - start..comment.start - start], piece, follows);
+            }
+            (at, follows) = (at.max(comment.end), true);
+        }
+        if at < end {
+            let piece = self.read(at..end);
+            self.after_comment(&value[at - start..], piece, follows);
+        }
+    }
+
+    /// Files the text written after a comment. The space on one side
+    /// of a comment is enough, so text that opens with a space takes
+    /// it off when the text before the comment closed with one.
+    fn after_comment(&mut self, value: &str, read: Read, follows: bool) {
+        let spaced = match self.inlines.last() {
+            Some((frame, ..)) => match frame.last() {
+                Some(Inline::Text { value, .. }) => value.ends_with(char::is_whitespace),
+                Some(_) => false,
+                None => true,
+            },
+            None => true,
+        };
+        if !(follows && spaced) {
+            return self.prose(value, read);
+        }
+        let kept = value.trim_start();
+        let taken = (value.len() - kept.len()) as u32;
+        let mut read = read;
+        if read.span.end - read.span.start == value.len() as u32 {
+            read.span.start += taken;
+            read.position = self.lines.position(read.span.start as usize);
+        }
+        self.prose(kept, read)
+    }
+
+    fn prose(&mut self, value: &str, read: Read) {
+        if value.is_empty() {
             return;
         }
         self.inline(Inline::Text {
@@ -577,6 +738,18 @@ impl<'a> Converter<'a> {
             });
         }
         let children = self.fold_spans(children);
+        let mut children = self.fold_highlights(children);
+        let read_to = inline_extent(&children).map_or(read.span.end, |held| held.span.end);
+        let mut read = read;
+        if self.commented(read.span.start, read_to.max(read.span.end)) {
+            trim_end(&mut children);
+            // A paragraph is read from where its prose is, so one
+            // under a comment is on its own line and not the
+            // comment's.
+            if matches!(kind, InlineFor::Paragraph) {
+                read = inline_extent(&children).unwrap_or(read);
+            }
+        }
         let (at, span) = (Some(read.position), Some(read.span));
         match kind {
             InlineFor::Emphasis => self.inline(Inline::Emphasis {
@@ -705,7 +878,16 @@ impl<'a> Converter<'a> {
     }
 
     /// Files a paragraph whose inlines have all arrived.
-    fn paragraph(&mut self, children: Vec<Inline>, read: Read) {
+    fn paragraph(&mut self, mut children: Vec<Inline>, read: Read) {
+        self.block_id(&mut children);
+        let callout = self
+            .callouts
+            .last()
+            .and_then(|callout| callout.as_ref())
+            .filter(|callout| callout.bracket == read.span.start as usize);
+        if let Some(callout) = callout.cloned() {
+            return self.callout_paragraph(children, read, &callout);
+        }
         if let Some(children) = self.brace_run(children, read) {
             self.displaced(&children);
             if let Some(forced) = self.forced_break(&children, read) {
@@ -721,6 +903,283 @@ impl<'a> Converter<'a> {
             }
         }
         self.flush_deferred();
+    }
+
+    /// The callout a blockquote opens, when its first line is
+    /// `[!type]` and a title or nothing after it. `+` or `-` after
+    /// the bracket folds a callout in Obsidian and means nothing on a
+    /// page.
+    fn callout(&self, read: Read) -> Option<Callout> {
+        if !self.options.dialect.callouts {
+            return None;
+        }
+        let start = read.span.start as usize;
+        let line = self.text.get(start..)?.lines().next()?;
+        let inner = line.trim_start().strip_prefix('>')?.trim_start();
+        let typed = inner.strip_prefix("[!")?;
+        let close = typed.find(']')?;
+        let kind = identifier(&typed[..close].to_lowercase())?;
+        let after = &typed[close + 1..];
+        let after = after.strip_prefix(['+', '-']).unwrap_or(after);
+        if !(after.is_empty() || after.starts_with([' ', '\t'])) {
+            return None;
+        }
+        let line_end = start + line.len();
+        Some(Callout {
+            kind,
+            bracket: line_end - inner.len(),
+            title: line_end - after.trim_start().len(),
+            line_end,
+        })
+    }
+
+    /// Files the paragraph a callout opens with as two: the title,
+    /// which is what its first line holds past the marker, and the
+    /// prose on the lines under it.
+    fn callout_paragraph(&mut self, children: Vec<Inline>, read: Read, callout: &Callout) {
+        self.displaced(&children);
+        let (mut title, mut body) = (Vec::new(), Vec::new());
+        for inline in children {
+            let Some(span) = inline_span(&inline) else {
+                body.push(inline);
+                continue;
+            };
+            let (start, end) = (span.start as usize, span.end as usize);
+            if end <= callout.title {
+                continue;
+            }
+            if start < callout.title {
+                title.extend(self.cut(&inline, callout.title - start..end - start));
+            } else if start < callout.line_end {
+                title.push(inline);
+            } else {
+                body.push(inline);
+            }
+        }
+        // The end of the first line is where the title ends, so it is
+        // not a space or a break in either paragraph.
+        if matches!(title.last(), Some(Inline::Break { .. })) {
+            title.pop();
+        }
+        trim_end(&mut title);
+        if body.first().is_some_and(blank) {
+            body.remove(0);
+        }
+        for (inlines, classes) in [(title, vec!["callout-title".to_string()]), (body, vec![])] {
+            if inlines.is_empty() {
+                continue;
+            }
+            let read = inline_extent(&inlines).unwrap_or(read);
+            self.push_block(Block::Paragraph {
+                id: Default::default(),
+                inlines,
+                attributes: Attributes { id: None, classes },
+                position: Some(read.position),
+                span: Some(read.span),
+            });
+        }
+        self.flush_deferred();
+    }
+
+    /// Takes a `^name` off the end of a block. It is what a link in
+    /// Obsidian names the block by, and no part of the prose.
+    fn block_id(&self, children: &mut Vec<Inline>) {
+        if !self.options.dialect.block_ids {
+            return;
+        }
+        let Some(Inline::Text { value, span, .. }) = children.last() else {
+            return;
+        };
+        let written = value.trim_end();
+        let Some(caret) = written.rfind('^') else {
+            return;
+        };
+        let name = &written[caret + 1..];
+        let plain = |c: char| c.is_ascii_alphanumeric() || c == '-';
+        if name.is_empty() || !name.chars().all(plain) {
+            return;
+        }
+        let verbatim = span.is_some_and(|span| (span.end - span.start) as usize == value.len());
+        if let Some(span) = span.filter(|_| verbatim)
+            && escaped(self.text, span.start as usize + caret)
+        {
+            return;
+        }
+        // The name stands apart from the prose: after a space, or on
+        // a line of its own.
+        let before = &written[..caret];
+        let apart = match before.is_empty() {
+            true => children.len() < 2 || children.get(children.len() - 2).is_some_and(blank),
+            false => before.ends_with(char::is_whitespace),
+        };
+        if !apart {
+            return;
+        }
+        let kept = before.trim_end().len();
+        if let Some(Inline::Text { value, span, .. }) = children.last_mut() {
+            value.truncate(kept);
+            if let Some(span) = span.as_mut().filter(|_| verbatim) {
+                span.end = span.start + kept as u32;
+            }
+        }
+        trim_end(children);
+    }
+
+    /// Whether a comment was written inside these bytes of the
+    /// source.
+    fn commented(&self, start: u32, end: u32) -> bool {
+        let (start, end) = (start as usize, end as usize);
+        let first = self.comments.partition_point(|comment| comment.end < start);
+        self.comments
+            .get(first)
+            .is_some_and(|comment| comment.start <= end)
+    }
+
+    /// Part of one text run, by the bytes of its value, read from the
+    /// bytes of the source that part was written at. Nothing for an
+    /// empty part, and nothing for a run whose value is not the bytes
+    /// it was read from, which has no part to take.
+    fn cut(&self, inline: &Inline, part: Range<usize>) -> Option<Inline> {
+        let Inline::Text {
+            value,
+            span: Some(span),
+            ..
+        } = inline
+        else {
+            return None;
+        };
+        let start = span.start as usize;
+        if part.is_empty() || self.text.get(start..span.end as usize) != Some(value.as_str()) {
+            return None;
+        }
+        let read = self.read(start + part.start..start + part.end);
+        Some(Inline::Text {
+            id: Default::default(),
+            value: value.get(part)?.to_string(),
+            attributes: Attributes::default(),
+            position: Some(read.position),
+            span: Some(read.span),
+        })
+    }
+
+    /// The next `==` at or after a place in one inline frame that can
+    /// open a highlight, or close one: the child it is in, and the
+    /// byte of that child's text.
+    ///
+    /// A mark is two `=` and no more, in a run that is the bytes it
+    /// was read from. The one that opens has text directly after it,
+    /// and the one that closes has text directly before it.
+    fn highlight_mark(
+        &self,
+        children: &[Inline],
+        from: (usize, usize),
+        closes: bool,
+    ) -> Option<(usize, usize)> {
+        let edge = |inline: Option<&Inline>, last: bool| match inline {
+            Some(Inline::Text { value, .. }) => match last {
+                true => value.chars().next_back(),
+                false => value.chars().next(),
+            },
+            Some(_) => Some('.'),
+            None => None,
+        };
+        for (index, child) in children.iter().enumerate().skip(from.0) {
+            let Inline::Text {
+                value,
+                span: Some(span),
+                ..
+            } = child
+            else {
+                continue;
+            };
+            let start = span.start as usize;
+            if self.text.get(start..span.end as usize) != Some(value.as_str()) {
+                continue;
+            }
+            let skip = if index == from.0 { from.1 } else { 0 };
+            for (at, _) in value.match_indices("==") {
+                let (before, after) = (&value[..at], &value[at + 2..]);
+                if at < skip
+                    || before.ends_with('=')
+                    || after.starts_with('=')
+                    || escaped(self.text, start + at)
+                {
+                    continue;
+                }
+                let beside = match closes {
+                    true => before
+                        .chars()
+                        .next_back()
+                        .or_else(|| edge(index.checked_sub(1).and_then(|i| children.get(i)), true)),
+                    false => after
+                        .chars()
+                        .next()
+                        .or_else(|| edge(children.get(index + 1), false)),
+                };
+                if beside.is_some_and(|c| !c.is_whitespace()) {
+                    return Some((index, at));
+                }
+            }
+        }
+        None
+    }
+
+    /// Folds every `==run==` of one inline frame into a highlight.
+    ///
+    /// The marks are text to the parser, so a highlight is read out
+    /// of what a frame collected, as a span is. The run may hold
+    /// markup: `==a *b* c==` opens in one text run and closes in
+    /// another.
+    fn fold_highlights(&mut self, mut children: Vec<Inline>) -> Vec<Inline> {
+        if !self.options.dialect.highlights {
+            return children;
+        }
+        let mut from = (0, 0);
+        while let Some(open) = self.highlight_mark(&children, from, false) {
+            let Some(close) = self.highlight_mark(&children, (open.0, open.1 + 2), true) else {
+                break;
+            };
+            let length = |inline: &Inline| match inline {
+                Inline::Text { value, .. } => value.len(),
+                _ => 0,
+            };
+            let starts = |inline: &Inline| inline_span(inline).map_or(0, |span| span.start);
+            let read = self.read(
+                starts(&children[open.0]) as usize + open.1
+                    ..starts(&children[close.0]) as usize + close.1 + 2,
+            );
+            let before = self.cut(&children[open.0], 0..open.1);
+            let after = self.cut(&children[close.0], close.1 + 2..length(&children[close.0]));
+            let mut inner = Vec::new();
+            if open.0 == close.0 {
+                inner.extend(self.cut(&children[open.0], open.1 + 2..close.1));
+            } else {
+                let head = open.1 + 2..length(&children[open.0]);
+                inner.extend(self.cut(&children[open.0], head));
+                let tail = self.cut(&children[close.0], 0..close.1);
+                inner.extend(children.drain(open.0 + 1..close.0));
+                inner.extend(tail);
+            }
+            // The text the marks were in is still there: one run, or
+            // the two the drain left side by side.
+            let stale = open.0..open.0 + 1 + usize::from(open.0 != close.0);
+            if inner.is_empty() {
+                from = (open.0, open.1 + 2);
+                continue;
+            }
+            let mut folded: Vec<Inline> = before.into_iter().collect();
+            folded.push(Inline::Highlight {
+                id: Default::default(),
+                children: inner,
+                attributes: Attributes::default(),
+                position: Some(read.position),
+                span: Some(read.span),
+            });
+            from = (open.0 + folded.len(), 0);
+            folded.extend(after);
+            children.splice(stale, folded);
+        }
+        children
     }
 
     /// The break a paragraph is when its whole text is `\pagebreak`
@@ -1044,13 +1503,19 @@ impl<'a> Converter<'a> {
             return;
         };
         self.pending = self.quoted.pop().flatten();
+        let callout = self.callouts.pop().flatten();
         if blocks.is_empty() {
             return;
         }
         self.push_block(Block::Blockquote {
             id: Default::default(),
             blocks,
-            attributes: Attributes::default(),
+            attributes: Attributes {
+                id: None,
+                classes: callout
+                    .map(|callout| vec!["callout".to_string(), callout.kind])
+                    .unwrap_or_default(),
+            },
             position: Some(read.position),
             span: Some(read.span),
         });
@@ -1363,6 +1828,7 @@ fn take_notes_in_inlines(
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
             | Inline::Strikethrough { children, .. }
+            | Inline::Highlight { children, .. }
             | Inline::Span { children, .. } => {
                 take_notes_in_inlines(children, notes, called, missing)
             }
@@ -1423,6 +1889,29 @@ fn slots(block: &mut Block) -> (&mut Attributes, &mut Option<SourceSpan>) {
         | Block::Table {
             attributes, span, ..
         } => (attributes, span),
+    }
+}
+
+/// Whether an inline is text of nothing but spaces, which is what a
+/// wrapped line is read as.
+fn blank(inline: &Inline) -> bool {
+    matches!(inline, Inline::Text { value, .. } if value.trim().is_empty())
+}
+
+/// Takes the space off the end of a run of inlines, where the text
+/// that stood after it was not prose.
+fn trim_end(inlines: &mut Vec<Inline>) {
+    while inlines.last().is_some_and(blank) {
+        inlines.pop();
+    }
+    if let Some(Inline::Text { value, span, .. }) = inlines.last_mut() {
+        let kept = value.trim_end().len();
+        if let Some(span) = span.as_mut()
+            && (span.end - span.start) as usize == value.len()
+        {
+            span.end = span.start + kept as u32;
+        }
+        value.truncate(kept);
     }
 }
 
@@ -2868,5 +3357,280 @@ Ordinary prose.
         assert!(warnings.is_empty(), "{warnings:?}");
         let texts: Vec<String> = sections[0].blocks.iter().map(text_of).collect();
         assert_eq!(texts, ["A line[^a].", "[^a]: The note."]);
+    }
+
+    /// A source read as an Obsidian vault holds it, in one section,
+    /// with nothing to warn about.
+    fn vault(markdown: &str) -> Vec<Block> {
+        let options = Options {
+            sections: Sections::Whole,
+            dialect: Dialect::obsidian(),
+        };
+        let (mut sections, warnings) = to_sections(markdown, "note.md", &options);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(sections.len(), 1, "{sections:?}");
+        sections.remove(0).blocks
+    }
+
+    /// Every text run under these inlines, with the bytes of the
+    /// source it says it was read from.
+    fn runs<'a>(inlines: &'a [Inline], markdown: &'a str, out: &mut Vec<(&'a str, &'a str)>) {
+        for inline in inlines {
+            match inline {
+                Inline::Text { value, span, .. } => {
+                    let span = span.expect("the frontend spans its text");
+                    out.push((value, &markdown[span.start as usize..span.end as usize]));
+                }
+                Inline::Emphasis { children, .. }
+                | Inline::Strong { children, .. }
+                | Inline::Link { children, .. }
+                | Inline::Strikethrough { children, .. }
+                | Inline::Highlight { children, .. }
+                | Inline::Span { children, .. } => runs(children, markdown, out),
+                Inline::Code { .. } | Inline::Break { .. } | Inline::Note { .. } => {}
+            }
+        }
+    }
+
+    /// Acceptance: a comment, inline or block, is not set, and the
+    /// text around it keeps its source offsets.
+    #[test]
+    fn a_comment_is_not_set_and_the_text_around_it_stays_where_it_was() {
+        let markdown = "He was %%not at all%% certain of *it*.\n\n\
+                        %%\nA note to self.\n\n# Not a heading\n\n- nor a list\n%%\n\
+                        Then he left. %%At last.%%\n";
+        let blocks = vault(markdown);
+        let texts: Vec<String> = blocks.iter().map(text_of).collect();
+        assert_eq!(texts, ["He was certain of it.", "Then he left."]);
+
+        let mut read = Vec::new();
+        for block in &blocks {
+            runs(inlines_of(block), markdown, &mut read);
+        }
+        let values: Vec<&str> = read.iter().map(|(value, _)| *value).collect();
+        assert_eq!(
+            values,
+            ["He was ", "certain of ", "it", ".", "Then he left."]
+        );
+        for (value, written) in read {
+            assert_eq!(value, written);
+        }
+        // The paragraph after the block comment is on the line it was
+        // written on, and a byte of it still answers with its text.
+        assert_eq!(
+            block_position(&blocks[1]).map(|at| at.line),
+            Some(10),
+            "{blocks:?}"
+        );
+    }
+
+    /// A `%%` with no partner comments nothing out: prose is never
+    /// dropped. A backslash before a mark makes it prose as well.
+    #[test]
+    fn a_comment_mark_alone_is_prose() {
+        let blocks = vault("He was 100%% sure.\n\nShe was not.\n");
+        let texts: Vec<String> = blocks.iter().map(text_of).collect();
+        assert_eq!(texts, ["He was 100%% sure.", "She was not."]);
+
+        let blocks = vault("She wrote \\%%this\\%% down.\n");
+        assert_eq!(text_of(&blocks[0]), "She wrote %%this%% down.");
+    }
+
+    /// Acceptance: a block id at the end of a paragraph or a list
+    /// item is not set.
+    #[test]
+    fn a_block_id_at_the_end_of_a_paragraph_or_an_item_is_not_set() {
+        let markdown = "He *waited*. ^para1\n\n\
+                        - The first item ^item-1\n- The second\n  ^item-2\n\n\
+                        > A quotation.\n\n^quote\n\n\
+                        Two to the power ^ of three, and x^2.\n";
+        let blocks = vault(markdown);
+        assert_eq!(text_of(&blocks[0]), "He waited.");
+        assert_eq!(
+            items_of(&blocks[1]),
+            ["The first item", "The second"],
+            "{blocks:?}"
+        );
+        // A name on a line of its own under a block is no paragraph.
+        assert!(matches!(blocks[2], Block::Blockquote { .. }), "{blocks:?}");
+        assert_eq!(text_of(&blocks[3]), "Two to the power ^ of three, and x^2.");
+        assert_eq!(blocks.len(), 4, "{blocks:?}");
+
+        let mut read = Vec::new();
+        runs(inlines_of(&blocks[0]), markdown, &mut read);
+        assert_eq!(read, [("He ", "He "), ("waited", "waited"), (".", ".")]);
+    }
+
+    /// Acceptance: a highlight sets its text without the `==` marks,
+    /// as an element a sheet can style.
+    #[test]
+    fn a_highlight_becomes_an_inline_of_its_own() {
+        let markdown = "He was ==quite *certain*== of it, and ==said so==.\n";
+        let blocks = vault(markdown);
+        assert_eq!(
+            text_of(&blocks[0]),
+            "He was quite certain of it, and said so."
+        );
+        let marked: Vec<(String, &str)> = inlines_of(&blocks[0])
+            .iter()
+            .filter_map(|inline| match inline {
+                Inline::Highlight { children, span, .. } => {
+                    let span = span.expect("a highlight says where it was read");
+                    Some((
+                        inline_text(children),
+                        &markdown[span.start as usize..span.end as usize],
+                    ))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            marked,
+            [
+                ("quite certain".to_string(), "==quite *certain*=="),
+                ("said so".to_string(), "==said so=="),
+            ],
+        );
+        let mut read = Vec::new();
+        runs(inlines_of(&blocks[0]), markdown, &mut read);
+        for (value, written) in read {
+            assert_eq!(value, written);
+        }
+    }
+
+    /// A `==` that has nothing to hold is prose: one with a space on
+    /// its inner side, one with no partner, and a longer run of `=`.
+    #[test]
+    fn a_highlight_mark_that_holds_nothing_is_prose() {
+        for prose in [
+            "If a == b then stop.",
+            "He ==never finished.",
+            "A rule ==== of four.",
+            "She wrote \\==this== down.",
+        ] {
+            let blocks = vault(&format!("{prose}\n"));
+            let inlines = inlines_of(&blocks[0]);
+            assert!(
+                !inlines
+                    .iter()
+                    .any(|inline| matches!(inline, Inline::Highlight { .. })),
+                "{inlines:?}",
+            );
+            assert_eq!(text_of(&blocks[0]), prose.replace('\\', ""));
+        }
+    }
+
+    /// The classes of a block.
+    fn classes_of(block: &Block) -> Vec<String> {
+        fleuron::content::block_attributes(block).classes.clone()
+    }
+
+    /// Acceptance: a callout sets its title and its body without the
+    /// `[!type]` marker, and the type is a class a sheet can match.
+    #[test]
+    fn a_callout_sets_its_title_and_its_body_and_takes_its_type_as_a_class() {
+        let markdown = "> [!Warning]- Mind the *gap*\n> The platform is low\n> on this side.\n>\n\
+                        > Step down.\n\n\
+                        > [!faq]\n> Is there a title? No.\n\n\
+                        > [not a callout] and so prose.\n";
+        let blocks = vault(markdown);
+        assert_eq!(blocks.len(), 3, "{blocks:?}");
+
+        let Block::Blockquote { blocks: held, .. } = &blocks[0] else {
+            panic!("expected a quotation, got {:?}", blocks[0]);
+        };
+        assert_eq!(classes_of(&blocks[0]), ["callout", "warning"]);
+        let texts: Vec<String> = held.iter().map(text_of).collect();
+        assert_eq!(
+            texts,
+            [
+                "Mind the gap",
+                "The platform is low on this side.",
+                "Step down."
+            ],
+        );
+        let named: Vec<Vec<String>> = held.iter().map(classes_of).collect();
+        assert_eq!(named, [vec!["callout-title".to_string()], vec![], vec![]]);
+        // The title is read from the bytes it was written at.
+        let span = block_span(&held[0]).expect("the title says where it was read");
+        assert_eq!(
+            &markdown[span.start as usize..span.end as usize],
+            "Mind the *gap*"
+        );
+
+        let Block::Blockquote { blocks: held, .. } = &blocks[1] else {
+            panic!("expected a quotation, got {:?}", blocks[1]);
+        };
+        assert_eq!(classes_of(&blocks[1]), ["callout", "faq"]);
+        let texts: Vec<String> = held.iter().map(text_of).collect();
+        assert_eq!(texts, ["Is there a title? No."]);
+        assert!(classes_of(&held[0]).is_empty());
+
+        let Block::Blockquote { blocks: held, .. } = &blocks[2] else {
+            panic!("expected a quotation, got {:?}", blocks[2]);
+        };
+        assert!(classes_of(&blocks[2]).is_empty());
+        assert_eq!(text_of(&held[0]), "[not a callout] and so prose.");
+    }
+
+    /// Acceptance: `%%`, `==` and `^id` inside a code span or a code
+    /// block are set as written.
+    #[test]
+    fn code_keeps_every_mark_as_written() {
+        let markdown = "Write `%%a%% ==b== ^c` to try it.\n\n\
+                        ```\n%%x%%\n==y== ^z\n```\n\n    %%p%% ==q== ^r\n\n\
+                        The mark is `%%`. ^real\n";
+        let blocks = vault(markdown);
+        let code: Vec<&str> = inlines_of(&blocks[0])
+            .iter()
+            .filter_map(|inline| match inline {
+                Inline::Code { value, .. } => Some(value.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(code, ["%%a%% ==b== ^c"]);
+        assert_eq!(text_of(&blocks[0]), "Write %%a%% ==b== ^c to try it.");
+        let Block::CodeBlock { text, .. } = &blocks[1] else {
+            panic!("expected a code block, got {:?}", blocks[1]);
+        };
+        assert_eq!(text, "%%x%%\n==y== ^z");
+        let Block::CodeBlock { text, .. } = &blocks[2] else {
+            panic!("expected a code block, got {:?}", blocks[2]);
+        };
+        assert_eq!(text, "%%p%% ==q== ^r");
+        // A mark in a code span opens no comment over the prose after
+        // it.
+        assert_eq!(text_of(&blocks[3]), "The mark is %%.");
+    }
+
+    /// Acceptance: the other dialects set all four as prose.
+    #[test]
+    fn the_other_dialects_read_all_four_as_prose() {
+        let markdown =
+            "A %%comment%% and a ==highlight==. ^para1\n\n> [!tip] A title\n> The body.\n";
+        for dialect in [Dialect::fleuron(), Dialect::common_mark(), Dialect::gfm()] {
+            let options = Options {
+                dialect,
+                ..Options::default()
+            };
+            let (sections, warnings) = to_sections(markdown, "note.md", &options);
+            assert!(warnings.is_empty(), "{warnings:?}");
+            let blocks = &sections[0].blocks;
+            assert_eq!(
+                text_of(&blocks[0]),
+                "A %%comment%% and a ==highlight==. ^para1",
+                "{dialect:?}",
+            );
+            let Block::Blockquote {
+                blocks: held,
+                attributes,
+                ..
+            } = &blocks[1]
+            else {
+                panic!("expected a quotation, got {:?}", blocks[1]);
+            };
+            assert!(attributes.is_empty(), "{dialect:?}");
+            assert_eq!(text_of(&held[0]), "[!tip] A title The body.", "{dialect:?}");
+        }
     }
 }

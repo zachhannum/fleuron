@@ -238,6 +238,12 @@ fn each_inline<'a>(inlines: &'a [Inline], f: &mut dyn FnMut(Visit<'a>)) {
                 attributes,
                 ..
             }
+            | Inline::Highlight {
+                id,
+                children,
+                attributes,
+                ..
+            }
             | Inline::Span {
                 id,
                 children,
@@ -615,6 +621,12 @@ impl<'s> Writer<'s, '_, '_> {
                 attributes,
                 ..
             } => self.wrap("s", *id, attributes, children),
+            Inline::Highlight {
+                id,
+                children,
+                attributes,
+                ..
+            } => self.wrap("mark", *id, attributes, children),
             Inline::Span {
                 id,
                 children,

@@ -25,6 +25,9 @@ fn fragment() -> impl Strategy<Value = String> {
         Just("| a | b |\n|---|---|\n| c | d |\n".to_string()),
         Just("A [link](there.md) and an ![image](plate.png).\n".to_string()),
         Just("Text ~~struck~~ through.\n".to_string()),
+        Just("A %%comment%% and a ==highlight==. ^para1\n".to_string()),
+        Just("%%\nA comment over\n\nseveral blocks.\n%%\n".to_string()),
+        Just("> [!note] A callout\n> and its body.\n".to_string()),
     ]
 }
 

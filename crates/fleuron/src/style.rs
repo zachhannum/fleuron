@@ -1170,6 +1170,7 @@ fn named_inlines<'a>(
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
             | Inline::Strikethrough { children, .. }
+            | Inline::Highlight { children, .. }
             | Inline::Span { children, .. } => named_inlines(children, source, first, warnings),
         }
     }
@@ -2406,6 +2407,29 @@ mod tests {
             first(&inherited, "em").text_decoration_line,
             first(&inherited, "p").text_decoration_line,
         );
+    }
+
+    /// A highlight is the element `mark`. The built-in sheet puts a
+    /// background behind it, and a sheet reaches it by that name.
+    #[test]
+    fn a_highlight_is_a_mark_with_a_background() {
+        let mut book: Book = serde_json::from_str(
+            r#"{"metadata": {}, "sections": [{"blocks": [{"type": "paragraph", "inlines": [
+                {"type": "text", "value": "He was "},
+                {"type": "highlight", "children": [{"type": "text", "value": "certain"}]}
+            ]}]}]}"#,
+        )
+        .expect("the book reads");
+        book.assign_node_ids();
+
+        let built_in = first(&compile(&book, ""), "mark");
+        assert_eq!(built_in.background.color, Some(Color::rgb(255, 255, 0)));
+
+        let authored = first(
+            &compile(&book, "mark { background-color: #c0c0c0 }"),
+            "mark",
+        );
+        assert_eq!(authored.background.color, Some(Color::rgb(192, 192, 192)));
     }
 
     /// The furniture grammar: what an element sets a running string

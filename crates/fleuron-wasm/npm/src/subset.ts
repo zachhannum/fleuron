@@ -192,6 +192,7 @@ export const SUBSET: Subset = {
       'strong',
       'a',
       's',
+      'mark',
       'span'
     ],
     compounds: [

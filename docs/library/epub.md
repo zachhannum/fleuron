@@ -188,6 +188,7 @@ The EPUB holds one XHTML document for each section, in the order of the sections
 | list | `ol` or `ul`, and `li` |
 | table | `table`, `thead`, `tbody`, `tr`, `th`, and `td` |
 | emphasis, strong, code, strikethrough | `em`, `strong`, `code`, and `s` |
+| highlight | `mark` |
 | span | `span` |
 | link | `a` |
 | hard break | `br` |

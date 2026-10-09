@@ -324,7 +324,7 @@ The element names come from markdown:
 ```
 book section notes note h1 h2 h3 h4 h5 h6 p blockquote pre
 hr img ul ol li table thead tbody tr th td code em strong a
-s span
+s mark span
 ```
 
 {/* end generated */}
@@ -405,7 +405,7 @@ Each pseudo-element starts from the style of the element it belongs to, so a rul
 
 `::before` and `::after` add content to an element. The `content` property holds what they add. A rule with no `content`, or with `content: none`, adds nothing. See [Cross-references](#cross-references) for how to print the page number or the text of another element in `content`.
 
-On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, struck text, code, or a span. The text properties style that text.
+On an inline element, `::before` adds text before the element, and `::after` adds text after it. An inline element is a link, emphasis, strong text, struck text, highlighted text, code, or a span. The text properties style that text.
 
 On a block or a section, `::before` adds a box as the first child, and `::after` adds a box as the last child. The box is as wide as the content box of the element. It takes the text properties of the element, and a rule on the pseudo-element overrides them.
 
@@ -737,7 +737,7 @@ How far a mark hangs depends on the mark: nearly all of a period or comma, less 
 
 ### Inline boxes
 
-An inline element is a link, emphasis, strong text, struck text, code, or a span. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
+An inline element is a link, emphasis, strong text, struck text, highlighted text, code, or a span. It can take a background, padding, and a border, the way a block does. The properties are the ones in [margins, borders, and padding](#margins-borders-and-padding), [backgrounds](#backgrounds), and [rounded corners](#rounded-corners). A margin on an inline element is not in the subset.
 
 The engine paints one box per line the element reaches. Padding and a border on the left and the right are width. They move the text after them, and the line breaks against them. Padding and a border above and below the text leave the height of the line alone. A box deeper than the text reaches over the lines around it.
 
@@ -1659,6 +1659,16 @@ blockquote {
   margin: 1em 2em;
 }
 
+/* The title of a callout is bold. The paragraph under the title has
+   no indent. */
+.callout-title {
+  font-weight: bold;
+}
+
+.callout-title + p {
+  text-indent: 0;
+}
+
 /* A code block has space above and below it, and a monospace family.
    The bundled family is the only face a book gets without
    @font-face, so a book that wants a monospace face declares one. */
@@ -1772,6 +1782,7 @@ em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
 s { text-decoration: line-through }
+mark { background-color: #ffff00 }
 
 @page {
   size: 432pt 648pt;

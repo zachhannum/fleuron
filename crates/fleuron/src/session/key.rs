@@ -274,6 +274,17 @@ fn hash_inlines(inlines: &[Inline], styles: &StyleTree, h: &mut DefaultHasher) {
                 hash_node(*id, styles, h);
                 hash_inlines(children, styles, h);
             }
+            Inline::Highlight {
+                id,
+                children,
+                position,
+                attributes: _,
+                span: _,
+            } => {
+                (9u8, position).hash(h);
+                hash_node(*id, styles, h);
+                hash_inlines(children, styles, h);
+            }
             Inline::Span {
                 id,
                 children,

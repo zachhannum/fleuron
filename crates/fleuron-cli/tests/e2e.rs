@@ -33,7 +33,7 @@ use fleuron::content::{Block, Book, Inline, Row};
 use fleuron::images::{Assets, ImageLoader};
 use fleuron::pages::{Corners, DrawItem, Page, Side};
 use fleuron::style::Color;
-use fleuron_markdown::Options;
+use fleuron_markdown::{Dialect, Options};
 
 /// The fixture is checked in and layout is deterministic, so the page
 /// count is a fact about the pipeline, not a range.
@@ -448,6 +448,78 @@ fn a_code_block_reads_back_as_its_lines() {
             .position(|read| *read == line.trim())
             .unwrap_or_else(|| panic!("pdftotext does not read {line:?} back as a line:\n{text}"));
         from += at + 1;
+    }
+    if let Err(difference) = holds(&book, &strip_furniture(&text, None), squeeze, true) {
+        panic!("the PDF's prose is not the book's: {difference}");
+    }
+}
+
+/// The four things an Obsidian note holds that are not prose, through
+/// the CLI. `fixtures/obsidian-note.md` is a working note over the
+/// opening of the fixture book, with comments, a highlight, block
+/// ids and two callouts.
+///
+/// The PDF holds every word of the prose and none of the rest: no
+/// word of a comment, no block id, and no mark of a highlight or a
+/// callout. The highlight is on the page as the fill the built-in
+/// sheet gives it.
+#[test]
+fn an_obsidian_note_reaches_the_pdf_as_its_prose() {
+    const HIGHLIGHT: Color = Color::rgb(0xff, 0xff, 0x00);
+
+    let source = fixtures().join("obsidian-note.md");
+    let (pdf, stderr) = run_with(
+        "obsidian-note",
+        &[source.as_path()],
+        &[],
+        &["-d", "obsidian"],
+    );
+    assert!(!stderr.contains("warning"), "the note is clean: {stderr}");
+
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}{}",
+            String::from_utf8_lossy(&check.stdout),
+            String::from_utf8_lossy(&check.stderr),
+        );
+    }
+
+    let markdown = std::fs::read_to_string(&source).expect("the fixture is checked in");
+    let reading = Options {
+        dialect: Dialect::obsidian(),
+        ..Options::default()
+    };
+    let name = source.display().to_string();
+    let (sections, warnings) = fleuron_markdown::to_sections(&markdown, &name, &reading);
+    assert!(warnings.is_empty(), "the fixture is clean: {warnings:?}");
+    let book = fleuron_markdown::assemble(fleuron_markdown::frontmatter(&markdown), sections);
+
+    let registry = fleuron::fonts::bundled_registry().expect("the bundled face parses");
+    let styles = fleuron::style::Stylesheets::parse(&[]).compile(&book, &registry);
+    let assets = Assets::probe(&book, &styles, &Beside);
+    let pages = fleuron::layout::layout_book(&book, &styles, &registry, &assets).pages;
+    let marked: Vec<_> = pages
+        .iter()
+        .flat_map(|page| fills(page, HIGHLIGHT))
+        .collect();
+    assert!(!marked.is_empty(), "nothing is behind the highlight");
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    for hidden in [
+        "Leave it so",
+        "Mr. Bates, who returns",
+        "%%",
+        "==",
+        "^",
+        "[!",
+    ] {
+        assert!(!text.contains(hidden), "{hidden:?} is on the page:\n{text}");
+    }
+    for written in ["On the name of the ship", "applied myself close"] {
+        assert!(text.contains(written), "{written:?} is missing:\n{text}");
     }
     if let Err(difference) = holds(&book, &strip_furniture(&text, None), squeeze, true) {
         panic!("the PDF's prose is not the book's: {difference}");
@@ -2636,7 +2708,10 @@ fn epub_text(epub: &Path) -> String {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric())
                 .collect();
-            if !matches!(name.as_str(), "em" | "strong" | "code" | "a" | "s" | "span") {
+            if !matches!(
+                name.as_str(),
+                "em" | "strong" | "code" | "a" | "s" | "mark" | "span"
+            ) {
                 text.push(' ');
             }
             rest = &rest[close + 1..];
@@ -3299,6 +3374,7 @@ fn append_inlines(inlines: &[Inline], text: &mut String, notes: &mut Notes) {
             | Inline::Strong { children, .. }
             | Inline::Link { children, .. }
             | Inline::Strikethrough { children, .. }
+            | Inline::Highlight { children, .. }
             | Inline::Span { children, .. } => append_inlines(children, text, notes),
         }
     }

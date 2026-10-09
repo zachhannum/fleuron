@@ -456,6 +456,7 @@ mod tests {
             {"type": "code", "value": "d"},
             {"type": "link", "url": "x", "children": [{"type": "text", "value": "e"}]},
             {"type": "strikethrough", "children": [{"type": "text", "value": "f"}]},
+            {"type": "highlight", "children": [{"type": "text", "value": "i"}]},
             {"type": "span", "children": [{"type": "text", "value": "g"}]},
             {"type": "note", "blocks": [{"type": "paragraph", "inlines": [
                 {"type": "text", "value": "h"}

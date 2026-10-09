@@ -38,6 +38,16 @@ blockquote {
   margin: 1em 2em;
 }
 
+/* The title of a callout is bold. The paragraph under the title has
+   no indent. */
+.callout-title {
+  font-weight: bold;
+}
+
+.callout-title + p {
+  text-indent: 0;
+}
+
 /* A code block has space above and below it, and a monospace family.
    The bundled family is the only face a book gets without
    @font-face, so a book that wants a monospace face declares one. */
@@ -151,6 +161,7 @@ em { font-style: italic }
 strong { font-weight: bold }
 code { font-family: monospace }
 s { text-decoration: line-through }
+mark { background-color: #ffff00 }
 
 @page {
   size: 432pt 648pt;
