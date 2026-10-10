@@ -30,6 +30,7 @@ import {
 import { faceFamily, paintPage } from './svg.js';
 import {
   linkAt,
+  sheetOf,
   type Asset,
   type Epub,
   type EpubFiles,
@@ -83,6 +84,11 @@ export interface PreviewOptions {
   paper?: string | null;
   /** What it is printed in. */
   ink?: string;
+  /**
+   * Whether a page with a bleed or marks shows where it is cut. On
+   * unless `false`.
+   */
+  trimEdge?: boolean;
   /**
    * The images the manuscript refers to, by the url it names them
    * by. Nothing here fetches a url, so a host that wants an image on
@@ -701,8 +707,9 @@ export class Preview {
     if (box.width === 0 || box.height === 0) {
       return null;
     }
-    const x = ((event.clientX - box.left) * page.width) / box.width;
-    const y = ((event.clientY - box.top) * page.height) / box.height;
+    const sheet = sheetOf(page);
+    const x = sheet.x + ((event.clientX - box.left) * sheet.width) / box.width;
+    const y = sheet.y + ((event.clientY - box.top) * sheet.height) / box.height;
     return linkAt(page, x, y);
   }
 
@@ -809,6 +816,7 @@ export class Preview {
       zoom: this.scale,
       ...(this.options.paper === undefined ? {} : { paper: this.options.paper }),
       ...(this.options.ink === undefined ? {} : { ink: this.options.ink }),
+      ...(this.options.trimEdge === undefined ? {} : { trimEdge: this.options.trimEdge }),
       asset: this.options.asset ?? ((asset: Asset) => this.pixels.get(asset.url)),
     };
   }

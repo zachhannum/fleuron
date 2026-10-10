@@ -34,6 +34,7 @@ import {
   PAGE_BACKGROUND,
   PAGE_FURNITURE,
   paintPage,
+  sheetOf,
   styleOp,
   wireVersion,
   type BackgroundItem,
@@ -1219,6 +1220,65 @@ function rects(svg: string): Record<string, number>[] {
 function near(painted: number | undefined, wanted: number): boolean {
   return painted !== undefined && Math.abs(painted - wanted) < 1e-3;
 }
+
+// Bleed and marks. The page keeps its trim and its coordinates, and
+// grows by the bleed and the slug on every edge. The painter shows the
+// whole sheet, as the PDF page does, and draws the trim edge on it.
+const bled = await client.preview([
+  styleOp('@page { bleed: 3mm; marks: crop cross; background-color: #f4f1ea }'),
+]);
+const bledPage = bled?.pages[1] ?? null;
+const bledSheet = bledPage === null ? null : sheetOf(bledPage);
+check(
+  'a bled page carries its bleed and the room for its marks',
+  bledPage !== null &&
+    near(bledPage.bleed, (3 * 72) / 25.4) &&
+    bledPage.slug > 0 &&
+    bledSheet !== null &&
+    near(bledSheet.x, -(bledPage.bleed + bledPage.slug)),
+  bledPage === null ? 'no page' : `bleed ${bledPage.bleed}, slug ${bledPage.slug}`,
+);
+check(
+  'and it is the trim the unbled book sets, with the text where that book sets it',
+  bledPage !== null &&
+    bledPage.width === preview.pages[1]?.width &&
+    bledPage.height === preview.pages[1]?.height &&
+    JSON.stringify(bledPage.items.filter((item) => item.kind === 'text')) ===
+      JSON.stringify(preview.pages[1]?.items.filter((item) => item.kind === 'text')),
+);
+const bledSvg = bledPage === null ? '' : paintPage(bledPage, { fonts: bled?.fonts ?? [] });
+const viewBox = /viewBox="([^"]*)"/.exec(bledSvg)?.[1] ?? '';
+check(
+  'the painter shows the whole sheet, as the PDF page does',
+  bledSheet !== null &&
+    viewBox.split(' ').map(Number).every((value, at) =>
+      near(value, [bledSheet.x, bledSheet.y, bledSheet.width, bledSheet.height][at] ?? NaN),
+    ),
+  viewBox,
+);
+const trimEdge = /<rect data-trim=""([^>]*)\/>/.exec(bledSvg)?.[1] ?? null;
+check(
+  'and draws the trim edge on it',
+  trimEdge !== null &&
+    bledPage !== null &&
+    trimEdge.includes(' x="0" y="0"') &&
+    trimEdge.includes(`width="${bledPage.width}"`),
+  trimEdge ?? 'no trim edge',
+);
+const uncutSvg =
+  bledPage === null ? '' : paintPage(bledPage, { fonts: bled?.fonts ?? [], trimEdge: false });
+check(
+  'a host turns the trim edge off, and the rest of the sheet is the same',
+  trimEdge !== null &&
+    !uncutSvg.includes('data-trim') &&
+    uncutSvg === bledSvg.replace(/<rect data-trim=""[^>]*\/>/, ''),
+);
+const plainSvg = paintPage(preview.pages[1] as Page, { fonts: preview.fonts });
+check(
+  'a page with no bleed paints on its trim, with no trim edge',
+  !plainSvg.includes('data-trim') &&
+    plainSvg.includes(`viewBox="0 0 ${preview.pages[1]?.width} ${preview.pages[1]?.height}"`),
+);
 
 // Columns. The page box divides, the flow fills one column before it
 // fills the next, and the painter draws the rule the display structure

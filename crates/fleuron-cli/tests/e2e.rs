@@ -62,7 +62,7 @@ const ORNAMENT: &str = "\u{2766}";
 /// book comes out under two numberings on two build configurations,
 /// and what the engine decided is the same under both.
 const DEFAULT_DISPLAY_LIST: &str =
-    "307a6d4b84d6c0c1aa9f3aa21a1ffb90ffea73c38369a465a4c50adea2f4ce69";
+    "a831616af073a5664100479bc2cf800ecc0eb377e3cbe0797b48ef0c9e1575e4";
 
 #[test]
 fn the_fixture_book_renders_a_pdf() {
@@ -2299,6 +2299,76 @@ fn the_pdf_is_structurally_sound() {
         String::from_utf8_lossy(&check.stdout),
         String::from_utf8_lossy(&check.stderr),
     );
+}
+
+/// The sheet the bled run is driven with: art to the edge, and the
+/// marks a printer cuts it by.
+const BLED: &str = "@page { bleed: 3mm; marks: crop cross; background-color: #f4f1ea }";
+
+/// Acceptance: a book bled and marked for a printer writes a PDF that
+/// `qpdf --check` passes, whose MediaBox is larger than its TrimBox by
+/// the bleed and the room for the marks, and whose TrimBox is the trim
+/// the book sets without them. The page count and every word of the
+/// book are what they are without the bleed.
+#[test]
+fn a_bled_and_marked_book_reaches_the_pdf() {
+    let sheet = write_sheet("bled", BLED);
+    let (pdf, stderr) = render("bled", &[sheet.as_path()]);
+    assert!(
+        !stderr.contains("unsupported"),
+        "bleed and marks are in the subset: {stderr}",
+    );
+
+    let pages = pages_under(BLED);
+    assert_eq!(pages.len(), EXPECTED_PAGES, "the bleed moved the pages");
+    let (bleed, outset) = (pages[0].bleed, pages[0].outset());
+    assert!((bleed - 3.0 * 72.0 / 25.4).abs() < 1e-3);
+    assert!(outset > bleed, "no room for the marks");
+
+    if let Some(check) = tool("qpdf", &["--check".as_ref(), pdf.as_os_str()]) {
+        assert!(
+            check.status.success(),
+            "qpdf --check: {}{}",
+            String::from_utf8_lossy(&check.stdout),
+            String::from_utf8_lossy(&check.stderr),
+        );
+    }
+
+    if let Some(run) = tool("pdfinfo", &["-box".as_ref(), pdf.as_os_str()]) {
+        let info = String::from_utf8_lossy(&run.stdout).into_owned();
+        let named = |name: &str| -> [f32; 4] {
+            let line = info
+                .lines()
+                .find(|line| line.starts_with(name))
+                .unwrap_or_else(|| panic!("pdfinfo names no {name}:\n{info}"));
+            let numbers: Vec<f32> = line[name.len()..]
+                .split_whitespace()
+                .map(|number| number.parse().expect("a number"))
+                .collect();
+            numbers.try_into().expect("four numbers")
+        };
+        let (media, trim, bled) = (named("MediaBox:"), named("TrimBox:"), named("BleedBox:"));
+        let (width, height) = (pages[0].width, pages[0].height);
+        let near = |a: f32, b: f32| (a - b).abs() < 0.01;
+        assert!(near(media[2] - media[0], width + 2.0 * outset), "{info}");
+        assert!(near(media[3] - media[1], height + 2.0 * outset), "{info}");
+        assert!(near(trim[2] - trim[0], width) && near(trim[3] - trim[1], height));
+        assert!(near(trim[0] - media[0], outset) && near(trim[1] - media[1], outset));
+        assert!(near(trim[0] - bled[0], bleed) && near(bled[2] - trim[2], bleed));
+    }
+
+    let Some(text) = extract_text(&pdf) else {
+        return;
+    };
+    assert_eq!(pages_of(&text).len(), EXPECTED_PAGES);
+    if let Err(difference) = holds(
+        &fixture_book(),
+        &strip_furniture(&text, None),
+        squeeze,
+        true,
+    ) {
+        panic!("the bled PDF's prose is not the book's: {difference}");
+    }
 }
 
 /// Acceptance: every word of the book comes back out of the PDF, and

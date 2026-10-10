@@ -35,6 +35,11 @@ impl Side {
 
 /// One typeset page: a number, a side, a trim size, and what to
 /// paint on it.
+///
+/// Coordinates are measured from the top left corner of the trim, so
+/// a page with a bleed has items at negative coordinates and past its
+/// width and height. The sheet a printer gets is the trim grown by
+/// `bleed + slug` on every edge.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Page {
     /// Folio, counting from 1.
@@ -45,6 +50,15 @@ pub struct Page {
     pub width: f32,
     /// Trimmed page height in points.
     pub height: f32,
+    /// How far past the trim the page background reaches, in points,
+    /// on every edge. Art that runs to the edge of the finished page
+    /// runs this far past it, so a cut that drifts still leaves no
+    /// white edge. Zero on a page with no bleed.
+    pub bleed: f32,
+    /// How far past the bleed the sheet reaches, in points, on every
+    /// edge: the room crop marks and registration marks are painted
+    /// in. Zero on a page with no marks.
+    pub slug: f32,
     /// The sections whose content appears on this page, in the order their
     /// content appears on it. A chapter that ends mid-page is followed
     /// there by the next one opening, so the page names both. A blank
@@ -59,6 +73,12 @@ pub struct Page {
 }
 
 impl Page {
+    /// How far the sheet reaches past the trim on every edge: the
+    /// bleed and the slug together.
+    pub fn outset(&self) -> f32 {
+        self.bleed + self.slug
+    }
+
     /// Puts the page's items in paint order. The sort is stable, so
     /// one layer keeps the order the flow produced it in.
     pub(crate) fn sort_by_layer(&mut self) {

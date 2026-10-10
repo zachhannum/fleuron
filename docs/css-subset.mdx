@@ -36,7 +36,7 @@ book {
 
 ## The page
 
-`@page` describes the page itself: its size, its margins, its columns, where its content sits, and the boxes in the margins that contain running heads and page numbers.
+`@page` describes the page itself: its size, its margins, its bleed and crop marks, its columns, where its content sits, and the boxes in the margins that contain running heads and page numbers.
 
 {/* generated: page-grammar */}
 
@@ -48,6 +48,8 @@ book {
   margin-right: <length> | <percentage>;
   margin-bottom: <length> | <percentage>;
   margin-left: <length> | <percentage>;
+  bleed: auto | <length>;
+  marks: none | [ crop || cross ];
   background-color: <color> | transparent;
   background-image: none | <url>;
   background-repeat: repeat | no-repeat;
@@ -138,7 +140,7 @@ Page rules cascade like any other rule: origin first, then specificity, then sou
 
 ### Page backgrounds
 
-A page carries a background: a color, an image, or a color with an image over it. The engine paints it over the whole page box, margins included, before anything else on the page.
+A page carries a background: a color, an image, or a color with an image over it. The engine draws it over the whole page box, margins included, before anything else on the page. On a page with a [bleed](#bleed-and-crop-marks), the background also covers the bleed.
 
 The following example puts one scan behind every left-hand page and another behind every right-hand page:
 
@@ -156,9 +158,38 @@ The following example puts one scan behind every left-hand page and another behi
 }
 ```
 
-The five background properties are described under [backgrounds](#backgrounds). They mean the same thing on a page as on a block. The box they measure against is the page box rather than the border box.
+The five background properties are described under [backgrounds](#backgrounds). They mean the same thing on a page as on a block. The box they measure against is the page box and its bleed rather than the border box.
 
 The engine opens no files of its own. Whatever string `url()` holds is the name the host resolves to bytes, the same way `@font-face` resolves a face. A url nothing resolves warns at the line and column it was written at, and the engine skips the image.
+
+### Bleed and crop marks
+
+A printer prints a book on large sheets, then cuts each sheet to the page size. Art that runs to the edge of the page must print past that edge. If it does not, a cut that is a little off leaves a white line. The bleed is the area past the edge that the art covers. `bleed` gives its width, and `marks` adds the lines a printer cuts along.
+
+`bleed` takes a length or `auto`. On a page with crop marks, `auto` is 6pt. On any other page, `auto` is zero. The page background covers the bleed. The text and every other thing on the page stay in the same place on the page as without a bleed.
+
+`marks` takes `none`, or `crop` and `cross` in either order:
+
+| value | what the engine draws |
+|---|---|
+| `crop` | two short lines off each corner of the page, one along each edge that meets there |
+| `cross` | a registration target off the middle of each edge |
+| `none` | no marks |
+
+A registration target is a circle and a cross. A printer uses it to line up the plates of each color. The engine draws the marks outside the bleed, in 24pt of extra space on each edge.
+
+In the PDF, a page is the page size plus the bleed and the space for the marks, on each edge. The PDF gives the page size as the `TrimBox` of the page, and the edge of the bleed as its `BleedBox`. A book with no bleed and no marks has PDF pages of the page size and nothing more. The preview shows the whole PDF page, with a thin dashed line where the printer cuts.
+
+The following example covers each page and a 3 mm bleed with a map, and adds crop marks:
+
+```css
+@page {
+  bleed: 3mm;
+  marks: crop;
+  background-image: url("art/map.webp");
+  background-size: cover;
+}
+```
 
 ### Running heads
 

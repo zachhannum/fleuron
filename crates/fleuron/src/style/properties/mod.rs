@@ -36,7 +36,7 @@ pub use edges::{Border, BorderRadius, BorderStyle, Corner, CornerRadius, Edge, E
 pub use exclusion::{
     Clear, Coord, Float, Inset, Position, ShapeOutside, ShapePoint, ShapeSource, WrapFlow,
 };
-pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, PageGeometry};
+pub use page::{Align, AlignContent, Band, ColumnRule, Columns, MarginBox, Marks, PageGeometry};
 pub use value::{
     BlendMode, BorderCollapse, BoxDecorationBreak, Break, Color, ColumnSpan, DecorationLine,
     DecorationStyle, Family, Figures, FontStyle, FontVariantAlternates, FontVariantCaps,

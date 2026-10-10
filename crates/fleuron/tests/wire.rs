@@ -212,21 +212,25 @@ fn link() -> impl Strategy<Value = Link> {
 fn page() -> impl Strategy<Value = Page> {
     (
         1u32..2000,
-        1.0f32..2000.0,
-        1.0f32..2000.0,
+        (1.0f32..2000.0, 1.0f32..2000.0),
+        (0.0f32..36.0, prop_oneof![Just(0.0f32), Just(24.0f32)]),
         proptest::sample::subsequence(section_ids(), 0..=3),
         proptest::collection::vec(item(), 0..8),
         proptest::collection::vec(link(), 0..3),
     )
-        .prop_map(|(number, width, height, sections, items, links)| Page {
-            number,
-            side: Side::of_number(number),
-            width,
-            height,
-            sections,
-            items,
-            links,
-        })
+        .prop_map(
+            |(number, (width, height), (bleed, slug), sections, items, links)| Page {
+                number,
+                side: Side::of_number(number),
+                width,
+                height,
+                bleed,
+                slug,
+                sections,
+                items,
+                links,
+            },
+        )
 }
 
 fn asset() -> impl Strategy<Value = Asset> {
