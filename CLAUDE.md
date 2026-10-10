@@ -84,7 +84,7 @@ markdown in → valid PDF out**. The CLI runs it in
   corpus is the other two public-domain books, checked
   in as markdown and read into content trees through the shipped
   frontend, so the measured path is the shipped path. Pride and
-  Prejudice is the gate: ~330 pages, the book scale the budgets are
+  Prejudice is the gate: ~310 pages, the book scale the budgets are
   written against. The Count of Monte Cristo is four times that, and
   exists to expose superlinearity. No generated prose — it is uniform,
   and uniform text hides the tail cases that make layout slow.
