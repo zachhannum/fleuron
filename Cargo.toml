@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.24.0"
+version = "0.25.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/zachhannum/fleuron"
@@ -23,9 +23,9 @@ readme = "README.md"
 # The crates that depend on each other. A published crate resolves the
 # version, and every crate in a release is laid out by one engine, so
 # the requirement is exact.
-fleuron = { path = "crates/fleuron", version = "=0.24.0" }
-fleuron-markdown = { path = "crates/fleuron-markdown", version = "=0.24.0" }
-fleuron-epub = { path = "crates/fleuron-epub", version = "=0.24.0" }
+fleuron = { path = "crates/fleuron", version = "=0.25.0" }
+fleuron-markdown = { path = "crates/fleuron-markdown", version = "=0.25.0" }
+fleuron-epub = { path = "crates/fleuron-epub", version = "=0.25.0" }
 
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
