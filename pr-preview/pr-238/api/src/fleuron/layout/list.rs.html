@@ -74,7 +74,7 @@
 <a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hang(<span class="kw-2">&amp;mut </span><span class="self">self</span>, start: usize, marker: Marker) {
 <a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let </span>first = <span class="self">self</span>.fragments[start..]
 <a href=#76 id=76 data-nosnippet>76</a>            .iter_mut()
-<a href=#77 id=77 data-nosnippet>77</a>            .find(|fragment| !<span class="macro">matches!</span>(fragment.piece, Piece::Anchor(<span class="kw">_</span>)));
+<a href=#77 id=77 data-nosnippet>77</a>            .find(|fragment| !fragment.aside());
 <a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">match </span>first {
 <a href=#79 id=79 data-nosnippet>79</a>            <span class="prelude-val">Some</span>(fragment) =&gt; fragment
 <a href=#80 id=80 data-nosnippet>80</a>                .markers
