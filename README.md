@@ -37,14 +37,8 @@ flexbox, no transforms. CSS the engine does not support is reported
 with the line and column it was written at, and the book lays out
 anyway.
 
-With no stylesheet of your own, the built-in stylesheet makes a 6x9
-inch trade paperback. Each section starts on the next page, left-hand
-or right-hand. The following rule starts each section on a right-hand
-page instead, with a blank page before it where one is necessary:
-
-```css
-section { break-before: recto }
-```
+The built-in stylesheet starts each section on the next page.
+`section { break-before: recto }` starts each one on a right-hand page.
 
 ## Architecture
 

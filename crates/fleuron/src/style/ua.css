@@ -12,8 +12,8 @@ book {
   widows: 2;
 }
 
-/* A section starts on the next page, left-hand or right-hand. Naming
-   its pages lets @page tell an opening page from a continuation. */
+/* A section starts on the next page. Naming its pages lets @page
+   tell an opening page from a continuation. */
 section {
   page: chapter;
   break-before: page;
