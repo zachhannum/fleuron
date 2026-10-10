@@ -12,11 +12,11 @@ book {
   widows: 2;
 }
 
-/* A chapter opens on a right-hand page. Naming its pages lets @page
-   tell an opening page from a continuation. */
+/* A section starts on the next page, left-hand or right-hand. Naming
+   its pages lets @page tell an opening page from a continuation. */
 section {
   page: chapter;
-  break-before: recto;
+  break-before: page;
   counter-reset: note;
 }
 
