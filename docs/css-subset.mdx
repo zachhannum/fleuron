@@ -15,7 +15,7 @@ The editor below is a live playground running the fleuron engine.
 
 ## The defaults
 
-The engine includes a built-in stylesheet that defines a basic trade paperback style: a 6x9 inch page, mirrored margins, and page numbers centered at the bottom. It sets the text in the [bundled font](library/fonts.md) at 11 pt with a line height of 1.4, left-aligned and unhyphenated. It indents every paragraph after the first and centers an ornament on each thematic break. A page break in the manuscript starts a new page, and a column break starts the next column.
+The engine includes a built-in stylesheet that defines a basic trade paperback style: a 6x9 inch page, mirrored margins, and page numbers centered at the bottom. It sets the text in the [bundled font](library/fonts.md) at 11 pt with a line height of 1.4, left-aligned and unhyphenated. It indents every paragraph after the first and centers an ornament on each thematic break. Each section starts on the next page, left-hand or right-hand. A page break in the manuscript starts a new page, and a column break starts the next column.
 
 The CSS for the built-in stylesheet is listed [at the bottom of this page](#the-built-in-stylesheet). Any additional CSS cascades over it regardless of specificity, so `p { text-indent: 0 }` overrides the built-in `p + p` rule.
 
@@ -1141,6 +1141,8 @@ Two layers are the engine's own. A stylesheet cannot name either one. The engine
 
 `orphans` and `widows` limit where a paragraph can split. A paragraph with fewer than `orphans + widows` lines moves whole to the next page instead. Where no permitted break is left, the page ends anyway.
 
+The built-in stylesheet gives every section `break-before: page`, so a section starts on the next page and no blank page comes before it. With `break-before: recto`, the engine adds a blank left-hand page before a section that otherwise starts on one.
+
 The following example starts each chapter on a right-hand page, keeps a heading with the text below it, and keeps block quotes whole:
 
 ```css
@@ -1727,11 +1729,11 @@ book {
   widows: 2;
 }
 
-/* A chapter opens on a right-hand page. Naming its pages lets @page
-   tell an opening page from a continuation. */
+/* A section starts on the next page, left-hand or right-hand. Naming
+   its pages lets @page tell an opening page from a continuation. */
 section {
   page: chapter;
-  break-before: recto;
+  break-before: page;
   counter-reset: note;
 }
 

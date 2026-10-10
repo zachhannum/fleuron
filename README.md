@@ -20,7 +20,7 @@ gives them a preview that matches the export.
 It owns the whole pipeline: [harfrust] shaping, Unicode line breaking
 and segmentation, Knuth-Plass justification, and CSS Fragmentation over
 a box tree it builds itself. Break decisions come out of the layout
-pass, so a 333-page novel reaches PDF bytes in 287 ms. The preview and
+pass, so a 307-page novel reaches PDF bytes in 287 ms. The preview and
 the PDF are painted from the same display structure, so they cannot
 come out different. The engine does no I/O and links no platform
 library, so it builds for any target Rust does.
@@ -36,6 +36,15 @@ It is not a browser engine. There is no float layout, no grid or
 flexbox, no transforms. CSS the engine does not support is reported
 with the line and column it was written at, and the book lays out
 anyway.
+
+With no stylesheet of your own, the built-in stylesheet makes a 6x9
+inch trade paperback. Each section starts on the next page, left-hand
+or right-hand. The following rule starts each section on a right-hand
+page instead, with a blank page before it where one is necessary:
+
+```css
+section { break-before: recto }
+```
 
 ## Architecture
 
@@ -82,8 +91,8 @@ fixed budgets.
 
 | | pages | parse | style | line layout | fragment | PDF | end to end | layout peak |
 |---|---|---|---|---|---|---|---|---|
-| *Pride and Prejudice* | 333 | 1 ms | 1 ms | 128 ms | 5 ms | 150 ms | 287 ms | 12 MiB |
-| *The Count of Monte Cristo* | 1254 | 5 ms | 6 ms | 505 ms | 20 ms | 563 ms | 1.10 s | 47 MiB |
+| *Pride and Prejudice* | 307 | 1 ms | 1 ms | 128 ms | 5 ms | 150 ms | 287 ms | 12 MiB |
+| *The Count of Monte Cristo* | 1185 | 5 ms | 6 ms | 505 ms | 20 ms | 563 ms | 1.10 s | 47 MiB |
 
 Four times the book costs about four times the time and four times the
 memory.
