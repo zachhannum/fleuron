@@ -2196,8 +2196,8 @@
 <a href=#2196 id=2196 data-nosnippet>2196</a>
 <a href=#2197 id=2197 data-nosnippet>2197</a>    <span class="doccomment">/// `break-before` and `break-after` reach fragmentation from the
 <a href=#2198 id=2198 data-nosnippet>2198</a>    /// cascade, and nothing in the paginator hardcodes them: a sheet
-<a href=#2199 id=2199 data-nosnippet>2199</a>    /// that turns the recto rule off runs the chapters together, and
-<a href=#2200 id=2200 data-nosnippet>2200</a>    /// one that asks for a page break gets one.
+<a href=#2199 id=2199 data-nosnippet>2199</a>    /// that turns the page break off runs the chapters together, and
+<a href=#2200 id=2200 data-nosnippet>2200</a>    /// one that asks for a side gets the blank page that takes.
 <a href=#2201 id=2201 data-nosnippet>2201</a>    </span><span class="attr">#[test]
 <a href=#2202 id=2202 data-nosnippet>2202</a>    </span><span class="kw">fn </span>break_control_comes_from_the_cascade() {
 <a href=#2203 id=2203 data-nosnippet>2203</a>        <span class="kw">let </span>chapters = || {
@@ -2206,328 +2206,327 @@
 <a href=#2206 id=2206 data-nosnippet>2206</a>                section(<span class="macro">vec!</span>[heading(<span class="string">"Two"</span>), paragraph(<span class="string">"The second chapter."</span>)]),
 <a href=#2207 id=2207 data-nosnippet>2207</a>            ]
 <a href=#2208 id=2208 data-nosnippet>2208</a>        };
-<a href=#2209 id=2209 data-nosnippet>2209</a>        <span class="comment">// The built-in sheet opens a chapter on a recto.
-<a href=#2210 id=2210 data-nosnippet>2210</a>        </span><span class="macro">assert_eq!</span>(paginate(chapters()).len(), <span class="number">3</span>);
+<a href=#2209 id=2209 data-nosnippet>2209</a>        <span class="comment">// The built-in sheet opens a chapter on the next page.
+<a href=#2210 id=2210 data-nosnippet>2210</a>        </span><span class="macro">assert_eq!</span>(paginate(chapters()).len(), <span class="number">2</span>);
 <a href=#2211 id=2211 data-nosnippet>2211</a>        <span class="comment">// The author turns that off and the chapters run together.
 <a href=#2212 id=2212 data-nosnippet>2212</a>        </span><span class="macro">assert_eq!</span>(
 <a href=#2213 id=2213 data-nosnippet>2213</a>            paginate_styled(<span class="string">"section { break-before: auto }"</span>, chapters()).len(),
 <a href=#2214 id=2214 data-nosnippet>2214</a>            <span class="number">1</span>,
 <a href=#2215 id=2215 data-nosnippet>2215</a>        );
-<a href=#2216 id=2216 data-nosnippet>2216</a>        <span class="comment">// A page break, without a side, is still a page break.
-<a href=#2217 id=2217 data-nosnippet>2217</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#2218 id=2218 data-nosnippet>2218</a>            paginate_styled(<span class="string">"section { break-before: page }"</span>, chapters()).len(),
-<a href=#2219 id=2219 data-nosnippet>2219</a>            <span class="number">2</span>,
-<a href=#2220 id=2220 data-nosnippet>2220</a>        );
-<a href=#2221 id=2221 data-nosnippet>2221</a>        <span class="comment">// And a verso open leaves the blank recto behind it.
-<a href=#2222 id=2222 data-nosnippet>2222</a>        </span><span class="kw">let </span>pages = paginate_styled(<span class="string">"section { break-before: verso }"</span>, chapters());
-<a href=#2223 id=2223 data-nosnippet>2223</a>        <span class="macro">assert_eq!</span>(pages.len(), <span class="number">4</span>);
-<a href=#2224 id=2224 data-nosnippet>2224</a>        <span class="macro">assert!</span>(pages[<span class="number">0</span>].items.is_empty() || pages[<span class="number">2</span>].items.is_empty());
-<a href=#2225 id=2225 data-nosnippet>2225</a>    }
-<a href=#2226 id=2226 data-nosnippet>2226</a>
-<a href=#2227 id=2227 data-nosnippet>2227</a>    <span class="doccomment">/// `break-inside: avoid` moves a block whole rather than split
-<a href=#2228 id=2228 data-nosnippet>2228</a>    /// it, and `break-after: avoid` keeps a heading with the prose
-<a href=#2229 id=2229 data-nosnippet>2229</a>    /// under it.
-<a href=#2230 id=2230 data-nosnippet>2230</a>    </span><span class="attr">#[test]
-<a href=#2231 id=2231 data-nosnippet>2231</a>    </span><span class="kw">fn </span>avoid_keeps_blocks_and_headings_with_what_follows_them() {
-<a href=#2232 id=2232 data-nosnippet>2232</a>        <span class="comment">// A page of single-line paragraphs, all but a few lines
-<a href=#2233 id=2233 data-nosnippet>2233</a>        // full, and then a quotation too long for what is left.
-<a href=#2234 id=2234 data-nosnippet>2234</a>        </span><span class="kw">let </span>quoted = <span class="string">"quoted words that would rather not be split across a page turn "</span>;
-<a href=#2235 id=2235 data-nosnippet>2235</a>        <span class="kw">let </span>filler: Vec&lt;Block&gt; = (<span class="number">0</span>..<span class="number">30</span>)
-<a href=#2236 id=2236 data-nosnippet>2236</a>            .map(|index| paragraph(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"filler line {index}"</span>)))
-<a href=#2237 id=2237 data-nosnippet>2237</a>            .collect();
-<a href=#2238 id=2238 data-nosnippet>2238</a>        <span class="kw">let </span>blocks = [
-<a href=#2239 id=2239 data-nosnippet>2239</a>            filler,
-<a href=#2240 id=2240 data-nosnippet>2240</a>            <span class="macro">vec!</span>[quote(<span class="macro">vec!</span>[paragraph(<span class="kw-2">&amp;</span>quoted.repeat(<span class="number">6</span>))])],
-<a href=#2241 id=2241 data-nosnippet>2241</a>            long_prose(<span class="number">2</span>),
-<a href=#2242 id=2242 data-nosnippet>2242</a>        ]
-<a href=#2243 id=2243 data-nosnippet>2243</a>        .concat();
-<a href=#2244 id=2244 data-nosnippet>2244</a>        <span class="comment">// A quoted line is one set at the quotation's indent: only
-<a href=#2245 id=2245 data-nosnippet>2245</a>        // its first begins with the words the quotation opens with.
-<a href=#2246 id=2246 data-nosnippet>2246</a>        </span><span class="kw">let </span>indent = quote_indent();
-<a href=#2247 id=2247 data-nosnippet>2247</a>        <span class="kw">let </span>split = |css: <span class="kw-2">&amp;</span>str| {
-<a href=#2248 id=2248 data-nosnippet>2248</a>            <span class="kw">let </span>pages = paginate_styled(css, <span class="macro">vec!</span>[section(blocks.clone())]);
-<a href=#2249 id=2249 data-nosnippet>2249</a>            pages
-<a href=#2250 id=2250 data-nosnippet>2250</a>                .iter()
-<a href=#2251 id=2251 data-nosnippet>2251</a>                .filter(|page| {
-<a href=#2252 id=2252 data-nosnippet>2252</a>                    <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(page);
-<a href=#2253 id=2253 data-nosnippet>2253</a>                    content_lines(page)
-<a href=#2254 id=2254 data-nosnippet>2254</a>                        .iter()
-<a href=#2255 id=2255 data-nosnippet>2255</a>                        .any(|(<span class="kw">_</span>, runs)| (runs[<span class="number">0</span>].<span class="number">0 </span>- left - indent).abs() &lt; <span class="number">1e-3</span>)
-<a href=#2256 id=2256 data-nosnippet>2256</a>                })
-<a href=#2257 id=2257 data-nosnippet>2257</a>                .count()
-<a href=#2258 id=2258 data-nosnippet>2258</a>        };
-<a href=#2259 id=2259 data-nosnippet>2259</a>        <span class="macro">assert!</span>(split(<span class="string">""</span>) &gt;= <span class="number">2</span>, <span class="string">"the quotation should straddle a page"</span>);
-<a href=#2260 id=2260 data-nosnippet>2260</a>        <span class="macro">assert_eq!</span>(
-<a href=#2261 id=2261 data-nosnippet>2261</a>            split(<span class="string">"blockquote { break-inside: avoid }"</span>),
-<a href=#2262 id=2262 data-nosnippet>2262</a>            <span class="number">1</span>,
-<a href=#2263 id=2263 data-nosnippet>2263</a>            <span class="string">"an avoided blockquote should move whole"</span>,
-<a href=#2264 id=2264 data-nosnippet>2264</a>        );
-<a href=#2265 id=2265 data-nosnippet>2265</a>
-<a href=#2266 id=2266 data-nosnippet>2266</a>        <span class="comment">// A heading is never the last thing on a page: the built-in
-<a href=#2267 id=2267 data-nosnippet>2267</a>        // sheet gives it `break-after: avoid`.
-<a href=#2268 id=2268 data-nosnippet>2268</a>        </span><span class="kw">let </span>pages = paginate(<span class="macro">vec!</span>[
-<a href=#2269 id=2269 data-nosnippet>2269</a>            section(long_prose(<span class="number">12</span>)),
-<a href=#2270 id=2270 data-nosnippet>2270</a>            section([<span class="macro">vec!</span>[heading(<span class="string">"Two"</span>)], long_prose(<span class="number">12</span>)].concat()),
-<a href=#2271 id=2271 data-nosnippet>2271</a>        ]);
-<a href=#2272 id=2272 data-nosnippet>2272</a>        <span class="kw">for </span>page <span class="kw">in </span><span class="kw-2">&amp;</span>pages {
-<a href=#2273 id=2273 data-nosnippet>2273</a>            <span class="kw">let </span>lines = content_lines(page);
-<a href=#2274 id=2274 data-nosnippet>2274</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, runs)) = lines.last() {
-<a href=#2275 id=2275 data-nosnippet>2275</a>                <span class="macro">assert!</span>(
-<a href=#2276 id=2276 data-nosnippet>2276</a>                    runs[<span class="number">0</span>].<span class="number">1 </span>!= chapter_size(),
-<a href=#2277 id=2277 data-nosnippet>2277</a>                    <span class="string">"page {}: a heading closed the page"</span>,
-<a href=#2278 id=2278 data-nosnippet>2278</a>                    page.number,
-<a href=#2279 id=2279 data-nosnippet>2279</a>                );
-<a href=#2280 id=2280 data-nosnippet>2280</a>            }
-<a href=#2281 id=2281 data-nosnippet>2281</a>        }
-<a href=#2282 id=2282 data-nosnippet>2282</a>    }
-<a href=#2283 id=2283 data-nosnippet>2283</a>
-<a href=#2284 id=2284 data-nosnippet>2284</a>    <span class="doccomment">/// An `h4` with the words `value`.
-<a href=#2285 id=2285 data-nosnippet>2285</a>    </span><span class="kw">fn </span>h4(value: <span class="kw-2">&amp;</span>str) -&gt; Block {
-<a href=#2286 id=2286 data-nosnippet>2286</a>        <span class="kw">let </span>Block::Heading { inlines, .. } = heading(value) <span class="kw">else </span>{
-<a href=#2287 id=2287 data-nosnippet>2287</a>            <span class="macro">unreachable!</span>(<span class="string">"`heading` makes a heading"</span>);
-<a href=#2288 id=2288 data-nosnippet>2288</a>        };
-<a href=#2289 id=2289 data-nosnippet>2289</a>        Block::Heading {
-<a href=#2290 id=2290 data-nosnippet>2290</a>            id: NodeId::UNASSIGNED,
-<a href=#2291 id=2291 data-nosnippet>2291</a>            level: HeadingLevel::H4,
-<a href=#2292 id=2292 data-nosnippet>2292</a>            inlines,
-<a href=#2293 id=2293 data-nosnippet>2293</a>            attributes: Attributes::default(),
-<a href=#2294 id=2294 data-nosnippet>2294</a>            position: <span class="prelude-val">None</span>,
-<a href=#2295 id=2295 data-nosnippet>2295</a>            span: <span class="prelude-val">None</span>,
-<a href=#2296 id=2296 data-nosnippet>2296</a>        }
-<a href=#2297 id=2297 data-nosnippet>2297</a>    }
-<a href=#2298 id=2298 data-nosnippet>2298</a>
-<a href=#2299 id=2299 data-nosnippet>2299</a>    <span class="doccomment">/// Each content line of a page as the text of its runs, with its
-<a href=#2300 id=2300 data-nosnippet>2300</a>    /// baseline, its leading edge and its size.
-<a href=#2301 id=2301 data-nosnippet>2301</a>    </span><span class="kw">fn </span>read_lines(page: <span class="kw-2">&amp;</span>Page) -&gt; Vec&lt;(f32, f32, f32, String)&gt; {
-<a href=#2302 id=2302 data-nosnippet>2302</a>        content_lines(page)
-<a href=#2303 id=2303 data-nosnippet>2303</a>            .into_iter()
-<a href=#2304 id=2304 data-nosnippet>2304</a>            .map(|(baseline, runs)| {
-<a href=#2305 id=2305 data-nosnippet>2305</a>                <span class="kw">let </span>text = runs.iter().map(|run| run.<span class="number">2</span>).collect();
-<a href=#2306 id=2306 data-nosnippet>2306</a>                (baseline, runs[<span class="number">0</span>].<span class="number">0</span>, runs[<span class="number">0</span>].<span class="number">1</span>, text)
-<a href=#2307 id=2307 data-nosnippet>2307</a>            })
-<a href=#2308 id=2308 data-nosnippet>2308</a>            .collect()
-<a href=#2309 id=2309 data-nosnippet>2309</a>    }
-<a href=#2310 id=2310 data-nosnippet>2310</a>
-<a href=#2311 id=2311 data-nosnippet>2311</a>    <span class="doccomment">/// The width of a line of text on the opening page of a chapter.
-<a href=#2312 id=2312 data-nosnippet>2312</a>    </span><span class="kw">fn </span>opening_measure() -&gt; f32 {
-<a href=#2313 id=2313 data-nosnippet>2313</a>        master(Situation::First(Side::Recto)).geometry.measure()
-<a href=#2314 id=2314 data-nosnippet>2314</a>    }
-<a href=#2315 id=2315 data-nosnippet>2315</a>
-<a href=#2316 id=2316 data-nosnippet>2316</a>    <span class="doccomment">/// Part: a generated box holds the value of `content`, which is a
-<a href=#2317 id=2317 data-nosnippet>2317</a>    /// string or nothing.
-<a href=#2318 id=2318 data-nosnippet>2318</a>    </span><span class="attr">#[test]
-<a href=#2319 id=2319 data-nosnippet>2319</a>    </span><span class="kw">fn </span>a_generated_box_holds_its_string_or_nothing() {
-<a href=#2320 id=2320 data-nosnippet>2320</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="string">"the paragraph itself"</span>)])];
-<a href=#2321 id=2321 data-nosnippet>2321</a>        <span class="kw">let </span>said = paginate_styled(<span class="string">"p::before { content: \"Before it\" }"</span>, blocks());
-<a href=#2322 id=2322 data-nosnippet>2322</a>        <span class="kw">let </span>texts: Vec&lt;String&gt; = read_lines(<span class="kw-2">&amp;</span>said[<span class="number">0</span>])
-<a href=#2323 id=2323 data-nosnippet>2323</a>            .into_iter()
-<a href=#2324 id=2324 data-nosnippet>2324</a>            .map(|line| line.<span class="number">3</span>)
-<a href=#2325 id=2325 data-nosnippet>2325</a>            .collect();
-<a href=#2326 id=2326 data-nosnippet>2326</a>        <span class="macro">assert_eq!</span>(texts, [<span class="string">"Before it"</span>, <span class="string">"the paragraph itself"</span>]);
-<a href=#2327 id=2327 data-nosnippet>2327</a>
-<a href=#2328 id=2328 data-nosnippet>2328</a>        <span class="kw">let </span>bare = paginate(blocks());
-<a href=#2329 id=2329 data-nosnippet>2329</a>        <span class="kw">let </span>empty = paginate_styled(<span class="string">"p::before { content: \"\" }"</span>, blocks());
-<a href=#2330 id=2330 data-nosnippet>2330</a>        <span class="macro">assert_eq!</span>(read_lines(<span class="kw-2">&amp;</span>empty[<span class="number">0</span>]), read_lines(<span class="kw-2">&amp;</span>bare[<span class="number">0</span>]));
-<a href=#2331 id=2331 data-nosnippet>2331</a>    }
-<a href=#2332 id=2332 data-nosnippet>2332</a>
-<a href=#2333 id=2333 data-nosnippet>2333</a>    <span class="doccomment">/// Part: the generated box is a block in the flow, the first or
-<a href=#2334 id=2334 data-nosnippet>2334</a>    /// the last child of its element, across the element's content box
-<a href=#2335 id=2335 data-nosnippet>2335</a>    /// and in the element's style.
-<a href=#2336 id=2336 data-nosnippet>2336</a>    </span><span class="attr">#[test]
-<a href=#2337 id=2337 data-nosnippet>2337</a>    </span><span class="kw">fn </span>a_generated_box_is_the_first_or_last_child_of_its_block() {
-<a href=#2338 id=2338 data-nosnippet>2338</a>        <span class="kw">let </span>pages = paginate_styled(
-<a href=#2339 id=2339 data-nosnippet>2339</a>            <span class="string">"blockquote { font-size: 10pt; margin: 0 20pt } \
-<a href=#2340 id=2340 data-nosnippet>2340</a>             blockquote::before { content: \"first\" } \
-<a href=#2341 id=2341 data-nosnippet>2341</a>             blockquote::after { content: \"last\" }"</span>,
-<a href=#2342 id=2342 data-nosnippet>2342</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[
-<a href=#2343 id=2343 data-nosnippet>2343</a>                quote(<span class="macro">vec!</span>[paragraph(<span class="string">"inside one"</span>), paragraph(<span class="string">"inside two"</span>)]),
-<a href=#2344 id=2344 data-nosnippet>2344</a>                paragraph(<span class="string">"outside"</span>),
-<a href=#2345 id=2345 data-nosnippet>2345</a>            ])],
-<a href=#2346 id=2346 data-nosnippet>2346</a>        );
-<a href=#2347 id=2347 data-nosnippet>2347</a>        <span class="kw">let </span>lines = read_lines(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2348 id=2348 data-nosnippet>2348</a>        <span class="kw">let </span>texts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = lines.iter().map(|line| line.<span class="number">3</span>.as_str()).collect();
-<a href=#2349 id=2349 data-nosnippet>2349</a>        <span class="macro">assert_eq!</span>(
-<a href=#2350 id=2350 data-nosnippet>2350</a>            texts,
-<a href=#2351 id=2351 data-nosnippet>2351</a>            [<span class="string">"first"</span>, <span class="string">"inside one"</span>, <span class="string">"inside two"</span>, <span class="string">"last"</span>, <span class="string">"outside"</span>]
-<a href=#2352 id=2352 data-nosnippet>2352</a>        );
-<a href=#2353 id=2353 data-nosnippet>2353</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2354 id=2354 data-nosnippet>2354</a>        <span class="kw">for </span>(<span class="kw">_</span>, x, size, text) <span class="kw">in </span>[<span class="kw-2">&amp;</span>lines[<span class="number">0</span>], <span class="kw-2">&amp;</span>lines[<span class="number">3</span>]] {
-<a href=#2355 id=2355 data-nosnippet>2355</a>            <span class="macro">assert!</span>((x - (left + <span class="number">20.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"{text} starts at {x}"</span>);
-<a href=#2356 id=2356 data-nosnippet>2356</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>size, <span class="number">10.0</span>, <span class="string">"{text} is not in the quotation's size"</span>);
-<a href=#2357 id=2357 data-nosnippet>2357</a>        }
-<a href=#2358 id=2358 data-nosnippet>2358</a>    }
-<a href=#2359 id=2359 data-nosnippet>2359</a>
-<a href=#2360 id=2360 data-nosnippet>2360</a>    <span class="doccomment">/// Part: the generated box takes the box model. Its border box
-<a href=#2361 id=2361 data-nosnippet>2361</a>    /// holds its border, its padding and its height, inside its own
-<a href=#2362 id=2362 data-nosnippet>2362</a>    /// margins.
-<a href=#2363 id=2363 data-nosnippet>2363</a>    </span><span class="attr">#[test]
-<a href=#2364 id=2364 data-nosnippet>2364</a>    </span><span class="kw">fn </span>a_generated_box_takes_the_box_model() {
-<a href=#2365 id=2365 data-nosnippet>2365</a>        <span class="kw">const </span>TINT: Color = Color::rgb(<span class="number">0xee</span>, <span class="number">0xee</span>, <span class="number">0xee</span>);
-<a href=#2366 id=2366 data-nosnippet>2366</a>        <span class="kw">const </span>INK: Color = Color::rgb(<span class="number">0xd6</span>, <span class="number">0x07</span>, <span class="number">0x5e</span>);
-<a href=#2367 id=2367 data-nosnippet>2367</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[heading(<span class="string">"Title"</span>), paragraph(<span class="string">"after"</span>)])];
-<a href=#2368 id=2368 data-nosnippet>2368</a>        <span class="kw">let </span>pages = paginate_styled(
-<a href=#2369 id=2369 data-nosnippet>2369</a>            <span class="string">"h1::after { content: \"\"; height: 2pt; padding: 3pt 0; \
-<a href=#2370 id=2370 data-nosnippet>2370</a>             border-top: 1pt solid #d6075e; margin: 0 12pt; background-color: #eeeeee }"</span>,
-<a href=#2371 id=2371 data-nosnippet>2371</a>            blocks(),
-<a href=#2372 id=2372 data-nosnippet>2372</a>        );
-<a href=#2373 id=2373 data-nosnippet>2373</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2374 id=2374 data-nosnippet>2374</a>        <span class="kw">let </span>measure = opening_measure();
-<a href=#2375 id=2375 data-nosnippet>2375</a>        <span class="kw">let </span>boxes = rects(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2376 id=2376 data-nosnippet>2376</a>        <span class="kw">let </span>[(x, <span class="kw">_</span>, w, h, <span class="kw">_</span>)] = boxes
-<a href=#2377 id=2377 data-nosnippet>2377</a>            .iter()
-<a href=#2378 id=2378 data-nosnippet>2378</a>            .filter(|rect| rect.<span class="number">4 </span>== TINT)
-<a href=#2379 id=2379 data-nosnippet>2379</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()[..]
-<a href=#2380 id=2380 data-nosnippet>2380</a>        <span class="kw">else </span>{
-<a href=#2381 id=2381 data-nosnippet>2381</a>            <span class="macro">panic!</span>(<span class="string">"one background: {boxes:?}"</span>);
-<a href=#2382 id=2382 data-nosnippet>2382</a>        };
-<a href=#2383 id=2383 data-nosnippet>2383</a>        <span class="macro">assert!</span>((x - (left + <span class="number">12.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box starts at {x}"</span>);
-<a href=#2384 id=2384 data-nosnippet>2384</a>        <span class="macro">assert!</span>((w - (measure - <span class="number">24.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box is {w} wide"</span>);
-<a href=#2385 id=2385 data-nosnippet>2385</a>        <span class="macro">assert!</span>((h - <span class="number">9.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box is {h} tall"</span>);
-<a href=#2386 id=2386 data-nosnippet>2386</a>        <span class="macro">assert!</span>(
-<a href=#2387 id=2387 data-nosnippet>2387</a>            boxes
-<a href=#2388 id=2388 data-nosnippet>2388</a>                .iter()
-<a href=#2389 id=2389 data-nosnippet>2389</a>                .any(|rect| rect.<span class="number">4 </span>== INK &amp;&amp; (rect.<span class="number">3 </span>- <span class="number">1.0</span>).abs() &lt; <span class="number">1e-3</span>),
-<a href=#2390 id=2390 data-nosnippet>2390</a>            <span class="string">"no top border: {boxes:?}"</span>,
-<a href=#2391 id=2391 data-nosnippet>2391</a>        );
-<a href=#2392 id=2392 data-nosnippet>2392</a>        <span class="kw">let </span>moved = baseline_of(<span class="kw-2">&amp;</span>pages, <span class="string">"after"</span>) - baseline_of(<span class="kw-2">&amp;</span>paginate(blocks()), <span class="string">"after"</span>);
-<a href=#2393 id=2393 data-nosnippet>2393</a>        <span class="macro">assert!</span>((moved - <span class="number">9.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the prose moved {moved}"</span>);
-<a href=#2394 id=2394 data-nosnippet>2394</a>    }
-<a href=#2395 id=2395 data-nosnippet>2395</a>
-<a href=#2396 id=2396 data-nosnippet>2396</a>    <span class="doccomment">/// Acceptance: `h4::after { content: ""; height: 2pt;
-<a href=#2397 id=2397 data-nosnippet>2397</a>    /// background-color: #d6075e }` draws a rule under every h4, at
-<a href=#2398 id=2398 data-nosnippet>2398</a>    /// the width of the heading's content box.
-<a href=#2399 id=2399 data-nosnippet>2399</a>    </span><span class="attr">#[test]
-<a href=#2400 id=2400 data-nosnippet>2400</a>    </span><span class="kw">fn </span>a_generated_rule_sits_under_every_h4_across_its_content_box() {
-<a href=#2401 id=2401 data-nosnippet>2401</a>        <span class="kw">const </span>INK: Color = Color::rgb(<span class="number">0xd6</span>, <span class="number">0x07</span>, <span class="number">0x5e</span>);
-<a href=#2402 id=2402 data-nosnippet>2402</a>        <span class="kw">let </span>pages = paginate_styled(
-<a href=#2403 id=2403 data-nosnippet>2403</a>            <span class="string">"h4 { margin: 0 20pt; padding: 0 10pt } \
-<a href=#2404 id=2404 data-nosnippet>2404</a>             h4::after { content: \"\"; height: 2pt; background-color: #d6075e }"</span>,
-<a href=#2405 id=2405 data-nosnippet>2405</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[
-<a href=#2406 id=2406 data-nosnippet>2406</a>                h4(<span class="string">"First"</span>),
-<a href=#2407 id=2407 data-nosnippet>2407</a>                paragraph(<span class="string">"one"</span>),
-<a href=#2408 id=2408 data-nosnippet>2408</a>                h4(<span class="string">"Second"</span>),
-<a href=#2409 id=2409 data-nosnippet>2409</a>                paragraph(<span class="string">"two"</span>),
-<a href=#2410 id=2410 data-nosnippet>2410</a>            ])],
-<a href=#2411 id=2411 data-nosnippet>2411</a>        );
-<a href=#2412 id=2412 data-nosnippet>2412</a>        <span class="kw">let </span>page = <span class="kw-2">&amp;</span>pages[<span class="number">0</span>];
-<a href=#2413 id=2413 data-nosnippet>2413</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(page);
-<a href=#2414 id=2414 data-nosnippet>2414</a>        <span class="kw">let </span>measure = opening_measure();
-<a href=#2415 id=2415 data-nosnippet>2415</a>        <span class="kw">let </span>lines = read_lines(page);
-<a href=#2416 id=2416 data-nosnippet>2416</a>        <span class="kw">let </span>rules: Vec&lt;<span class="kw">_</span>&gt; = rects(page)
-<a href=#2417 id=2417 data-nosnippet>2417</a>            .into_iter()
-<a href=#2418 id=2418 data-nosnippet>2418</a>            .filter(|rect| rect.<span class="number">4 </span>== INK)
-<a href=#2419 id=2419 data-nosnippet>2419</a>            .collect();
-<a href=#2420 id=2420 data-nosnippet>2420</a>        <span class="macro">assert_eq!</span>(rules.len(), <span class="number">2</span>, <span class="string">"{rules:?}"</span>);
-<a href=#2421 id=2421 data-nosnippet>2421</a>        <span class="kw">for </span>((x, y, w, h, <span class="kw">_</span>), title) <span class="kw">in </span>rules.iter().zip([<span class="string">"First"</span>, <span class="string">"Second"</span>]) {
-<a href=#2422 id=2422 data-nosnippet>2422</a>            <span class="macro">assert!</span>(
-<a href=#2423 id=2423 data-nosnippet>2423</a>                (x - (left + <span class="number">30.0</span>)).abs() &lt; <span class="number">1e-3</span>,
-<a href=#2424 id=2424 data-nosnippet>2424</a>                <span class="string">"{title}: the rule starts at {x}"
-<a href=#2425 id=2425 data-nosnippet>2425</a>            </span>);
-<a href=#2426 id=2426 data-nosnippet>2426</a>            <span class="macro">assert!</span>(
-<a href=#2427 id=2427 data-nosnippet>2427</a>                (w - (measure - <span class="number">60.0</span>)).abs() &lt; <span class="number">1e-3</span>,
-<a href=#2428 id=2428 data-nosnippet>2428</a>                <span class="string">"{title}: the rule is {w} wide"
-<a href=#2429 id=2429 data-nosnippet>2429</a>            </span>);
-<a href=#2430 id=2430 data-nosnippet>2430</a>            <span class="macro">assert!</span>((h - <span class="number">2.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"{title}: the rule is {h} tall"</span>);
-<a href=#2431 id=2431 data-nosnippet>2431</a>            <span class="kw">let </span>at = lines
-<a href=#2432 id=2432 data-nosnippet>2432</a>                .iter()
-<a href=#2433 id=2433 data-nosnippet>2433</a>                .position(|line| line.<span class="number">3 </span>== title)
-<a href=#2434 id=2434 data-nosnippet>2434</a>                .expect(<span class="string">"the heading is set"</span>);
-<a href=#2435 id=2435 data-nosnippet>2435</a>            <span class="macro">assert!</span>(<span class="kw-2">*</span>y &gt; lines[at].<span class="number">0</span>, <span class="string">"{title}: the rule is above the baseline"</span>);
-<a href=#2436 id=2436 data-nosnippet>2436</a>            <span class="macro">assert!</span>(
-<a href=#2437 id=2437 data-nosnippet>2437</a>                y + h &lt;= lines[at + <span class="number">1</span>].<span class="number">0</span>,
-<a href=#2438 id=2438 data-nosnippet>2438</a>                <span class="string">"{title}: the rule runs into the prose"
-<a href=#2439 id=2439 data-nosnippet>2439</a>            </span>);
-<a href=#2440 id=2440 data-nosnippet>2440</a>        }
-<a href=#2441 id=2441 data-nosnippet>2441</a>    }
-<a href=#2442 id=2442 data-nosnippet>2442</a>
-<a href=#2443 id=2443 data-nosnippet>2443</a>    <span class="doccomment">/// Acceptance: `blockquote::before { content: "\201C" }` sets an
-<a href=#2444 id=2444 data-nosnippet>2444</a>    /// opening quotation mark before the quote's first line.
-<a href=#2445 id=2445 data-nosnippet>2445</a>    </span><span class="attr">#[test]
-<a href=#2446 id=2446 data-nosnippet>2446</a>    </span><span class="kw">fn </span>a_generated_quotation_mark_opens_the_quotation() {
-<a href=#2447 id=2447 data-nosnippet>2447</a>        <span class="kw">let </span>pages = paginate_styled(
-<a href=#2448 id=2448 data-nosnippet>2448</a>            <span class="string">"blockquote::before { content: \"\\201C\" }"</span>,
-<a href=#2449 id=2449 data-nosnippet>2449</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[quote(<span class="macro">vec!</span>[paragraph(<span class="string">"quoted words"</span>)])])],
-<a href=#2450 id=2450 data-nosnippet>2450</a>        );
-<a href=#2451 id=2451 data-nosnippet>2451</a>        <span class="kw">let </span>lines = read_lines(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2452 id=2452 data-nosnippet>2452</a>        <span class="kw">let </span>texts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = lines.iter().map(|line| line.<span class="number">3</span>.as_str()).collect();
-<a href=#2453 id=2453 data-nosnippet>2453</a>        <span class="macro">assert_eq!</span>(texts, [<span class="string">"\u{201C}"</span>, <span class="string">"quoted words"</span>]);
-<a href=#2454 id=2454 data-nosnippet>2454</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
-<a href=#2455 id=2455 data-nosnippet>2455</a>        <span class="macro">assert!</span>(
-<a href=#2456 id=2456 data-nosnippet>2456</a>            (lines[<span class="number">0</span>].<span class="number">1 </span>- (left + quote_indent())).abs() &lt; <span class="number">1e-3</span>,
-<a href=#2457 id=2457 data-nosnippet>2457</a>            <span class="string">"the mark starts at {}"</span>,
-<a href=#2458 id=2458 data-nosnippet>2458</a>            lines[<span class="number">0</span>].<span class="number">1</span>,
-<a href=#2459 id=2459 data-nosnippet>2459</a>        );
-<a href=#2460 id=2460 data-nosnippet>2460</a>    }
-<a href=#2461 id=2461 data-nosnippet>2461</a>
-<a href=#2462 id=2462 data-nosnippet>2462</a>    <span class="doccomment">/// Acceptance: a generated box takes height in the flow, and the
-<a href=#2463 id=2463 data-nosnippet>2463</a>    /// block under it moves down by that height.
-<a href=#2464 id=2464 data-nosnippet>2464</a>    </span><span class="attr">#[test]
-<a href=#2465 id=2465 data-nosnippet>2465</a>    </span><span class="kw">fn </span>the_block_under_a_generated_box_moves_down_by_its_height() {
-<a href=#2466 id=2466 data-nosnippet>2466</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="string">"one"</span>), paragraph(<span class="string">"two"</span>)])];
-<a href=#2467 id=2467 data-nosnippet>2467</a>        <span class="kw">let </span>bare = paginate(blocks());
-<a href=#2468 id=2468 data-nosnippet>2468</a>        <span class="kw">let </span>tall = paginate_styled(<span class="string">"p::after { content: \"\"; height: 30pt }"</span>, blocks());
-<a href=#2469 id=2469 data-nosnippet>2469</a>        <span class="kw">let </span>moved = baseline_of(<span class="kw-2">&amp;</span>tall, <span class="string">"two"</span>) - baseline_of(<span class="kw-2">&amp;</span>bare, <span class="string">"two"</span>);
-<a href=#2470 id=2470 data-nosnippet>2470</a>        <span class="macro">assert!</span>((moved - <span class="number">30.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the paragraph moved {moved}"</span>);
-<a href=#2471 id=2471 data-nosnippet>2471</a>    }
-<a href=#2472 id=2472 data-nosnippet>2472</a>
-<a href=#2473 id=2473 data-nosnippet>2473</a>    <span class="doccomment">/// Acceptance: a page break falling on a generated box keeps it
-<a href=#2474 id=2474 data-nosnippet>2474</a>    /// with the element it belongs to. No page opens between a box and
-<a href=#2475 id=2475 data-nosnippet>2475</a>    /// its element, so no page opens on a box that `::after` made.
-<a href=#2476 id=2476 data-nosnippet>2476</a>    </span><span class="attr">#[test]
-<a href=#2477 id=2477 data-nosnippet>2477</a>    </span><span class="kw">fn </span>a_page_break_keeps_a_generated_box_with_its_element() {
-<a href=#2478 id=2478 data-nosnippet>2478</a>        <span class="kw">let </span>book = book_of(<span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="kw-2">&amp;</span><span class="string">"words "</span>.repeat(<span class="number">60</span>))])]);
-<a href=#2479 id=2479 data-nosnippet>2479</a>        <span class="kw">let </span>fragments = |css: <span class="kw-2">&amp;</span>str| {
-<a href=#2480 id=2480 data-nosnippet>2480</a>            <span class="kw">let </span>styles = styled(css, <span class="kw-2">&amp;</span>book);
-<a href=#2481 id=2481 data-nosnippet>2481</a>            Paginator::new(registry(), <span class="kw-2">&amp;</span>styles).section_fragments(<span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>])
-<a href=#2482 id=2482 data-nosnippet>2482</a>        };
-<a href=#2483 id=2483 data-nosnippet>2483</a>        <span class="kw">let </span>lines = |fragments: <span class="kw-2">&amp;</span>[Fragment]| -&gt; Vec&lt;usize&gt; {
-<a href=#2484 id=2484 data-nosnippet>2484</a>            fragments
-<a href=#2485 id=2485 data-nosnippet>2485</a>                .iter()
-<a href=#2486 id=2486 data-nosnippet>2486</a>                .enumerate()
-<a href=#2487 id=2487 data-nosnippet>2487</a>                .filter(|(<span class="kw">_</span>, fragment)| <span class="macro">matches!</span>(fragment.piece, Piece::Line { .. }))
-<a href=#2488 id=2488 data-nosnippet>2488</a>                .map(|(index, <span class="kw">_</span>)| index)
-<a href=#2489 id=2489 data-nosnippet>2489</a>                .collect()
-<a href=#2490 id=2490 data-nosnippet>2490</a>        };
-<a href=#2491 id=2491 data-nosnippet>2491</a>        <span class="kw">let </span>bare = fragments(<span class="string">""</span>);
-<a href=#2492 id=2492 data-nosnippet>2492</a>        <span class="macro">assert_ne!</span>(bare[lines(<span class="kw-2">&amp;</span>bare)[<span class="number">0</span>]].break_before, BreakPoint::Forbidden);
-<a href=#2493 id=2493 data-nosnippet>2493</a>
-<a href=#2494 id=2494 data-nosnippet>2494</a>        <span class="kw">let </span>boxed =
-<a href=#2495 id=2495 data-nosnippet>2495</a>            fragments(<span class="string">"p::before { content: \"x\" } p::after { content: \"\"; height: 20pt }"</span>);
-<a href=#2496 id=2496 data-nosnippet>2496</a>        <span class="kw">let </span>at = lines(<span class="kw-2">&amp;</span>boxed);
-<a href=#2497 id=2497 data-nosnippet>2497</a>        <span class="macro">assert_eq!</span>(
-<a href=#2498 id=2498 data-nosnippet>2498</a>            boxed[at[<span class="number">1</span>]].break_before,
-<a href=#2499 id=2499 data-nosnippet>2499</a>            BreakPoint::Forbidden,
-<a href=#2500 id=2500 data-nosnippet>2500</a>            <span class="string">"the paragraph can leave the box before it"</span>,
-<a href=#2501 id=2501 data-nosnippet>2501</a>        );
-<a href=#2502 id=2502 data-nosnippet>2502</a>        <span class="kw">let </span>after = at.last().expect(<span class="string">"the paragraph has lines"</span>) + <span class="number">1</span>;
-<a href=#2503 id=2503 data-nosnippet>2503</a>        <span class="macro">assert!</span>(
-<a href=#2504 id=2504 data-nosnippet>2504</a>            after &lt; boxed.len(),
-<a href=#2505 id=2505 data-nosnippet>2505</a>            <span class="string">"the box after the paragraph is missing"
-<a href=#2506 id=2506 data-nosnippet>2506</a>        </span>);
-<a href=#2507 id=2507 data-nosnippet>2507</a>        <span class="kw">for </span>fragment <span class="kw">in </span><span class="kw-2">&amp;</span>boxed[after..] {
-<a href=#2508 id=2508 data-nosnippet>2508</a>            <span class="macro">assert_eq!</span>(
-<a href=#2509 id=2509 data-nosnippet>2509</a>                fragment.break_before,
-<a href=#2510 id=2510 data-nosnippet>2510</a>                BreakPoint::Forbidden,
-<a href=#2511 id=2511 data-nosnippet>2511</a>                <span class="string">"the box after the paragraph can leave it"</span>,
-<a href=#2512 id=2512 data-nosnippet>2512</a>            );
-<a href=#2513 id=2513 data-nosnippet>2513</a>        }
-<a href=#2514 id=2514 data-nosnippet>2514</a>
-<a href=#2515 id=2515 data-nosnippet>2515</a>        <span class="kw">let </span>pages = paginate_styled(
-<a href=#2516 id=2516 data-nosnippet>2516</a>            <span class="string">"p { orphans: 1; widows: 1 } \
-<a href=#2517 id=2517 data-nosnippet>2517</a>             p::after { content: \"\"; height: 24pt; background-color: #eeeeee }"</span>,
-<a href=#2518 id=2518 data-nosnippet>2518</a>            <span class="macro">vec!</span>[section(long_prose(<span class="number">40</span>))],
-<a href=#2519 id=2519 data-nosnippet>2519</a>        );
-<a href=#2520 id=2520 data-nosnippet>2520</a>        <span class="macro">assert!</span>(pages.len() &gt; <span class="number">2</span>, <span class="string">"the prose fills {} pages"</span>, pages.len());
-<a href=#2521 id=2521 data-nosnippet>2521</a>        <span class="kw">for </span>page <span class="kw">in </span><span class="kw-2">&amp;</span>pages {
-<a href=#2522 id=2522 data-nosnippet>2522</a>            <span class="kw">let </span>lines = content_lines(page);
-<a href=#2523 id=2523 data-nosnippet>2523</a>            <span class="kw">for </span>(<span class="kw">_</span>, y, ..) <span class="kw">in </span>rects(page) {
-<a href=#2524 id=2524 data-nosnippet>2524</a>                <span class="macro">assert!</span>(
-<a href=#2525 id=2525 data-nosnippet>2525</a>                    lines.first().is_some_and(|(baseline, <span class="kw">_</span>)| <span class="kw-2">*</span>baseline &lt; y),
-<a href=#2526 id=2526 data-nosnippet>2526</a>                    <span class="string">"page {}: a generated box opens the page"</span>,
-<a href=#2527 id=2527 data-nosnippet>2527</a>                    page.number,
-<a href=#2528 id=2528 data-nosnippet>2528</a>                );
-<a href=#2529 id=2529 data-nosnippet>2529</a>            }
-<a href=#2530 id=2530 data-nosnippet>2530</a>        }
-<a href=#2531 id=2531 data-nosnippet>2531</a>    }
-<a href=#2532 id=2532 data-nosnippet>2532</a>}
+<a href=#2216 id=2216 data-nosnippet>2216</a>        <span class="comment">// A recto open leaves a blank verso behind it.
+<a href=#2217 id=2217 data-nosnippet>2217</a>        </span><span class="kw">let </span>pages = paginate_styled(<span class="string">"section { break-before: recto }"</span>, chapters());
+<a href=#2218 id=2218 data-nosnippet>2218</a>        <span class="macro">assert_eq!</span>(pages.len(), <span class="number">3</span>);
+<a href=#2219 id=2219 data-nosnippet>2219</a>        <span class="macro">assert!</span>(pages[<span class="number">1</span>].items.is_empty());
+<a href=#2220 id=2220 data-nosnippet>2220</a>        <span class="comment">// And a verso open leaves the blank recto behind it.
+<a href=#2221 id=2221 data-nosnippet>2221</a>        </span><span class="kw">let </span>pages = paginate_styled(<span class="string">"section { break-before: verso }"</span>, chapters());
+<a href=#2222 id=2222 data-nosnippet>2222</a>        <span class="macro">assert_eq!</span>(pages.len(), <span class="number">4</span>);
+<a href=#2223 id=2223 data-nosnippet>2223</a>        <span class="macro">assert!</span>(pages[<span class="number">0</span>].items.is_empty() || pages[<span class="number">2</span>].items.is_empty());
+<a href=#2224 id=2224 data-nosnippet>2224</a>    }
+<a href=#2225 id=2225 data-nosnippet>2225</a>
+<a href=#2226 id=2226 data-nosnippet>2226</a>    <span class="doccomment">/// `break-inside: avoid` moves a block whole rather than split
+<a href=#2227 id=2227 data-nosnippet>2227</a>    /// it, and `break-after: avoid` keeps a heading with the prose
+<a href=#2228 id=2228 data-nosnippet>2228</a>    /// under it.
+<a href=#2229 id=2229 data-nosnippet>2229</a>    </span><span class="attr">#[test]
+<a href=#2230 id=2230 data-nosnippet>2230</a>    </span><span class="kw">fn </span>avoid_keeps_blocks_and_headings_with_what_follows_them() {
+<a href=#2231 id=2231 data-nosnippet>2231</a>        <span class="comment">// A page of single-line paragraphs, all but a few lines
+<a href=#2232 id=2232 data-nosnippet>2232</a>        // full, and then a quotation too long for what is left.
+<a href=#2233 id=2233 data-nosnippet>2233</a>        </span><span class="kw">let </span>quoted = <span class="string">"quoted words that would rather not be split across a page turn "</span>;
+<a href=#2234 id=2234 data-nosnippet>2234</a>        <span class="kw">let </span>filler: Vec&lt;Block&gt; = (<span class="number">0</span>..<span class="number">30</span>)
+<a href=#2235 id=2235 data-nosnippet>2235</a>            .map(|index| paragraph(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"filler line {index}"</span>)))
+<a href=#2236 id=2236 data-nosnippet>2236</a>            .collect();
+<a href=#2237 id=2237 data-nosnippet>2237</a>        <span class="kw">let </span>blocks = [
+<a href=#2238 id=2238 data-nosnippet>2238</a>            filler,
+<a href=#2239 id=2239 data-nosnippet>2239</a>            <span class="macro">vec!</span>[quote(<span class="macro">vec!</span>[paragraph(<span class="kw-2">&amp;</span>quoted.repeat(<span class="number">6</span>))])],
+<a href=#2240 id=2240 data-nosnippet>2240</a>            long_prose(<span class="number">2</span>),
+<a href=#2241 id=2241 data-nosnippet>2241</a>        ]
+<a href=#2242 id=2242 data-nosnippet>2242</a>        .concat();
+<a href=#2243 id=2243 data-nosnippet>2243</a>        <span class="comment">// A quoted line is one set at the quotation's indent: only
+<a href=#2244 id=2244 data-nosnippet>2244</a>        // its first begins with the words the quotation opens with.
+<a href=#2245 id=2245 data-nosnippet>2245</a>        </span><span class="kw">let </span>indent = quote_indent();
+<a href=#2246 id=2246 data-nosnippet>2246</a>        <span class="kw">let </span>split = |css: <span class="kw-2">&amp;</span>str| {
+<a href=#2247 id=2247 data-nosnippet>2247</a>            <span class="kw">let </span>pages = paginate_styled(css, <span class="macro">vec!</span>[section(blocks.clone())]);
+<a href=#2248 id=2248 data-nosnippet>2248</a>            pages
+<a href=#2249 id=2249 data-nosnippet>2249</a>                .iter()
+<a href=#2250 id=2250 data-nosnippet>2250</a>                .filter(|page| {
+<a href=#2251 id=2251 data-nosnippet>2251</a>                    <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(page);
+<a href=#2252 id=2252 data-nosnippet>2252</a>                    content_lines(page)
+<a href=#2253 id=2253 data-nosnippet>2253</a>                        .iter()
+<a href=#2254 id=2254 data-nosnippet>2254</a>                        .any(|(<span class="kw">_</span>, runs)| (runs[<span class="number">0</span>].<span class="number">0 </span>- left - indent).abs() &lt; <span class="number">1e-3</span>)
+<a href=#2255 id=2255 data-nosnippet>2255</a>                })
+<a href=#2256 id=2256 data-nosnippet>2256</a>                .count()
+<a href=#2257 id=2257 data-nosnippet>2257</a>        };
+<a href=#2258 id=2258 data-nosnippet>2258</a>        <span class="macro">assert!</span>(split(<span class="string">""</span>) &gt;= <span class="number">2</span>, <span class="string">"the quotation should straddle a page"</span>);
+<a href=#2259 id=2259 data-nosnippet>2259</a>        <span class="macro">assert_eq!</span>(
+<a href=#2260 id=2260 data-nosnippet>2260</a>            split(<span class="string">"blockquote { break-inside: avoid }"</span>),
+<a href=#2261 id=2261 data-nosnippet>2261</a>            <span class="number">1</span>,
+<a href=#2262 id=2262 data-nosnippet>2262</a>            <span class="string">"an avoided blockquote should move whole"</span>,
+<a href=#2263 id=2263 data-nosnippet>2263</a>        );
+<a href=#2264 id=2264 data-nosnippet>2264</a>
+<a href=#2265 id=2265 data-nosnippet>2265</a>        <span class="comment">// A heading is never the last thing on a page: the built-in
+<a href=#2266 id=2266 data-nosnippet>2266</a>        // sheet gives it `break-after: avoid`.
+<a href=#2267 id=2267 data-nosnippet>2267</a>        </span><span class="kw">let </span>pages = paginate(<span class="macro">vec!</span>[
+<a href=#2268 id=2268 data-nosnippet>2268</a>            section(long_prose(<span class="number">12</span>)),
+<a href=#2269 id=2269 data-nosnippet>2269</a>            section([<span class="macro">vec!</span>[heading(<span class="string">"Two"</span>)], long_prose(<span class="number">12</span>)].concat()),
+<a href=#2270 id=2270 data-nosnippet>2270</a>        ]);
+<a href=#2271 id=2271 data-nosnippet>2271</a>        <span class="kw">for </span>page <span class="kw">in </span><span class="kw-2">&amp;</span>pages {
+<a href=#2272 id=2272 data-nosnippet>2272</a>            <span class="kw">let </span>lines = content_lines(page);
+<a href=#2273 id=2273 data-nosnippet>2273</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, runs)) = lines.last() {
+<a href=#2274 id=2274 data-nosnippet>2274</a>                <span class="macro">assert!</span>(
+<a href=#2275 id=2275 data-nosnippet>2275</a>                    runs[<span class="number">0</span>].<span class="number">1 </span>!= chapter_size(),
+<a href=#2276 id=2276 data-nosnippet>2276</a>                    <span class="string">"page {}: a heading closed the page"</span>,
+<a href=#2277 id=2277 data-nosnippet>2277</a>                    page.number,
+<a href=#2278 id=2278 data-nosnippet>2278</a>                );
+<a href=#2279 id=2279 data-nosnippet>2279</a>            }
+<a href=#2280 id=2280 data-nosnippet>2280</a>        }
+<a href=#2281 id=2281 data-nosnippet>2281</a>    }
+<a href=#2282 id=2282 data-nosnippet>2282</a>
+<a href=#2283 id=2283 data-nosnippet>2283</a>    <span class="doccomment">/// An `h4` with the words `value`.
+<a href=#2284 id=2284 data-nosnippet>2284</a>    </span><span class="kw">fn </span>h4(value: <span class="kw-2">&amp;</span>str) -&gt; Block {
+<a href=#2285 id=2285 data-nosnippet>2285</a>        <span class="kw">let </span>Block::Heading { inlines, .. } = heading(value) <span class="kw">else </span>{
+<a href=#2286 id=2286 data-nosnippet>2286</a>            <span class="macro">unreachable!</span>(<span class="string">"`heading` makes a heading"</span>);
+<a href=#2287 id=2287 data-nosnippet>2287</a>        };
+<a href=#2288 id=2288 data-nosnippet>2288</a>        Block::Heading {
+<a href=#2289 id=2289 data-nosnippet>2289</a>            id: NodeId::UNASSIGNED,
+<a href=#2290 id=2290 data-nosnippet>2290</a>            level: HeadingLevel::H4,
+<a href=#2291 id=2291 data-nosnippet>2291</a>            inlines,
+<a href=#2292 id=2292 data-nosnippet>2292</a>            attributes: Attributes::default(),
+<a href=#2293 id=2293 data-nosnippet>2293</a>            position: <span class="prelude-val">None</span>,
+<a href=#2294 id=2294 data-nosnippet>2294</a>            span: <span class="prelude-val">None</span>,
+<a href=#2295 id=2295 data-nosnippet>2295</a>        }
+<a href=#2296 id=2296 data-nosnippet>2296</a>    }
+<a href=#2297 id=2297 data-nosnippet>2297</a>
+<a href=#2298 id=2298 data-nosnippet>2298</a>    <span class="doccomment">/// Each content line of a page as the text of its runs, with its
+<a href=#2299 id=2299 data-nosnippet>2299</a>    /// baseline, its leading edge and its size.
+<a href=#2300 id=2300 data-nosnippet>2300</a>    </span><span class="kw">fn </span>read_lines(page: <span class="kw-2">&amp;</span>Page) -&gt; Vec&lt;(f32, f32, f32, String)&gt; {
+<a href=#2301 id=2301 data-nosnippet>2301</a>        content_lines(page)
+<a href=#2302 id=2302 data-nosnippet>2302</a>            .into_iter()
+<a href=#2303 id=2303 data-nosnippet>2303</a>            .map(|(baseline, runs)| {
+<a href=#2304 id=2304 data-nosnippet>2304</a>                <span class="kw">let </span>text = runs.iter().map(|run| run.<span class="number">2</span>).collect();
+<a href=#2305 id=2305 data-nosnippet>2305</a>                (baseline, runs[<span class="number">0</span>].<span class="number">0</span>, runs[<span class="number">0</span>].<span class="number">1</span>, text)
+<a href=#2306 id=2306 data-nosnippet>2306</a>            })
+<a href=#2307 id=2307 data-nosnippet>2307</a>            .collect()
+<a href=#2308 id=2308 data-nosnippet>2308</a>    }
+<a href=#2309 id=2309 data-nosnippet>2309</a>
+<a href=#2310 id=2310 data-nosnippet>2310</a>    <span class="doccomment">/// The width of a line of text on the opening page of a chapter.
+<a href=#2311 id=2311 data-nosnippet>2311</a>    </span><span class="kw">fn </span>opening_measure() -&gt; f32 {
+<a href=#2312 id=2312 data-nosnippet>2312</a>        master(Situation::First(Side::Recto)).geometry.measure()
+<a href=#2313 id=2313 data-nosnippet>2313</a>    }
+<a href=#2314 id=2314 data-nosnippet>2314</a>
+<a href=#2315 id=2315 data-nosnippet>2315</a>    <span class="doccomment">/// Part: a generated box holds the value of `content`, which is a
+<a href=#2316 id=2316 data-nosnippet>2316</a>    /// string or nothing.
+<a href=#2317 id=2317 data-nosnippet>2317</a>    </span><span class="attr">#[test]
+<a href=#2318 id=2318 data-nosnippet>2318</a>    </span><span class="kw">fn </span>a_generated_box_holds_its_string_or_nothing() {
+<a href=#2319 id=2319 data-nosnippet>2319</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="string">"the paragraph itself"</span>)])];
+<a href=#2320 id=2320 data-nosnippet>2320</a>        <span class="kw">let </span>said = paginate_styled(<span class="string">"p::before { content: \"Before it\" }"</span>, blocks());
+<a href=#2321 id=2321 data-nosnippet>2321</a>        <span class="kw">let </span>texts: Vec&lt;String&gt; = read_lines(<span class="kw-2">&amp;</span>said[<span class="number">0</span>])
+<a href=#2322 id=2322 data-nosnippet>2322</a>            .into_iter()
+<a href=#2323 id=2323 data-nosnippet>2323</a>            .map(|line| line.<span class="number">3</span>)
+<a href=#2324 id=2324 data-nosnippet>2324</a>            .collect();
+<a href=#2325 id=2325 data-nosnippet>2325</a>        <span class="macro">assert_eq!</span>(texts, [<span class="string">"Before it"</span>, <span class="string">"the paragraph itself"</span>]);
+<a href=#2326 id=2326 data-nosnippet>2326</a>
+<a href=#2327 id=2327 data-nosnippet>2327</a>        <span class="kw">let </span>bare = paginate(blocks());
+<a href=#2328 id=2328 data-nosnippet>2328</a>        <span class="kw">let </span>empty = paginate_styled(<span class="string">"p::before { content: \"\" }"</span>, blocks());
+<a href=#2329 id=2329 data-nosnippet>2329</a>        <span class="macro">assert_eq!</span>(read_lines(<span class="kw-2">&amp;</span>empty[<span class="number">0</span>]), read_lines(<span class="kw-2">&amp;</span>bare[<span class="number">0</span>]));
+<a href=#2330 id=2330 data-nosnippet>2330</a>    }
+<a href=#2331 id=2331 data-nosnippet>2331</a>
+<a href=#2332 id=2332 data-nosnippet>2332</a>    <span class="doccomment">/// Part: the generated box is a block in the flow, the first or
+<a href=#2333 id=2333 data-nosnippet>2333</a>    /// the last child of its element, across the element's content box
+<a href=#2334 id=2334 data-nosnippet>2334</a>    /// and in the element's style.
+<a href=#2335 id=2335 data-nosnippet>2335</a>    </span><span class="attr">#[test]
+<a href=#2336 id=2336 data-nosnippet>2336</a>    </span><span class="kw">fn </span>a_generated_box_is_the_first_or_last_child_of_its_block() {
+<a href=#2337 id=2337 data-nosnippet>2337</a>        <span class="kw">let </span>pages = paginate_styled(
+<a href=#2338 id=2338 data-nosnippet>2338</a>            <span class="string">"blockquote { font-size: 10pt; margin: 0 20pt } \
+<a href=#2339 id=2339 data-nosnippet>2339</a>             blockquote::before { content: \"first\" } \
+<a href=#2340 id=2340 data-nosnippet>2340</a>             blockquote::after { content: \"last\" }"</span>,
+<a href=#2341 id=2341 data-nosnippet>2341</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[
+<a href=#2342 id=2342 data-nosnippet>2342</a>                quote(<span class="macro">vec!</span>[paragraph(<span class="string">"inside one"</span>), paragraph(<span class="string">"inside two"</span>)]),
+<a href=#2343 id=2343 data-nosnippet>2343</a>                paragraph(<span class="string">"outside"</span>),
+<a href=#2344 id=2344 data-nosnippet>2344</a>            ])],
+<a href=#2345 id=2345 data-nosnippet>2345</a>        );
+<a href=#2346 id=2346 data-nosnippet>2346</a>        <span class="kw">let </span>lines = read_lines(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2347 id=2347 data-nosnippet>2347</a>        <span class="kw">let </span>texts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = lines.iter().map(|line| line.<span class="number">3</span>.as_str()).collect();
+<a href=#2348 id=2348 data-nosnippet>2348</a>        <span class="macro">assert_eq!</span>(
+<a href=#2349 id=2349 data-nosnippet>2349</a>            texts,
+<a href=#2350 id=2350 data-nosnippet>2350</a>            [<span class="string">"first"</span>, <span class="string">"inside one"</span>, <span class="string">"inside two"</span>, <span class="string">"last"</span>, <span class="string">"outside"</span>]
+<a href=#2351 id=2351 data-nosnippet>2351</a>        );
+<a href=#2352 id=2352 data-nosnippet>2352</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2353 id=2353 data-nosnippet>2353</a>        <span class="kw">for </span>(<span class="kw">_</span>, x, size, text) <span class="kw">in </span>[<span class="kw-2">&amp;</span>lines[<span class="number">0</span>], <span class="kw-2">&amp;</span>lines[<span class="number">3</span>]] {
+<a href=#2354 id=2354 data-nosnippet>2354</a>            <span class="macro">assert!</span>((x - (left + <span class="number">20.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"{text} starts at {x}"</span>);
+<a href=#2355 id=2355 data-nosnippet>2355</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>size, <span class="number">10.0</span>, <span class="string">"{text} is not in the quotation's size"</span>);
+<a href=#2356 id=2356 data-nosnippet>2356</a>        }
+<a href=#2357 id=2357 data-nosnippet>2357</a>    }
+<a href=#2358 id=2358 data-nosnippet>2358</a>
+<a href=#2359 id=2359 data-nosnippet>2359</a>    <span class="doccomment">/// Part: the generated box takes the box model. Its border box
+<a href=#2360 id=2360 data-nosnippet>2360</a>    /// holds its border, its padding and its height, inside its own
+<a href=#2361 id=2361 data-nosnippet>2361</a>    /// margins.
+<a href=#2362 id=2362 data-nosnippet>2362</a>    </span><span class="attr">#[test]
+<a href=#2363 id=2363 data-nosnippet>2363</a>    </span><span class="kw">fn </span>a_generated_box_takes_the_box_model() {
+<a href=#2364 id=2364 data-nosnippet>2364</a>        <span class="kw">const </span>TINT: Color = Color::rgb(<span class="number">0xee</span>, <span class="number">0xee</span>, <span class="number">0xee</span>);
+<a href=#2365 id=2365 data-nosnippet>2365</a>        <span class="kw">const </span>INK: Color = Color::rgb(<span class="number">0xd6</span>, <span class="number">0x07</span>, <span class="number">0x5e</span>);
+<a href=#2366 id=2366 data-nosnippet>2366</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[heading(<span class="string">"Title"</span>), paragraph(<span class="string">"after"</span>)])];
+<a href=#2367 id=2367 data-nosnippet>2367</a>        <span class="kw">let </span>pages = paginate_styled(
+<a href=#2368 id=2368 data-nosnippet>2368</a>            <span class="string">"h1::after { content: \"\"; height: 2pt; padding: 3pt 0; \
+<a href=#2369 id=2369 data-nosnippet>2369</a>             border-top: 1pt solid #d6075e; margin: 0 12pt; background-color: #eeeeee }"</span>,
+<a href=#2370 id=2370 data-nosnippet>2370</a>            blocks(),
+<a href=#2371 id=2371 data-nosnippet>2371</a>        );
+<a href=#2372 id=2372 data-nosnippet>2372</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2373 id=2373 data-nosnippet>2373</a>        <span class="kw">let </span>measure = opening_measure();
+<a href=#2374 id=2374 data-nosnippet>2374</a>        <span class="kw">let </span>boxes = rects(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2375 id=2375 data-nosnippet>2375</a>        <span class="kw">let </span>[(x, <span class="kw">_</span>, w, h, <span class="kw">_</span>)] = boxes
+<a href=#2376 id=2376 data-nosnippet>2376</a>            .iter()
+<a href=#2377 id=2377 data-nosnippet>2377</a>            .filter(|rect| rect.<span class="number">4 </span>== TINT)
+<a href=#2378 id=2378 data-nosnippet>2378</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()[..]
+<a href=#2379 id=2379 data-nosnippet>2379</a>        <span class="kw">else </span>{
+<a href=#2380 id=2380 data-nosnippet>2380</a>            <span class="macro">panic!</span>(<span class="string">"one background: {boxes:?}"</span>);
+<a href=#2381 id=2381 data-nosnippet>2381</a>        };
+<a href=#2382 id=2382 data-nosnippet>2382</a>        <span class="macro">assert!</span>((x - (left + <span class="number">12.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box starts at {x}"</span>);
+<a href=#2383 id=2383 data-nosnippet>2383</a>        <span class="macro">assert!</span>((w - (measure - <span class="number">24.0</span>)).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box is {w} wide"</span>);
+<a href=#2384 id=2384 data-nosnippet>2384</a>        <span class="macro">assert!</span>((h - <span class="number">9.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the box is {h} tall"</span>);
+<a href=#2385 id=2385 data-nosnippet>2385</a>        <span class="macro">assert!</span>(
+<a href=#2386 id=2386 data-nosnippet>2386</a>            boxes
+<a href=#2387 id=2387 data-nosnippet>2387</a>                .iter()
+<a href=#2388 id=2388 data-nosnippet>2388</a>                .any(|rect| rect.<span class="number">4 </span>== INK &amp;&amp; (rect.<span class="number">3 </span>- <span class="number">1.0</span>).abs() &lt; <span class="number">1e-3</span>),
+<a href=#2389 id=2389 data-nosnippet>2389</a>            <span class="string">"no top border: {boxes:?}"</span>,
+<a href=#2390 id=2390 data-nosnippet>2390</a>        );
+<a href=#2391 id=2391 data-nosnippet>2391</a>        <span class="kw">let </span>moved = baseline_of(<span class="kw-2">&amp;</span>pages, <span class="string">"after"</span>) - baseline_of(<span class="kw-2">&amp;</span>paginate(blocks()), <span class="string">"after"</span>);
+<a href=#2392 id=2392 data-nosnippet>2392</a>        <span class="macro">assert!</span>((moved - <span class="number">9.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the prose moved {moved}"</span>);
+<a href=#2393 id=2393 data-nosnippet>2393</a>    }
+<a href=#2394 id=2394 data-nosnippet>2394</a>
+<a href=#2395 id=2395 data-nosnippet>2395</a>    <span class="doccomment">/// Acceptance: `h4::after { content: ""; height: 2pt;
+<a href=#2396 id=2396 data-nosnippet>2396</a>    /// background-color: #d6075e }` draws a rule under every h4, at
+<a href=#2397 id=2397 data-nosnippet>2397</a>    /// the width of the heading's content box.
+<a href=#2398 id=2398 data-nosnippet>2398</a>    </span><span class="attr">#[test]
+<a href=#2399 id=2399 data-nosnippet>2399</a>    </span><span class="kw">fn </span>a_generated_rule_sits_under_every_h4_across_its_content_box() {
+<a href=#2400 id=2400 data-nosnippet>2400</a>        <span class="kw">const </span>INK: Color = Color::rgb(<span class="number">0xd6</span>, <span class="number">0x07</span>, <span class="number">0x5e</span>);
+<a href=#2401 id=2401 data-nosnippet>2401</a>        <span class="kw">let </span>pages = paginate_styled(
+<a href=#2402 id=2402 data-nosnippet>2402</a>            <span class="string">"h4 { margin: 0 20pt; padding: 0 10pt } \
+<a href=#2403 id=2403 data-nosnippet>2403</a>             h4::after { content: \"\"; height: 2pt; background-color: #d6075e }"</span>,
+<a href=#2404 id=2404 data-nosnippet>2404</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[
+<a href=#2405 id=2405 data-nosnippet>2405</a>                h4(<span class="string">"First"</span>),
+<a href=#2406 id=2406 data-nosnippet>2406</a>                paragraph(<span class="string">"one"</span>),
+<a href=#2407 id=2407 data-nosnippet>2407</a>                h4(<span class="string">"Second"</span>),
+<a href=#2408 id=2408 data-nosnippet>2408</a>                paragraph(<span class="string">"two"</span>),
+<a href=#2409 id=2409 data-nosnippet>2409</a>            ])],
+<a href=#2410 id=2410 data-nosnippet>2410</a>        );
+<a href=#2411 id=2411 data-nosnippet>2411</a>        <span class="kw">let </span>page = <span class="kw-2">&amp;</span>pages[<span class="number">0</span>];
+<a href=#2412 id=2412 data-nosnippet>2412</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(page);
+<a href=#2413 id=2413 data-nosnippet>2413</a>        <span class="kw">let </span>measure = opening_measure();
+<a href=#2414 id=2414 data-nosnippet>2414</a>        <span class="kw">let </span>lines = read_lines(page);
+<a href=#2415 id=2415 data-nosnippet>2415</a>        <span class="kw">let </span>rules: Vec&lt;<span class="kw">_</span>&gt; = rects(page)
+<a href=#2416 id=2416 data-nosnippet>2416</a>            .into_iter()
+<a href=#2417 id=2417 data-nosnippet>2417</a>            .filter(|rect| rect.<span class="number">4 </span>== INK)
+<a href=#2418 id=2418 data-nosnippet>2418</a>            .collect();
+<a href=#2419 id=2419 data-nosnippet>2419</a>        <span class="macro">assert_eq!</span>(rules.len(), <span class="number">2</span>, <span class="string">"{rules:?}"</span>);
+<a href=#2420 id=2420 data-nosnippet>2420</a>        <span class="kw">for </span>((x, y, w, h, <span class="kw">_</span>), title) <span class="kw">in </span>rules.iter().zip([<span class="string">"First"</span>, <span class="string">"Second"</span>]) {
+<a href=#2421 id=2421 data-nosnippet>2421</a>            <span class="macro">assert!</span>(
+<a href=#2422 id=2422 data-nosnippet>2422</a>                (x - (left + <span class="number">30.0</span>)).abs() &lt; <span class="number">1e-3</span>,
+<a href=#2423 id=2423 data-nosnippet>2423</a>                <span class="string">"{title}: the rule starts at {x}"
+<a href=#2424 id=2424 data-nosnippet>2424</a>            </span>);
+<a href=#2425 id=2425 data-nosnippet>2425</a>            <span class="macro">assert!</span>(
+<a href=#2426 id=2426 data-nosnippet>2426</a>                (w - (measure - <span class="number">60.0</span>)).abs() &lt; <span class="number">1e-3</span>,
+<a href=#2427 id=2427 data-nosnippet>2427</a>                <span class="string">"{title}: the rule is {w} wide"
+<a href=#2428 id=2428 data-nosnippet>2428</a>            </span>);
+<a href=#2429 id=2429 data-nosnippet>2429</a>            <span class="macro">assert!</span>((h - <span class="number">2.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"{title}: the rule is {h} tall"</span>);
+<a href=#2430 id=2430 data-nosnippet>2430</a>            <span class="kw">let </span>at = lines
+<a href=#2431 id=2431 data-nosnippet>2431</a>                .iter()
+<a href=#2432 id=2432 data-nosnippet>2432</a>                .position(|line| line.<span class="number">3 </span>== title)
+<a href=#2433 id=2433 data-nosnippet>2433</a>                .expect(<span class="string">"the heading is set"</span>);
+<a href=#2434 id=2434 data-nosnippet>2434</a>            <span class="macro">assert!</span>(<span class="kw-2">*</span>y &gt; lines[at].<span class="number">0</span>, <span class="string">"{title}: the rule is above the baseline"</span>);
+<a href=#2435 id=2435 data-nosnippet>2435</a>            <span class="macro">assert!</span>(
+<a href=#2436 id=2436 data-nosnippet>2436</a>                y + h &lt;= lines[at + <span class="number">1</span>].<span class="number">0</span>,
+<a href=#2437 id=2437 data-nosnippet>2437</a>                <span class="string">"{title}: the rule runs into the prose"
+<a href=#2438 id=2438 data-nosnippet>2438</a>            </span>);
+<a href=#2439 id=2439 data-nosnippet>2439</a>        }
+<a href=#2440 id=2440 data-nosnippet>2440</a>    }
+<a href=#2441 id=2441 data-nosnippet>2441</a>
+<a href=#2442 id=2442 data-nosnippet>2442</a>    <span class="doccomment">/// Acceptance: `blockquote::before { content: "\201C" }` sets an
+<a href=#2443 id=2443 data-nosnippet>2443</a>    /// opening quotation mark before the quote's first line.
+<a href=#2444 id=2444 data-nosnippet>2444</a>    </span><span class="attr">#[test]
+<a href=#2445 id=2445 data-nosnippet>2445</a>    </span><span class="kw">fn </span>a_generated_quotation_mark_opens_the_quotation() {
+<a href=#2446 id=2446 data-nosnippet>2446</a>        <span class="kw">let </span>pages = paginate_styled(
+<a href=#2447 id=2447 data-nosnippet>2447</a>            <span class="string">"blockquote::before { content: \"\\201C\" }"</span>,
+<a href=#2448 id=2448 data-nosnippet>2448</a>            <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[quote(<span class="macro">vec!</span>[paragraph(<span class="string">"quoted words"</span>)])])],
+<a href=#2449 id=2449 data-nosnippet>2449</a>        );
+<a href=#2450 id=2450 data-nosnippet>2450</a>        <span class="kw">let </span>lines = read_lines(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2451 id=2451 data-nosnippet>2451</a>        <span class="kw">let </span>texts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = lines.iter().map(|line| line.<span class="number">3</span>.as_str()).collect();
+<a href=#2452 id=2452 data-nosnippet>2452</a>        <span class="macro">assert_eq!</span>(texts, [<span class="string">"\u{201C}"</span>, <span class="string">"quoted words"</span>]);
+<a href=#2453 id=2453 data-nosnippet>2453</a>        <span class="kw">let </span>(left, <span class="kw">_</span>) = origin_of(<span class="kw-2">&amp;</span>pages[<span class="number">0</span>]);
+<a href=#2454 id=2454 data-nosnippet>2454</a>        <span class="macro">assert!</span>(
+<a href=#2455 id=2455 data-nosnippet>2455</a>            (lines[<span class="number">0</span>].<span class="number">1 </span>- (left + quote_indent())).abs() &lt; <span class="number">1e-3</span>,
+<a href=#2456 id=2456 data-nosnippet>2456</a>            <span class="string">"the mark starts at {}"</span>,
+<a href=#2457 id=2457 data-nosnippet>2457</a>            lines[<span class="number">0</span>].<span class="number">1</span>,
+<a href=#2458 id=2458 data-nosnippet>2458</a>        );
+<a href=#2459 id=2459 data-nosnippet>2459</a>    }
+<a href=#2460 id=2460 data-nosnippet>2460</a>
+<a href=#2461 id=2461 data-nosnippet>2461</a>    <span class="doccomment">/// Acceptance: a generated box takes height in the flow, and the
+<a href=#2462 id=2462 data-nosnippet>2462</a>    /// block under it moves down by that height.
+<a href=#2463 id=2463 data-nosnippet>2463</a>    </span><span class="attr">#[test]
+<a href=#2464 id=2464 data-nosnippet>2464</a>    </span><span class="kw">fn </span>the_block_under_a_generated_box_moves_down_by_its_height() {
+<a href=#2465 id=2465 data-nosnippet>2465</a>        <span class="kw">let </span>blocks = || <span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="string">"one"</span>), paragraph(<span class="string">"two"</span>)])];
+<a href=#2466 id=2466 data-nosnippet>2466</a>        <span class="kw">let </span>bare = paginate(blocks());
+<a href=#2467 id=2467 data-nosnippet>2467</a>        <span class="kw">let </span>tall = paginate_styled(<span class="string">"p::after { content: \"\"; height: 30pt }"</span>, blocks());
+<a href=#2468 id=2468 data-nosnippet>2468</a>        <span class="kw">let </span>moved = baseline_of(<span class="kw-2">&amp;</span>tall, <span class="string">"two"</span>) - baseline_of(<span class="kw-2">&amp;</span>bare, <span class="string">"two"</span>);
+<a href=#2469 id=2469 data-nosnippet>2469</a>        <span class="macro">assert!</span>((moved - <span class="number">30.0</span>).abs() &lt; <span class="number">1e-3</span>, <span class="string">"the paragraph moved {moved}"</span>);
+<a href=#2470 id=2470 data-nosnippet>2470</a>    }
+<a href=#2471 id=2471 data-nosnippet>2471</a>
+<a href=#2472 id=2472 data-nosnippet>2472</a>    <span class="doccomment">/// Acceptance: a page break falling on a generated box keeps it
+<a href=#2473 id=2473 data-nosnippet>2473</a>    /// with the element it belongs to. No page opens between a box and
+<a href=#2474 id=2474 data-nosnippet>2474</a>    /// its element, so no page opens on a box that `::after` made.
+<a href=#2475 id=2475 data-nosnippet>2475</a>    </span><span class="attr">#[test]
+<a href=#2476 id=2476 data-nosnippet>2476</a>    </span><span class="kw">fn </span>a_page_break_keeps_a_generated_box_with_its_element() {
+<a href=#2477 id=2477 data-nosnippet>2477</a>        <span class="kw">let </span>book = book_of(<span class="macro">vec!</span>[section(<span class="macro">vec!</span>[paragraph(<span class="kw-2">&amp;</span><span class="string">"words "</span>.repeat(<span class="number">60</span>))])]);
+<a href=#2478 id=2478 data-nosnippet>2478</a>        <span class="kw">let </span>fragments = |css: <span class="kw-2">&amp;</span>str| {
+<a href=#2479 id=2479 data-nosnippet>2479</a>            <span class="kw">let </span>styles = styled(css, <span class="kw-2">&amp;</span>book);
+<a href=#2480 id=2480 data-nosnippet>2480</a>            Paginator::new(registry(), <span class="kw-2">&amp;</span>styles).section_fragments(<span class="kw-2">&amp;</span>book.sections[<span class="number">0</span>])
+<a href=#2481 id=2481 data-nosnippet>2481</a>        };
+<a href=#2482 id=2482 data-nosnippet>2482</a>        <span class="kw">let </span>lines = |fragments: <span class="kw-2">&amp;</span>[Fragment]| -&gt; Vec&lt;usize&gt; {
+<a href=#2483 id=2483 data-nosnippet>2483</a>            fragments
+<a href=#2484 id=2484 data-nosnippet>2484</a>                .iter()
+<a href=#2485 id=2485 data-nosnippet>2485</a>                .enumerate()
+<a href=#2486 id=2486 data-nosnippet>2486</a>                .filter(|(<span class="kw">_</span>, fragment)| <span class="macro">matches!</span>(fragment.piece, Piece::Line { .. }))
+<a href=#2487 id=2487 data-nosnippet>2487</a>                .map(|(index, <span class="kw">_</span>)| index)
+<a href=#2488 id=2488 data-nosnippet>2488</a>                .collect()
+<a href=#2489 id=2489 data-nosnippet>2489</a>        };
+<a href=#2490 id=2490 data-nosnippet>2490</a>        <span class="kw">let </span>bare = fragments(<span class="string">""</span>);
+<a href=#2491 id=2491 data-nosnippet>2491</a>        <span class="macro">assert_ne!</span>(bare[lines(<span class="kw-2">&amp;</span>bare)[<span class="number">0</span>]].break_before, BreakPoint::Forbidden);
+<a href=#2492 id=2492 data-nosnippet>2492</a>
+<a href=#2493 id=2493 data-nosnippet>2493</a>        <span class="kw">let </span>boxed =
+<a href=#2494 id=2494 data-nosnippet>2494</a>            fragments(<span class="string">"p::before { content: \"x\" } p::after { content: \"\"; height: 20pt }"</span>);
+<a href=#2495 id=2495 data-nosnippet>2495</a>        <span class="kw">let </span>at = lines(<span class="kw-2">&amp;</span>boxed);
+<a href=#2496 id=2496 data-nosnippet>2496</a>        <span class="macro">assert_eq!</span>(
+<a href=#2497 id=2497 data-nosnippet>2497</a>            boxed[at[<span class="number">1</span>]].break_before,
+<a href=#2498 id=2498 data-nosnippet>2498</a>            BreakPoint::Forbidden,
+<a href=#2499 id=2499 data-nosnippet>2499</a>            <span class="string">"the paragraph can leave the box before it"</span>,
+<a href=#2500 id=2500 data-nosnippet>2500</a>        );
+<a href=#2501 id=2501 data-nosnippet>2501</a>        <span class="kw">let </span>after = at.last().expect(<span class="string">"the paragraph has lines"</span>) + <span class="number">1</span>;
+<a href=#2502 id=2502 data-nosnippet>2502</a>        <span class="macro">assert!</span>(
+<a href=#2503 id=2503 data-nosnippet>2503</a>            after &lt; boxed.len(),
+<a href=#2504 id=2504 data-nosnippet>2504</a>            <span class="string">"the box after the paragraph is missing"
+<a href=#2505 id=2505 data-nosnippet>2505</a>        </span>);
+<a href=#2506 id=2506 data-nosnippet>2506</a>        <span class="kw">for </span>fragment <span class="kw">in </span><span class="kw-2">&amp;</span>boxed[after..] {
+<a href=#2507 id=2507 data-nosnippet>2507</a>            <span class="macro">assert_eq!</span>(
+<a href=#2508 id=2508 data-nosnippet>2508</a>                fragment.break_before,
+<a href=#2509 id=2509 data-nosnippet>2509</a>                BreakPoint::Forbidden,
+<a href=#2510 id=2510 data-nosnippet>2510</a>                <span class="string">"the box after the paragraph can leave it"</span>,
+<a href=#2511 id=2511 data-nosnippet>2511</a>            );
+<a href=#2512 id=2512 data-nosnippet>2512</a>        }
+<a href=#2513 id=2513 data-nosnippet>2513</a>
+<a href=#2514 id=2514 data-nosnippet>2514</a>        <span class="kw">let </span>pages = paginate_styled(
+<a href=#2515 id=2515 data-nosnippet>2515</a>            <span class="string">"p { orphans: 1; widows: 1 } \
+<a href=#2516 id=2516 data-nosnippet>2516</a>             p::after { content: \"\"; height: 24pt; background-color: #eeeeee }"</span>,
+<a href=#2517 id=2517 data-nosnippet>2517</a>            <span class="macro">vec!</span>[section(long_prose(<span class="number">40</span>))],
+<a href=#2518 id=2518 data-nosnippet>2518</a>        );
+<a href=#2519 id=2519 data-nosnippet>2519</a>        <span class="macro">assert!</span>(pages.len() &gt; <span class="number">2</span>, <span class="string">"the prose fills {} pages"</span>, pages.len());
+<a href=#2520 id=2520 data-nosnippet>2520</a>        <span class="kw">for </span>page <span class="kw">in </span><span class="kw-2">&amp;</span>pages {
+<a href=#2521 id=2521 data-nosnippet>2521</a>            <span class="kw">let </span>lines = content_lines(page);
+<a href=#2522 id=2522 data-nosnippet>2522</a>            <span class="kw">for </span>(<span class="kw">_</span>, y, ..) <span class="kw">in </span>rects(page) {
+<a href=#2523 id=2523 data-nosnippet>2523</a>                <span class="macro">assert!</span>(
+<a href=#2524 id=2524 data-nosnippet>2524</a>                    lines.first().is_some_and(|(baseline, <span class="kw">_</span>)| <span class="kw-2">*</span>baseline &lt; y),
+<a href=#2525 id=2525 data-nosnippet>2525</a>                    <span class="string">"page {}: a generated box opens the page"</span>,
+<a href=#2526 id=2526 data-nosnippet>2526</a>                    page.number,
+<a href=#2527 id=2527 data-nosnippet>2527</a>                );
+<a href=#2528 id=2528 data-nosnippet>2528</a>            }
+<a href=#2529 id=2529 data-nosnippet>2529</a>        }
+<a href=#2530 id=2530 data-nosnippet>2530</a>    }
+<a href=#2531 id=2531 data-nosnippet>2531</a>}
 </code></pre></div></section></main></body></html>
