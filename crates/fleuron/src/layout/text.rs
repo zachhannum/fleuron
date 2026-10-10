@@ -65,6 +65,16 @@ impl Paginator<'_> {
                 shift(&mut items, x + fragment.x, top);
                 items
             }
+            Piece::Float(float) => vec![DrawItem::Image {
+                x: x + fragment.x + float.x,
+                y: top + float.y,
+                w: float.width,
+                h: float.height,
+                asset: float.asset,
+                alpha: 255,
+                layer: fragment.layer,
+                blend: float.blend,
+            }],
             Piece::Blank | Piece::Anchor(_) => Vec::new(),
         });
         fade(&mut items, fragment.opacity);

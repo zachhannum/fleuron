@@ -22,7 +22,8 @@
 //! beside them, `list` sets a list an item at a time with the marker
 //! of each, `table` sets a table a row at a time, `flow` stacks
 //! fragments into pages, `exclusion` places the images and blocks the
-//! sheet anchored and wraps prose around them, `background` puts art
+//! sheet anchored and wraps prose around them, `float` keeps the room
+//! a floated image takes in its column, `background` puts art
 //! behind a box, `inline` paints the box an inline element takes on a
 //! line, `furniture` paints the margin boxes, and `text` turns a
 //! shaped line into paint ops.
@@ -31,6 +32,7 @@ mod background;
 mod build;
 mod cap;
 mod exclusion;
+mod float;
 mod flow;
 mod fragment;
 mod furniture;
@@ -48,7 +50,7 @@ mod testing;
 
 pub use build::Reflow;
 pub use fragment::{
-    BreakPoint, Decoration, Decorations, DropCap, Fragment, Marker, Marks, Piece, TableRow,
+    BreakPoint, Decoration, Decorations, DropCap, Floated, Fragment, Marker, Marks, Piece, TableRow,
 };
 pub use furniture::margin_band;
 pub use note::Note;
@@ -71,7 +73,7 @@ use crate::images::{Assets, Contours};
 use crate::lines::{LineLayout, ParagraphStyle, Patterns};
 use crate::pages::{Page, Side};
 use crate::session::Session;
-use crate::style::{Background, PageStyle, Position, StyleTree};
+use crate::style::{Background, Float, PageStyle, Position, StyleTree};
 use crate::{LayoutOutput, Warning};
 
 use flow::{Flow, PageSlot};
@@ -146,8 +148,11 @@ pub struct Paginator<'a> {
     /// character and source, so the same message stands once under
     /// every file that has the character.
     uncovered: RefCell<Vec<UncoveredWarning>>,
-    /// Whether the sheet anchors anything to the page, answered once.
+    /// Whether the sheet anchors anything to the page or floats
+    /// anything, answered once.
     wraps: OnceCell<bool>,
+    /// Whether the sheet floats anything, answered once.
+    floats: OnceCell<bool>,
     /// How many times the flow set a paragraph again beside an image.
     rebreaks: Cell<u32>,
     /// What the references in the book resolve against.
@@ -224,6 +229,7 @@ impl<'a> Paginator<'a> {
             warnings: RefCell::new(Vec::new()),
             uncovered: RefCell::new(Vec::new()),
             wraps: OnceCell::new(),
+            floats: OnceCell::new(),
             rebreaks: Cell::new(0),
             references: RefCell::new(References::default()),
             notes: RefCell::new(Numbering::default()),
@@ -336,17 +342,29 @@ impl Paginator<'_> {
         *self.references.borrow_mut() = references;
     }
 
-    /// Whether the sheet takes anything out of the flow and against
-    /// the page.
+    /// Whether the sheet takes anything out of the flow: against the
+    /// page, or to one side of a column.
     ///
-    /// A book that anchors nothing never sets a paragraph twice, so
-    /// its fragments keep nothing to set one from.
+    /// A book that anchors nothing and floats nothing never sets a
+    /// paragraph twice, so its fragments keep nothing to set one from.
     fn wraps(&self) -> bool {
         *self.wraps.get_or_init(|| {
+            self.floats()
+                || self
+                    .styles
+                    .styles()
+                    .iter()
+                    .any(|style| style.position == Position::Absolute)
+        })
+    }
+
+    /// Whether the sheet floats anything.
+    pub(super) fn floats(&self) -> bool {
+        *self.floats.get_or_init(|| {
             self.styles
                 .styles()
                 .iter()
-                .any(|style| style.position == Position::Absolute)
+                .any(|style| style.float != Float::None)
         })
     }
 

@@ -174,7 +174,7 @@ fn the_files_the_host_sent_are_in_the_container() {
 #[test]
 fn the_warnings_come_back_as_a_render_s_do() {
     let markdown = BOOK.replace("small estate", "small <b>estate</b>");
-    let css = format!("{CSS}p {{ float: left }}\nh1 {{ background-image: url(gone.png) }}\n");
+    let css = format!("{CSS}p {{ display: flex }}\nh1 {{ background-image: url(gone.png) }}\n");
     let mut session = session(&markdown, &css);
     let reply = export(&session);
     let rendered = wire::decode(&session.preview(None, None).unwrap())
@@ -187,8 +187,11 @@ fn the_warnings_come_back_as_a_render_s_do() {
         .expect("reading the source warns on the render");
     assert_eq!(reply.warnings.first(), Some(read), "{:?}", reply.warnings);
     assert!(
-        reply.warnings.iter().any(|w| w.message.contains("`float`")
-            && w.origin.as_deref() == Some("author.css:4:5")),
+        reply
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("`display`")
+                && w.origin.as_deref() == Some("author.css:4:5")),
         "{:?}",
         reply.warnings
     );

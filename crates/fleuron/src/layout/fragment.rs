@@ -7,7 +7,7 @@ use crate::content::NodeId;
 use crate::lines::Line;
 use crate::pages::{DrawItem, PageBox};
 use crate::style::{
-    BlendMode, BorderRadius, BoxDecorationBreak, Break, Color, ComputedStyle, Edges,
+    BlendMode, BorderRadius, BoxDecorationBreak, Break, Clear, Color, ComputedStyle, Edges, Float,
 };
 
 use super::background::Backdrop;
@@ -63,6 +63,34 @@ pub enum Piece {
     Anchor(NodeId),
     /// One row of a table, set whole.
     Row(Box<TableRow>),
+    /// An image floated to one side of its column. It takes no height
+    /// in the column, and the prose after it sets beside it.
+    Float(Box<Floated>),
+}
+
+/// An image floated to one side of its column. The fragment's `x` is
+/// the leading edge of its margin box and its height is the height of
+/// that box, which is what the prose beside it keeps clear of.
+#[derive(Debug, Clone)]
+pub struct Floated {
+    /// The image's own node.
+    pub node: NodeId,
+    /// The side of the column it stands at.
+    pub side: Float,
+    /// Index into the asset table.
+    pub asset: u32,
+    /// Leading edge of the image, from the margin box's own.
+    pub x: f32,
+    /// Top of the image, from the margin box's own.
+    pub y: f32,
+    /// Width of the image in points, after any scaling.
+    pub width: f32,
+    /// Height of the image in points, after any scaling.
+    pub height: f32,
+    /// Width of the margin box.
+    pub outer: f32,
+    /// How the image mixes with what is behind it.
+    pub blend: BlendMode,
 }
 
 /// One row of a table, set whole: what it paints, and what the flow
@@ -164,6 +192,9 @@ pub struct Fragment {
     /// How much of what the fragment paints shows, from 0 to 1: the
     /// `opacity` of the blocks it came out of, multiplied together.
     pub opacity: f32,
+    /// Which floats it starts below, from the `clear` of the block
+    /// whose first fragment it is.
+    pub clear: Clear,
 }
 
 impl Fragment {
@@ -186,7 +217,14 @@ impl Fragment {
             layer: 0,
             offset: (0.0, 0.0),
             opacity: 1.0,
+            clear: Clear::None,
         }
+    }
+
+    /// Whether it stands outside the height of the column: an anchor,
+    /// or a float.
+    pub(super) fn aside(&self) -> bool {
+        matches!(self.piece, Piece::Anchor(_) | Piece::Float(_))
     }
 }
 

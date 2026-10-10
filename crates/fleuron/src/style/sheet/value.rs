@@ -8,11 +8,12 @@ use crate::lines::{HangEnd, HangingPunctuation};
 use crate::pages::Side;
 use crate::style::properties::{
     AlignContent, BackgroundRepeat, BlendMode, BorderCollapse, BorderStyle, BoxDecorationBreak,
-    Break, ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle, Declaration,
-    DecorationLine, DecorationStyle, Edge, Family, Figures, FontStyle, FontVariantAlternates,
-    FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions, Hyphens, LINE_WIDTHS,
-    Length, LineHeight, ListStyleType, NumericSpacing, Position, ShapeSource, SizeSource,
-    StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform, Url, WrapFlow,
+    Break, Clear, ColumnSpan, Content, ContentPiece, Corner, CounterReset, CounterStyle,
+    Declaration, DecorationLine, DecorationStyle, Edge, Family, Figures, Float, FontStyle,
+    FontVariantAlternates, FontVariantCaps, FontVariantLigatures, FontVariantNumeric, Fractions,
+    Hyphens, LINE_WIDTHS, Length, LineHeight, ListStyleType, NumericSpacing, Position, ShapeSource,
+    SizeSource, StringPiece, StringSet, Target, TextAlign, TextJustify, TextTransform, Url,
+    WrapFlow,
 };
 
 use super::StyleError;
@@ -593,6 +594,31 @@ pub(super) fn wrap_flow(input: &mut Parser<'_, '_>) -> Option<WrapFlow> {
         "both" => Some(WrapFlow::Both),
         "start" => Some(WrapFlow::Start),
         "end" => Some(WrapFlow::End),
+        _ => None,
+    }
+}
+
+/// `float: none | left | right`: which side of its column an image in
+/// the flow moves to.
+pub(super) fn float(input: &mut Parser<'_, '_>) -> Option<Float> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(Float::None),
+        "left" => Some(Float::Left),
+        "right" => Some(Float::Right),
+        _ => None,
+    }
+}
+
+/// `clear: none | left | right | both`: which floats a block starts
+/// below.
+pub(super) fn clear(input: &mut Parser<'_, '_>) -> Option<Clear> {
+    let keyword = input.expect_ident().ok()?.clone();
+    match_ignore_ascii_case! { &keyword,
+        "none" => Some(Clear::None),
+        "left" => Some(Clear::Left),
+        "right" => Some(Clear::Right),
+        "both" => Some(Clear::Both),
         _ => None,
     }
 }
