@@ -2196,8 +2196,8 @@ mod tests {
 
     /// `break-before` and `break-after` reach fragmentation from the
     /// cascade, and nothing in the paginator hardcodes them: a sheet
-    /// that turns the recto rule off runs the chapters together, and
-    /// one that asks for a page break gets one.
+    /// that turns the page break off runs the chapters together, and
+    /// one that asks for a side gets the blank page that takes.
     #[test]
     fn break_control_comes_from_the_cascade() {
         let chapters = || {
@@ -2206,18 +2206,17 @@ mod tests {
                 section(vec![heading("Two"), paragraph("The second chapter.")]),
             ]
         };
-        // The built-in sheet opens a chapter on a recto.
-        assert_eq!(paginate(chapters()).len(), 3);
+        // The built-in sheet opens a chapter on the next page.
+        assert_eq!(paginate(chapters()).len(), 2);
         // The author turns that off and the chapters run together.
         assert_eq!(
             paginate_styled("section { break-before: auto }", chapters()).len(),
             1,
         );
-        // A page break, without a side, is still a page break.
-        assert_eq!(
-            paginate_styled("section { break-before: page }", chapters()).len(),
-            2,
-        );
+        // A recto open leaves a blank verso behind it.
+        let pages = paginate_styled("section { break-before: recto }", chapters());
+        assert_eq!(pages.len(), 3);
+        assert!(pages[1].items.is_empty());
         // And a verso open leaves the blank recto behind it.
         let pages = paginate_styled("section { break-before: verso }", chapters());
         assert_eq!(pages.len(), 4);

@@ -13,8 +13,11 @@ use fleuron::pages::{DrawItem, Page, Side};
 use fleuron::style::{PageQuery, Situation, Source, StyleTree, Stylesheets};
 
 /// The author sheet the fixture is set under: roman front matter, an
-/// arabic body, and running heads on the outer edge.
+/// arabic body, chapters that open on a recto, and running heads on
+/// the outer edge.
 const FURNITURE_CSS: &str = r#"
+section { break-before: recto }
+
 /* Front matter takes a page of its own name, and numbers in roman. */
 section:first-child { page: front }
 
@@ -372,7 +375,8 @@ fn a_running_string_is_the_value_the_page_opened_with() {
     let book = fixture();
     let styles = Stylesheets::parse(&[Source::author(
         "unblinded.css",
-        "section:nth-child(2) { counter-reset: page 1 }
+        "section { break-before: recto }
+         section:nth-child(2) { counter-reset: page 1 }
          @page :left  { @top-left  { content: string(chapter); font-size: 8pt } }
          @page :right { @top-right { content: string(chapter); font-size: 8pt } }",
     )])

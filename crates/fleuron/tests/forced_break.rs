@@ -140,16 +140,18 @@ fn two_breaks_in_a_row_are_one_break() {
     assert_eq!(page_of(&pages, "Blefuscu"), 1);
 }
 
-/// Acceptance: a page break at the end of a chapter keeps the next
-/// chapter on a right-hand page, and adds no blank page to what the
-/// chapter opening already asks for.
+/// Acceptance: a page break at the end of a chapter adds no page to
+/// what the chapter opening already asks for, and a chapter that
+/// opens on a right-hand page stays on one.
 #[test]
-fn a_page_break_at_the_end_of_a_chapter_keeps_the_next_on_the_right() {
-    let plain = pages("# One\n\nLilliput.\n\n# Two\n\nBlefuscu.\n", "");
-    let broken = pages(
-        "# One\n\nLilliput.\n\n\\pagebreak\n\n# Two\n\nBlefuscu.\n",
-        "",
-    );
+fn a_page_break_at_the_end_of_a_chapter_adds_no_page() {
+    let plain = "# One\n\nLilliput.\n\n# Two\n\nBlefuscu.\n";
+    let broken = "# One\n\nLilliput.\n\n\\pagebreak\n\n# Two\n\nBlefuscu.\n";
+    assert_eq!(pages(plain, "").len(), 2);
+    assert_eq!(pages(broken, "").len(), 2);
+
+    let recto = "section { break-before: recto }";
+    let (plain, broken) = (pages(plain, recto), pages(broken, recto));
     assert_eq!(
         page_of(&plain, "Blefuscu"),
         2,

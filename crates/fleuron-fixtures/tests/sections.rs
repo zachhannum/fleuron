@@ -8,7 +8,8 @@ use fleuron::content::{Block, NodeId};
 use fleuron::images::Assets;
 use fleuron::layout::layout_book;
 use fleuron::pages::{DrawItem, Page};
-use fleuron_fixtures::{Corpus, registry, styles};
+use fleuron::style::{Source, Stylesheets};
+use fleuron_fixtures::{Corpus, registry};
 
 /// The size the sheet sets a section's opening heading at.
 fn heading_size(book: &fleuron::content::Book, styles: &fleuron::style::StyleTree) -> f32 {
@@ -33,7 +34,10 @@ fn opens_a_chapter(page: &Page, size: f32) -> bool {
 #[test]
 fn every_chapter_opens_on_a_page_that_names_it() {
     let book = Corpus::GATE.book();
-    let styles = styles(&book);
+    // The sheet squares the chapters onto rectos, so the novel has
+    // blank leaves to check.
+    let recto = Source::author("recto.css", "section { break-before: recto }");
+    let styles = Stylesheets::parse(&[recto]).compile(&book, registry());
     let output = layout_book(&book, &styles, registry(), &Assets::none());
     let size = heading_size(&book, &styles);
     let ids: Vec<NodeId> = book.sections.iter().map(|section| section.id).collect();
@@ -67,8 +71,7 @@ fn every_chapter_opens_on_a_page_that_names_it() {
         );
     }
 
-    // The novel squares its chapters onto rectos, so it has blank
-    // leaves, and a blank leaf has nobody's content on it.
+    // A blank leaf has nobody's content on it.
     let blanks = output
         .pages
         .iter()

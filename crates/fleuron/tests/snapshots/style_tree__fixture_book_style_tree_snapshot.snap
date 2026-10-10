@@ -79,9 +79,7 @@ expression: tree
         "bottom": 0.0,
         "left": 0.0
       },
-      "break_before": {
-        "side": "recto"
-      },
+      "break_before": "page",
       "break_after": "auto",
       "break_inside": "auto"
     },

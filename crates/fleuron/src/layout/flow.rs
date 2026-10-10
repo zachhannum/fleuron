@@ -1549,6 +1549,9 @@ mod tests {
     /// columns apart by where a line starts.
     const TWO_COLUMNS: &str = "@page { column-count: 2; column-gap: 18pt }";
 
+    /// The sheet of a book whose chapters open on a right-hand page.
+    const RECTO: &str = "section { break-before: recto }";
+
     /// How far every content line and every rect of `page` sits below
     /// the same line and rect of `plain`. Both pages hold the same
     /// things, and each thing moved by the one distance.
@@ -1608,7 +1611,7 @@ mod tests {
     #[test]
     fn a_title_page_centers_between_the_top_and_bottom_margins() {
         let sections = || vec![title_page("One"), title_page("Two")];
-        let named = format!("{TINT} section {{ page: chapter-opening }}");
+        let named = format!("{TINT} section {{ page: chapter-opening; break-before: recto }}");
         let plain = paginate_styled(&named, sections());
         let at = |align: &str| {
             paginate_styled(
@@ -2567,18 +2570,21 @@ mod tests {
         assert_eq!(Side::of_number(10_001), Side::Recto);
     }
 
-    /// A chapter opens on a fresh recto page with the heading first;
-    /// the verso it skips, when there is one, ships blank — so every
-    /// blank page in the book is a verso.
+    /// A chapter a sheet opens on a recto starts a fresh page with
+    /// the heading first; the verso it skips, when there is one, ships
+    /// blank — so every blank page in the book is a verso.
     #[test]
     fn chapters_open_on_recto() {
-        let pages = paginate(vec![
-            section(long_prose(12)),
-            section(vec![
-                heading("Chapter Two"),
-                paragraph("More prose follows here."),
-            ]),
-        ]);
+        let pages = paginate_styled(
+            RECTO,
+            vec![
+                section(long_prose(12)),
+                section(vec![
+                    heading("Chapter Two"),
+                    paragraph("More prose follows here."),
+                ]),
+            ],
+        );
         assert!(pages.len() > 2, "expected multi-page output");
         let mut chapter_two = None;
         for (i, page) in pages.iter().enumerate() {
@@ -2743,11 +2749,14 @@ mod tests {
     fn a_blank_leaf_names_no_section() {
         // A one-paragraph chapter between two long ones ends on its
         // own opening recto, which leaves a blank verso behind it.
-        let pages = paginate(vec![
-            chapter("Chapter One", 14),
-            section(vec![heading("Chapter Two"), paragraph("A short chapter.")]),
-            chapter("Chapter Three", 14),
-        ]);
+        let pages = paginate_styled(
+            RECTO,
+            vec![
+                chapter("Chapter One", 14),
+                section(vec![heading("Chapter Two"), paragraph("A short chapter.")]),
+                chapter("Chapter Three", 14),
+            ],
+        );
         let blanks: Vec<&Page> = pages.iter().filter(|page| page.items.is_empty()).collect();
         assert!(
             !blanks.is_empty(),
@@ -2782,8 +2791,9 @@ mod tests {
         assert_eq!(shared.sections, ids);
     }
 
-    /// A book of several pages with a blank leaf in it: a short
-    /// chapter ends on its opening recto and leaves a verso behind.
+    /// A book of several pages that has a blank leaf in it under
+    /// `RECTO`: a short chapter ends on its opening recto and leaves a
+    /// verso behind.
     fn two_chapters() -> Vec<crate::content::Section> {
         vec![
             chapter("One", 14),
@@ -2796,8 +2806,8 @@ mod tests {
     /// bleed edge, on a page of text and on a blank leaf alike.
     #[test]
     fn a_page_background_paints_to_the_bleed_edge() {
-        let css = "@page { background-color: #e8e0d0; bleed: 9pt }";
-        let pages = paginate_styled(css, two_chapters());
+        let css = format!("{RECTO} @page {{ background-color: #e8e0d0; bleed: 9pt }}");
+        let pages = paginate_styled(&css, two_chapters());
         assert!(pages.len() > 3);
         for page in &pages {
             assert_eq!(page.bleed, 9.0);
@@ -2820,8 +2830,11 @@ mod tests {
     /// relative to the trim as on an unbled one, and the folio with it.
     #[test]
     fn a_bled_page_sets_its_text_where_an_unbled_one_does() {
-        let plain = paginate(two_chapters());
-        let bled = paginate_styled("@page { bleed: 3mm; marks: crop cross }", two_chapters());
+        let plain = paginate_styled(RECTO, two_chapters());
+        let bled = paginate_styled(
+            &format!("{RECTO} @page {{ bleed: 3mm; marks: crop cross }}"),
+            two_chapters(),
+        );
         assert_eq!(plain.len(), bled.len(), "the page count moved");
         let text = |page: &Page| {
             page.items
@@ -2842,7 +2855,7 @@ mod tests {
     /// mark on any page.
     #[test]
     fn a_book_naming_no_bleed_has_pages_of_its_trim_alone() {
-        for page in paginate(two_chapters()) {
+        for page in paginate_styled(RECTO, two_chapters()) {
             assert_eq!((page.bleed, page.slug), (0.0, 0.0));
             let outside = page.items.iter().any(|item| match item {
                 DrawItem::Rect { x, y, .. } | DrawItem::Rounded { x, y, .. } => {
@@ -2858,8 +2871,8 @@ mod tests {
     /// leaf included, and they survive the furniture being painted.
     #[test]
     fn every_page_carries_its_marks() {
-        let css = "@page { marks: crop }";
-        let pages = paginate_styled(css, two_chapters());
+        let css = format!("{RECTO} @page {{ marks: crop }}");
+        let pages = paginate_styled(&css, two_chapters());
         assert!(
             pages.iter().any(|page| page.sections.is_empty()),
             "no blank leaf"
