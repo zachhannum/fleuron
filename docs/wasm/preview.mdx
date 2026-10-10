@@ -210,6 +210,7 @@ The second argument is all optional:
 | `assets` | none | The asset table, `output.assets`. Leave it out and the painter has no url to resolve, so every image is drawn as an empty box. |
 | `asset` | none | `(asset, index) => url`, for images. |
 | `links` | `true` | Whether each line of each link gets a transparent mark. `false` leaves the marks out, for a host that marks links itself. See [links without the preview](#links-without-the-preview). |
+| `trimEdge` | `true` | Whether a page with a bleed or marks shows where the printer cuts. `false` leaves the dashed rectangle out. |
 
 Layout never decodes an image. It probes the header for the intrinsic size, reserves a box of the right shape, and records an index into `output.assets`. `asset` turns that entry back into something a browser can load: any URL an `<img>` would take, including a `blob:` or `data:` one, or `null` when there is nothing to supply. On `null` the painter outlines the box the image would have filled, so the space it takes is still visible.
 

@@ -79,6 +79,12 @@ export interface PaintOptions {
    * tests links on its own passes.
    */
   links?: boolean;
+  /**
+   * Whether a page with a bleed or marks shows where it is cut, as a
+   * dashed `rect[data-trim]`. On unless `false`, which a host that
+   * wants the sheet as the PDF holds it passes.
+   */
+  trimEdge?: boolean;
 }
 
 /**
@@ -121,7 +127,7 @@ export function paintPage(page: Page, options: PaintOptions = {}): string {
     ` width="${num(sheet.width * zoom)}" height="${num(sheet.height * zoom)}"` +
     ` fill="${escape(options.ink ?? '#000000')}"` +
     ` data-page="${page.number}" data-side="${page.side}">` +
-    `<g style="pointer-events: none">${ground}${body}${trimEdge(page)}</g>${overlay}${marks}</svg>`
+    `<g style="pointer-events: none">${ground}${body}${options.trimEdge === false ? '' : trimEdge(page)}</g>${overlay}${marks}</svg>`
   );
 }
 

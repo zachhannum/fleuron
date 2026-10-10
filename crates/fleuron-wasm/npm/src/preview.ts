@@ -85,6 +85,11 @@ export interface PreviewOptions {
   /** What it is printed in. */
   ink?: string;
   /**
+   * Whether a page with a bleed or marks shows where it is cut. On
+   * unless `false`.
+   */
+  trimEdge?: boolean;
+  /**
    * The images the manuscript refers to, by the url it names them
    * by. Nothing here fetches a url, so a host that wants an image on
    * the page fetches the file itself and hands over the bytes.
@@ -811,6 +816,7 @@ export class Preview {
       zoom: this.scale,
       ...(this.options.paper === undefined ? {} : { paper: this.options.paper }),
       ...(this.options.ink === undefined ? {} : { ink: this.options.ink }),
+      ...(this.options.trimEdge === undefined ? {} : { trimEdge: this.options.trimEdge }),
       asset: this.options.asset ?? ((asset: Asset) => this.pixels.get(asset.url)),
     };
   }

@@ -1265,6 +1265,14 @@ check(
     trimEdge.includes(`width="${bledPage.width}"`),
   trimEdge ?? 'no trim edge',
 );
+const uncutSvg =
+  bledPage === null ? '' : paintPage(bledPage, { fonts: bled?.fonts ?? [], trimEdge: false });
+check(
+  'a host turns the trim edge off, and the rest of the sheet is the same',
+  trimEdge !== null &&
+    !uncutSvg.includes('data-trim') &&
+    uncutSvg === bledSvg.replace(/<rect data-trim=""[^>]*\/>/, ''),
+);
 const plainSvg = paintPage(preview.pages[1] as Page, { fonts: preview.fonts });
 check(
   'a page with no bleed paints on its trim, with no trim edge',
