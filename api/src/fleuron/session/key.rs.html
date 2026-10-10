@@ -385,202 +385,207 @@
 <a href=#385 id=385 data-nosnippet>385</a>        mix_blend_mode,
 <a href=#386 id=386 data-nosnippet>386</a>        blend_around,
 <a href=#387 id=387 data-nosnippet>387</a>        wrap_flow: <span class="kw">_</span>,
-<a href=#388 id=388 data-nosnippet>388</a>        shape_outside: <span class="kw">_</span>,
-<a href=#389 id=389 data-nosnippet>389</a>        shape_margin: <span class="kw">_</span>,
-<a href=#390 id=390 data-nosnippet>390</a>        margin,
-<a href=#391 id=391 data-nosnippet>391</a>        padding,
-<a href=#392 id=392 data-nosnippet>392</a>        border,
-<a href=#393 id=393 data-nosnippet>393</a>        <span class="comment">// A decoration carries its corners to the page.
-<a href=#394 id=394 data-nosnippet>394</a>        </span>border_radius,
-<a href=#395 id=395 data-nosnippet>395</a>        background,
-<a href=#396 id=396 data-nosnippet>396</a>        box_decoration_break,
-<a href=#397 id=397 data-nosnippet>397</a>        width,
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="comment">// A block taller than its content emits the space below it.
-<a href=#399 id=399 data-nosnippet>399</a>        </span>height,
-<a href=#400 id=400 data-nosnippet>400</a>        min_height,
-<a href=#401 id=401 data-nosnippet>401</a>        max_width,
-<a href=#402 id=402 data-nosnippet>402</a>        max_height,
-<a href=#403 id=403 data-nosnippet>403</a>        border_collapse,
-<a href=#404 id=404 data-nosnippet>404</a>        list_style_type,
-<a href=#405 id=405 data-nosnippet>405</a>        break_before,
-<a href=#406 id=406 data-nosnippet>406</a>        break_after,
-<a href=#407 id=407 data-nosnippet>407</a>        break_inside,
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="comment">// A spanning block breaks to the whole content box.
-<a href=#409 id=409 data-nosnippet>409</a>        </span>column_span,
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="comment">// What a custom property holds reaches layout only through the
-<a href=#411 id=411 data-nosnippet>411</a>        // properties that read it, which are hashed here already.
-<a href=#412 id=412 data-nosnippet>412</a>        </span>custom: <span class="kw">_</span>,
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="comment">// A feature draws other glyphs, and other glyphs take other
-<a href=#414 id=414 data-nosnippet>414</a>        // advances, so a line breaks where the features put it.
-<a href=#415 id=415 data-nosnippet>415</a>        </span>font_feature_settings,
-<a href=#416 id=416 data-nosnippet>416</a>        font_variant_ligatures,
-<a href=#417 id=417 data-nosnippet>417</a>        font_variant_numeric,
-<a href=#418 id=418 data-nosnippet>418</a>        font_variant_alternates,
-<a href=#419 id=419 data-nosnippet>419</a>    } = style;
-<a href=#420 id=420 data-nosnippet>420</a>    (border_collapse, list_style_type).hash(h);
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">for </span>size <span class="kw">in </span>[width, height, min_height, max_width, max_height] {
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">match </span>size {
-<a href=#423 id=423 data-nosnippet>423</a>            Width::Auto =&gt; <span class="number">0u8</span>.hash(h),
-<a href=#424 id=424 data-nosnippet>424</a>            Width::Points(points) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
-<a href=#425 id=425 data-nosnippet>425</a>            Width::Percent(percent) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
-<a href=#426 id=426 data-nosnippet>426</a>        }
-<a href=#427 id=427 data-nosnippet>427</a>    }
-<a href=#428 id=428 data-nosnippet>428</a>    (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
-<a href=#429 id=429 data-nosnippet>429</a>    (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
-<a href=#430 id=430 data-nosnippet>430</a>    (
-<a href=#431 id=431 data-nosnippet>431</a>        font_feature_settings,
-<a href=#432 id=432 data-nosnippet>432</a>        font_variant_ligatures,
-<a href=#433 id=433 data-nosnippet>433</a>        font_variant_numeric,
-<a href=#434 id=434 data-nosnippet>434</a>        font_variant_alternates,
-<a href=#435 id=435 data-nosnippet>435</a>    )
-<a href=#436 id=436 data-nosnippet>436</a>        .hash(h);
-<a href=#437 id=437 data-nosnippet>437</a>    (
-<a href=#438 id=438 data-nosnippet>438</a>        text_decoration_line,
-<a href=#439 id=439 data-nosnippet>439</a>        text_decoration_color,
-<a href=#440 id=440 data-nosnippet>440</a>        text_decoration_style,
-<a href=#441 id=441 data-nosnippet>441</a>        text_decoration_thickness.map(f32::to_bits),
-<a href=#442 id=442 data-nosnippet>442</a>    )
-<a href=#443 id=443 data-nosnippet>443</a>        .hash(h);
-<a href=#444 id=444 data-nosnippet>444</a>    (text_align, text_justify, hanging_punctuation).hash(h);
-<a href=#445 id=445 data-nosnippet>445</a>    (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
-<a href=#446 id=446 data-nosnippet>446</a>    (
-<a href=#447 id=447 data-nosnippet>447</a>        content,
-<a href=#448 id=448 data-nosnippet>448</a>        string_set,
-<a href=#449 id=449 data-nosnippet>449</a>        counter_reset,
-<a href=#450 id=450 data-nosnippet>450</a>        note_reset,
-<a href=#451 id=451 data-nosnippet>451</a>        initial_letter,
-<a href=#452 id=452 data-nosnippet>452</a>    )
-<a href=#453 id=453 data-nosnippet>453</a>        .hash(h);
-<a href=#454 id=454 data-nosnippet>454</a>    (position, z_index, opacity.to_bits()).hash(h);
-<a href=#455 id=455 data-nosnippet>455</a>    (mix_blend_mode, blend_around).hash(h);
-<a href=#456 id=456 data-nosnippet>456</a>    hash_insets(<span class="kw-2">*</span>inset, h);
-<a href=#457 id=457 data-nosnippet>457</a>    (break_before, break_after, break_inside, column_span).hash(h);
-<a href=#458 id=458 data-nosnippet>458</a>    hash_background(background, h);
-<a href=#459 id=459 data-nosnippet>459</a>    box_decoration_break.hash(h);
-<a href=#460 id=460 data-nosnippet>460</a>    hash_edges(<span class="kw-2">*</span>margin, h);
-<a href=#461 id=461 data-nosnippet>461</a>    hash_edges(<span class="kw-2">*</span>padding, h);
-<a href=#462 id=462 data-nosnippet>462</a>    hash_edges(border.widths(), h);
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">for </span>edge <span class="kw">in </span>[border.top, border.right, border.bottom, border.left] {
-<a href=#464 id=464 data-nosnippet>464</a>        edge.color.hash(h);
-<a href=#465 id=465 data-nosnippet>465</a>    }
-<a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">for </span>corner <span class="kw">in </span>[
-<a href=#467 id=467 data-nosnippet>467</a>        border_radius.top_left,
-<a href=#468 id=468 data-nosnippet>468</a>        border_radius.top_right,
-<a href=#469 id=469 data-nosnippet>469</a>        border_radius.bottom_right,
-<a href=#470 id=470 data-nosnippet>470</a>        border_radius.bottom_left,
-<a href=#471 id=471 data-nosnippet>471</a>    ] {
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">for </span>axis <span class="kw">in </span>[corner.x, corner.y] {
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">match </span>axis {
-<a href=#474 id=474 data-nosnippet>474</a>                <span class="kw">crate</span>::style::Coord::Points(points) =&gt; (<span class="number">0u8</span>, points.to_bits()).hash(h),
-<a href=#475 id=475 data-nosnippet>475</a>                <span class="kw">crate</span>::style::Coord::Percent(percent) =&gt; (<span class="number">1u8</span>, percent.to_bits()).hash(h),
-<a href=#476 id=476 data-nosnippet>476</a>            }
-<a href=#477 id=477 data-nosnippet>477</a>        }
-<a href=#478 id=478 data-nosnippet>478</a>    }
-<a href=#479 id=479 data-nosnippet>479</a>}
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a><span class="doccomment">/// What one box paints behind its content. The tint and the image
-<a href=#482 id=482 data-nosnippet>482</a>/// both reach the display structure through the flow, and neither
-<a href=#483 id=483 data-nosnippet>483</a>/// moves a line, but a section keyed without them would serve a page
-<a href=#484 id=484 data-nosnippet>484</a>/// still painted the way it was.
-<a href=#485 id=485 data-nosnippet>485</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_background(background: <span class="kw-2">&amp;</span>Background, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#486 id=486 data-nosnippet>486</a>    <span class="kw">let </span>Background {
-<a href=#487 id=487 data-nosnippet>487</a>        color,
-<a href=#488 id=488 data-nosnippet>488</a>        image,
-<a href=#489 id=489 data-nosnippet>489</a>        repeat,
-<a href=#490 id=490 data-nosnippet>490</a>        size,
-<a href=#491 id=491 data-nosnippet>491</a>        position,
-<a href=#492 id=492 data-nosnippet>492</a>    } = background;
-<a href=#493 id=493 data-nosnippet>493</a>    (color, image, repeat).hash(h);
-<a href=#494 id=494 data-nosnippet>494</a>    <span class="kw">match </span>size {
-<a href=#495 id=495 data-nosnippet>495</a>        BackgroundSize::Auto =&gt; <span class="number">0u8</span>.hash(h),
-<a href=#496 id=496 data-nosnippet>496</a>        BackgroundSize::Cover =&gt; <span class="number">1u8</span>.hash(h),
-<a href=#497 id=497 data-nosnippet>497</a>        BackgroundSize::Contain =&gt; <span class="number">2u8</span>.hash(h),
-<a href=#498 id=498 data-nosnippet>498</a>        BackgroundSize::Fixed { width, height } =&gt; {
-<a href=#499 id=499 data-nosnippet>499</a>            <span class="number">3u8</span>.hash(h);
-<a href=#500 id=500 data-nosnippet>500</a>            <span class="kw">for </span>axis <span class="kw">in </span>[width, height] {
-<a href=#501 id=501 data-nosnippet>501</a>                hash_coord(<span class="kw-2">*</span>axis, h);
-<a href=#502 id=502 data-nosnippet>502</a>            }
-<a href=#503 id=503 data-nosnippet>503</a>        }
-<a href=#504 id=504 data-nosnippet>504</a>    }
-<a href=#505 id=505 data-nosnippet>505</a>    hash_coord(<span class="prelude-val">Some</span>(position.x), h);
-<a href=#506 id=506 data-nosnippet>506</a>    hash_coord(<span class="prelude-val">Some</span>(position.y), h);
-<a href=#507 id=507 data-nosnippet>507</a>}
-<a href=#508 id=508 data-nosnippet>508</a>
-<a href=#509 id=509 data-nosnippet>509</a><span class="doccomment">/// One coordinate, or the absence of one: `f32` is not `Hash`, and a
-<a href=#510 id=510 data-nosnippet>510</a>/// percentage and a length of the same number are different answers.
-<a href=#511 id=511 data-nosnippet>511</a></span><span class="kw">fn </span>hash_coord(coord: <span class="prelude-ty">Option</span>&lt;Coord&gt;, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#512 id=512 data-nosnippet>512</a>    <span class="kw">match </span>coord {
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="prelude-val">None </span>=&gt; <span class="number">0u8</span>.hash(h),
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="prelude-val">Some</span>(Coord::Points(points)) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
-<a href=#515 id=515 data-nosnippet>515</a>        <span class="prelude-val">Some</span>(Coord::Percent(percent)) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
-<a href=#516 id=516 data-nosnippet>516</a>    }
-<a href=#517 id=517 data-nosnippet>517</a>}
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_geometry(geometry: PageGeometry, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">let </span>PageGeometry {
-<a href=#521 id=521 data-nosnippet>521</a>        width,
-<a href=#522 id=522 data-nosnippet>522</a>        height,
-<a href=#523 id=523 data-nosnippet>523</a>        margin,
-<a href=#524 id=524 data-nosnippet>524</a>        columns,
-<a href=#525 id=525 data-nosnippet>525</a>        align_content,
-<a href=#526 id=526 data-nosnippet>526</a>    } = geometry;
-<a href=#527 id=527 data-nosnippet>527</a>    (width.to_bits(), height.to_bits(), align_content).hash(h);
-<a href=#528 id=528 data-nosnippet>528</a>    hash_edges(margin, h);
-<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">let </span>Columns {
-<a href=#530 id=530 data-nosnippet>530</a>        count,
-<a href=#531 id=531 data-nosnippet>531</a>        width,
-<a href=#532 id=532 data-nosnippet>532</a>        gap,
-<a href=#533 id=533 data-nosnippet>533</a>        rule,
-<a href=#534 id=534 data-nosnippet>534</a>    } = columns;
-<a href=#535 id=535 data-nosnippet>535</a>    (count, width.map(f32::to_bits), gap.to_bits()).hash(h);
-<a href=#536 id=536 data-nosnippet>536</a>    <span class="kw">let </span>ColumnRule { style, width } = rule;
-<a href=#537 id=537 data-nosnippet>537</a>    (style, width.to_bits()).hash(h);
-<a href=#538 id=538 data-nosnippet>538</a>}
-<a href=#539 id=539 data-nosnippet>539</a>
-<a href=#540 id=540 data-nosnippet>540</a><span class="doccomment">/// What one contour is: which of the three `shape-outside` says, and
-<a href=#541 id=541 data-nosnippet>541</a>/// the points where it says a polygon.
-<a href=#542 id=542 data-nosnippet>542</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_shape(shape: <span class="kw-2">&amp;</span>ShapeOutside, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#543 id=543 data-nosnippet>543</a>    <span class="kw">match </span>shape {
-<a href=#544 id=544 data-nosnippet>544</a>        ShapeOutside::None =&gt; <span class="number">0u8</span>.hash(h),
-<a href=#545 id=545 data-nosnippet>545</a>        ShapeOutside::Auto =&gt; <span class="number">1u8</span>.hash(h),
-<a href=#546 id=546 data-nosnippet>546</a>        ShapeOutside::Polygon(points) =&gt; {
-<a href=#547 id=547 data-nosnippet>547</a>            <span class="number">2u8</span>.hash(h);
-<a href=#548 id=548 data-nosnippet>548</a>            <span class="kw">for </span>point <span class="kw">in </span>points {
-<a href=#549 id=549 data-nosnippet>549</a>                <span class="kw">for </span>coord <span class="kw">in </span>[point.x, point.y] {
-<a href=#550 id=550 data-nosnippet>550</a>                    <span class="kw">match </span>coord {
-<a href=#551 id=551 data-nosnippet>551</a>                        Coord::Points(points) =&gt; (<span class="number">0u8</span>, points.to_bits()).hash(h),
-<a href=#552 id=552 data-nosnippet>552</a>                        Coord::Percent(percent) =&gt; (<span class="number">1u8</span>, percent.to_bits()).hash(h),
-<a href=#553 id=553 data-nosnippet>553</a>                    }
-<a href=#554 id=554 data-nosnippet>554</a>                }
-<a href=#555 id=555 data-nosnippet>555</a>            }
-<a href=#556 id=556 data-nosnippet>556</a>        }
-<a href=#557 id=557 data-nosnippet>557</a>    }
-<a href=#558 id=558 data-nosnippet>558</a>}
-<a href=#559 id=559 data-nosnippet>559</a>
-<a href=#560 id=560 data-nosnippet>560</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_edges(edges: Edges, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#561 id=561 data-nosnippet>561</a>    <span class="kw">let </span>Edges {
-<a href=#562 id=562 data-nosnippet>562</a>        top,
-<a href=#563 id=563 data-nosnippet>563</a>        right,
-<a href=#564 id=564 data-nosnippet>564</a>        bottom,
-<a href=#565 id=565 data-nosnippet>565</a>        left,
-<a href=#566 id=566 data-nosnippet>566</a>    } = edges;
-<a href=#567 id=567 data-nosnippet>567</a>    [top, right, bottom, left].map(f32::to_bits).hash(h);
-<a href=#568 id=568 data-nosnippet>568</a>}
-<a href=#569 id=569 data-nosnippet>569</a>
-<a href=#570 id=570 data-nosnippet>570</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_insets(insets: Edges&lt;Inset&gt;, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#571 id=571 data-nosnippet>571</a>    <span class="kw">for </span>inset <span class="kw">in </span>[insets.top, insets.right, insets.bottom, insets.left] {
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">match </span>inset {
-<a href=#573 id=573 data-nosnippet>573</a>            Inset::Auto =&gt; <span class="number">0u8</span>.hash(h),
-<a href=#574 id=574 data-nosnippet>574</a>            Inset::Points(points) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
-<a href=#575 id=575 data-nosnippet>575</a>            Inset::Percent(percent) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
-<a href=#576 id=576 data-nosnippet>576</a>        }
-<a href=#577 id=577 data-nosnippet>577</a>    }
-<a href=#578 id=578 data-nosnippet>578</a>}
-<a href=#579 id=579 data-nosnippet>579</a>
-<a href=#580 id=580 data-nosnippet>580</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_nodes(styles: <span class="kw-2">&amp;</span>StyleTree, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
-<a href=#581 id=581 data-nosnippet>581</a>    <span class="kw">for </span>node <span class="kw">in </span>styles.nodes() {
-<a href=#582 id=582 data-nosnippet>582</a>        (node.id, node.element, node.style, node.first_letter).hash(h);
-<a href=#583 id=583 data-nosnippet>583</a>        (node.first_line, node.before, node.after).hash(h);
-<a href=#584 id=584 data-nosnippet>584</a>    }
-<a href=#585 id=585 data-nosnippet>585</a>}
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="comment">// A float is a fragment of its own, and a block that clears
+<a href=#389 id=389 data-nosnippet>389</a>        // one carries that on its first fragment.
+<a href=#390 id=390 data-nosnippet>390</a>        </span>float,
+<a href=#391 id=391 data-nosnippet>391</a>        clear,
+<a href=#392 id=392 data-nosnippet>392</a>        shape_outside: <span class="kw">_</span>,
+<a href=#393 id=393 data-nosnippet>393</a>        shape_margin: <span class="kw">_</span>,
+<a href=#394 id=394 data-nosnippet>394</a>        margin,
+<a href=#395 id=395 data-nosnippet>395</a>        padding,
+<a href=#396 id=396 data-nosnippet>396</a>        border,
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="comment">// A decoration carries its corners to the page.
+<a href=#398 id=398 data-nosnippet>398</a>        </span>border_radius,
+<a href=#399 id=399 data-nosnippet>399</a>        background,
+<a href=#400 id=400 data-nosnippet>400</a>        box_decoration_break,
+<a href=#401 id=401 data-nosnippet>401</a>        width,
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="comment">// A block taller than its content emits the space below it.
+<a href=#403 id=403 data-nosnippet>403</a>        </span>height,
+<a href=#404 id=404 data-nosnippet>404</a>        min_height,
+<a href=#405 id=405 data-nosnippet>405</a>        max_width,
+<a href=#406 id=406 data-nosnippet>406</a>        max_height,
+<a href=#407 id=407 data-nosnippet>407</a>        border_collapse,
+<a href=#408 id=408 data-nosnippet>408</a>        list_style_type,
+<a href=#409 id=409 data-nosnippet>409</a>        break_before,
+<a href=#410 id=410 data-nosnippet>410</a>        break_after,
+<a href=#411 id=411 data-nosnippet>411</a>        break_inside,
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="comment">// A spanning block breaks to the whole content box.
+<a href=#413 id=413 data-nosnippet>413</a>        </span>column_span,
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="comment">// What a custom property holds reaches layout only through the
+<a href=#415 id=415 data-nosnippet>415</a>        // properties that read it, which are hashed here already.
+<a href=#416 id=416 data-nosnippet>416</a>        </span>custom: <span class="kw">_</span>,
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="comment">// A feature draws other glyphs, and other glyphs take other
+<a href=#418 id=418 data-nosnippet>418</a>        // advances, so a line breaks where the features put it.
+<a href=#419 id=419 data-nosnippet>419</a>        </span>font_feature_settings,
+<a href=#420 id=420 data-nosnippet>420</a>        font_variant_ligatures,
+<a href=#421 id=421 data-nosnippet>421</a>        font_variant_numeric,
+<a href=#422 id=422 data-nosnippet>422</a>        font_variant_alternates,
+<a href=#423 id=423 data-nosnippet>423</a>    } = style;
+<a href=#424 id=424 data-nosnippet>424</a>    (border_collapse, list_style_type).hash(h);
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">for </span>size <span class="kw">in </span>[width, height, min_height, max_width, max_height] {
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">match </span>size {
+<a href=#427 id=427 data-nosnippet>427</a>            Width::Auto =&gt; <span class="number">0u8</span>.hash(h),
+<a href=#428 id=428 data-nosnippet>428</a>            Width::Points(points) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
+<a href=#429 id=429 data-nosnippet>429</a>            Width::Percent(percent) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
+<a href=#430 id=430 data-nosnippet>430</a>        }
+<a href=#431 id=431 data-nosnippet>431</a>    }
+<a href=#432 id=432 data-nosnippet>432</a>    (font_id, font_size.to_bits(), line_height.to_bits(), color).hash(h);
+<a href=#433 id=433 data-nosnippet>433</a>    (letter_spacing.to_bits(), font_variant_caps, text_transform).hash(h);
+<a href=#434 id=434 data-nosnippet>434</a>    (
+<a href=#435 id=435 data-nosnippet>435</a>        font_feature_settings,
+<a href=#436 id=436 data-nosnippet>436</a>        font_variant_ligatures,
+<a href=#437 id=437 data-nosnippet>437</a>        font_variant_numeric,
+<a href=#438 id=438 data-nosnippet>438</a>        font_variant_alternates,
+<a href=#439 id=439 data-nosnippet>439</a>    )
+<a href=#440 id=440 data-nosnippet>440</a>        .hash(h);
+<a href=#441 id=441 data-nosnippet>441</a>    (
+<a href=#442 id=442 data-nosnippet>442</a>        text_decoration_line,
+<a href=#443 id=443 data-nosnippet>443</a>        text_decoration_color,
+<a href=#444 id=444 data-nosnippet>444</a>        text_decoration_style,
+<a href=#445 id=445 data-nosnippet>445</a>        text_decoration_thickness.map(f32::to_bits),
+<a href=#446 id=446 data-nosnippet>446</a>    )
+<a href=#447 id=447 data-nosnippet>447</a>        .hash(h);
+<a href=#448 id=448 data-nosnippet>448</a>    (text_align, text_justify, hanging_punctuation).hash(h);
+<a href=#449 id=449 data-nosnippet>449</a>    (text_indent.to_bits(), hyphens, orphans, widows).hash(h);
+<a href=#450 id=450 data-nosnippet>450</a>    (
+<a href=#451 id=451 data-nosnippet>451</a>        content,
+<a href=#452 id=452 data-nosnippet>452</a>        string_set,
+<a href=#453 id=453 data-nosnippet>453</a>        counter_reset,
+<a href=#454 id=454 data-nosnippet>454</a>        note_reset,
+<a href=#455 id=455 data-nosnippet>455</a>        initial_letter,
+<a href=#456 id=456 data-nosnippet>456</a>    )
+<a href=#457 id=457 data-nosnippet>457</a>        .hash(h);
+<a href=#458 id=458 data-nosnippet>458</a>    (position, z_index, opacity.to_bits()).hash(h);
+<a href=#459 id=459 data-nosnippet>459</a>    (mix_blend_mode, blend_around).hash(h);
+<a href=#460 id=460 data-nosnippet>460</a>    (float, clear).hash(h);
+<a href=#461 id=461 data-nosnippet>461</a>    hash_insets(<span class="kw-2">*</span>inset, h);
+<a href=#462 id=462 data-nosnippet>462</a>    (break_before, break_after, break_inside, column_span).hash(h);
+<a href=#463 id=463 data-nosnippet>463</a>    hash_background(background, h);
+<a href=#464 id=464 data-nosnippet>464</a>    box_decoration_break.hash(h);
+<a href=#465 id=465 data-nosnippet>465</a>    hash_edges(<span class="kw-2">*</span>margin, h);
+<a href=#466 id=466 data-nosnippet>466</a>    hash_edges(<span class="kw-2">*</span>padding, h);
+<a href=#467 id=467 data-nosnippet>467</a>    hash_edges(border.widths(), h);
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">for </span>edge <span class="kw">in </span>[border.top, border.right, border.bottom, border.left] {
+<a href=#469 id=469 data-nosnippet>469</a>        edge.color.hash(h);
+<a href=#470 id=470 data-nosnippet>470</a>    }
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="kw">for </span>corner <span class="kw">in </span>[
+<a href=#472 id=472 data-nosnippet>472</a>        border_radius.top_left,
+<a href=#473 id=473 data-nosnippet>473</a>        border_radius.top_right,
+<a href=#474 id=474 data-nosnippet>474</a>        border_radius.bottom_right,
+<a href=#475 id=475 data-nosnippet>475</a>        border_radius.bottom_left,
+<a href=#476 id=476 data-nosnippet>476</a>    ] {
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">for </span>axis <span class="kw">in </span>[corner.x, corner.y] {
+<a href=#478 id=478 data-nosnippet>478</a>            <span class="kw">match </span>axis {
+<a href=#479 id=479 data-nosnippet>479</a>                <span class="kw">crate</span>::style::Coord::Points(points) =&gt; (<span class="number">0u8</span>, points.to_bits()).hash(h),
+<a href=#480 id=480 data-nosnippet>480</a>                <span class="kw">crate</span>::style::Coord::Percent(percent) =&gt; (<span class="number">1u8</span>, percent.to_bits()).hash(h),
+<a href=#481 id=481 data-nosnippet>481</a>            }
+<a href=#482 id=482 data-nosnippet>482</a>        }
+<a href=#483 id=483 data-nosnippet>483</a>    }
+<a href=#484 id=484 data-nosnippet>484</a>}
+<a href=#485 id=485 data-nosnippet>485</a>
+<a href=#486 id=486 data-nosnippet>486</a><span class="doccomment">/// What one box paints behind its content. The tint and the image
+<a href=#487 id=487 data-nosnippet>487</a>/// both reach the display structure through the flow, and neither
+<a href=#488 id=488 data-nosnippet>488</a>/// moves a line, but a section keyed without them would serve a page
+<a href=#489 id=489 data-nosnippet>489</a>/// still painted the way it was.
+<a href=#490 id=490 data-nosnippet>490</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_background(background: <span class="kw-2">&amp;</span>Background, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#491 id=491 data-nosnippet>491</a>    <span class="kw">let </span>Background {
+<a href=#492 id=492 data-nosnippet>492</a>        color,
+<a href=#493 id=493 data-nosnippet>493</a>        image,
+<a href=#494 id=494 data-nosnippet>494</a>        repeat,
+<a href=#495 id=495 data-nosnippet>495</a>        size,
+<a href=#496 id=496 data-nosnippet>496</a>        position,
+<a href=#497 id=497 data-nosnippet>497</a>    } = background;
+<a href=#498 id=498 data-nosnippet>498</a>    (color, image, repeat).hash(h);
+<a href=#499 id=499 data-nosnippet>499</a>    <span class="kw">match </span>size {
+<a href=#500 id=500 data-nosnippet>500</a>        BackgroundSize::Auto =&gt; <span class="number">0u8</span>.hash(h),
+<a href=#501 id=501 data-nosnippet>501</a>        BackgroundSize::Cover =&gt; <span class="number">1u8</span>.hash(h),
+<a href=#502 id=502 data-nosnippet>502</a>        BackgroundSize::Contain =&gt; <span class="number">2u8</span>.hash(h),
+<a href=#503 id=503 data-nosnippet>503</a>        BackgroundSize::Fixed { width, height } =&gt; {
+<a href=#504 id=504 data-nosnippet>504</a>            <span class="number">3u8</span>.hash(h);
+<a href=#505 id=505 data-nosnippet>505</a>            <span class="kw">for </span>axis <span class="kw">in </span>[width, height] {
+<a href=#506 id=506 data-nosnippet>506</a>                hash_coord(<span class="kw-2">*</span>axis, h);
+<a href=#507 id=507 data-nosnippet>507</a>            }
+<a href=#508 id=508 data-nosnippet>508</a>        }
+<a href=#509 id=509 data-nosnippet>509</a>    }
+<a href=#510 id=510 data-nosnippet>510</a>    hash_coord(<span class="prelude-val">Some</span>(position.x), h);
+<a href=#511 id=511 data-nosnippet>511</a>    hash_coord(<span class="prelude-val">Some</span>(position.y), h);
+<a href=#512 id=512 data-nosnippet>512</a>}
+<a href=#513 id=513 data-nosnippet>513</a>
+<a href=#514 id=514 data-nosnippet>514</a><span class="doccomment">/// One coordinate, or the absence of one: `f32` is not `Hash`, and a
+<a href=#515 id=515 data-nosnippet>515</a>/// percentage and a length of the same number are different answers.
+<a href=#516 id=516 data-nosnippet>516</a></span><span class="kw">fn </span>hash_coord(coord: <span class="prelude-ty">Option</span>&lt;Coord&gt;, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#517 id=517 data-nosnippet>517</a>    <span class="kw">match </span>coord {
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="prelude-val">None </span>=&gt; <span class="number">0u8</span>.hash(h),
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="prelude-val">Some</span>(Coord::Points(points)) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="prelude-val">Some</span>(Coord::Percent(percent)) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
+<a href=#521 id=521 data-nosnippet>521</a>    }
+<a href=#522 id=522 data-nosnippet>522</a>}
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_geometry(geometry: PageGeometry, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#525 id=525 data-nosnippet>525</a>    <span class="kw">let </span>PageGeometry {
+<a href=#526 id=526 data-nosnippet>526</a>        width,
+<a href=#527 id=527 data-nosnippet>527</a>        height,
+<a href=#528 id=528 data-nosnippet>528</a>        margin,
+<a href=#529 id=529 data-nosnippet>529</a>        columns,
+<a href=#530 id=530 data-nosnippet>530</a>        align_content,
+<a href=#531 id=531 data-nosnippet>531</a>    } = geometry;
+<a href=#532 id=532 data-nosnippet>532</a>    (width.to_bits(), height.to_bits(), align_content).hash(h);
+<a href=#533 id=533 data-nosnippet>533</a>    hash_edges(margin, h);
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">let </span>Columns {
+<a href=#535 id=535 data-nosnippet>535</a>        count,
+<a href=#536 id=536 data-nosnippet>536</a>        width,
+<a href=#537 id=537 data-nosnippet>537</a>        gap,
+<a href=#538 id=538 data-nosnippet>538</a>        rule,
+<a href=#539 id=539 data-nosnippet>539</a>    } = columns;
+<a href=#540 id=540 data-nosnippet>540</a>    (count, width.map(f32::to_bits), gap.to_bits()).hash(h);
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="kw">let </span>ColumnRule { style, width } = rule;
+<a href=#542 id=542 data-nosnippet>542</a>    (style, width.to_bits()).hash(h);
+<a href=#543 id=543 data-nosnippet>543</a>}
+<a href=#544 id=544 data-nosnippet>544</a>
+<a href=#545 id=545 data-nosnippet>545</a><span class="doccomment">/// What one contour is: which of the three `shape-outside` says, and
+<a href=#546 id=546 data-nosnippet>546</a>/// the points where it says a polygon.
+<a href=#547 id=547 data-nosnippet>547</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_shape(shape: <span class="kw-2">&amp;</span>ShapeOutside, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#548 id=548 data-nosnippet>548</a>    <span class="kw">match </span>shape {
+<a href=#549 id=549 data-nosnippet>549</a>        ShapeOutside::None =&gt; <span class="number">0u8</span>.hash(h),
+<a href=#550 id=550 data-nosnippet>550</a>        ShapeOutside::Auto =&gt; <span class="number">1u8</span>.hash(h),
+<a href=#551 id=551 data-nosnippet>551</a>        ShapeOutside::Polygon(points) =&gt; {
+<a href=#552 id=552 data-nosnippet>552</a>            <span class="number">2u8</span>.hash(h);
+<a href=#553 id=553 data-nosnippet>553</a>            <span class="kw">for </span>point <span class="kw">in </span>points {
+<a href=#554 id=554 data-nosnippet>554</a>                <span class="kw">for </span>coord <span class="kw">in </span>[point.x, point.y] {
+<a href=#555 id=555 data-nosnippet>555</a>                    <span class="kw">match </span>coord {
+<a href=#556 id=556 data-nosnippet>556</a>                        Coord::Points(points) =&gt; (<span class="number">0u8</span>, points.to_bits()).hash(h),
+<a href=#557 id=557 data-nosnippet>557</a>                        Coord::Percent(percent) =&gt; (<span class="number">1u8</span>, percent.to_bits()).hash(h),
+<a href=#558 id=558 data-nosnippet>558</a>                    }
+<a href=#559 id=559 data-nosnippet>559</a>                }
+<a href=#560 id=560 data-nosnippet>560</a>            }
+<a href=#561 id=561 data-nosnippet>561</a>        }
+<a href=#562 id=562 data-nosnippet>562</a>    }
+<a href=#563 id=563 data-nosnippet>563</a>}
+<a href=#564 id=564 data-nosnippet>564</a>
+<a href=#565 id=565 data-nosnippet>565</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_edges(edges: Edges, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#566 id=566 data-nosnippet>566</a>    <span class="kw">let </span>Edges {
+<a href=#567 id=567 data-nosnippet>567</a>        top,
+<a href=#568 id=568 data-nosnippet>568</a>        right,
+<a href=#569 id=569 data-nosnippet>569</a>        bottom,
+<a href=#570 id=570 data-nosnippet>570</a>        left,
+<a href=#571 id=571 data-nosnippet>571</a>    } = edges;
+<a href=#572 id=572 data-nosnippet>572</a>    [top, right, bottom, left].map(f32::to_bits).hash(h);
+<a href=#573 id=573 data-nosnippet>573</a>}
+<a href=#574 id=574 data-nosnippet>574</a>
+<a href=#575 id=575 data-nosnippet>575</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_insets(insets: Edges&lt;Inset&gt;, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">for </span>inset <span class="kw">in </span>[insets.top, insets.right, insets.bottom, insets.left] {
+<a href=#577 id=577 data-nosnippet>577</a>        <span class="kw">match </span>inset {
+<a href=#578 id=578 data-nosnippet>578</a>            Inset::Auto =&gt; <span class="number">0u8</span>.hash(h),
+<a href=#579 id=579 data-nosnippet>579</a>            Inset::Points(points) =&gt; (<span class="number">1u8</span>, points.to_bits()).hash(h),
+<a href=#580 id=580 data-nosnippet>580</a>            Inset::Percent(percent) =&gt; (<span class="number">2u8</span>, percent.to_bits()).hash(h),
+<a href=#581 id=581 data-nosnippet>581</a>        }
+<a href=#582 id=582 data-nosnippet>582</a>    }
+<a href=#583 id=583 data-nosnippet>583</a>}
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>hash_nodes(styles: <span class="kw-2">&amp;</span>StyleTree, h: <span class="kw-2">&amp;mut </span>DefaultHasher) {
+<a href=#586 id=586 data-nosnippet>586</a>    <span class="kw">for </span>node <span class="kw">in </span>styles.nodes() {
+<a href=#587 id=587 data-nosnippet>587</a>        (node.id, node.element, node.style, node.first_letter).hash(h);
+<a href=#588 id=588 data-nosnippet>588</a>        (node.first_line, node.before, node.after).hash(h);
+<a href=#589 id=589 data-nosnippet>589</a>    }
+<a href=#590 id=590 data-nosnippet>590</a>}
 </code></pre></div></section></main></body></html>
