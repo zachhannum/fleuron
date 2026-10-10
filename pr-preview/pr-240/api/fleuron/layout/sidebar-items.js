@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["BreakPoint","Piece"],"fn":["layout_book","margin_band"],"struct":["Decoration","Decorations","DropCap","Floated","Fragment","Marker","Marks","Note","Paginator","Reflow","TableRow"]};

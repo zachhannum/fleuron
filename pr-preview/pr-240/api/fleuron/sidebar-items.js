@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["content","fonts","images","layout","linebox","lines","pages","pdf","session","style","wire"],"struct":["LayoutOutput","Warning"]};
