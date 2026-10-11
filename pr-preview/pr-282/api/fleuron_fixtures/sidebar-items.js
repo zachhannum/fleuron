@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["image_boxes","registry","run_boxes","shaped_texts","styles","styles_on"],"mod":["alloc","anchored_images","corpus","gate"]};

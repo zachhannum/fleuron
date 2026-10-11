@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Descriptor","FontFace","MarginBoxDescription","Page","PageSize","Property","Selector","Selectors","Subset"]};
