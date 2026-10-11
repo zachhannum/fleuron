@@ -367,11 +367,12 @@ impl Session {
     /// screen.
     ///
     /// `multiple_of` pads the book: 2 for an even page count, 4 for a
-    /// multiple of four. The writer adds blank leaves after the last
-    /// page until the count is reached. Each is the size of that page
-    /// and has nothing on it. They are in the PDF only, so no stage
-    /// runs and the preview keeps its pages. Left out, the PDF holds
-    /// the pages of the preview.
+    /// multiple of four. The writer adds blank pages after the last
+    /// page until the book has that count. A blank page has the size
+    /// of that last page and has nothing on it. The blank pages are
+    /// in the PDF only. No stage runs, and the preview keeps its
+    /// pages. Without `multiple_of`, the PDF holds the pages of the
+    /// preview.
     #[wasm_bindgen(js_name = exportPdf)]
     pub fn export_pdf(&mut self, multiple_of: Option<u32>) -> Result<Vec<u8>, JsError> {
         let pad = pad_to(multiple_of).map_err(js_error)?;

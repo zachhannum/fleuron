@@ -26,11 +26,10 @@ impl Session<'_> {
         self.export_padded(None)
     }
 
-    /// The same, with blank leaves after the last page until the
-    /// book has the count `pad` asks for. The leaves are in the PDF
-    /// and nowhere else: no stage runs to add them, and the pages
-    /// [`Session::preview`] answers with are the ones it answered
-    /// with before.
+    /// The same, with blank pages after the last page until the
+    /// book has the count `pad` names. The blank pages are in the
+    /// PDF only. No stage runs to add them, and
+    /// [`Session::preview`] returns the same pages as before.
     pub fn export_padded(&mut self, pad: Option<PadTo>) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");

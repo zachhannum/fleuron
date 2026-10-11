@@ -102,7 +102,8 @@ Everything in the first table changes an input and repaints. Everything in the s
 | `onLink` | the function that a click on a link calls, and assigning to it replaces the function |
 | `follow(link)` | follows a link the same way a click does |
 | `svg(page?)` | the markup for a fetched page, painted but not mounted; empty for one that is not |
-| `exportPdf()` | the same run as PDF bytes |
+| `exportPdf({ multipleOf }?)` | the same run as PDF bytes, [padded](quickstart.md#exporting) to an even page count or to a multiple of four when `multipleOf` is 2 or 4 |
+| `pdfPages({ multipleOf }?)` | how many pages that PDF holds |
 | `exportEpub()` | the book as a [reflowable EPUB](../library/epub.md#from-a-worker), with its warnings |
 | `exportEpubFiles()` | the same EPUB as [its files](../library/epub.md#the-files-one-by-one), not zipped, with the spine |
 | `destroy()` | closes the worker and empties the element |

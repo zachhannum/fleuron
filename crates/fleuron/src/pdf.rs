@@ -62,10 +62,10 @@ pub enum PdfError {
 
 /// The page count a print vendor asks a book to reach.
 ///
-/// A book that falls short is padded with blank leaves after its
-/// last page. A blank leaf is the size of that page, sheet and trim
-/// and bleed alike, and nothing is painted on it: no folio, no
-/// running head and no other margin box.
+/// The writer adds blank pages after the last page of a book that
+/// falls short. A blank page has the size of that last page, with
+/// the same bleed and the same room for marks. It has no page
+/// number, no running head and no other margin box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PadTo {
     /// An even count.
@@ -87,7 +87,7 @@ impl PadTo {
 }
 
 /// How many pages [`write_padded`] writes for this book: the pages
-/// laid out, and the blank leaves `pad` adds after them.
+/// laid out, and the blank pages `pad` adds after them.
 pub fn page_count(output: &LayoutOutput, pad: Option<PadTo>) -> usize {
     let pages = output.pages.len();
     pad.map_or(pages, |pad| pad.count(pages))
@@ -111,12 +111,11 @@ pub fn write(
     write_padded(output, registry, assets, metadata, None)
 }
 
-/// The same, with blank leaves after the last page until the book
-/// has the count `pad` asks for. [`page_count`] says how many pages
-/// that is.
+/// The same, with blank pages after the last page until the book
+/// has the count `pad` names. [`page_count`] returns that count.
 ///
-/// The leaves are the writer's own. The display structure is read
-/// and not changed, so nothing is laid out again to add them.
+/// The blank pages are in the PDF only. The writer reads the display
+/// structure and does not change it, so nothing is laid out again.
 pub fn write_padded(
     output: &LayoutOutput,
     registry: &FontRegistry,
