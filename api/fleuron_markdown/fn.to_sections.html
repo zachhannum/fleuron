@@ -2,10 +2,10 @@
     text: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.str.html">str</a>,
     source: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.str.html">str</a>,
     options: &amp;<a class="struct" href="struct.Options.html" title="struct fleuron_markdown::Options">Options</a>,
-) -&gt; (<a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Section&gt;, <a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Warning&gt;)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Reads one source into sections, and everything the reading had to
+) -&gt; (<a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="../fleuron/content/struct.Section.html" title="struct fleuron::content::Section">Section</a>&gt;, <a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="../fleuron/struct.Warning.html" title="struct fleuron::Warning">Warning</a>&gt;)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Reads one source into sections, and everything the reading had to
 complain about.</p>
 <p><code>source</code> names the file for diagnostics and becomes every
-section’s <code>source</code>; it is what [<code>fleuron::session::Session::replace_source</code>]
+section’s <code>source</code>; it is what <a href="../fleuron/session/struct.Session.html#method.replace_source" title="method fleuron::session::Session::replace_source"><code>fleuron::session::Session::replace_source</code></a>
 replaces by. Node ids are left unassigned: they are assigned in
 document order over a whole book, which is <a href="fn.assemble.html" title="fn fleuron_markdown::assemble"><code>assemble</code></a>’s job.</p>
 </div></details></section></div></main></body></html>
