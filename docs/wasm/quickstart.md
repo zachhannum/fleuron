@@ -146,6 +146,15 @@ const pdf = await client.exportPdf();
 
 The export draws from the same laid-out pages the preview drew, rather than laying the book out a second time, so it cannot come out different from what is on screen.
 
+A print vendor can ask for an even page count, or for a multiple of four. With `multipleOf` set to 2 or 4, the engine adds blank pages at the end of the PDF to reach that count. The preview does not change. `client.pdfPages` returns the page count of that PDF.
+
+The following example reads the page count of a book padded to a multiple of four, then exports the book:
+
+```js
+const pages = await client.pdfPages({ multipleOf: 4 });
+const padded = await client.exportPdf([], { multipleOf: 4 });
+```
+
 ```js
 const epub = await client.exportEpub();
 ```

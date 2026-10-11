@@ -24,6 +24,17 @@ let bytes = session.export()?;       // the same run, as PDF
 
 `preview` and `export` are two painters over one set of stages, so an export cannot contradict the preview it came from.
 
+`export_padded` adds blank pages at the end of the PDF to reach an even page count or a multiple of four. No stage runs, and `preview` does not change. `exported_pages` returns the page count of that PDF.
+
+The following example reads the page count of a book padded to a multiple of four, then writes the PDF:
+
+```rust
+use fleuron::pdf::PadTo;
+
+let pages = session.exported_pages(Some(PadTo::MultipleOfFour));
+let bytes = session.export_padded(Some(PadTo::MultipleOfFour))?;
+```
+
 A writer that reads the book rather than the pages, such as [the EPUB writer](epub.md), reads the inputs of the session instead. `book`, `sheets`, `images`, and `font_files` return what the host set and sent. Reading them runs no stage.
 
 ## What an edit costs

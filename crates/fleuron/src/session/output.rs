@@ -9,7 +9,7 @@ use crate::fonts::FontRegistry;
 use crate::images::Assets;
 use crate::layout::font_table;
 use crate::pages::{DrawItem, Folios, Navigation};
-use crate::pdf::{self, PdfError};
+use crate::pdf::{self, PadTo, PdfError};
 
 use super::Session;
 
@@ -23,14 +23,31 @@ impl Session<'_> {
     /// The same, as PDF bytes. The stages above the painter are the
     /// ones the preview used, so an export cannot contradict it.
     pub fn export(&mut self) -> Result<Vec<u8>, PdfError> {
+        self.export_padded(None)
+    }
+
+    /// The same, with blank pages after the last page until the
+    /// book has the count `pad` names. The blank pages are in the
+    /// PDF only. No stage runs to add them, and
+    /// [`Session::preview`] returns the same pages as before.
+    pub fn export_padded(&mut self, pad: Option<PadTo>) -> Result<Vec<u8>, PdfError> {
         self.update();
         let output = self.output.as_ref().expect("an update leaves an output");
-        pdf::write(
+        pdf::write_padded(
             output,
             self.registry.get(),
             self.assets.get(),
             &self.book.metadata,
+            pad,
         )
+    }
+
+    /// How many pages [`Session::export_padded`] writes with the
+    /// same `pad`, answered without writing them.
+    pub fn exported_pages(&mut self, pad: Option<PadTo>) -> usize {
+        self.update();
+        let output = self.output.as_ref().expect("an update leaves an output");
+        pdf::page_count(output, pad)
     }
 
     /// Where each of these nodes' content is set, answered in the
@@ -263,5 +280,51 @@ mod tests {
         let bytes = session.export().expect("the fixture book writes PDF");
         assert_eq!(session.stages(), before, "an export re-ran a stage");
         assert!(bytes.starts_with(b"%PDF"), "that is not a PDF");
+    }
+
+    /// Acceptance: the session's export takes the count to pad to,
+    /// and says how many pages the file holds.
+    #[test]
+    fn the_export_takes_a_count_and_says_how_many_pages_it_writes() {
+        let mut session = three_chapters();
+        let laid_out = session.preview().pages.len();
+        assert_eq!(session.exported_pages(None), laid_out);
+        for (pad, multiple) in [(PadTo::Even, 2), (PadTo::MultipleOfFour, 4)] {
+            let pages = session.exported_pages(Some(pad));
+            assert_eq!(pages, laid_out.next_multiple_of(multiple));
+            let bytes = session
+                .export_padded(Some(pad))
+                .expect("the fixture book writes PDF");
+            let pdf = String::from_utf8_lossy(&bytes);
+            assert!(
+                pdf.contains(&format!("/Type /Pages\n  /Count {pages}")),
+                "the file does not hold the {pages} pages the session answered with"
+            );
+        }
+    }
+
+    /// Acceptance: the padding lays nothing out again, and the pages
+    /// the preview answers with are the ones it answered with before.
+    #[test]
+    fn padding_runs_no_stage_and_leaves_the_preview_as_it_was() {
+        let mut session = Session::new(registry());
+        session.set_content(book(vec![section("one.md", prose("alpha", 1))]));
+        let encoded = |output: &LayoutOutput| crate::wire::encode(output).expect("it encodes");
+        let before = encoded(session.preview());
+        let laid_out = session.preview().pages.len();
+        assert_eq!(laid_out % 4, 1, "the book needs no padding");
+        let settled = session.stages();
+
+        let pages = session.exported_pages(Some(PadTo::MultipleOfFour));
+        session
+            .export_padded(Some(PadTo::MultipleOfFour))
+            .expect("the fixture book writes PDF");
+        assert_eq!(pages, laid_out + 3);
+        assert_eq!(session.stages(), settled, "padding re-ran a stage");
+        assert!(
+            encoded(session.preview()) == before,
+            "padding changed the preview"
+        );
+        assert_eq!(session.stages(), settled, "the preview after it re-ran one");
     }
 }

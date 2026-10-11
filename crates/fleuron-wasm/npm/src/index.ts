@@ -34,6 +34,7 @@ export {
   type NodeSource,
   type PageBox,
   type Op,
+  type PdfOptions,
   type Rendered,
   type Request,
   type Response,

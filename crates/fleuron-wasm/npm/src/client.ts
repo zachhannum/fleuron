@@ -12,6 +12,7 @@ import {
   type Names,
   type NodeSource,
   type Op,
+  type PdfOptions,
   type Request,
   type Response,
   type Want,
@@ -117,9 +118,25 @@ export class Client {
     return bytes === SUPERSEDED ? SUPERSEDED : decodeDisplayList(bytes);
   }
 
-  /** The same, as PDF bytes. */
-  async exportPdf(ops: Op[] = []): Promise<Uint8Array | null> {
-    return this.render(ops, 'pdf');
+  /**
+   * The same, as PDF bytes. `options` can pad the book to an even
+   * page count or to a multiple of four: see {@link PdfOptions}.
+   */
+  async exportPdf(ops: Op[] = [], options: PdfOptions = {}): Promise<Uint8Array | null> {
+    return this.renderAs(ops, { want: 'pdf', ...options });
+  }
+
+  /**
+   * How many pages {@link Client.exportPdf} writes with the same
+   * `options`: the pages of the book, and the blank pages that pad
+   * it. No PDF is written to answer.
+   *
+   * A question rather than a render: nothing overtakes it. The answer
+   * is about the book as the worker holds it, so an edit still in
+   * flight is an edit this has not seen.
+   */
+  async pdfPages(options: PdfOptions = {}): Promise<number> {
+    return this.ask<number>({ ops: [], want: 'pages', ...options });
   }
 
   /**
@@ -293,7 +310,7 @@ export class Client {
   /** {@link Client.render}, with any of the request's own options. */
   private async renderAs(
     ops: Op[],
-    what: { want: Want; first?: number; count?: number; unzipped?: boolean },
+    what: { want: Want; first?: number; count?: number; unzipped?: boolean; multipleOf?: 2 | 4 },
   ): Promise<Uint8Array | null> {
     this.generation = this.generationFor(ops);
     const response = await this.send({ ops, ...what, generation: this.generation });
@@ -322,6 +339,7 @@ export class Client {
     box?: MarginBoxName;
     x?: number;
     y?: number;
+    multipleOf?: 2 | 4;
   }): Promise<T> {
     const response = await this.send(what);
     if (!isRendered(response)) {
@@ -346,6 +364,7 @@ export class Client {
     first?: number;
     count?: number;
     unzipped?: boolean;
+    multipleOf?: 2 | 4;
   }): Promise<Response> {
     this.id += 1;
     const request: Request = {
@@ -365,6 +384,7 @@ export class Client {
       ...(what.first === undefined ? {} : { first: what.first }),
       ...(what.count === undefined ? {} : { count: what.count }),
       ...(what.unzipped === undefined ? {} : { unzipped: what.unzipped }),
+      ...(what.multipleOf === undefined ? {} : { multipleOf: what.multipleOf }),
     };
     const transfer = request.ops
       .filter((op) => op.op === 'font' || op.op === 'image')

@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 use fleuron::Warning;
 use fleuron::content::{Attributes, Book, HeadingLevel, Metadata, NodeId, Section};
 use fleuron::fonts::{FontSource, bundled_registry};
+use fleuron::pdf::PadTo;
 use fleuron::session::Session as Engine;
 use fleuron::style::{MarginBox, Source, Stylesheets};
 use fleuron::wire;
@@ -364,9 +365,26 @@ impl Session {
     /// The same run as PDF bytes. Both painters read the stages the
     /// preview settled, so an export cannot contradict what is on
     /// screen.
+    ///
+    /// `multiple_of` pads the book: 2 for an even page count, 4 for a
+    /// multiple of four. The writer adds blank pages after the last
+    /// page until the book has that count. A blank page has the size
+    /// of that last page and has nothing on it. The blank pages are
+    /// in the PDF only. No stage runs, and the preview keeps its
+    /// pages. Without `multiple_of`, the PDF holds the pages of the
+    /// preview.
     #[wasm_bindgen(js_name = exportPdf)]
-    pub fn export_pdf(&mut self) -> Result<Vec<u8>, JsError> {
-        self.engine.export().map_err(js_error)
+    pub fn export_pdf(&mut self, multiple_of: Option<u32>) -> Result<Vec<u8>, JsError> {
+        let pad = pad_to(multiple_of).map_err(js_error)?;
+        self.engine.export_padded(pad).map_err(js_error)
+    }
+
+    /// How many pages [`Session::export_pdf`] writes with the same
+    /// `multiple_of`, answered without writing them.
+    #[wasm_bindgen(js_name = pdfPages)]
+    pub fn pdf_pages(&mut self, multiple_of: Option<u32>) -> Result<u32, JsError> {
+        let pad = pad_to(multiple_of).map_err(js_error)?;
+        Ok(self.engine.exported_pages(pad) as u32)
     }
 
     /// The book as a reflowable EPUB, and what writing it warned
@@ -635,7 +653,7 @@ pub fn render(markdown: &str, css: &str) -> Result<Vec<u8>, JsError> {
 /// The same, as PDF bytes.
 #[wasm_bindgen(js_name = renderPdf)]
 pub fn render_pdf(markdown: &str, css: &str) -> Result<Vec<u8>, JsError> {
-    once(markdown, css)?.export_pdf()
+    once(markdown, css)?.export_pdf(None)
 }
 
 fn once(markdown: &str, css: &str) -> Result<Session, JsError> {
@@ -645,6 +663,19 @@ fn once(markdown: &str, css: &str) -> Result<Session, JsError> {
         session.set_style(vec!["author.css".to_string()], vec![css.to_string()])?;
     }
     Ok(session)
+}
+
+/// The count a host asked a PDF to be padded to, which it names by
+/// the number the count is a multiple of.
+fn pad_to(multiple_of: Option<u32>) -> Result<Option<PadTo>, String> {
+    match multiple_of {
+        None => Ok(None),
+        Some(2) => Ok(Some(PadTo::Even)),
+        Some(4) => Ok(Some(PadTo::MultipleOfFour)),
+        Some(other) => Err(format!(
+            "a PDF is padded to a multiple of 2 or 4 pages, not of {other}"
+        )),
+    }
 }
 
 /// Anything that went wrong, in the host's own error type. The
