@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["render","render_pdf","wire_version"],"struct":["Session"]};

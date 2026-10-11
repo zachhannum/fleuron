@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["PadTo","PdfError"],"fn":["page_count","write","write_padded"]};

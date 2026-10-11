@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CSS_DPI"],"enum":["Added"],"fn":["backgrounds","is_svg","probe","trace"],"struct":["Asset","Assets","Contour","Contours","Intrinsic","NoImages"],"trait":["ImageLoader"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Sections"],"fn":["assemble","frontmatter","to_sections"],"struct":["Cache","Dialect","Options","SourceKey"]};

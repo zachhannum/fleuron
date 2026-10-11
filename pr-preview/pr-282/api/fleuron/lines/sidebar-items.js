@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["HangEnd","Spans"],"struct":["Broken","Face","FirstLine","Generated","HangingPunctuation","Inherited","InlineBox","InlineFragment","Line","LineBreakOptions","LineLayout","LineSpan","Measure","Opening","ParagraphStyle","Patterns","Shaped","ShapedRun","Span"],"trait":["InlineStyles"]};

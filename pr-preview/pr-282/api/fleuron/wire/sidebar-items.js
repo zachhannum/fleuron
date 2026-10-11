@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["VERSION"],"enum":["WireError"],"fn":["decode","decode_epub","decode_epub_files","encode","encode_epub","encode_epub_files","encode_range","version"],"struct":["Epub","EpubFile","EpubFiles","EpubSpineEntry","Reply"]};
