@@ -146,9 +146,7 @@ const pdf = await client.exportPdf();
 
 The export draws from the same laid-out pages the preview drew, rather than laying the book out a second time, so it cannot come out different from what is on screen.
 
-A print vendor can ask for a book with an even page count, or with a page count that is a multiple of four. If you pass `multipleOf` as 2 or as 4, the engine pads the PDF to that count. The engine adds blank pages after the last page of the book. A blank page has the size of that last page. It has no page number, no running head, and no other margin box. The blank pages are in the PDF only. The preview keeps its pages, and the engine does not lay out the book again.
-
-`client.pdfPages` takes the same `multipleOf` and returns the page count of the PDF without writing the PDF. A host can show the count before it exports.
+A print vendor can ask for an even page count, or for a multiple of four. With `multipleOf` set to 2 or 4, the engine adds blank pages at the end of the PDF to reach that count. The preview does not change. `client.pdfPages` returns the page count of that PDF.
 
 The following example reads the page count of a book padded to a multiple of four, then exports the book:
 

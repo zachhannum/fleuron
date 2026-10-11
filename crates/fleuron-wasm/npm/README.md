@@ -199,10 +199,8 @@ for selection and copy-and-paste.
 `paintPage` draws one of them as SVG. Each run becomes one `<text>`
 with an x for every character in it, so the browser places the
 glyphs where the engine put them instead of working out positions of
-its own. `exportPdf` writes the same pages as PDF. With
-`{ multipleOf: 2 }` or `{ multipleOf: 4 }`, it pads the PDF with blank
-pages to an even page count or to a multiple of four, and `pdfPages`
-returns the page count of that PDF. `exportEpub` writes
+its own. `exportPdf` writes the same pages as PDF, and `multipleOf`
+pads it with blank pages to a multiple of 2 or 4. `exportEpub` writes
 the book as a reflowable EPUB, with the warnings that writing it
 raised, and lays out nothing to do it. `exportEpubFiles` returns the
 files of the same EPUB one by one, not zipped, with the spine, for a
