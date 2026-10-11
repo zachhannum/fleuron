@@ -91,6 +91,12 @@ function info(pdf: Uint8Array): string | null {
   return run.status === 0 ? run.stdout : null;
 }
 
+/** How many pages the page tree of a PDF counts. */
+function pagesOf(pdf: Uint8Array): number {
+  const count = /\/Type \/Pages\s+\/Count (\d+)/.exec(Buffer.from(pdf).toString('latin1'));
+  return count === null ? -1 : Number(count[1]);
+}
+
 /**
  * What the CLI makes of some markdown: the run this one is checked
  * against.
@@ -920,6 +926,64 @@ if (extracted === null || wanted === null) {
 } else {
   check('the PDF reads back as the text the CLI wrote', extracted === wanted);
 }
+
+// The export pads the book to the page count a print vendor asks
+// for. The blank pages are the writer's own: no stage runs to add
+// them, and the preview answers with the bytes it answered with
+// before. The reply to the export says how many pages the PDF holds,
+// and the same count is a question a host asks before it exports.
+const unpadded = await client.render([], 'preview');
+const beforePadding = client.stages;
+const laidOut = preview.pages.length;
+check('a PDF with no padding holds the pages of the preview', pagesOf(pdf) === laidOut, `${pagesOf(pdf)} of ${laidOut}`);
+check('the count asked for with no padding is the pages of the preview', (await client.pdfPages()) === laidOut);
+for (const multipleOf of [2, 4] as const) {
+  const wanted = Math.ceil(laidOut / multipleOf) * multipleOf;
+  const asked = await client.pdfPages({ multipleOf });
+  const padReplies: Response[] = [];
+  const tapPad = (response: Response): void => {
+    padReplies.push(response);
+  };
+  worker.on('message', tapPad);
+  const padded = await client.exportPdf([], { multipleOf });
+  worker.off('message', tapPad);
+  if (padded === null) {
+    throw new Error('nothing overtook the padded export, and it still came back superseded');
+  }
+  const reply = padReplies.find(isRendered);
+  check(
+    `the PDF padded to a multiple of ${multipleOf} holds the least such count`,
+    pagesOf(padded) === wanted,
+    `${pagesOf(padded)} pages for a book of ${laidOut}`,
+  );
+  check(
+    `the reply to that export says how many pages the PDF holds`,
+    reply?.pages === wanted && asked === wanted,
+    `reply ${reply?.pages}, asked ${asked}, written ${wanted}`,
+  );
+  const readBack = text(padded);
+  if (readBack !== null && extracted !== null) {
+    check(
+      `the pages that pad to a multiple of ${multipleOf} have no text on them`,
+      readBack.replace(/\f/g, '') === extracted.replace(/\f/g, ''),
+    );
+  }
+}
+check(
+  'a book whose count is short of a multiple of four is padded',
+  laidOut % 4 !== 0,
+  `the fixture book is ${laidOut} pages, so the padding to four added nothing`,
+);
+check(
+  'padding the PDF runs no stage',
+  JSON.stringify(client.stages) === JSON.stringify(beforePadding),
+  `${JSON.stringify(beforePadding)} before, ${JSON.stringify(client.stages)} after`,
+);
+const afterPadding = await client.render([], 'preview');
+check(
+  'the preview after a padded export is the preview before it',
+  unpadded !== null && afterPadding !== null && Buffer.from(unpadded).equals(Buffer.from(afterPadding)),
+);
 
 // The EPUB comes from the tree and the sheets the session holds, so
 // no stage runs, and it is the file the CLI writes for the same book.

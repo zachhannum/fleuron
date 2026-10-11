@@ -114,6 +114,7 @@ export class Engine {
           kind: request.want,
           bytes,
           stages: [stages[0] ?? 0, stages[1] ?? 0, stages[2] ?? 0, stages[3] ?? 0],
+          ...(request.want === 'pdf' ? { pages: this.session.pdfPages(request.multipleOf) } : {}),
         },
         [bytes.buffer as ArrayBuffer],
       );
@@ -125,7 +126,7 @@ export class Engine {
   private produce(request: Request): Uint8Array {
     switch (request.want) {
       case 'pdf':
-        return this.session.exportPdf();
+        return this.session.exportPdf(request.multipleOf);
       case 'epub':
         return request.unzipped === true ? this.session.exportEpubFiles() : this.session.exportEpub();
       case 'font':
@@ -146,6 +147,8 @@ export class Engine {
         return answer(this.session.hit(request.page ?? 0, request.x ?? 0, request.y ?? 0) ?? null);
       case 'names':
         return answer(this.session.names(request.source));
+      case 'pages':
+        return answer(this.session.pdfPages(request.multipleOf));
       default:
         return this.session.preview(request.first, request.count);
     }
@@ -229,7 +232,8 @@ function answer(json: string | number | null): Uint8Array {
  * face's bytes, asking where a node was read from or what was read at
  * a byte, asking which folios some nodes are set on, asking what
  * styled an element or which element is at a point, asking which
- * classes and ids a source writes, or asking which
+ * classes and ids a source writes, asking how many pages a PDF
+ * holds, or asking which
  * pages of the book as it stands (no `ops` of its own) fall in a
  * range. None of them overtakes a render nor is overtaken by one, or
  * by a sibling question, since none says what the last edit
@@ -249,6 +253,7 @@ function isQuestion(request: Request): boolean {
     request.want === 'inspect' ||
     request.want === 'hit' ||
     request.want === 'names' ||
+    request.want === 'pages' ||
     (request.want === 'preview' &&
       request.ops.length === 0 &&
       request.first !== undefined &&

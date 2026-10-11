@@ -237,12 +237,27 @@ export type MarginBoxName =
   | 'left-middle'
   | 'left-top';
 
+/** How `want: 'pdf'` writes the book. */
+export interface PdfOptions {
+  /**
+   * Pads the book to a page count a print vendor asks for: 2 for an
+   * even count, 4 for a multiple of four. The PDF gets blank pages
+   * after the last page of the book until the count is reached. A
+   * blank page is the size of that last page, and has no folio, no
+   * running head and no other margin box. The blank pages are in the
+   * PDF only: the book is not laid out again and the preview keeps
+   * its pages. Left out, the PDF holds the pages of the preview.
+   */
+  multipleOf?: 2 | 4;
+}
+
 /**
  * What a request wants back, if anything: a display structure, a PDF,
  * an EPUB, the file a face was registered from, the node one byte of a source
  * was read into, the source one node was read from, the folios some
  * nodes are set on, what styled one element or margin box, the
- * element at a point, or the classes and ids a source writes.
+ * element at a point, the classes and ids a source writes, or how
+ * many pages a PDF holds.
  *
  * The first three are renders and the rest are questions, which is
  * what decides whether a later request may overtake it.
@@ -257,7 +272,8 @@ export type Want =
   | 'folios'
   | 'inspect'
   | 'hit'
-  | 'names';
+  | 'names'
+  | 'pages';
 
 /** An edit, a render, a question, or an edit and one of those. */
 export interface Request {
@@ -309,6 +325,12 @@ export interface Request {
    * rather than the zip: see {@link EpubFiles}.
    */
   unzipped?: boolean;
+  /**
+   * With `want: 'pdf'`, the page count to pad the PDF to, and with
+   * `want: 'pages'`, the padding to count: see
+   * {@link PdfOptions.multipleOf}.
+   */
+  multipleOf?: 2 | 4;
 }
 
 /**
@@ -328,6 +350,11 @@ export interface Rendered {
    * a clock would only show a fast machine.
    */
   stages: [number, number, number, number];
+  /**
+   * With `kind: 'pdf'`, how many pages the PDF holds: the pages of
+   * the book and the blank pages that pad it.
+   */
+  pages?: number;
 }
 
 /** Inputs applied, with nothing asked for back. */

@@ -23,6 +23,7 @@ import {
   type Attributes,
   type Metadata,
   type Op,
+  type PdfOptions,
   type Response,
   type Sheet,
   type Source,
@@ -476,10 +477,20 @@ export class Preview {
 
   /**
    * The book as PDF bytes, from the stages the preview settled, so
-   * the export cannot contradict what is on screen.
+   * the export cannot contradict what is on screen. `options` can pad
+   * the book to an even page count or to a multiple of four, with
+   * blank pages that are in the PDF and not on screen.
    */
-  async exportPdf(): Promise<Uint8Array | null> {
-    return this.client.exportPdf();
+  async exportPdf(options: PdfOptions = {}): Promise<Uint8Array | null> {
+    return this.client.exportPdf([], options);
+  }
+
+  /**
+   * How many pages {@link Preview.exportPdf} writes with the same
+   * `options`, answered without writing them.
+   */
+  async pdfPages(options: PdfOptions = {}): Promise<number> {
+    return this.client.pdfPages(options);
   }
 
   /**
