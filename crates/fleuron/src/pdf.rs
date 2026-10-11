@@ -60,6 +60,39 @@ pub enum PdfError {
     Serialize(String),
 }
 
+/// The page count a print vendor asks a book to reach.
+///
+/// A book that falls short is padded with blank leaves after its
+/// last page. A blank leaf is the size of that page, sheet and trim
+/// and bleed alike, and nothing is painted on it: no folio, no
+/// running head and no other margin box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PadTo {
+    /// An even count.
+    Even,
+    /// A multiple of four.
+    MultipleOfFour,
+}
+
+impl PadTo {
+    /// How many pages a book of `pages` holds once it is padded. A
+    /// book that already has the count, or has no page at all, is
+    /// left as it is.
+    pub fn count(self, pages: usize) -> usize {
+        pages.next_multiple_of(match self {
+            PadTo::Even => 2,
+            PadTo::MultipleOfFour => 4,
+        })
+    }
+}
+
+/// How many pages [`write_padded`] writes for this book: the pages
+/// laid out, and the blank leaves `pad` adds after them.
+pub fn page_count(output: &LayoutOutput, pad: Option<PadTo>) -> usize {
+    let pages = output.pages.len();
+    pad.map_or(pages, |pad| pad.count(pages))
+}
+
 /// Writes one laid-out book as PDF bytes.
 ///
 /// Fonts resolve through the registry that shaped the run and images
@@ -75,11 +108,28 @@ pub fn write(
     assets: &Assets,
     metadata: &Metadata,
 ) -> Result<Vec<u8>, PdfError> {
+    write_padded(output, registry, assets, metadata, None)
+}
+
+/// The same, with blank leaves after the last page until the book
+/// has the count `pad` asks for. [`page_count`] says how many pages
+/// that is.
+///
+/// The leaves are the writer's own. The display structure is read
+/// and not changed, so nothing is laid out again to add them.
+pub fn write_padded(
+    output: &LayoutOutput,
+    registry: &FontRegistry,
+    assets: &Assets,
+    metadata: &Metadata,
+    pad: Option<PadTo>,
+) -> Result<Vec<u8>, PdfError> {
     write_with(
         output,
         registry,
         assets,
         metadata,
+        pad,
         SerializeSettings::default(),
     )
 }
@@ -89,6 +139,7 @@ fn write_with(
     registry: &FontRegistry,
     assets: &Assets,
     metadata: &Metadata,
+    pad: Option<PadTo>,
     settings: SerializeSettings,
 ) -> Result<Vec<u8>, PdfError> {
     let fonts = embed_fonts(registry)?;
@@ -119,6 +170,11 @@ fn write_with(
             }
         }
         pdf_page.finish();
+    }
+    if let Some(last) = output.pages.last() {
+        for _ in output.pages.len()..page_count(output, pad) {
+            document.start_page_with(settings_of(last)).finish();
+        }
     }
     if !output.navigation.outline.is_empty() {
         let mut outline = Outline::new();
@@ -920,17 +976,65 @@ mod tests {
     }
 
     fn bytes_of(output: &LayoutOutput, assets: &Assets, metadata: &Metadata) -> Vec<u8> {
+        bytes_padded(output, assets, metadata, None)
+    }
+
+    fn bytes_padded(
+        output: &LayoutOutput,
+        assets: &Assets,
+        metadata: &Metadata,
+        pad: Option<PadTo>,
+    ) -> Vec<u8> {
         write_with(
             output,
             registry(),
             assets,
             metadata,
+            pad,
             SerializeSettings {
                 compress_content_streams: false,
                 ..Default::default()
             },
         )
         .expect("the bundled face embeds")
+    }
+
+    /// The same as [`readable`], padded to a count.
+    fn padded(output: &LayoutOutput, pad: Option<PadTo>) -> String {
+        latin1(&bytes_padded(
+            output,
+            &Assets::none(),
+            &Metadata::default(),
+            pad,
+        ))
+    }
+
+    /// How many pages the page tree counts.
+    fn counted(pdf: &str) -> usize {
+        let (_, rest) = pdf
+            .split_once("/Type /Pages\n  /Count ")
+            .expect("a page tree");
+        let (count, _) = rest.split_once('\n').expect("a count");
+        count.parse().expect("a number")
+    }
+
+    /// Each page of the file, in the order the file writes them: its
+    /// object, and its content stream.
+    fn written_pages(pdf: &str) -> Vec<(&str, &str)> {
+        pdf.split("  /Type /Page\n")
+            .skip(1)
+            .map(|rest| {
+                let (page, _) = rest.split_once("endobj").expect("the page object ends");
+                let (_, contents) = page.split_once("/Contents ").expect("a content stream");
+                let (id, _) = contents.split_once(' ').expect("an object number");
+                let (_, object) = pdf
+                    .split_once(&format!("\n{id} 0 obj\n"))
+                    .expect("the stream is in the file");
+                let (_, stream) = object.split_once("stream\n").expect("a stream");
+                let (body, _) = stream.split_once("endstream").expect("the stream ends");
+                (page, body)
+            })
+            .collect()
     }
 
     fn latin1(bytes: &[u8]) -> String {
@@ -2141,6 +2245,106 @@ mod tests {
         );
         assert!(pdf.contains("startxref"), "no cross-reference offset");
         assert!(pdf.trim_end().ends_with("%%EOF"), "no trailer");
+    }
+
+    /// A book of this many pages, each with a line of text on it.
+    fn pages_of(count: usize) -> LayoutOutput {
+        let book = book("Some prose.");
+        let mut output = laid_out(&book);
+        output.pages = (0..count).flat_map(|_| laid_out(&book).pages).collect();
+        output
+    }
+
+    /// Acceptance: the writer takes a count to pad to, an even one or
+    /// a multiple of four, and the book has the least such count that
+    /// holds its pages.
+    #[test]
+    fn a_book_is_padded_to_an_even_count_or_a_multiple_of_four() {
+        for pages in 1..=9 {
+            let output = pages_of(pages);
+            assert_eq!(counted(&padded(&output, None)), pages);
+
+            let even = counted(&padded(&output, Some(PadTo::Even)));
+            assert_eq!(even % 2, 0, "{pages} pages padded to {even}");
+            assert!((pages..pages + 2).contains(&even), "{pages} to {even}");
+
+            let fours = counted(&padded(&output, Some(PadTo::MultipleOfFour)));
+            assert_eq!(fours % 4, 0, "{pages} pages padded to {fours}");
+            assert!((pages..pages + 4).contains(&fours), "{pages} to {fours}");
+        }
+    }
+
+    /// A book with no page has no last page to size a leaf by, and
+    /// the file is the one the writer makes of it unpadded.
+    #[test]
+    fn a_book_with_no_page_is_not_padded() {
+        let output = pages_of(0);
+        assert_eq!(page_count(&output, Some(PadTo::MultipleOfFour)), 0);
+        assert_eq!(
+            padded(&output, Some(PadTo::MultipleOfFour)),
+            padded(&output, None)
+        );
+    }
+
+    /// Acceptance: a blank leaf has the size of the book's last page,
+    /// sheet and trim and bleed, and carries no folio, no running
+    /// head and no other margin box.
+    #[test]
+    fn a_blank_leaf_is_the_size_of_the_last_page_and_carries_nothing() {
+        let book = book("Some prose.");
+        let furniture = "bleed: 3mm; marks: crop;
+             @top-center { content: 'Gulliver' }
+             @bottom-center { content: counter(page) }";
+        let mut output = styled(
+            &book,
+            &format!("@page {{ size: 300pt 400pt; {furniture} }}"),
+        );
+        output.pages.extend(
+            styled(
+                &book,
+                &format!("@page {{ size: 432pt 648pt; {furniture} }}"),
+            )
+            .pages,
+        );
+        assert_eq!(output.pages.len(), 2);
+
+        let pdf = padded(&output, Some(PadTo::MultipleOfFour));
+        let pages = written_pages(&pdf);
+        assert_eq!(pages.len(), 4);
+        let (last, painted) = pages[1];
+        assert!(
+            painted.contains("Tj") || painted.contains("TJ"),
+            "the last page of the book shows no folio, so this proves nothing:\n{painted}"
+        );
+        for (leaf, stream) in &pages[2..] {
+            for name in ["MediaBox", "TrimBox", "BleedBox"] {
+                assert_eq!(page_box(leaf, name), page_box(last, name), "{name}");
+            }
+            assert_eq!(stream.trim(), "", "a blank leaf paints something");
+            assert!(!leaf.contains("/Annots"), "a blank leaf carries a link");
+            assert!(!leaf.contains("/Font"), "a blank leaf names a face");
+        }
+        assert_ne!(
+            page_box(pages[0].0, "MediaBox"),
+            page_box(last, "MediaBox"),
+            "the two pages of the book are one size, so this proves nothing"
+        );
+    }
+
+    /// Acceptance: the count the writer answers with is the count the
+    /// file holds.
+    #[test]
+    fn the_count_answered_is_the_count_written() {
+        for pages in 1..=9 {
+            let output = pages_of(pages);
+            for pad in [None, Some(PadTo::Even), Some(PadTo::MultipleOfFour)] {
+                assert_eq!(
+                    page_count(&output, pad),
+                    counted(&padded(&output, pad)),
+                    "{pages} pages, {pad:?}"
+                );
+            }
+        }
     }
 
     /// Two runs over one book produce byte-identical PDFs: nothing in
